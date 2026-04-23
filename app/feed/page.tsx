@@ -142,9 +142,7 @@ export default function FeedPage() {
 
     const normalizedComments = (data || []).map((comment: any) => ({
       ...comment,
-      profiles: Array.isArray(comment.profiles)
-        ? comment.profiles[0] || null
-        : comment.profiles,
+      profiles: Array.isArray(comment.profiles) ? comment.profiles[0] || null : comment.profiles,
     }))
 
     setComments(normalizedComments)
@@ -327,15 +325,23 @@ export default function FeedPage() {
   }
 
   async function handleToggleLike(postId: string) {
-    const alreadyLiked = likes.find(
-      (like) => like.post_id === postId && like.user_id === userId
-    )
+    const { data: existingLike, error: checkError } = await supabase
+      .from('likes')
+      .select('id')
+      .eq('post_id', postId)
+      .eq('user_id', userId)
+      .maybeSingle()
 
-    if (alreadyLiked) {
+    if (checkError) {
+      setMessage('Erro ao verificar curtida: ' + checkError.message)
+      return
+    }
+
+    if (existingLike) {
       const { error } = await supabase
         .from('likes')
         .delete()
-        .eq('id', alreadyLiked.id)
+        .eq('id', existingLike.id)
 
       if (error) {
         setMessage('Erro ao remover curtida: ' + error.message)
@@ -406,6 +412,13 @@ export default function FeedPage() {
         </div>
 
         <div className="flex gap-3">
+          <Link
+            href="/search"
+            className="border border-zinc-300 dark:border-zinc-700 px-4 py-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-900"
+          >
+            Buscar usuários
+          </Link>
+          
           <Link
             href="/profile"
             className="border border-zinc-300 dark:border-zinc-700 px-4 py-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-900"
@@ -506,11 +519,10 @@ export default function FeedPage() {
             <button
               type="submit"
               disabled={uploadingPostImage}
-              className={`px-6 py-3 rounded-xl font-medium ${
-                uploadingPostImage
-                  ? 'bg-zinc-300 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300 cursor-not-allowed'
-                  : 'bg-black text-white dark:bg-white dark:text-black hover:opacity-90'
-              }`}
+              className={`px-6 py-3 rounded-xl font-medium ${uploadingPostImage
+                ? 'bg-zinc-300 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300 cursor-not-allowed'
+                : 'bg-black text-white dark:bg-white dark:text-black hover:opacity-90'
+                }`}
             >
               {uploadingPostImage ? 'Enviando imagem...' : 'Publicar'}
             </button>
@@ -632,11 +644,10 @@ export default function FeedPage() {
                 <div className="mt-4 flex items-center gap-3">
                   <button
                     onClick={() => handleToggleLike(post.id)}
-                    className={`px-4 py-2 rounded-xl text-sm font-medium ${
-                      userLiked
-                        ? 'bg-black text-white dark:bg-white dark:text-black'
-                        : 'border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800'
-                    }`}
+                    className={`px-4 py-2 rounded-xl text-sm font-medium ${userLiked
+                      ? 'bg-black text-white dark:bg-white dark:text-black'
+                      : 'border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                      }`}
                   >
                     {userLiked ? 'Curtido' : 'Curtir'}
                   </button>
