@@ -26,6 +26,11 @@ type Comment = {
   user_id: string
   content: string
   created_at: string
+  profiles: {
+    username: string
+    display_name: string | null
+    avatar_url: string | null
+  } | null
 }
 
 type Like = {
@@ -116,7 +121,18 @@ export default function FeedPage() {
   async function loadComments() {
     const { data, error } = await supabase
       .from('comments')
-      .select('*')
+      .select(`
+        id,
+        post_id,
+        user_id,
+        content,
+        created_at,
+        profiles (
+          username,
+          display_name,
+          avatar_url
+        )
+      `)
       .order('created_at', { ascending: true })
 
     if (error) {
@@ -124,7 +140,14 @@ export default function FeedPage() {
       return
     }
 
-    setComments(data || [])
+    const normalizedComments = (data || []).map((comment: any) => ({
+      ...comment,
+      profiles: Array.isArray(comment.profiles)
+        ? comment.profiles[0] || null
+        : comment.profiles,
+    }))
+
+    setComments(normalizedComments)
   }
 
   async function loadLikes() {
@@ -632,22 +655,69 @@ export default function FeedPage() {
                     Comentários
                   </h3>
 
-                  <div className="space-y-2 mb-4">
+                  <div className="space-y-3 mb-4">
                     {postComments.length === 0 && (
                       <p className="text-sm text-zinc-500">Nenhum comentário ainda.</p>
                     )}
 
-                    {postComments.map((comment) => (
-                      <div
-                        key={comment.id}
-                        className="bg-zinc-50 dark:bg-zinc-800 rounded-xl px-4 py-3 text-sm"
-                      >
-                        <p className="text-zinc-800 dark:text-zinc-200">{comment.content}</p>
-                        <p className="text-xs text-zinc-500 mt-2">
-                          {new Date(comment.created_at).toLocaleString('pt-BR')}
-                        </p>
-                      </div>
-                    ))}
+                    {postComments.map((comment) => {
+                      const commentAuthorName =
+                        comment.profiles?.display_name ||
+                        comment.profiles?.username ||
+                        'Usuário'
+                      const commentAuthorUsername =
+                        comment.profiles?.username || 'usuario'
+                      const commentAuthorAvatar =
+                        comment.profiles?.avatar_url || ''
+
+                      return (
+                        <div
+                          key={comment.id}
+                          className="bg-zinc-50 dark:bg-zinc-800 rounded-xl px-4 py-3 text-sm"
+                        >
+                          <div className="flex items-start gap-3">
+                            <Link
+                              href={`/u/${commentAuthorUsername}`}
+                              className="shrink-0 hover:opacity-80 transition"
+                            >
+                              {commentAuthorAvatar ? (
+                                <img
+                                  src={commentAuthorAvatar}
+                                  alt={commentAuthorName}
+                                  className="w-10 h-10 rounded-full object-cover border border-zinc-300 dark:border-zinc-700"
+                                />
+                              ) : (
+                                <div className="w-10 h-10 rounded-full bg-zinc-100 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 flex items-center justify-center text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                                  {commentAuthorName.charAt(0).toUpperCase()}
+                                </div>
+                              )}
+                            </Link>
+
+                            <div className="flex-1">
+                              <Link
+                                href={`/u/${commentAuthorUsername}`}
+                                className="block hover:opacity-80 transition"
+                              >
+                                <p className="font-semibold text-black dark:text-white">
+                                  {commentAuthorName}
+                                </p>
+                                <p className="text-xs text-zinc-500">
+                                  @{commentAuthorUsername}
+                                </p>
+                              </Link>
+
+                              <p className="text-zinc-800 dark:text-zinc-200 mt-2">
+                                {comment.content}
+                              </p>
+
+                              <p className="text-xs text-zinc-500 mt-2">
+                                {new Date(comment.created_at).toLocaleString('pt-BR')}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
                   </div>
 
                   <div className="flex flex-col sm:flex-row gap-3">
