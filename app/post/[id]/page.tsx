@@ -569,17 +569,17 @@ export default function PublicProfilePage() {
           <img
             src={item.avatar_url}
             alt={itemName}
-            className="w-12 h-12 rounded-full object-cover border border-zinc-300 dark:border-zinc-700"
+            className="w-12 h-12 rounded-full object-cover border border-zinc-300 dark:border-zinc-700 shrink-0"
           />
         ) : (
-          <div className="w-12 h-12 rounded-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 flex items-center justify-center text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+          <div className="w-12 h-12 rounded-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 flex items-center justify-center text-sm font-semibold text-zinc-700 dark:text-zinc-300 shrink-0">
             {itemName.charAt(0).toUpperCase()}
           </div>
         )}
 
-        <div>
-          <p className="font-semibold text-black dark:text-white">{itemName}</p>
-          <p className="text-sm text-zinc-500">@{item.username}</p>
+        <div className="min-w-0">
+          <p className="font-semibold text-black dark:text-white break-words">{itemName}</p>
+          <p className="text-sm text-zinc-500 break-all">@{item.username}</p>
         </div>
       </Link>
     )
@@ -587,7 +587,7 @@ export default function PublicProfilePage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-white text-black dark:bg-black dark:text-white flex items-center justify-center">
+      <main className="min-h-screen bg-white text-black dark:bg-black dark:text-white flex items-center justify-center px-4">
         <p>Carregando perfil...</p>
       </main>
     )
@@ -596,22 +596,24 @@ export default function PublicProfilePage() {
   if (!profile) {
     return (
       <main className="min-h-screen bg-white text-black dark:bg-black dark:text-white">
-        <header className="border-b border-zinc-200 dark:border-zinc-800 px-6 py-4 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold">EntreUS</h1>
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">Só Entre Nós</p>
-          </div>
+        <header className="border-b border-zinc-200 dark:border-zinc-800 px-4 sm:px-6 py-4">
+          <div className="max-w-4xl mx-auto flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-bold">EntreUS</h1>
+              <p className="text-sm text-zinc-500 dark:text-zinc-400">Só Entre Nós</p>
+            </div>
 
-          <Link
-            href="/feed"
-            className="border border-zinc-300 dark:border-zinc-700 px-4 py-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-900"
-          >
-            Voltar ao feed
-          </Link>
+            <Link
+              href="/feed"
+              className="w-full sm:w-auto text-center border border-zinc-300 dark:border-zinc-700 px-4 py-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-900"
+            >
+              Voltar ao feed
+            </Link>
+          </div>
         </header>
 
-        <section className="max-w-3xl mx-auto px-6 py-8">
-          <div className="bg-white dark:bg-zinc-900 rounded-2xl p-6 border border-zinc-200 dark:border-zinc-800">
+        <section className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+          <div className="bg-white dark:bg-zinc-900 rounded-2xl p-4 sm:p-6 border border-zinc-200 dark:border-zinc-800">
             <p className="text-zinc-700 dark:text-zinc-300">{message || 'Perfil não encontrado.'}</p>
           </div>
         </section>
@@ -624,152 +626,167 @@ export default function PublicProfilePage() {
 
   return (
     <main className="min-h-screen bg-white text-black dark:bg-black dark:text-white transition-colors">
-      <header className="border-b border-zinc-200 dark:border-zinc-800 px-6 py-4 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">EntreUS</h1>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">Só Entre Nós</p>
-        </div>
+      <header className="border-b border-zinc-200 dark:border-zinc-800 px-4 sm:px-6 py-4">
+        <div className="max-w-4xl mx-auto flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold">EntreUS</h1>
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">Só Entre Nós</p>
+          </div>
 
-        <div className="flex gap-3">
-          {isOwnProfile && (
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+            {isOwnProfile && (
+              <Link
+                href="/profile"
+                className="w-full sm:w-auto text-center border border-zinc-300 dark:border-zinc-700 px-4 py-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-900"
+              >
+                Meu perfil
+              </Link>
+            )}
+
             <Link
-              href="/profile"
-              className="border border-zinc-300 dark:border-zinc-700 px-4 py-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-900"
+              href="/feed"
+              className="w-full sm:w-auto text-center border border-zinc-300 dark:border-zinc-700 px-4 py-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-900"
             >
-              Meu perfil
+              Voltar ao feed
             </Link>
-          )}
-
-          <Link
-            href="/feed"
-            className="border border-zinc-300 dark:border-zinc-700 px-4 py-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-900"
-          >
-            Voltar ao feed
-          </Link>
+          </div>
         </div>
       </header>
 
-      <section className="max-w-3xl mx-auto px-6 py-8">
-        <div className="bg-white dark:bg-zinc-900 rounded-2xl p-6 border border-zinc-200 dark:border-zinc-800 mb-6">
-          <div className="flex items-start justify-between gap-4 flex-col sm:flex-row">
-            <div className="flex items-start gap-4">
-              {profile.avatar_url ? (
-                <img
-                  src={profile.avatar_url}
-                  alt={displayName}
-                  className="w-20 h-20 rounded-full object-cover border border-zinc-300 dark:border-zinc-700"
-                />
-              ) : (
-                <div className="w-20 h-20 rounded-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 flex items-center justify-center text-2xl font-bold text-zinc-700 dark:text-zinc-300">
-                  {displayName.charAt(0).toUpperCase()}
+      <section className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+        <div className="bg-white dark:bg-zinc-900 rounded-2xl p-4 sm:p-6 border border-zinc-200 dark:border-zinc-800 mb-6">
+          <div className="flex flex-col gap-5">
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+              <div className="flex items-start gap-4 min-w-0">
+                {profile.avatar_url ? (
+                  <img
+                    src={profile.avatar_url}
+                    alt={displayName}
+                    className="w-20 h-20 rounded-full object-cover border border-zinc-300 dark:border-zinc-700 shrink-0"
+                  />
+                ) : (
+                  <div className="w-20 h-20 rounded-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 flex items-center justify-center text-2xl font-bold text-zinc-700 dark:text-zinc-300 shrink-0">
+                    {displayName.charAt(0).toUpperCase()}
+                  </div>
+                )}
+
+                <div className="min-w-0">
+                  <h2 className="text-2xl sm:text-3xl font-bold text-black dark:text-white break-words">
+                    {displayName}
+                  </h2>
+                  <p className="text-zinc-500 dark:text-zinc-400 mt-1 break-all">@{profile.username}</p>
+                </div>
+              </div>
+
+              {!isOwnProfile && !hasBlockedMe && (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 w-full sm:w-auto">
+                  <button
+                    type="button"
+                    onClick={handleToggleFollow}
+                    disabled={followLoading || isBlockedByMe}
+                    className={`px-4 py-2 rounded-xl font-medium transition text-sm ${
+                      isFollowing
+                        ? 'border border-zinc-300 dark:border-zinc-700 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                        : 'bg-black text-white dark:bg-white dark:text-black hover:opacity-90'
+                    } ${followLoading || isBlockedByMe ? 'opacity-60 cursor-not-allowed' : ''}`}
+                  >
+                    {followLoading ? 'Carregando...' : isFollowing ? 'Seguindo' : 'Seguir'}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleToggleBlock}
+                    disabled={blockLoading}
+                    className={`px-4 py-2 rounded-xl font-medium transition text-sm ${
+                      isBlockedByMe
+                        ? 'border border-zinc-300 dark:border-zinc-700 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                        : 'border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950'
+                    } ${blockLoading ? 'opacity-60 cursor-not-allowed' : ''}`}
+                  >
+                    {blockLoading
+                      ? 'Carregando...'
+                      : isBlockedByMe
+                      ? 'Desbloquear'
+                      : 'Bloquear'}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleReportUser}
+                    disabled={reportingUser || reportedUser}
+                    className={`px-4 py-2 rounded-xl font-medium transition text-sm ${
+                      reportedUser
+                        ? 'border border-green-300 dark:border-green-700 text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950'
+                        : 'border border-orange-300 dark:border-orange-700 text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950'
+                    } ${reportingUser ? 'opacity-60 cursor-not-allowed' : ''}`}
+                  >
+                    {reportingUser
+                      ? 'Enviando...'
+                      : reportedUser
+                      ? 'Usuário denunciado'
+                      : 'Denunciar'}
+                  </button>
                 </div>
               )}
+            </div>
 
-              <div>
-                <h2 className="text-2xl font-bold text-black dark:text-white">{displayName}</h2>
-                <p className="text-zinc-500 dark:text-zinc-400 mt-1">@{profile.username}</p>
+            <div className="grid grid-cols-3 gap-2 sm:gap-4 text-sm">
+              <button
+                type="button"
+                onClick={handleOpenFollowers}
+                className="text-left rounded-xl border border-zinc-200 dark:border-zinc-800 px-3 py-3 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition"
+              >
+                <span className="block font-semibold text-black dark:text-white text-base sm:text-lg">
+                  {followersCount}
+                </span>
+                <span className="text-zinc-600 dark:text-zinc-400">seguidores</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleOpenFollowing}
+                className="text-left rounded-xl border border-zinc-200 dark:border-zinc-800 px-3 py-3 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition"
+              >
+                <span className="block font-semibold text-black dark:text-white text-base sm:text-lg">
+                  {followingCount}
+                </span>
+                <span className="text-zinc-600 dark:text-zinc-400">seguindo</span>
+              </button>
+
+              <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 px-3 py-3">
+                <span className="block font-semibold text-black dark:text-white text-base sm:text-lg">
+                  {posts.length}
+                </span>
+                <span className="text-zinc-600 dark:text-zinc-400">publicações</span>
               </div>
             </div>
 
-            {!isOwnProfile && !hasBlockedMe && (
-              <div className="flex gap-3 flex-wrap">
-                <button
-                  type="button"
-                  onClick={handleToggleFollow}
-                  disabled={followLoading || isBlockedByMe}
-                  className={`px-4 py-2 rounded-xl font-medium transition ${
-                    isFollowing
-                      ? 'border border-zinc-300 dark:border-zinc-700 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800'
-                      : 'bg-black text-white dark:bg-white dark:text-black hover:opacity-90'
-                  } ${followLoading || isBlockedByMe ? 'opacity-60 cursor-not-allowed' : ''}`}
-                >
-                  {followLoading ? 'Carregando...' : isFollowing ? 'Seguindo' : 'Seguir'}
-                </button>
+            <div>
+              {hasBlockedMe ? (
+                <p className="text-zinc-700 dark:text-zinc-300">
+                  Você não pode visualizar este perfil porque este usuário te bloqueou.
+                </p>
+              ) : isBlockedByMe ? (
+                <p className="text-zinc-700 dark:text-zinc-300">
+                  Você bloqueou este usuário. Desbloqueie para voltar a ver o conteúdo dele.
+                </p>
+              ) : (
+                <p className="text-zinc-800 dark:text-zinc-200 whitespace-pre-wrap break-words text-sm sm:text-base">
+                  {profile.bio?.trim() || 'Este usuário ainda não adicionou uma bio.'}
+                </p>
+              )}
+            </div>
 
-                <button
-                  type="button"
-                  onClick={handleToggleBlock}
-                  disabled={blockLoading}
-                  className={`px-4 py-2 rounded-xl font-medium transition ${
-                    isBlockedByMe
-                      ? 'border border-zinc-300 dark:border-zinc-700 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800'
-                      : 'border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950'
-                  } ${blockLoading ? 'opacity-60 cursor-not-allowed' : ''}`}
-                >
-                  {blockLoading
-                    ? 'Carregando...'
-                    : isBlockedByMe
-                    ? 'Desbloquear'
-                    : 'Bloquear'}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleReportUser}
-                  disabled={reportingUser || reportedUser}
-                  className={`px-4 py-2 rounded-xl font-medium transition ${
-                    reportedUser
-                      ? 'border border-green-300 dark:border-green-700 text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950'
-                      : 'border border-orange-300 dark:border-orange-700 text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950'
-                  } ${reportingUser ? 'opacity-60 cursor-not-allowed' : ''}`}
-                >
-                  {reportingUser
-                    ? 'Enviando...'
-                    : reportedUser
-                    ? 'Usuário denunciado'
-                    : 'Denunciar usuário'}
-                </button>
-              </div>
+            {message && (
+              <p className="text-sm text-zinc-600 dark:text-zinc-400">{message}</p>
             )}
           </div>
-
-          <div className="mt-4 flex gap-6 text-sm text-zinc-700 dark:text-zinc-300 flex-wrap">
-            <button
-              type="button"
-              onClick={handleOpenFollowers}
-              className="text-left hover:opacity-80 transition"
-            >
-              <span className="font-semibold text-black dark:text-white">{followersCount}</span> seguidores
-            </button>
-
-            <button
-              type="button"
-              onClick={handleOpenFollowing}
-              className="text-left hover:opacity-80 transition"
-            >
-              <span className="font-semibold text-black dark:text-white">{followingCount}</span> seguindo
-            </button>
-
-            <p>
-              <span className="font-semibold text-black dark:text-white">{posts.length}</span> publicações
-            </p>
-          </div>
-
-          <div className="mt-4">
-            {hasBlockedMe ? (
-              <p className="text-zinc-700 dark:text-zinc-300">
-                Você não pode visualizar este perfil porque este usuário te bloqueou.
-              </p>
-            ) : isBlockedByMe ? (
-              <p className="text-zinc-700 dark:text-zinc-300">
-                Você bloqueou este usuário. Desbloqueie para voltar a ver o conteúdo dele.
-              </p>
-            ) : (
-              <p className="text-zinc-800 dark:text-zinc-200 whitespace-pre-wrap">
-                {profile.bio?.trim() || 'Este usuário ainda não adicionou uma bio.'}
-              </p>
-            )}
-          </div>
-
-          {message && (
-            <p className="mt-4 text-sm text-zinc-600 dark:text-zinc-400">{message}</p>
-          )}
         </div>
 
         {!hasBlockedMe && !isBlockedByMe && (
           <>
             <div className="mb-4">
-              <h3 className="text-lg font-semibold text-black dark:text-white">
+              <h3 className="text-lg sm:text-xl font-semibold text-black dark:text-white break-words">
                 Publicações de {displayName}
               </h3>
               <p className="text-sm text-zinc-500 dark:text-zinc-400">
@@ -777,9 +794,9 @@ export default function PublicProfilePage() {
               </p>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-4 sm:space-y-5">
               {posts.length === 0 && (
-                <div className="bg-white dark:bg-zinc-900 rounded-2xl p-6 border border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400">
+                <div className="bg-white dark:bg-zinc-900 rounded-2xl p-4 sm:p-6 border border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400">
                   Nenhuma publicação visível ainda.
                 </div>
               )}
@@ -787,28 +804,28 @@ export default function PublicProfilePage() {
               {posts.map((post) => (
                 <article
                   key={post.id}
-                  className="bg-white dark:bg-zinc-900 rounded-2xl p-6 border border-zinc-200 dark:border-zinc-800"
+                  className="bg-white dark:bg-zinc-900 rounded-2xl p-4 sm:p-6 border border-zinc-200 dark:border-zinc-800"
                 >
-                  <div className="mb-3 flex items-center gap-3">
+                  <div className="mb-3 flex items-center gap-3 min-w-0">
                     {profile.avatar_url ? (
                       <img
                         src={profile.avatar_url}
                         alt={displayName}
-                        className="w-12 h-12 rounded-full object-cover border border-zinc-300 dark:border-zinc-700"
+                        className="w-12 h-12 rounded-full object-cover border border-zinc-300 dark:border-zinc-700 shrink-0"
                       />
                     ) : (
-                      <div className="w-12 h-12 rounded-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 flex items-center justify-center text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+                      <div className="w-12 h-12 rounded-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 flex items-center justify-center text-sm font-semibold text-zinc-700 dark:text-zinc-300 shrink-0">
                         {displayName.charAt(0).toUpperCase()}
                       </div>
                     )}
 
-                    <div>
-                      <p className="font-semibold text-black dark:text-white">{displayName}</p>
-                      <p className="text-sm text-zinc-500">@{profile.username}</p>
+                    <div className="min-w-0">
+                      <p className="font-semibold text-black dark:text-white break-words">{displayName}</p>
+                      <p className="text-sm text-zinc-500 break-all">@{profile.username}</p>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 mb-2 flex-wrap">
+                  <div className="flex items-center gap-2 mb-3 flex-wrap">
                     <p className="text-sm text-zinc-500">
                       {post.category || 'Sem categoria'}
                     </p>
@@ -818,7 +835,7 @@ export default function PublicProfilePage() {
                   </div>
 
                   {post.content && (
-                    <p className="text-zinc-800 dark:text-zinc-200 whitespace-pre-wrap mb-4">
+                    <p className="text-zinc-800 dark:text-zinc-200 whitespace-pre-wrap mb-4 break-words text-sm sm:text-base">
                       {post.content}
                     </p>
                   )}
@@ -827,7 +844,7 @@ export default function PublicProfilePage() {
                     <img
                       src={post.image_url}
                       alt="Imagem da publicação"
-                      className="w-full max-h-[32rem] object-cover rounded-2xl border border-zinc-200 dark:border-zinc-700"
+                      className="w-full max-h-[24rem] sm:max-h-[32rem] object-cover rounded-2xl border border-zinc-200 dark:border-zinc-700"
                     />
                   )}
 
@@ -842,9 +859,9 @@ export default function PublicProfilePage() {
       </section>
 
       {showFollowersModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
-          <div className="w-full max-w-md bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-xl">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-200 dark:border-zinc-800">
+        <div className="fixed inset-0 bg-black/60 flex items-end sm:items-center justify-center p-0 sm:p-4 z-50">
+          <div className="w-full sm:max-w-md bg-white dark:bg-zinc-900 rounded-t-3xl sm:rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-xl max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between px-4 sm:px-5 py-4 border-b border-zinc-200 dark:border-zinc-800">
               <h3 className="text-lg font-semibold text-black dark:text-white">Seguidores</h3>
               <button
                 type="button"
@@ -855,7 +872,7 @@ export default function PublicProfilePage() {
               </button>
             </div>
 
-            <div className="p-4 max-h-[70vh] overflow-y-auto">
+            <div className="p-3 sm:p-4 overflow-y-auto">
               {loadingFollowers ? (
                 <p className="text-zinc-500 dark:text-zinc-400">Carregando seguidores...</p>
               ) : followersList.length === 0 ? (
@@ -869,9 +886,9 @@ export default function PublicProfilePage() {
       )}
 
       {showFollowingModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
-          <div className="w-full max-w-md bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-xl">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-200 dark:border-zinc-800">
+        <div className="fixed inset-0 bg-black/60 flex items-end sm:items-center justify-center p-0 sm:p-4 z-50">
+          <div className="w-full sm:max-w-md bg-white dark:bg-zinc-900 rounded-t-3xl sm:rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-xl max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between px-4 sm:px-5 py-4 border-b border-zinc-200 dark:border-zinc-800">
               <h3 className="text-lg font-semibold text-black dark:text-white">Seguindo</h3>
               <button
                 type="button"
@@ -882,7 +899,7 @@ export default function PublicProfilePage() {
               </button>
             </div>
 
-            <div className="p-4 max-h-[70vh] overflow-y-auto">
+            <div className="p-3 sm:p-4 overflow-y-auto">
               {loadingFollowing ? (
                 <p className="text-zinc-500 dark:text-zinc-400">Carregando usuários...</p>
               ) : followingList.length === 0 ? (

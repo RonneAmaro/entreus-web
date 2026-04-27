@@ -21,6 +21,8 @@ export default function SearchPage() {
   const [query, setQuery] = useState('')
   const [message, setMessage] = useState('')
   const [profiles, setProfiles] = useState<Profile[]>([])
+  const [blockedUserIds, setBlockedUserIds] = useState<string[]>([])
+  const [currentUserId, setCurrentUserId] = useState('')
 
   useEffect(() => {
     async function checkUser() {
@@ -33,26 +35,76 @@ export default function SearchPage() {
         return
       }
 
+      setCurrentUserId(user.id)
+
+      const blockedIds = await loadBlockedUserIds(user.id)
+      setBlockedUserIds(blockedIds)
+
       setLoading(false)
-      await loadInitialProfiles()
+      await loadInitialProfiles(user.id, blockedIds)
     }
 
     checkUser()
   }, [router])
 
-  async function loadInitialProfiles() {
+  async function loadBlockedUserIds(userId: string) {
+    const { data: blockedByMe, error: blockedByMeError } = await supabase
+      .from('blocks')
+      .select('blocked_id')
+      .eq('blocker_id', userId)
+
+    if (blockedByMeError) {
+      setMessage('Erro ao carregar bloqueios: ' + blockedByMeError.message)
+      return []
+    }
+
+    const { data: blockedMe, error: blockedMeError } = await supabase
+      .from('blocks')
+      .select('blocker_id')
+      .eq('blocked_id', userId)
+
+    if (blockedMeError) {
+      setMessage('Erro ao carregar bloqueios: ' + blockedMeError.message)
+      return []
+    }
+
+    const ids = new Set<string>()
+
+    for (const item of blockedByMe || []) {
+      if (item.blocked_id) ids.add(item.blocked_id)
+    }
+
+    for (const item of blockedMe || []) {
+      if (item.blocker_id) ids.add(item.blocker_id)
+    }
+
+    return Array.from(ids)
+  }
+
+  function filterBlockedProfiles(
+    allProfiles: Profile[],
+    userId: string,
+    blockedIds: string[]
+  ) {
+    return allProfiles.filter(
+      (profile) => profile.id !== userId && !blockedIds.includes(profile.id)
+    )
+  }
+
+  async function loadInitialProfiles(userId = currentUserId, blockedIds = blockedUserIds) {
     const { data, error } = await supabase
       .from('profiles')
       .select('id, username, display_name, bio, avatar_url')
       .order('created_at', { ascending: false })
-      .limit(12)
+      .limit(20)
 
     if (error) {
       setMessage('Erro ao carregar usuários: ' + error.message)
       return
     }
 
-    setProfiles(data || [])
+    const filteredProfiles = filterBlockedProfiles(data || [], userId, blockedIds)
+    setProfiles(filteredProfiles)
   }
 
   async function handleSearch(e: React.FormEvent) {
@@ -84,9 +136,10 @@ export default function SearchPage() {
       return
     }
 
-    setProfiles(data || [])
+    const filteredProfiles = filterBlockedProfiles(data || [], currentUserId, blockedUserIds)
+    setProfiles(filteredProfiles)
 
-    if (!data || data.length === 0) {
+    if (!filteredProfiles || filteredProfiles.length === 0) {
       setMessage('Nenhum usuário encontrado.')
     }
 

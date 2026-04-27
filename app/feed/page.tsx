@@ -1,8 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useMemo, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import { supabase } from '@/lib/supabase'
 
@@ -13,6 +13,7 @@ type Post = {
   created_at: string
   user_id: string
   image_url: string | null
+  visibility: 'public' | 'followers' | 'private'
   profiles: {
     username: string
     display_name: string | null
@@ -39,8 +40,16 @@ type Like = {
   user_id: string
 }
 
+type Follow = {
+  id?: string
+  follower_id: string
+  following_id: string
+}
+
 export default function FeedPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const highlightedPostId = searchParams.get('post') || ''
   const { theme, setTheme } = useTheme()
 
   const [mounted, setMounted] = useState(false)
@@ -48,6 +57,7 @@ export default function FeedPage() {
   const [email, setEmail] = useState('')
   const [content, setContent] = useState('')
   const [category, setCategory] = useState('cotidiano')
+  const [visibility, setVisibility] = useState<'public' | 'followers' | 'private'>('public')
   const [selectedImage, setSelectedImage] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState('')
   const [uploadingPostImage, setUploadingPostImage] = useState(false)
@@ -55,9 +65,22 @@ export default function FeedPage() {
   const [posts, setPosts] = useState<Post[]>([])
   const [comments, setComments] = useState<Comment[]>([])
   const [likes, setLikes] = useState<Like[]>([])
+  const [blockedUserIds, setBlockedUserIds] = useState<string[]>([])
+  const [follows, setFollows] = useState<Follow[]>([])
+  const [followLoadingUserId, setFollowLoadingUserId] = useState<string | null>(null)
+  const [reportingPostId, setReportingPostId] = useState<string | null>(null)
+  const [reportedPostIds, setReportedPostIds] = useState<string[]>([])
+  const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0)
+  const [copiedPostId, setCopiedPostId] = useState<string | null>(null)
+
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({})
   const [editingPostId, setEditingPostId] = useState<string | null>(null)
   const [editContent, setEditContent] = useState('')
+  const [editSelectedImage, setEditSelectedImage] = useState<File | null>(null)
+  const [editImagePreview, setEditImagePreview] = useState('')
+  const [removeCurrentImage, setRemoveCurrentImage] = useState(false)
+  const [savingEdit, setSavingEdit] = useState(false)
+
   const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(true)
 
@@ -78,16 +101,127 @@ export default function FeedPage() {
 
       setUserId(user.id)
       setEmail(user.email || '')
-      await loadPosts()
-      await loadComments()
-      await loadLikes()
+
+      const blockedIds = await loadBlockedUserIds(user.id)
+      setBlockedUserIds(blockedIds)
+
+      const followsData = await loadFollows()
+      setFollows(followsData)
+
+      await Promise.all([
+        loadPosts(user.id, blockedIds, followsData),
+        loadComments(blockedIds),
+        loadLikes(),
+        loadUnreadNotificationsCount(user.id),
+      ])
+
       setLoading(false)
     }
 
     loadUserAndData()
   }, [router])
 
-  async function loadPosts() {
+  useEffect(() => {
+    if (!highlightedPostId || posts.length === 0) return
+
+    const timer = setTimeout(() => {
+      const element = document.getElementById(`post-${highlightedPostId}`)
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }
+    }, 300)
+
+    return () => clearTimeout(timer)
+  }, [highlightedPostId, posts])
+
+  async function loadUnreadNotificationsCount(currentUserId: string = userId) {
+    if (!currentUserId) return
+
+    const { count, error } = await supabase
+      .from('notifications')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', currentUserId)
+      .eq('read', false)
+
+    if (error) {
+      setMessage('Erro ao carregar notificações: ' + error.message)
+      return
+    }
+
+    setUnreadNotificationsCount(count || 0)
+  }
+
+  async function loadBlockedUserIds(currentUserId: string) {
+    const { data: blockedByMe, error: blockedByMeError } = await supabase
+      .from('blocks')
+      .select('blocked_id')
+      .eq('blocker_id', currentUserId)
+
+    if (blockedByMeError) {
+      setMessage('Erro ao carregar bloqueios: ' + blockedByMeError.message)
+      return []
+    }
+
+    const { data: blockedMe, error: blockedMeError } = await supabase
+      .from('blocks')
+      .select('blocker_id')
+      .eq('blocked_id', currentUserId)
+
+    if (blockedMeError) {
+      setMessage('Erro ao carregar bloqueios: ' + blockedMeError.message)
+      return []
+    }
+
+    const ids = new Set<string>()
+
+    for (const item of blockedByMe || []) {
+      if (item.blocked_id) ids.add(item.blocked_id)
+    }
+
+    for (const item of blockedMe || []) {
+      if (item.blocker_id) ids.add(item.blocker_id)
+    }
+
+    return Array.from(ids)
+  }
+
+  async function loadFollows() {
+    const { data, error } = await supabase
+      .from('follows')
+      .select('id, follower_id, following_id')
+
+    if (error) {
+      setMessage('Erro ao carregar seguimentos: ' + error.message)
+      return []
+    }
+
+    return data || []
+  }
+
+  function canSeePost(post: Post, currentUserId: string, currentFollows: Follow[]) {
+    if (post.user_id === currentUserId) return true
+    if (post.visibility === 'public') return true
+
+    if (post.visibility === 'followers') {
+      return currentFollows.some(
+        (follow) =>
+          follow.follower_id === currentUserId &&
+          follow.following_id === post.user_id
+      )
+    }
+
+    if (post.visibility === 'private') {
+      return false
+    }
+
+    return false
+  }
+
+  async function loadPosts(
+    currentUserId: string = userId,
+    currentBlockedIds: string[] = blockedUserIds,
+    currentFollows: Follow[] = follows
+  ) {
     const { data, error } = await supabase
       .from('posts')
       .select(`
@@ -97,6 +231,7 @@ export default function FeedPage() {
         created_at,
         user_id,
         image_url,
+        visibility,
         profiles (
           username,
           display_name,
@@ -110,15 +245,19 @@ export default function FeedPage() {
       return
     }
 
-    const normalizedPosts = (data || []).map((post: any) => ({
-      ...post,
-      profiles: Array.isArray(post.profiles) ? post.profiles[0] || null : post.profiles,
-    }))
+    const normalizedPosts = (data || [])
+      .map((post: any) => ({
+        ...post,
+        visibility: (post.visibility || 'public') as 'public' | 'followers' | 'private',
+        profiles: Array.isArray(post.profiles) ? post.profiles[0] || null : post.profiles,
+      }))
+      .filter((post: Post) => !currentBlockedIds.includes(post.user_id))
+      .filter((post: Post) => canSeePost(post, currentUserId, currentFollows))
 
     setPosts(normalizedPosts)
   }
 
-  async function loadComments() {
+  async function loadComments(currentBlockedIds: string[] = blockedUserIds) {
     const { data, error } = await supabase
       .from('comments')
       .select(`
@@ -140,10 +279,12 @@ export default function FeedPage() {
       return
     }
 
-    const normalizedComments = (data || []).map((comment: any) => ({
-      ...comment,
-      profiles: Array.isArray(comment.profiles) ? comment.profiles[0] || null : comment.profiles,
-    }))
+    const normalizedComments = (data || [])
+      .map((comment: any) => ({
+        ...comment,
+        profiles: Array.isArray(comment.profiles) ? comment.profiles[0] || null : comment.profiles,
+      }))
+      .filter((comment: Comment) => !currentBlockedIds.includes(comment.user_id))
 
     setComments(normalizedComments)
   }
@@ -157,6 +298,120 @@ export default function FeedPage() {
     }
 
     setLikes(data || [])
+  }
+
+  async function refreshAfterFollowChange() {
+    const freshFollows = await loadFollows()
+    setFollows(freshFollows)
+    await loadPosts(userId, blockedUserIds, freshFollows)
+  }
+
+  async function handleToggleFollow(targetUserId: string) {
+    if (!userId || !targetUserId || userId === targetUserId) return
+
+    if (blockedUserIds.includes(targetUserId)) {
+      setMessage('Não é possível seguir um usuário bloqueado ou que te bloqueou.')
+      return
+    }
+
+    setFollowLoadingUserId(targetUserId)
+    setMessage('')
+
+    const { data: existingFollow, error: checkError } = await supabase
+      .from('follows')
+      .select('id')
+      .eq('follower_id', userId)
+      .eq('following_id', targetUserId)
+      .maybeSingle()
+
+    if (checkError) {
+      setMessage('Erro ao verificar seguimento: ' + checkError.message)
+      setFollowLoadingUserId(null)
+      return
+    }
+
+    if (existingFollow) {
+      const { error } = await supabase
+        .from('follows')
+        .delete()
+        .eq('id', existingFollow.id)
+
+      if (error) {
+        setMessage('Erro ao deixar de seguir: ' + error.message)
+        setFollowLoadingUserId(null)
+        return
+      }
+    } else {
+      const { error } = await supabase.from('follows').insert({
+        follower_id: userId,
+        following_id: targetUserId,
+      })
+
+      if (error) {
+        setMessage('Erro ao seguir: ' + error.message)
+        setFollowLoadingUserId(null)
+        return
+      }
+
+      await supabase.from('notifications').insert({
+        user_id: targetUserId,
+        actor_id: userId,
+        type: 'follow',
+      })
+    }
+
+    await refreshAfterFollowChange()
+    setFollowLoadingUserId(null)
+  }
+
+  async function handleReportPost(postId: string, postOwnerId: string) {
+    if (!userId) return
+    if (postOwnerId === userId) {
+      setMessage('Você não pode denunciar sua própria publicação.')
+      return
+    }
+
+    const reason = window.prompt(
+      'Informe o motivo da denúncia.\nEx.: spam, nudez indevida, assédio, conteúdo ofensivo'
+    )
+
+    if (!reason || !reason.trim()) {
+      return
+    }
+
+    setReportingPostId(postId)
+    setMessage('')
+
+    const { error } = await supabase.from('reports').insert({
+      reporter_id: userId,
+      reported_post_id: postId,
+      reported_user_id: postOwnerId,
+      reason: reason.trim(),
+    })
+
+    if (error) {
+      setMessage('Erro ao denunciar publicação: ' + error.message)
+      setReportingPostId(null)
+      return
+    }
+
+    setReportedPostIds((prev) => [...prev, postId])
+    setMessage('Publicação denunciada com sucesso.')
+    setReportingPostId(null)
+  }
+
+  async function handleCopyPostLink(postId: string) {
+    const url = `${window.location.origin}/post/${postId}`
+
+    try {
+      await navigator.clipboard.writeText(url)
+      setCopiedPostId(postId)
+      setTimeout(() => {
+        setCopiedPostId((current) => (current === postId ? null : current))
+      }, 2000)
+    } catch {
+      setMessage('Não foi possível copiar o link do post.')
+    }
   }
 
   async function uploadPostImage(file: File) {
@@ -224,7 +479,7 @@ export default function FeedPage() {
       content: content.trim() || null,
       category,
       image_url: uploadedImageUrl,
-      visibility: 'public',
+      visibility,
       is_sensitive: category === 'sensual' || category === 'adulto',
     })
 
@@ -235,6 +490,7 @@ export default function FeedPage() {
 
     setContent('')
     setCategory('cotidiano')
+    setVisibility('public')
     setSelectedImage(null)
     setImagePreview('')
     setMessage('Publicado com sucesso!')
@@ -266,33 +522,99 @@ export default function FeedPage() {
   function handleStartEdit(post: Post) {
     setEditingPostId(post.id)
     setEditContent(post.content || '')
+    setEditSelectedImage(null)
+    setEditImagePreview(post.image_url || '')
+    setRemoveCurrentImage(false)
   }
 
   function handleCancelEdit() {
     setEditingPostId(null)
     setEditContent('')
+    setEditSelectedImage(null)
+    setEditImagePreview('')
+    setRemoveCurrentImage(false)
   }
 
-  async function handleSaveEdit(postId: string) {
-    if (!editContent.trim()) {
+  function handleSelectEditImage(file: File | null) {
+    if (!file) {
+      setEditSelectedImage(null)
+      setEditImagePreview('')
+      return
+    }
+
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp']
+    if (!allowedTypes.includes(file.type)) {
+      setMessage('Envie uma imagem JPG, PNG ou WEBP.')
+      return
+    }
+
+    const previewUrl = URL.createObjectURL(file)
+    setEditSelectedImage(file)
+    setEditImagePreview(previewUrl)
+    setRemoveCurrentImage(false)
+    setMessage('')
+  }
+
+  function handleRemoveCurrentEditImage() {
+    setEditSelectedImage(null)
+    setEditImagePreview('')
+    setRemoveCurrentImage(true)
+  }
+
+  async function handleSaveEdit(postId: string, currentImageUrl: string | null) {
+    if (!editContent.trim() && !editSelectedImage && !currentImageUrl && !removeCurrentImage) {
       setMessage('O post não pode ficar vazio.')
+      return
+    }
+
+    setSavingEdit(true)
+    setMessage('')
+
+    let finalImageUrl = currentImageUrl
+
+    if (removeCurrentImage) {
+      finalImageUrl = null
+    }
+
+    if (editSelectedImage) {
+      const uploadedImageUrl = await uploadPostImage(editSelectedImage)
+      if (!uploadedImageUrl) {
+        setSavingEdit(false)
+        return
+      }
+      finalImageUrl = uploadedImageUrl
+    }
+
+    const finalContent = editContent.trim() || null
+
+    if (!finalContent && !finalImageUrl) {
+      setMessage('O post não pode ficar vazio.')
+      setSavingEdit(false)
       return
     }
 
     const { error } = await supabase
       .from('posts')
-      .update({ content: editContent })
+      .update({
+        content: finalContent,
+        image_url: finalImageUrl,
+      })
       .eq('id', postId)
       .eq('user_id', userId)
 
     if (error) {
       setMessage('Erro ao editar: ' + error.message)
+      setSavingEdit(false)
       return
     }
 
     setMessage('Post editado com sucesso!')
     setEditingPostId(null)
     setEditContent('')
+    setEditSelectedImage(null)
+    setEditImagePreview('')
+    setRemoveCurrentImage(false)
+    setSavingEdit(false)
     await loadPosts()
   }
 
@@ -304,15 +626,31 @@ export default function FeedPage() {
       return
     }
 
-    const { error } = await supabase.from('comments').insert({
-      post_id: postId,
-      user_id: userId,
-      content: text,
-    })
+    const { data: insertedComment, error } = await supabase
+      .from('comments')
+      .insert({
+        post_id: postId,
+        user_id: userId,
+        content: text,
+      })
+      .select('id')
+      .single()
 
     if (error) {
       setMessage('Erro ao comentar: ' + error.message)
       return
+    }
+
+    const commentedPost = posts.find((post) => post.id === postId)
+
+    if (commentedPost && commentedPost.user_id !== userId) {
+      await supabase.from('notifications').insert({
+        user_id: commentedPost.user_id,
+        actor_id: userId,
+        type: 'comment',
+        post_id: postId,
+        comment_id: insertedComment?.id || null,
+      })
     }
 
     setCommentInputs((prev) => ({
@@ -357,6 +695,17 @@ export default function FeedPage() {
         setMessage('Erro ao curtir: ' + error.message)
         return
       }
+
+      const likedPost = posts.find((post) => post.id === postId)
+
+      if (likedPost && likedPost.user_id !== userId) {
+        await supabase.from('notifications').insert({
+          user_id: likedPost.user_id,
+          actor_id: userId,
+          type: 'like',
+          post_id: postId,
+        })
+      }
     }
 
     await loadLikes()
@@ -395,9 +744,25 @@ export default function FeedPage() {
     setImagePreview('')
   }
 
+  function getVisibilityLabel(value: Post['visibility']) {
+    if (value === 'public') return 'Público'
+    if (value === 'followers') return 'Só seguidores'
+    return 'Privado'
+  }
+
+  const followStateMap = useMemo(() => {
+    const map = new Map<string, boolean>()
+    for (const follow of follows) {
+      if (follow.follower_id === userId) {
+        map.set(follow.following_id, true)
+      }
+    }
+    return map
+  }, [follows, userId])
+
   if (loading) {
     return (
-      <main className="min-h-screen bg-white text-black dark:bg-black dark:text-white flex items-center justify-center">
+      <main className="min-h-screen bg-white text-black dark:bg-black dark:text-white flex items-center justify-center px-4">
         <p>Carregando feed...</p>
       </main>
     )
@@ -405,53 +770,67 @@ export default function FeedPage() {
 
   return (
     <main className="min-h-screen bg-white text-black dark:bg-black dark:text-white transition-colors">
-      <header className="border-b border-zinc-200 dark:border-zinc-800 px-6 py-4 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">EntreUS</h1>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">Só Entre Nós</p>
-        </div>
+      <header className="border-b border-zinc-200 dark:border-zinc-800 px-4 sm:px-6 py-4">
+        <div className="max-w-4xl mx-auto flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold">EntreUS</h1>
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">Só Entre Nós</p>
+          </div>
 
-        <div className="flex gap-3">
-          <Link
-            href="/search"
-            className="border border-zinc-300 dark:border-zinc-700 px-4 py-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-900"
-          >
-            Buscar usuários
-          </Link>
-          
-          <Link
-            href="/profile"
-            className="border border-zinc-300 dark:border-zinc-700 px-4 py-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-900"
-          >
-            Meu perfil
-          </Link>
-
-          {mounted && (
-            <button
-              onClick={handleToggleTheme}
-              className="border border-zinc-300 dark:border-zinc-700 px-4 py-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-900"
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:flex gap-2 sm:gap-3">
+            <Link
+              href="/notifications"
+              className="relative text-center border border-zinc-300 dark:border-zinc-700 px-3 sm:px-4 py-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-900 text-sm sm:text-base"
             >
-              {theme === 'dark' ? 'Tema claro' : 'Tema escuro'}
-            </button>
-          )}
+              Notificações
+              {unreadNotificationsCount > 0 && (
+                <span className="absolute -top-2 -right-2 min-w-[22px] h-[22px] px-1 rounded-full bg-red-600 text-white text-xs font-bold flex items-center justify-center">
+                  {unreadNotificationsCount > 99 ? '99+' : unreadNotificationsCount}
+                </span>
+              )}
+            </Link>
 
-          <button
-            onClick={handleLogout}
-            className="border border-zinc-300 dark:border-zinc-700 px-4 py-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-900"
-          >
-            Sair
-          </button>
+            <Link
+              href="/search"
+              className="text-center border border-zinc-300 dark:border-zinc-700 px-3 sm:px-4 py-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-900 text-sm sm:text-base"
+            >
+              Buscar
+            </Link>
+
+            <Link
+              href="/profile"
+              className="text-center border border-zinc-300 dark:border-zinc-700 px-3 sm:px-4 py-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-900 text-sm sm:text-base"
+            >
+              Meu perfil
+            </Link>
+
+            {mounted && (
+              <button
+                onClick={handleToggleTheme}
+                className="border border-zinc-300 dark:border-zinc-700 px-3 sm:px-4 py-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-900 text-sm sm:text-base"
+              >
+                {theme === 'dark' ? 'Tema claro' : 'Tema escuro'}
+              </button>
+            )}
+
+            <button
+              onClick={handleLogout}
+              className="border border-zinc-300 dark:border-zinc-700 px-3 sm:px-4 py-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-900 text-sm sm:text-base col-span-2 sm:col-span-1"
+            >
+              Sair
+            </button>
+          </div>
         </div>
       </header>
 
-      <section className="max-w-3xl mx-auto px-6 py-8">
-        <div className="mb-6 text-sm text-zinc-500 dark:text-zinc-400">
+      <section className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+        <div className="mb-4 sm:mb-6 text-sm text-zinc-500 dark:text-zinc-400 break-all">
           Logado como: <span className="text-black dark:text-white">{email}</span>
         </div>
 
         <form
           onSubmit={handleCreatePost}
-          className="bg-white dark:bg-zinc-900 rounded-2xl p-6 border border-zinc-200 dark:border-zinc-800 mb-6"
+          className="bg-white dark:bg-zinc-900 rounded-2xl p-4 sm:p-6 border border-zinc-200 dark:border-zinc-800 mb-6"
         >
           <label className="block mb-3 text-sm text-zinc-700 dark:text-zinc-300">
             O que você quer compartilhar?
@@ -461,8 +840,47 @@ export default function FeedPage() {
             value={content}
             onChange={(e) => setContent(e.target.value)}
             placeholder="Escreva sobre seu dia, uma viagem, um café, um pensamento..."
-            className="w-full min-h-32 rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 px-4 py-3 outline-none focus:border-zinc-500 resize-none"
+            className="w-full min-h-32 sm:min-h-36 rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 px-4 py-3 outline-none focus:border-zinc-500 resize-none text-sm sm:text-base"
           />
+
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block mb-2 text-sm text-zinc-700 dark:text-zinc-300">
+                Categoria
+              </label>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 px-4 py-3 outline-none text-sm sm:text-base"
+              >
+                <option value="cotidiano">Cotidiano</option>
+                <option value="viagens">Viagens</option>
+                <option value="lugares">Lugares</option>
+                <option value="comida">Comida</option>
+                <option value="pensamentos">Pensamentos</option>
+                <option value="lifestyle">Lifestyle</option>
+                <option value="sensual">Sensual</option>
+                <option value="adulto">Adulto</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block mb-2 text-sm text-zinc-700 dark:text-zinc-300">
+                Privacidade
+              </label>
+              <select
+                value={visibility}
+                onChange={(e) =>
+                  setVisibility(e.target.value as 'public' | 'followers' | 'private')
+                }
+                className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 px-4 py-3 outline-none text-sm sm:text-base"
+              >
+                <option value="public">Público</option>
+                <option value="followers">Só seguidores</option>
+                <option value="private">Privado</option>
+              </select>
+            </div>
+          </div>
 
           <div className="mt-4">
             <label className="block mb-2 text-sm text-zinc-700 dark:text-zinc-300">
@@ -473,7 +891,7 @@ export default function FeedPage() {
               type="file"
               accept="image/png,image/jpeg,image/webp"
               onChange={(e) => handleSelectImage(e.target.files?.[0] || null)}
-              className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 px-4 py-3 outline-none"
+              className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 px-4 py-3 outline-none text-sm sm:text-base"
             />
 
             <p className="text-xs text-zinc-500 mt-2">
@@ -487,42 +905,33 @@ export default function FeedPage() {
               <img
                 src={imagePreview}
                 alt="Prévia"
-                className="w-full max-h-96 object-cover rounded-2xl border border-zinc-200 dark:border-zinc-700"
+                className="w-full max-h-80 sm:max-h-96 object-cover rounded-2xl border border-zinc-200 dark:border-zinc-700"
               />
 
               <button
                 type="button"
                 onClick={removeSelectedImage}
-                className="mt-3 border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 px-4 py-2 rounded-xl hover:bg-red-50 dark:hover:bg-red-950"
+                className="mt-3 w-full sm:w-auto border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 px-4 py-2 rounded-xl hover:bg-red-50 dark:hover:bg-red-950"
               >
                 Remover imagem
               </button>
             </div>
           )}
 
-          <div className="mt-4 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              className="rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 px-4 py-3 outline-none"
-            >
-              <option value="cotidiano">Cotidiano</option>
-              <option value="viagens">Viagens</option>
-              <option value="lugares">Lugares</option>
-              <option value="comida">Comida</option>
-              <option value="pensamentos">Pensamentos</option>
-              <option value="lifestyle">Lifestyle</option>
-              <option value="sensual">Sensual</option>
-              <option value="adulto">Adulto</option>
-            </select>
+          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+              Visibilidade atual:{' '}
+              <span className="font-medium">{getVisibilityLabel(visibility)}</span>
+            </p>
 
             <button
               type="submit"
               disabled={uploadingPostImage}
-              className={`px-6 py-3 rounded-xl font-medium ${uploadingPostImage
-                ? 'bg-zinc-300 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300 cursor-not-allowed'
-                : 'bg-black text-white dark:bg-white dark:text-black hover:opacity-90'
-                }`}
+              className={`w-full sm:w-auto px-6 py-3 rounded-xl font-medium ${
+                uploadingPostImage
+                  ? 'bg-zinc-300 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300 cursor-not-allowed'
+                  : 'bg-black text-white dark:bg-white dark:text-black hover:opacity-90'
+              }`}
             >
               {uploadingPostImage ? 'Enviando imagem...' : 'Publicar'}
             </button>
@@ -531,9 +940,9 @@ export default function FeedPage() {
           {message && <p className="mt-4 text-sm text-zinc-700 dark:text-zinc-300">{message}</p>}
         </form>
 
-        <div className="space-y-4">
+        <div className="space-y-4 sm:space-y-5">
           {posts.length === 0 && (
-            <div className="bg-white dark:bg-zinc-900 rounded-2xl p-6 border border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400">
+            <div className="bg-white dark:bg-zinc-900 rounded-2xl p-4 sm:p-6 border border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400">
               Nenhuma publicação ainda.
             </div>
           )}
@@ -549,75 +958,198 @@ export default function FeedPage() {
               post.profiles?.display_name || post.profiles?.username || 'Usuário'
             const authorUsername = post.profiles?.username || 'usuario'
             const authorAvatar = post.profiles?.avatar_url || ''
+            const isOwnPost = post.user_id === userId
+            const isBlockedRelation = blockedUserIds.includes(post.user_id)
+            const isFollowingAuthor = followStateMap.get(post.user_id) || false
+            const isHighlighted = highlightedPostId === post.id
 
             return (
               <article
+                id={`post-${post.id}`}
                 key={post.id}
-                className="bg-white dark:bg-zinc-900 rounded-2xl p-6 border border-zinc-200 dark:border-zinc-800"
+                className={`bg-white dark:bg-zinc-900 rounded-2xl p-4 sm:p-6 border transition ${
+                  isHighlighted
+                    ? 'border-blue-500 dark:border-blue-400 ring-2 ring-blue-200 dark:ring-blue-900'
+                    : 'border-zinc-200 dark:border-zinc-800'
+                }`}
               >
-                <div className="mb-3">
+                <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <Link
                     href={`/u/${authorUsername}`}
-                    className="flex items-center gap-3 hover:opacity-80 transition"
+                    className="flex items-center gap-3 hover:opacity-80 transition min-w-0"
                   >
                     {authorAvatar ? (
                       <img
                         src={authorAvatar}
                         alt={authorName}
-                        className="w-12 h-12 rounded-full object-cover border border-zinc-300 dark:border-zinc-700"
+                        className="w-12 h-12 rounded-full object-cover border border-zinc-300 dark:border-zinc-700 shrink-0"
                       />
                     ) : (
-                      <div className="w-12 h-12 rounded-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 flex items-center justify-center text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+                      <div className="w-12 h-12 rounded-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 flex items-center justify-center text-sm font-semibold text-zinc-700 dark:text-zinc-300 shrink-0">
                         {authorName.charAt(0).toUpperCase()}
                       </div>
                     )}
 
-                    <div>
-                      <p className="font-semibold text-black dark:text-white">{authorName}</p>
-                      <p className="text-sm text-zinc-500">@{authorUsername}</p>
+                    <div className="min-w-0">
+                      <p className="font-semibold text-black dark:text-white break-words">
+                        {authorName}
+                      </p>
+                      <p className="text-sm text-zinc-500 break-all">@{authorUsername}</p>
                     </div>
                   </Link>
+
+                  {!isOwnPost && !isBlockedRelation && (
+                    <button
+                      type="button"
+                      onClick={() => handleToggleFollow(post.user_id)}
+                      disabled={followLoadingUserId === post.user_id}
+                      className={`w-full sm:w-auto px-4 py-2 rounded-xl text-sm font-medium transition ${
+                        isFollowingAuthor
+                          ? 'border border-zinc-300 dark:border-zinc-700 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                          : 'bg-black text-white dark:bg-white dark:text-black hover:opacity-90'
+                      } ${
+                        followLoadingUserId === post.user_id
+                          ? 'opacity-60 cursor-not-allowed'
+                          : ''
+                      }`}
+                    >
+                      {followLoadingUserId === post.user_id
+                        ? 'Carregando...'
+                        : isFollowingAuthor
+                        ? 'Seguindo'
+                        : 'Seguir'}
+                    </button>
+                  )}
                 </div>
 
-                <p className="text-sm text-zinc-500 mb-2">{post.category}</p>
+                <div className="flex items-center gap-2 mb-3 flex-wrap">
+                  <p className="text-sm text-zinc-500">{post.category}</p>
+                  <span className="text-xs px-2 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
+                    {getVisibilityLabel(post.visibility)}
+                  </span>
+                  {isHighlighted && (
+                    <span className="text-xs px-2 py-1 rounded-full bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                      Destaque da notificação
+                    </span>
+                  )}
+                </div>
 
-                {post.user_id === userId && (
-                  <div className="flex gap-2 mb-3">
-                    <button
-                      onClick={() => handleStartEdit(post)}
-                      className="text-sm border border-blue-400 dark:border-blue-700 text-blue-600 dark:text-blue-400 px-3 py-1 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950"
-                    >
-                      Editar
-                    </button>
+                <div className="mb-4 flex gap-2 flex-wrap">
+                  {post.user_id === userId && (
+                    <>
+                      <button
+                        onClick={() => handleStartEdit(post)}
+                        className="text-sm border border-blue-400 dark:border-blue-700 text-blue-600 dark:text-blue-400 px-3 py-2 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950"
+                      >
+                        Editar
+                      </button>
 
+                      <button
+                        onClick={() => handleDeletePost(post.id)}
+                        className="text-sm border border-red-400 dark:border-red-700 text-red-600 dark:text-red-400 px-3 py-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-950"
+                      >
+                        Excluir
+                      </button>
+                    </>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => handleCopyPostLink(post.id)}
+                    className={`text-sm px-3 py-2 rounded-lg border ${
+                      copiedPostId === post.id
+                        ? 'border-green-300 dark:border-green-700 text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950'
+                        : 'border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                    }`}
+                  >
+                    {copiedPostId === post.id ? 'Link copiado' : 'Copiar link'}
+                  </button>
+
+                  {post.user_id !== userId && (
                     <button
-                      onClick={() => handleDeletePost(post.id)}
-                      className="text-sm border border-red-400 dark:border-red-700 text-red-600 dark:text-red-400 px-3 py-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-950"
+                      type="button"
+                      onClick={() => handleReportPost(post.id, post.user_id)}
+                      disabled={reportingPostId === post.id || reportedPostIds.includes(post.id)}
+                      className={`text-sm px-3 py-2 rounded-lg ${
+                        reportedPostIds.includes(post.id)
+                          ? 'border border-green-300 dark:border-green-700 text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950'
+                          : 'border border-orange-300 dark:border-orange-700 text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950'
+                      } ${
+                        reportingPostId === post.id ? 'opacity-60 cursor-not-allowed' : ''
+                      }`}
                     >
-                      Excluir
+                      {reportingPostId === post.id
+                        ? 'Enviando...'
+                        : reportedPostIds.includes(post.id)
+                        ? 'Denunciado'
+                        : 'Denunciar'}
                     </button>
-                  </div>
-                )}
+                  )}
+                </div>
 
                 {isEditing ? (
                   <div className="mb-4">
                     <textarea
                       value={editContent}
                       onChange={(e) => setEditContent(e.target.value)}
-                      className="w-full min-h-28 rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 px-4 py-3 outline-none focus:border-zinc-500 resize-none"
+                      className="w-full min-h-28 rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 px-4 py-3 outline-none focus:border-zinc-500 resize-none text-sm sm:text-base"
                     />
 
-                    <div className="flex gap-3 mt-3">
+                    {(editImagePreview || post.image_url) && !removeCurrentImage && (
+                      <div className="mt-4">
+                        <p className="text-sm text-zinc-500 mb-3">Imagem atual / nova imagem</p>
+                        <img
+                          src={editImagePreview || post.image_url || ''}
+                          alt="Prévia da edição"
+                          className="w-full max-h-80 sm:max-h-96 object-cover rounded-2xl border border-zinc-200 dark:border-zinc-700"
+                        />
+                      </div>
+                    )}
+
+                    <div className="mt-4">
+                      <label className="block mb-2 text-sm text-zinc-700 dark:text-zinc-300">
+                        Trocar imagem
+                      </label>
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        onChange={(e) => handleSelectEditImage(e.target.files?.[0] || null)}
+                        className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 px-4 py-3 outline-none text-sm sm:text-base"
+                      />
+                    </div>
+
+                    {(post.image_url || editImagePreview) && !removeCurrentImage && (
                       <button
-                        onClick={() => handleSaveEdit(post.id)}
-                        className="bg-black text-white dark:bg-white dark:text-black px-4 py-2 rounded-xl font-medium hover:opacity-90"
+                        type="button"
+                        onClick={handleRemoveCurrentEditImage}
+                        className="mt-3 w-full sm:w-auto border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 px-4 py-2 rounded-xl hover:bg-red-50 dark:hover:bg-red-950"
                       >
-                        Salvar
+                        Remover imagem do post
+                      </button>
+                    )}
+
+                    {removeCurrentImage && (
+                      <p className="mt-3 text-sm text-zinc-500 dark:text-zinc-400">
+                        A imagem será removida ao salvar.
+                      </p>
+                    )}
+
+                    <div className="flex flex-col sm:flex-row gap-3 mt-4">
+                      <button
+                        onClick={() => handleSaveEdit(post.id, post.image_url)}
+                        disabled={savingEdit}
+                        className={`w-full sm:w-auto px-4 py-2 rounded-xl font-medium ${
+                          savingEdit
+                            ? 'bg-zinc-300 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300 cursor-not-allowed'
+                            : 'bg-black text-white dark:bg-white dark:text-black hover:opacity-90'
+                        }`}
+                      >
+                        {savingEdit ? 'Salvando...' : 'Salvar'}
                       </button>
 
                       <button
                         onClick={handleCancelEdit}
-                        className="border border-zinc-300 dark:border-zinc-700 px-4 py-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                        className="w-full sm:w-auto border border-zinc-300 dark:border-zinc-700 px-4 py-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800"
                       >
                         Cancelar
                       </button>
@@ -626,7 +1158,7 @@ export default function FeedPage() {
                 ) : (
                   <>
                     {post.content && (
-                      <p className="text-zinc-800 dark:text-zinc-200 whitespace-pre-wrap mb-4">
+                      <p className="text-zinc-800 dark:text-zinc-200 whitespace-pre-wrap mb-4 break-words text-sm sm:text-base">
                         {post.content}
                       </p>
                     )}
@@ -635,19 +1167,20 @@ export default function FeedPage() {
                       <img
                         src={post.image_url}
                         alt="Imagem da publicação"
-                        className="w-full max-h-[32rem] object-cover rounded-2xl border border-zinc-200 dark:border-zinc-700"
+                        className="w-full max-h-[24rem] sm:max-h-[32rem] object-cover rounded-2xl border border-zinc-200 dark:border-zinc-700"
                       />
                     )}
                   </>
                 )}
 
-                <div className="mt-4 flex items-center gap-3">
+                <div className="mt-4 flex flex-wrap items-center gap-2 sm:gap-3">
                   <button
                     onClick={() => handleToggleLike(post.id)}
-                    className={`px-4 py-2 rounded-xl text-sm font-medium ${userLiked
-                      ? 'bg-black text-white dark:bg-white dark:text-black'
-                      : 'border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800'
-                      }`}
+                    className={`px-4 py-2 rounded-xl text-sm font-medium ${
+                      userLiked
+                        ? 'bg-black text-white dark:bg-white dark:text-black'
+                        : 'border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                    }`}
                   >
                     {userLiked ? 'Curtido' : 'Curtir'}
                   </button>
@@ -704,20 +1237,20 @@ export default function FeedPage() {
                               )}
                             </Link>
 
-                            <div className="flex-1">
+                            <div className="flex-1 min-w-0">
                               <Link
                                 href={`/u/${commentAuthorUsername}`}
                                 className="block hover:opacity-80 transition"
                               >
-                                <p className="font-semibold text-black dark:text-white">
+                                <p className="font-semibold text-black dark:text-white break-words">
                                   {commentAuthorName}
                                 </p>
-                                <p className="text-xs text-zinc-500">
+                                <p className="text-xs text-zinc-500 break-all">
                                   @{commentAuthorUsername}
                                 </p>
                               </Link>
 
-                              <p className="text-zinc-800 dark:text-zinc-200 mt-2">
+                              <p className="text-zinc-800 dark:text-zinc-200 mt-2 break-words">
                                 {comment.content}
                               </p>
 
@@ -742,12 +1275,12 @@ export default function FeedPage() {
                         }))
                       }
                       placeholder="Escreva um comentário..."
-                      className="flex-1 rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 px-4 py-3 outline-none focus:border-zinc-500"
+                      className="flex-1 rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 px-4 py-3 outline-none focus:border-zinc-500 text-sm sm:text-base"
                     />
 
                     <button
                       onClick={() => handleCreateComment(post.id)}
-                      className="bg-black text-white dark:bg-zinc-100 dark:text-black px-5 py-3 rounded-xl font-medium hover:opacity-90"
+                      className="w-full sm:w-auto bg-black text-white dark:bg-zinc-100 dark:text-black px-5 py-3 rounded-xl font-medium hover:opacity-90"
                     >
                       Comentar
                     </button>
