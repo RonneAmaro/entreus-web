@@ -792,16 +792,19 @@ function FeedContent() {
     <main className="min-h-screen bg-white text-black dark:bg-black dark:text-white transition-colors">
       <header className="border-b border-zinc-200 dark:border-zinc-800 px-4 sm:px-6 py-4">
         <div className="max-w-4xl mx-auto flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex flex-col items-start">
+          <div className="flex flex-col items-center justify-center shrink-0">
             <Image
               src="/logo.png"
               alt="Logo EntreUS"
-              width={180}
-              height={180}
-              className="h-auto w-auto max-h-24 object-contain"
+              width={260}
+              height={110}
+              className="h-auto w-[200px] sm:w-[240px] object-contain"
               priority
             />
-            <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">Só Entre Nós</p>
+
+            <p className="-mt-2 text-center text-sm font-medium tracking-wide text-zinc-500 dark:text-zinc-400">
+              Só Entre Nós
+            </p>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:flex gap-2 sm:gap-3">
