@@ -55,7 +55,6 @@ export default function HomePage() {
                   playsInline
                   preload="metadata"
                   poster="/logo.png"
-                  controls
                 >
                   <source src="/intro.mp4" type="video/mp4" />
                   Seu navegador não suporta vídeo em HTML5.
