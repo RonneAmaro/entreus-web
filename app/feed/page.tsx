@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import { supabase } from '@/lib/supabase'
@@ -46,7 +46,7 @@ type Follow = {
   following_id: string
 }
 
-export default function FeedPage() {
+function FeedContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const highlightedPostId = searchParams.get('post') || ''
@@ -210,10 +210,7 @@ export default function FeedPage() {
       )
     }
 
-    if (post.visibility === 'private') {
-      return false
-    }
-
+    if (post.visibility === 'private') return false
     return false
   }
 
@@ -375,9 +372,7 @@ export default function FeedPage() {
       'Informe o motivo da denúncia.\nEx.: spam, nudez indevida, assédio, conteúdo ofensivo'
     )
 
-    if (!reason || !reason.trim()) {
-      return
-    }
+    if (!reason || !reason.trim()) return
 
     setReportingPostId(postId)
     setMessage('')
@@ -469,9 +464,7 @@ export default function FeedPage() {
 
     if (selectedImage) {
       uploadedImageUrl = await uploadPostImage(selectedImage)
-      if (selectedImage && !uploadedImageUrl) {
-        return
-      }
+      if (selectedImage && !uploadedImageUrl) return
     }
 
     const { error } = await supabase.from('posts').insert({
@@ -499,7 +492,6 @@ export default function FeedPage() {
 
   async function handleDeletePost(postId: string) {
     const confirmDelete = window.confirm('Tem certeza que deseja excluir esta publicação?')
-
     if (!confirmDelete) return
 
     const { error } = await supabase
@@ -572,9 +564,7 @@ export default function FeedPage() {
 
     let finalImageUrl = currentImageUrl
 
-    if (removeCurrentImage) {
-      finalImageUrl = null
-    }
+    if (removeCurrentImage) finalImageUrl = null
 
     if (editSelectedImage) {
       const uploadedImageUrl = await uploadPostImage(editSelectedImage)
@@ -985,7 +975,7 @@ export default function FeedPage() {
                         className="w-12 h-12 rounded-full object-cover border border-zinc-300 dark:border-zinc-700 shrink-0"
                       />
                     ) : (
-                      <div className="w-12 h-12 rounded-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 flex items-center justify-center text-sm font-semibold text-zinc-700 dark:text-zinc-300 shrink-0">
+                      <div className="w-12 h-12 rounded-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 flex items-center justify-center text-sm font-semibold text-zinc-700 dark:text-zinc-300">
                         {authorName.charAt(0).toUpperCase()}
                       </div>
                     )}
@@ -1245,9 +1235,7 @@ export default function FeedPage() {
                                 <p className="font-semibold text-black dark:text-white break-words">
                                   {commentAuthorName}
                                 </p>
-                                <p className="text-xs text-zinc-500 break-all">
-                                  @{commentAuthorUsername}
-                                </p>
+                                <p className="text-xs text-zinc-500 break-all">@{commentAuthorUsername}</p>
                               </Link>
 
                               <p className="text-zinc-800 dark:text-zinc-200 mt-2 break-words">
@@ -1292,5 +1280,19 @@ export default function FeedPage() {
         </div>
       </section>
     </main>
+  )
+}
+
+export default function FeedPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="min-h-screen bg-white text-black dark:bg-black dark:text-white flex items-center justify-center px-4">
+          <p>Carregando feed...</p>
+        </main>
+      }
+    >
+      <FeedContent />
+    </Suspense>
   )
 }
