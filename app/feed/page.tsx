@@ -13,6 +13,7 @@ type Post = {
   created_at: string
   user_id: string
   image_url: string | null
+  video_url: string | null
   visibility: 'public' | 'followers' | 'private'
   profiles: {
     username: string
@@ -58,9 +59,15 @@ function FeedContent() {
   const [content, setContent] = useState('')
   const [category, setCategory] = useState('cotidiano')
   const [visibility, setVisibility] = useState<'public' | 'followers' | 'private'>('public')
+
   const [selectedImage, setSelectedImage] = useState<File | null>(null)
+  const [selectedVideo, setSelectedVideo] = useState<File | null>(null)
+
   const [imagePreview, setImagePreview] = useState('')
+  const [videoPreview, setVideoPreview] = useState('')
+
   const [uploadingPostImage, setUploadingPostImage] = useState(false)
+  const [uploadingPostVideo, setUploadingPostVideo] = useState(false)
 
   const [posts, setPosts] = useState<Post[]>([])
   const [comments, setComments] = useState<Comment[]>([])
@@ -76,9 +83,6 @@ function FeedContent() {
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({})
   const [editingPostId, setEditingPostId] = useState<string | null>(null)
   const [editContent, setEditContent] = useState('')
-  const [editSelectedImage, setEditSelectedImage] = useState<File | null>(null)
-  const [editImagePreview, setEditImagePreview] = useState('')
-  const [removeCurrentImage, setRemoveCurrentImage] = useState(false)
   const [savingEdit, setSavingEdit] = useState(false)
 
   const [message, setMessage] = useState('')
@@ -228,6 +232,7 @@ function FeedContent() {
         created_at,
         user_id,
         image_url,
+        video_url,
         visibility,
         profiles (
           username,
@@ -450,21 +455,68 @@ function FeedContent() {
     return publicUrlData.publicUrl
   }
 
+  async function uploadPostVideo(file: File) {
+    if (!userId) return null
+
+    const allowedTypes = ['video/mp4', 'video/webm', 'video/ogg']
+    if (!allowedTypes.includes(file.type)) {
+      setMessage('Envie um vídeo MP4, WEBM ou OGG.')
+      return null
+    }
+
+    const maxSizeInBytes = 30 * 1024 * 1024
+    if (file.size > maxSizeInBytes) {
+      setMessage('O vídeo deve ter no máximo 30MB.')
+      return null
+    }
+
+    setUploadingPostVideo(true)
+
+    const fileExt = file.name.split('.').pop()?.toLowerCase() || 'mp4'
+    const filePath = `${userId}/video-${Date.now()}.${fileExt}`
+
+    const { error: uploadError } = await supabase.storage
+      .from('post-videos')
+      .upload(filePath, file, {
+        cacheControl: '3600',
+        upsert: true,
+      })
+
+    if (uploadError) {
+      setMessage('Erro ao enviar vídeo do post: ' + uploadError.message)
+      setUploadingPostVideo(false)
+      return null
+    }
+
+    const { data: publicUrlData } = supabase.storage
+      .from('post-videos')
+      .getPublicUrl(filePath)
+
+    setUploadingPostVideo(false)
+    return publicUrlData.publicUrl
+  }
+
   async function handleCreatePost(e: React.FormEvent) {
     e.preventDefault()
 
-    if (!content.trim() && !selectedImage) {
-      setMessage('Escreva algo ou escolha uma imagem antes de publicar.')
+    if (!content.trim() && !selectedImage && !selectedVideo) {
+      setMessage('Escreva algo ou escolha uma mídia antes de publicar.')
       return
     }
 
     setMessage('')
 
     let uploadedImageUrl: string | null = null
+    let uploadedVideoUrl: string | null = null
 
     if (selectedImage) {
       uploadedImageUrl = await uploadPostImage(selectedImage)
       if (selectedImage && !uploadedImageUrl) return
+    }
+
+    if (selectedVideo) {
+      uploadedVideoUrl = await uploadPostVideo(selectedVideo)
+      if (selectedVideo && !uploadedVideoUrl) return
     }
 
     const { error } = await supabase.from('posts').insert({
@@ -472,6 +524,7 @@ function FeedContent() {
       content: content.trim() || null,
       category,
       image_url: uploadedImageUrl,
+      video_url: uploadedVideoUrl,
       visibility,
       is_sensitive: category === 'sensual' || category === 'adulto',
     })
@@ -485,7 +538,9 @@ function FeedContent() {
     setCategory('cotidiano')
     setVisibility('public')
     setSelectedImage(null)
+    setSelectedVideo(null)
     setImagePreview('')
+    setVideoPreview('')
     setMessage('Publicado com sucesso!')
     await loadPosts()
   }
@@ -514,47 +569,15 @@ function FeedContent() {
   function handleStartEdit(post: Post) {
     setEditingPostId(post.id)
     setEditContent(post.content || '')
-    setEditSelectedImage(null)
-    setEditImagePreview(post.image_url || '')
-    setRemoveCurrentImage(false)
   }
 
   function handleCancelEdit() {
     setEditingPostId(null)
     setEditContent('')
-    setEditSelectedImage(null)
-    setEditImagePreview('')
-    setRemoveCurrentImage(false)
   }
 
-  function handleSelectEditImage(file: File | null) {
-    if (!file) {
-      setEditSelectedImage(null)
-      setEditImagePreview('')
-      return
-    }
-
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp']
-    if (!allowedTypes.includes(file.type)) {
-      setMessage('Envie uma imagem JPG, PNG ou WEBP.')
-      return
-    }
-
-    const previewUrl = URL.createObjectURL(file)
-    setEditSelectedImage(file)
-    setEditImagePreview(previewUrl)
-    setRemoveCurrentImage(false)
-    setMessage('')
-  }
-
-  function handleRemoveCurrentEditImage() {
-    setEditSelectedImage(null)
-    setEditImagePreview('')
-    setRemoveCurrentImage(true)
-  }
-
-  async function handleSaveEdit(postId: string, currentImageUrl: string | null) {
-    if (!editContent.trim() && !editSelectedImage && !currentImageUrl && !removeCurrentImage) {
+  async function handleSaveEdit(postId: string) {
+    if (!editContent.trim()) {
       setMessage('O post não pode ficar vazio.')
       return
     }
@@ -562,32 +585,10 @@ function FeedContent() {
     setSavingEdit(true)
     setMessage('')
 
-    let finalImageUrl = currentImageUrl
-
-    if (removeCurrentImage) finalImageUrl = null
-
-    if (editSelectedImage) {
-      const uploadedImageUrl = await uploadPostImage(editSelectedImage)
-      if (!uploadedImageUrl) {
-        setSavingEdit(false)
-        return
-      }
-      finalImageUrl = uploadedImageUrl
-    }
-
-    const finalContent = editContent.trim() || null
-
-    if (!finalContent && !finalImageUrl) {
-      setMessage('O post não pode ficar vazio.')
-      setSavingEdit(false)
-      return
-    }
-
     const { error } = await supabase
       .from('posts')
       .update({
-        content: finalContent,
-        image_url: finalImageUrl,
+        content: editContent.trim(),
       })
       .eq('id', postId)
       .eq('user_id', userId)
@@ -601,9 +602,6 @@ function FeedContent() {
     setMessage('Post editado com sucesso!')
     setEditingPostId(null)
     setEditContent('')
-    setEditSelectedImage(null)
-    setEditImagePreview('')
-    setRemoveCurrentImage(false)
     setSavingEdit(false)
     await loadPosts()
   }
@@ -717,6 +715,9 @@ function FeedContent() {
       return
     }
 
+    setSelectedVideo(null)
+    setVideoPreview('')
+
     const allowedTypes = ['image/jpeg', 'image/png', 'image/webp']
     if (!allowedTypes.includes(file.type)) {
       setMessage('Envie uma imagem JPG, PNG ou WEBP.')
@@ -729,9 +730,36 @@ function FeedContent() {
     setMessage('')
   }
 
+  function handleSelectVideo(file: File | null) {
+    if (!file) {
+      setSelectedVideo(null)
+      setVideoPreview('')
+      return
+    }
+
+    setSelectedImage(null)
+    setImagePreview('')
+
+    const allowedTypes = ['video/mp4', 'video/webm', 'video/ogg']
+    if (!allowedTypes.includes(file.type)) {
+      setMessage('Envie um vídeo MP4, WEBM ou OGG.')
+      return
+    }
+
+    const previewUrl = URL.createObjectURL(file)
+    setSelectedVideo(file)
+    setVideoPreview(previewUrl)
+    setMessage('')
+  }
+
   function removeSelectedImage() {
     setSelectedImage(null)
     setImagePreview('')
+  }
+
+  function removeSelectedVideo() {
+    setSelectedVideo(null)
+    setVideoPreview('')
   }
 
   function getVisibilityLabel(value: Post['visibility']) {
@@ -872,22 +900,37 @@ function FeedContent() {
             </div>
           </div>
 
-          <div className="mt-4">
-            <label className="block mb-2 text-sm text-zinc-700 dark:text-zinc-300">
-              Imagem da publicação
-            </label>
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block mb-2 text-sm text-zinc-700 dark:text-zinc-300">
+                Imagem da publicação
+              </label>
 
-            <input
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              onChange={(e) => handleSelectImage(e.target.files?.[0] || null)}
-              className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 px-4 py-3 outline-none text-sm sm:text-base"
-            />
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                onChange={(e) => handleSelectImage(e.target.files?.[0] || null)}
+                className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 px-4 py-3 outline-none text-sm sm:text-base"
+              />
+            </div>
 
-            <p className="text-xs text-zinc-500 mt-2">
-              Formatos aceitos: JPG, PNG e WEBP. Tamanho máximo: 5MB.
-            </p>
+            <div>
+              <label className="block mb-2 text-sm text-zinc-700 dark:text-zinc-300">
+                Vídeo da publicação
+              </label>
+
+              <input
+                type="file"
+                accept="video/mp4,video/webm,video/ogg"
+                onChange={(e) => handleSelectVideo(e.target.files?.[0] || null)}
+                className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 px-4 py-3 outline-none text-sm sm:text-base"
+              />
+            </div>
           </div>
+
+          <p className="text-xs text-zinc-500 mt-2">
+            Imagem: JPG, PNG e WEBP até 5MB. Vídeo: MP4, WEBM ou OGG até 30MB.
+          </p>
 
           {imagePreview && (
             <div className="mt-4">
@@ -908,6 +951,25 @@ function FeedContent() {
             </div>
           )}
 
+          {videoPreview && (
+            <div className="mt-4">
+              <p className="text-sm text-zinc-500 mb-3">Prévia do vídeo</p>
+              <video
+                src={videoPreview}
+                controls
+                className="w-full max-h-80 sm:max-h-96 rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-black"
+              />
+
+              <button
+                type="button"
+                onClick={removeSelectedVideo}
+                className="mt-3 w-full sm:w-auto border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 px-4 py-2 rounded-xl hover:bg-red-50 dark:hover:bg-red-950"
+              >
+                Remover vídeo
+              </button>
+            </div>
+          )}
+
           <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-zinc-500 dark:text-zinc-400">
               Visibilidade atual:{' '}
@@ -916,14 +978,18 @@ function FeedContent() {
 
             <button
               type="submit"
-              disabled={uploadingPostImage}
+              disabled={uploadingPostImage || uploadingPostVideo}
               className={`w-full sm:w-auto px-6 py-3 rounded-xl font-medium ${
-                uploadingPostImage
+                uploadingPostImage || uploadingPostVideo
                   ? 'bg-zinc-300 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300 cursor-not-allowed'
                   : 'bg-black text-white dark:bg-white dark:text-black hover:opacity-90'
               }`}
             >
-              {uploadingPostImage ? 'Enviando imagem...' : 'Publicar'}
+              {uploadingPostImage
+                ? 'Enviando imagem...'
+                : uploadingPostVideo
+                ? 'Enviando vídeo...'
+                : 'Publicar'}
             </button>
           </div>
 
@@ -1085,48 +1151,9 @@ function FeedContent() {
                       className="w-full min-h-28 rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 px-4 py-3 outline-none focus:border-zinc-500 resize-none text-sm sm:text-base"
                     />
 
-                    {(editImagePreview || post.image_url) && !removeCurrentImage && (
-                      <div className="mt-4">
-                        <p className="text-sm text-zinc-500 mb-3">Imagem atual / nova imagem</p>
-                        <img
-                          src={editImagePreview || post.image_url || ''}
-                          alt="Prévia da edição"
-                          className="w-full max-h-80 sm:max-h-96 object-cover rounded-2xl border border-zinc-200 dark:border-zinc-700"
-                        />
-                      </div>
-                    )}
-
-                    <div className="mt-4">
-                      <label className="block mb-2 text-sm text-zinc-700 dark:text-zinc-300">
-                        Trocar imagem
-                      </label>
-                      <input
-                        type="file"
-                        accept="image/png,image/jpeg,image/webp"
-                        onChange={(e) => handleSelectEditImage(e.target.files?.[0] || null)}
-                        className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 px-4 py-3 outline-none text-sm sm:text-base"
-                      />
-                    </div>
-
-                    {(post.image_url || editImagePreview) && !removeCurrentImage && (
-                      <button
-                        type="button"
-                        onClick={handleRemoveCurrentEditImage}
-                        className="mt-3 w-full sm:w-auto border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 px-4 py-2 rounded-xl hover:bg-red-50 dark:hover:bg-red-950"
-                      >
-                        Remover imagem do post
-                      </button>
-                    )}
-
-                    {removeCurrentImage && (
-                      <p className="mt-3 text-sm text-zinc-500 dark:text-zinc-400">
-                        A imagem será removida ao salvar.
-                      </p>
-                    )}
-
                     <div className="flex flex-col sm:flex-row gap-3 mt-4">
                       <button
-                        onClick={() => handleSaveEdit(post.id, post.image_url)}
+                        onClick={() => handleSaveEdit(post.id)}
                         disabled={savingEdit}
                         className={`w-full sm:w-auto px-4 py-2 rounded-xl font-medium ${
                           savingEdit
@@ -1157,7 +1184,15 @@ function FeedContent() {
                       <img
                         src={post.image_url}
                         alt="Imagem da publicação"
-                        className="w-full max-h-[24rem] sm:max-h-[32rem] object-cover rounded-2xl border border-zinc-200 dark:border-zinc-700"
+                        className="w-full max-h-[24rem] sm:max-h-[32rem] object-cover rounded-2xl border border-zinc-200 dark:border-zinc-700 mb-4"
+                      />
+                    )}
+
+                    {post.video_url && (
+                      <video
+                        src={post.video_url}
+                        controls
+                        className="w-full max-h-[24rem] sm:max-h-[32rem] rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-black"
                       />
                     )}
                   </>
