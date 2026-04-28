@@ -1,5 +1,6 @@
 'use client'
 
+import Image from 'next/image'
 import Link from 'next/link'
 import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -790,9 +791,16 @@ function FeedContent() {
     <main className="min-h-screen bg-white text-black dark:bg-black dark:text-white transition-colors">
       <header className="border-b border-zinc-200 dark:border-zinc-800 px-4 sm:px-6 py-4">
         <div className="max-w-4xl mx-auto flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold">EntreUS</h1>
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">Só Entre Nós</p>
+          <div className="flex flex-col items-start">
+            <Image
+              src="/logo.png"
+              alt="Logo EntreUS"
+              width={110}
+              height={110}
+              className="h-auto w-auto max-h-12 object-contain"
+              priority
+            />
+            <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">Só Entre Nós</p>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:flex gap-2 sm:gap-3">
