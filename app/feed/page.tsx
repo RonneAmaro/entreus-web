@@ -19,6 +19,12 @@ type ComposerSubmitData = {
   videoFile: File | null
 }
 
+type CurrentProfile = {
+  username: string | null
+  display_name: string | null
+  avatar_url: string | null
+}
+
 type Post = {
   id: string
   content: string | null
@@ -69,6 +75,7 @@ function FeedContent() {
   const [mounted, setMounted] = useState(false)
   const [userId, setUserId] = useState('')
   const [email, setEmail] = useState('')
+  const [currentProfile, setCurrentProfile] = useState<CurrentProfile | null>(null)
 
   const [uploadingPostImage, setUploadingPostImage] = useState(false)
   const [uploadingPostVideo, setUploadingPostVideo] = useState(false)
@@ -110,6 +117,16 @@ function FeedContent() {
       setUserId(user.id)
       setEmail(user.email || '')
 
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('username, display_name, avatar_url')
+        .eq('id', user.id)
+        .single()
+
+      if (!profileError && profileData) {
+        setCurrentProfile(profileData as CurrentProfile)
+      }
+
       const blockedIds = await loadBlockedUserIds(user.id)
       setBlockedUserIds(blockedIds)
 
@@ -134,6 +151,7 @@ function FeedContent() {
 
     const timer = setTimeout(() => {
       const element = document.getElementById(`post-${highlightedPostId}`)
+
       if (element) {
         element.scrollIntoView({ behavior: 'smooth', block: 'center' })
       }
@@ -736,6 +754,7 @@ function FeedContent() {
       composer.scrollIntoView({ behavior: 'smooth', block: 'center' })
 
       const textarea = composer.querySelector('textarea')
+
       if (textarea instanceof HTMLTextAreaElement) {
         setTimeout(() => textarea.focus(), 350)
       }
@@ -781,6 +800,8 @@ function FeedContent() {
 
       <MobileNavigation
         email={email}
+        displayName={currentProfile?.display_name || currentProfile?.username || 'Minha conta'}
+        avatarUrl={currentProfile?.avatar_url || null}
         unreadNotificationsCount={unreadNotificationsCount}
         mounted={mounted}
         theme={theme}
@@ -799,8 +820,8 @@ function FeedContent() {
 
         <div id="post-composer" className="mb-6 scroll-mt-24">
           <PostComposer
-            userName={email || 'Usuário'}
-            userAvatarUrl={null}
+            userName={currentProfile?.display_name || currentProfile?.username || email || 'Usuário'}
+            userAvatarUrl={currentProfile?.avatar_url || null}
             submitting={uploadingPostImage || uploadingPostVideo}
             onSubmit={handleCreatePost}
           />

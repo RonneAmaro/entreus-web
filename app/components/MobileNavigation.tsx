@@ -21,6 +21,8 @@ import {
 
 type MobileNavigationProps = {
   email: string
+  displayName?: string
+  avatarUrl?: string | null
   unreadNotificationsCount?: number
   mounted: boolean
   theme?: string
@@ -29,13 +31,15 @@ type MobileNavigationProps = {
   onPostClick: () => void
 }
 
-function getInitial(email: string) {
-  if (!email) return 'U'
-  return email.slice(0, 1).toUpperCase()
+function getInitial(text: string) {
+  if (!text) return 'U'
+  return text.slice(0, 1).toUpperCase()
 }
 
 export default function MobileNavigation({
   email,
+  displayName = 'Minha conta',
+  avatarUrl,
   unreadNotificationsCount = 0,
   mounted,
   theme,
@@ -51,16 +55,23 @@ export default function MobileNavigation({
 
   return (
     <>
-      {/* Barra superior mobile */}
       <header className="fixed left-0 top-0 z-50 flex h-16 w-full items-center justify-between border-b border-zinc-200 bg-white px-4 dark:border-zinc-800 dark:bg-black lg:hidden">
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="flex h-10 w-10 items-center justify-center rounded-full border border-zinc-200 bg-zinc-100 text-zinc-800 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100"
+          className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border border-zinc-200 bg-zinc-100 text-zinc-800 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100"
           aria-label="Abrir menu do perfil"
         >
-          {email ? (
-            <span className="text-sm font-bold">{getInitial(email)}</span>
+          {avatarUrl ? (
+            <img
+              src={avatarUrl}
+              alt={displayName}
+              className="h-full w-full object-cover"
+            />
+          ) : email ? (
+            <span className="text-sm font-bold">
+              {getInitial(displayName || email)}
+            </span>
           ) : (
             <Menu className="h-5 w-5" />
           )}
@@ -92,7 +103,6 @@ export default function MobileNavigation({
         </Link>
       </header>
 
-      {/* Menu lateral mobile */}
       {open && (
         <div className="fixed inset-0 z-[60] lg:hidden">
           <button
@@ -103,17 +113,25 @@ export default function MobileNavigation({
           />
 
           <aside className="relative h-full w-[82%] max-w-[340px] overflow-y-auto border-r border-zinc-200 bg-white px-5 py-5 shadow-2xl dark:border-zinc-800 dark:bg-black">
-            <div className="mb-6 flex items-center justify-between">
+            <div className="mb-6 flex items-start justify-between">
               <div>
-                <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-full border border-zinc-200 bg-zinc-100 text-lg font-bold text-zinc-800 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100">
-                  {getInitial(email)}
+                <div className="mb-3 flex h-16 w-16 items-center justify-center overflow-hidden rounded-full border border-zinc-200 bg-zinc-100 text-lg font-bold text-zinc-800 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100">
+                  {avatarUrl ? (
+                    <img
+                      src={avatarUrl}
+                      alt={displayName}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    getInitial(displayName || email)
+                  )}
                 </div>
 
-                <p className="max-w-[230px] truncate text-sm font-semibold text-zinc-900 dark:text-white">
-                  Minha conta
+                <p className="max-w-[230px] truncate text-base font-bold text-zinc-900 dark:text-white">
+                  {displayName}
                 </p>
 
-                <p className="max-w-[230px] truncate text-xs text-zinc-500">
+                <p className="max-w-[230px] truncate text-sm text-zinc-500">
                   {email}
                 </p>
               </div>
@@ -124,7 +142,7 @@ export default function MobileNavigation({
                 className="flex h-10 w-10 items-center justify-center rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-900"
                 aria-label="Fechar menu"
               >
-                <X className="h-5 w-5" />
+                <X className="h-6 w-6" />
               </button>
             </div>
 
@@ -208,6 +226,7 @@ export default function MobileNavigation({
                   ) : (
                     <Moon className="h-5 w-5" />
                   )}
+
                   {theme === 'dark' ? 'Tema claro' : 'Tema escuro'}
                 </button>
               )}
@@ -225,7 +244,6 @@ export default function MobileNavigation({
         </div>
       )}
 
-      {/* Barra inferior mobile */}
       <nav className="fixed bottom-0 left-0 z-50 grid h-16 w-full grid-cols-5 border-t border-zinc-200 bg-white dark:border-zinc-800 dark:bg-black lg:hidden">
         <Link
           href="/feed"
