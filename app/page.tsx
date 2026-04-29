@@ -7,7 +7,24 @@ export default function HomePage() {
       <section className="w-full max-w-6xl">
         <div className="bg-zinc-950 border border-zinc-800 rounded-3xl px-4 py-8 sm:px-8 sm:py-12 shadow-xl">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 items-center">
-            <div className="flex flex-col items-center lg:items-start text-center lg:text-left">
+            <div className="flex justify-center order-1">
+              <div className="w-full max-w-2xl rounded-3xl overflow-hidden border border-zinc-800 bg-black shadow-2xl">
+                <video
+                  className="w-full h-auto object-cover"
+                  autoPlay
+                  muted
+                  loop
+                  playsInline
+                  preload="metadata"
+                  poster="/logo.png"
+                >
+                  <source src="/intro.mp4" type="video/mp4" />
+                  Seu navegador não suporta vídeo em HTML5.
+                </video>
+              </div>
+            </div>
+
+            <div className="flex flex-col items-center lg:items-start text-center lg:text-left order-2">
               <div className="mb-6">
                 <Image
                   src="/logo.png"
@@ -42,23 +59,6 @@ export default function HomePage() {
                 >
                   Entrar
                 </Link>
-              </div>
-            </div>
-
-            <div className="flex justify-center">
-              <div className="w-full max-w-2xl rounded-3xl overflow-hidden border border-zinc-800 bg-black shadow-2xl">
-                <video
-                  className="w-full h-auto object-cover"
-                  autoPlay
-                  muted
-                  loop
-                  playsInline
-                  preload="metadata"
-                  poster="/logo.png"
-                >
-                  <source src="/intro.mp4" type="video/mp4" />
-                  Seu navegador não suporta vídeo em HTML5.
-                </video>
               </div>
             </div>
           </div>
