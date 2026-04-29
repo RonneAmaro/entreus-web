@@ -27,15 +27,15 @@ export default function HomePage() {
             </div>
 
             {/* SEGUNDO: LOGO, TEXTO E BOTÕES */}
-            <div className="flex flex-col items-center lg:items-start text-center lg:text-left">
-              <div className="mb-6">
+            <div className="flex flex-col items-center justify-center text-center">
+              <div className="mb-5 flex justify-center">
                 <Image
                   src="/logo.png"
                   alt="EntreUS"
                   width={420}
                   height={180}
                   priority
-                  className="h-auto w-auto max-w-[260px] sm:max-w-[340px] lg:max-w-[420px]"
+                  className="h-auto w-auto max-w-[260px] sm:max-w-[340px] lg:max-w-[360px]"
                 />
               </div>
 
@@ -43,22 +43,22 @@ export default function HomePage() {
                 Só Entre Nós
               </p>
 
-              <p className="text-sm sm:text-base text-zinc-400 max-w-xl leading-relaxed mb-8">
+              <p className="text-sm sm:text-base text-zinc-400 max-w-md leading-relaxed mb-8">
                 Uma rede social privada para adultos, focada em conexão, lifestyle,
                 liberdade, privacidade e interações reais em um ambiente discreto e moderno.
               </p>
 
-              <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+              <div className="flex flex-col sm:flex-row justify-center items-center gap-3 w-full sm:w-auto">
                 <Link
                   href="/signup"
-                  className="w-full sm:w-auto px-6 py-3 rounded-xl bg-white text-black font-medium hover:opacity-90 transition text-center"
+                  className="w-full sm:w-auto min-w-[130px] px-6 py-3 rounded-xl bg-white text-black font-medium hover:opacity-90 transition text-center"
                 >
                   Criar conta
                 </Link>
 
                 <Link
                   href="/login"
-                  className="w-full sm:w-auto px-6 py-3 rounded-xl border border-zinc-700 hover:bg-zinc-900 transition text-center"
+                  className="w-full sm:w-auto min-w-[130px] px-6 py-3 rounded-xl border border-zinc-700 hover:bg-zinc-900 transition text-center"
                 >
                   Entrar
                 </Link>
