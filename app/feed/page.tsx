@@ -2,7 +2,6 @@
 
 import PostComposer from '../components/PostComposer'
 import AppSidebar from '../components/AppSidebar'
-import Image from 'next/image'
 import Link from 'next/link'
 import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -764,70 +763,6 @@ function FeedContent() {
         onLogout={handleLogout}
       />
 
-      <header className="border-b border-zinc-200 dark:border-zinc-800 px-4 sm:px-6 py-4">
-        <div className="max-w-4xl mx-auto flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex flex-col items-center justify-center shrink-0">
-            <Image
-              src="/logo.png"
-              alt="Logo EntreUS"
-              width={520}
-              height={210}
-              className="h-auto w-[320px] sm:w-[420px] object-contain"
-              priority
-            />
-
-            <p className="-mt-4 text-center text-base font-medium tracking-wide text-zinc-500 dark:text-zinc-400">
-              Só Entre Nós
-            </p>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:flex gap-2 sm:gap-3">
-            <Link
-              href="/notifications"
-              className="relative text-center border border-zinc-300 dark:border-zinc-700 px-3 sm:px-4 py-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-900 text-sm sm:text-base"
-            >
-              Notificações
-
-              {unreadNotificationsCount > 0 && (
-                <span className="absolute -top-2 -right-2 min-w-[22px] h-[22px] px-1 rounded-full bg-red-600 text-white text-xs font-bold flex items-center justify-center">
-                  {unreadNotificationsCount > 99 ? '99+' : unreadNotificationsCount}
-                </span>
-              )}
-            </Link>
-
-            <Link
-              href="/search"
-              className="text-center border border-zinc-300 dark:border-zinc-700 px-3 sm:px-4 py-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-900 text-sm sm:text-base"
-            >
-              Buscar
-            </Link>
-
-            <Link
-              href="/profile"
-              className="text-center border border-zinc-300 dark:border-zinc-700 px-3 sm:px-4 py-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-900 text-sm sm:text-base"
-            >
-              Meu perfil
-            </Link>
-
-            {mounted && (
-              <button
-                onClick={handleToggleTheme}
-                className="border border-zinc-300 dark:border-zinc-700 px-3 sm:px-4 py-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-900 text-sm sm:text-base"
-              >
-                {theme === 'dark' ? 'Tema claro' : 'Tema escuro'}
-              </button>
-            )}
-
-            <button
-              onClick={handleLogout}
-              className="border border-zinc-300 dark:border-zinc-700 px-3 sm:px-4 py-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-900 text-sm sm:text-base col-span-2 sm:col-span-1"
-            >
-              Sair
-            </button>
-          </div>
-        </div>
-      </header>
-
       <section className="mx-auto max-w-2xl px-4 py-6 sm:px-6 sm:py-8 lg:ml-[300px] lg:mr-auto">
         <div className="mb-4 sm:mb-6 text-sm text-zinc-500 dark:text-zinc-400 break-all">
           Logado como:{' '}
@@ -882,10 +817,11 @@ function FeedContent() {
               <article
                 id={`post-${post.id}`}
                 key={post.id}
-                className={`bg-white dark:bg-zinc-900 rounded-2xl p-4 sm:p-6 border transition ${isHighlighted
-                  ? 'border-blue-500 dark:border-blue-400 ring-2 ring-blue-200 dark:ring-blue-900'
-                  : 'border-zinc-200 dark:border-zinc-800'
-                  }`}
+                className={`bg-white dark:bg-zinc-900 rounded-2xl p-4 sm:p-6 border transition ${
+                  isHighlighted
+                    ? 'border-blue-500 dark:border-blue-400 ring-2 ring-blue-200 dark:ring-blue-900'
+                    : 'border-zinc-200 dark:border-zinc-800'
+                }`}
               >
                 <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <Link
@@ -920,13 +856,15 @@ function FeedContent() {
                       type="button"
                       onClick={() => handleToggleFollow(post.user_id)}
                       disabled={followLoadingUserId === post.user_id}
-                      className={`w-full sm:w-auto px-4 py-2 rounded-xl text-sm font-medium transition ${isFollowingAuthor
-                        ? 'border border-zinc-300 dark:border-zinc-700 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800'
-                        : 'bg-black text-white dark:bg-white dark:text-black hover:opacity-90'
-                        } ${followLoadingUserId === post.user_id
+                      className={`w-full sm:w-auto px-4 py-2 rounded-xl text-sm font-medium transition ${
+                        isFollowingAuthor
+                          ? 'border border-zinc-300 dark:border-zinc-700 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                          : 'bg-black text-white dark:bg-white dark:text-black hover:opacity-90'
+                      } ${
+                        followLoadingUserId === post.user_id
                           ? 'opacity-60 cursor-not-allowed'
                           : ''
-                        }`}
+                      }`}
                     >
                       {followLoadingUserId === post.user_id
                         ? 'Carregando...'
@@ -975,10 +913,11 @@ function FeedContent() {
                   <button
                     type="button"
                     onClick={() => handleCopyPostLink(post.id)}
-                    className={`text-sm px-3 py-2 rounded-lg border ${copiedPostId === post.id
-                      ? 'border-green-300 dark:border-green-700 text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950'
-                      : 'border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800'
-                      }`}
+                    className={`text-sm px-3 py-2 rounded-lg border ${
+                      copiedPostId === post.id
+                        ? 'border-green-300 dark:border-green-700 text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950'
+                        : 'border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                    }`}
                   >
                     {copiedPostId === post.id ? 'Link copiado' : 'Copiar link'}
                   </button>
@@ -988,13 +927,15 @@ function FeedContent() {
                       type="button"
                       onClick={() => handleReportPost(post.id, post.user_id)}
                       disabled={reportingPostId === post.id || reportedPostIds.includes(post.id)}
-                      className={`text-sm px-3 py-2 rounded-lg ${reportedPostIds.includes(post.id)
-                        ? 'border border-green-300 dark:border-green-700 text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950'
-                        : 'border border-orange-300 dark:border-orange-700 text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950'
-                        } ${reportingPostId === post.id
+                      className={`text-sm px-3 py-2 rounded-lg ${
+                        reportedPostIds.includes(post.id)
+                          ? 'border border-green-300 dark:border-green-700 text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950'
+                          : 'border border-orange-300 dark:border-orange-700 text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950'
+                      } ${
+                        reportingPostId === post.id
                           ? 'opacity-60 cursor-not-allowed'
                           : ''
-                        }`}
+                      }`}
                     >
                       {reportingPostId === post.id
                         ? 'Enviando...'
@@ -1017,10 +958,11 @@ function FeedContent() {
                       <button
                         onClick={() => handleSaveEdit(post.id)}
                         disabled={savingEdit}
-                        className={`w-full sm:w-auto px-4 py-2 rounded-xl font-medium ${savingEdit
-                          ? 'bg-zinc-300 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300 cursor-not-allowed'
-                          : 'bg-black text-white dark:bg-white dark:text-black hover:opacity-90'
-                          }`}
+                        className={`w-full sm:w-auto px-4 py-2 rounded-xl font-medium ${
+                          savingEdit
+                            ? 'bg-zinc-300 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300 cursor-not-allowed'
+                            : 'bg-black text-white dark:bg-white dark:text-black hover:opacity-90'
+                        }`}
                       >
                         {savingEdit ? 'Salvando...' : 'Salvar'}
                       </button>
@@ -1062,10 +1004,11 @@ function FeedContent() {
                 <div className="mt-4 flex flex-wrap items-center gap-2 sm:gap-3">
                   <button
                     onClick={() => handleToggleLike(post.id)}
-                    className={`px-4 py-2 rounded-xl text-sm font-medium ${userLiked
-                      ? 'bg-black text-white dark:bg-white dark:text-black'
-                      : 'border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800'
-                      }`}
+                    className={`px-4 py-2 rounded-xl text-sm font-medium ${
+                      userLiked
+                        ? 'bg-black text-white dark:bg-white dark:text-black'
+                        : 'border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                    }`}
                   >
                     {userLiked ? 'Curtido' : 'Curtir'}
                   </button>
