@@ -2,6 +2,7 @@
 
 import PostComposer from '../components/PostComposer'
 import AppSidebar from '../components/AppSidebar'
+import MobileNavigation from '../components/MobileNavigation'
 import Link from 'next/link'
 import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -255,7 +256,9 @@ function FeedContent() {
       .map((post: any) => ({
         ...post,
         visibility: (post.visibility || 'public') as VisibilityType,
-        profiles: Array.isArray(post.profiles) ? post.profiles[0] || null : post.profiles,
+        profiles: Array.isArray(post.profiles)
+          ? post.profiles[0] || null
+          : post.profiles,
       }))
       .filter((post: Post) => !currentBlockedIds.includes(post.user_id))
       .filter((post: Post) => canSeePost(post, currentUserId, currentFollows))
@@ -726,6 +729,19 @@ function FeedContent() {
     setTheme(theme === 'dark' ? 'light' : 'dark')
   }
 
+  function handlePostComposerFocus() {
+    const composer = document.getElementById('post-composer')
+
+    if (composer) {
+      composer.scrollIntoView({ behavior: 'smooth', block: 'center' })
+
+      const textarea = composer.querySelector('textarea')
+      if (textarea instanceof HTMLTextAreaElement) {
+        setTimeout(() => textarea.focus(), 350)
+      }
+    }
+  }
+
   function getVisibilityLabel(value: Post['visibility']) {
     if (value === 'public') return 'Público'
     if (value === 'followers') return 'Só seguidores'
@@ -763,7 +779,17 @@ function FeedContent() {
         onLogout={handleLogout}
       />
 
-      <section className="mx-auto max-w-2xl px-4 py-6 sm:px-6 sm:py-8 lg:ml-[300px] lg:mr-auto">
+      <MobileNavigation
+        email={email}
+        unreadNotificationsCount={unreadNotificationsCount}
+        mounted={mounted}
+        theme={theme}
+        onToggleTheme={handleToggleTheme}
+        onLogout={handleLogout}
+        onPostClick={handlePostComposerFocus}
+      />
+
+      <section className="mx-auto max-w-2xl px-4 py-20 pb-24 sm:px-6 lg:ml-[300px] lg:mr-auto lg:py-8">
         <div className="mb-4 sm:mb-6 text-sm text-zinc-500 dark:text-zinc-400 break-all">
           Logado como:{' '}
           <span className="text-black dark:text-white">
