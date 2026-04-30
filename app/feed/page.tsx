@@ -6,6 +6,7 @@ import MobileNavigation from '../components/MobileNavigation'
 import PostMoreMenu from '../components/PostMoreMenu'
 import PostMediaGallery from '../components/PostMediaGallery'
 import PostActions from '../components/PostActions'
+import LinkPreview from '../components/LinkPreview'
 import Link from 'next/link'
 import { Edit3, MoreHorizontal, Trash2 } from 'lucide-react'
 import { Suspense, useEffect, useMemo, useState } from 'react'
@@ -1133,8 +1134,8 @@ function FeedContent() {
                 id={`post-${post.id}`}
                 key={post.id}
                 className={`bg-white dark:bg-zinc-900 rounded-2xl p-4 sm:p-6 border transition ${isHighlighted
-                    ? 'border-blue-500 dark:border-blue-400 ring-2 ring-blue-200 dark:ring-blue-900'
-                    : 'border-zinc-200 dark:border-zinc-800'
+                  ? 'border-blue-500 dark:border-blue-400 ring-2 ring-blue-200 dark:ring-blue-900'
+                  : 'border-zinc-200 dark:border-zinc-800'
                   }`}
               >
                 <div className="mb-3 flex items-start justify-between gap-3">
@@ -1184,8 +1185,8 @@ function FeedContent() {
                       onClick={() => handleToggleFollow(post.user_id)}
                       disabled={followLoadingUserId === post.user_id}
                       className={`rounded-full px-4 py-2 text-sm font-medium transition ${isFollowingAuthor
-                          ? 'border border-zinc-300 text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800'
-                          : 'bg-black text-white hover:opacity-90 dark:bg-white dark:text-black'
+                        ? 'border border-zinc-300 text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800'
+                        : 'bg-black text-white hover:opacity-90 dark:bg-white dark:text-black'
                         } ${followLoadingUserId === post.user_id
                           ? 'opacity-60 cursor-not-allowed'
                           : ''
@@ -1229,8 +1230,8 @@ function FeedContent() {
                         onClick={() => handleSaveEdit(post.id)}
                         disabled={savingEdit}
                         className={`w-full sm:w-auto px-4 py-2 rounded-xl font-medium ${savingEdit
-                            ? 'bg-zinc-300 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300 cursor-not-allowed'
-                            : 'bg-black text-white dark:bg-white dark:text-black hover:opacity-90'
+                          ? 'bg-zinc-300 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300 cursor-not-allowed'
+                          : 'bg-black text-white dark:bg-white dark:text-black hover:opacity-90'
                           }`}
                       >
                         {savingEdit ? 'Salvando...' : 'Salvar'}
@@ -1251,6 +1252,7 @@ function FeedContent() {
                         {post.content}
                       </p>
                     )}
+                    <LinkPreview content={post.content} />
 
                     <PostMediaGallery media={postMedia} />
                   </>
@@ -1432,8 +1434,8 @@ function FeedContent() {
                                   type="button"
                                   onClick={() => handleToggleCommentLike(comment.id)}
                                   className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium transition ${userLikedComment
-                                      ? 'bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400'
-                                      : 'text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-700'
+                                    ? 'bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400'
+                                    : 'text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-700'
                                     }`}
                                 >
                                   <span>{userLikedComment ? '♥' : '♡'}</span>
