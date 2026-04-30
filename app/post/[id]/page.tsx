@@ -3,14 +3,27 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { ArrowLeft, Heart, MessageCircle, Share2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import LinkPreview from '@/app/components/LinkPreview'
+import PostMediaGallery from '@/app/components/PostMediaGallery'
+
+type VisibilityType = 'public' | 'followers' | 'private'
 
 type Profile = {
-  id: string
   username: string
   display_name: string | null
-  bio: string | null
   avatar_url: string | null
+}
+
+type PostMedia = {
+  id: string
+  post_id: string
+  user_id: string
+  media_url: string
+  media_type: 'image' | 'video'
+  position: number
+  created_at?: string
 }
 
 type Post = {
@@ -19,898 +32,675 @@ type Post = {
   category: string | null
   created_at: string
   user_id: string
-  image_url?: string | null
-  visibility?: 'public' | 'followers' | 'private'
+  image_url: string | null
+  video_url: string | null
+  visibility: VisibilityType
+  profiles: Profile | null
+  media?: PostMedia[]
 }
 
-type FollowProfile = {
+type Comment = {
   id: string
-  username: string
-  display_name: string | null
-  avatar_url: string | null
+  post_id: string
+  user_id: string
+  content: string
+  created_at: string
+  profiles: Profile | null
 }
 
-export default function PublicProfilePage() {
+type Like = {
+  id: string
+  post_id: string
+  user_id: string
+}
+
+function getVisibilityLabel(value: VisibilityType) {
+  if (value === 'followers') return 'Só seguidores'
+  if (value === 'private') return 'Privado'
+  return 'Público'
+}
+
+function getPostMedia(post: Post): PostMedia[] {
+  if (post.media && post.media.length > 0) {
+    return post.media
+  }
+
+  const legacyMedia: PostMedia[] = []
+
+  if (post.image_url) {
+    legacyMedia.push({
+      id: `${post.id}-legacy-image`,
+      post_id: post.id,
+      user_id: post.user_id,
+      media_url: post.image_url,
+      media_type: 'image',
+      position: 0,
+    })
+  }
+
+  if (post.video_url) {
+    legacyMedia.push({
+      id: `${post.id}-legacy-video`,
+      post_id: post.id,
+      user_id: post.user_id,
+      media_url: post.video_url,
+      media_type: 'video',
+      position: legacyMedia.length,
+    })
+  }
+
+  return legacyMedia
+}
+
+export default function PostPage() {
   const params = useParams()
   const router = useRouter()
-  const username = typeof params.username === 'string' ? params.username : ''
+  const postId = typeof params.id === 'string' ? params.id : ''
 
   const [loggedUserId, setLoggedUserId] = useState('')
-  const [profile, setProfile] = useState<Profile | null>(null)
-  const [posts, setPosts] = useState<Post[]>([])
-  const [loading, setLoading] = useState(true)
+  const [post, setPost] = useState<Post | null>(null)
+  const [comments, setComments] = useState<Comment[]>([])
+  const [likes, setLikes] = useState<Like[]>([])
+  const [commentInput, setCommentInput] = useState('')
   const [message, setMessage] = useState('')
-
-  const [isFollowing, setIsFollowing] = useState(false)
-  const [followersCount, setFollowersCount] = useState(0)
-  const [followingCount, setFollowingCount] = useState(0)
-
-  const [followLoading, setFollowLoading] = useState(false)
-  const [blockLoading, setBlockLoading] = useState(false)
-  const [reportingUser, setReportingUser] = useState(false)
-  const [reportedUser, setReportedUser] = useState(false)
-
-  const [isBlockedByMe, setIsBlockedByMe] = useState(false)
-  const [hasBlockedMe, setHasBlockedMe] = useState(false)
-
-  const [showFollowersModal, setShowFollowersModal] = useState(false)
-  const [showFollowingModal, setShowFollowingModal] = useState(false)
-  const [followersList, setFollowersList] = useState<FollowProfile[]>([])
-  const [followingList, setFollowingList] = useState<FollowProfile[]>([])
-  const [loadingFollowers, setLoadingFollowers] = useState(false)
-  const [loadingFollowing, setLoadingFollowing] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [sendingComment, setSendingComment] = useState(false)
+  const [copySuccess, setCopySuccess] = useState(false)
+  const [canInteract, setCanInteract] = useState(false)
 
   useEffect(() => {
-    async function loadPage() {
+    async function loadPostPage() {
       setLoading(true)
       setMessage('')
+
+      if (!postId) {
+        setMessage('Publicação inválida.')
+        setLoading(false)
+        return
+      }
 
       const {
         data: { user },
       } = await supabase.auth.getUser()
 
-      if (!user) {
-        router.push('/login')
-        return
-      }
+      const currentUserId = user?.id || ''
+      setLoggedUserId(currentUserId)
+      setCanInteract(!!currentUserId)
 
-      setLoggedUserId(user.id)
-
-      if (!username) {
-        setMessage('Usuário inválido.')
-        setLoading(false)
-        return
-      }
-
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('id, username, display_name, bio, avatar_url')
-        .eq('username', username)
+      const { data: postData, error: postError } = await supabase
+        .from('posts')
+        .select(`
+          id,
+          content,
+          category,
+          created_at,
+          user_id,
+          image_url,
+          video_url,
+          visibility,
+          profiles (
+            username,
+            display_name,
+            avatar_url
+          )
+        `)
+        .eq('id', postId)
         .maybeSingle()
 
-      if (profileError) {
-        setMessage('Erro ao carregar perfil: ' + profileError.message)
+      if (postError) {
+        setMessage('Erro ao carregar publicação: ' + postError.message)
         setLoading(false)
         return
       }
 
-      if (!profileData) {
-        setMessage('Perfil não encontrado.')
+      if (!postData) {
+        setMessage('Publicação não encontrada.')
         setLoading(false)
         return
       }
 
-      setProfile(profileData)
+      const normalizedPost = {
+        ...postData,
+        visibility: (postData.visibility || 'public') as VisibilityType,
+        profiles: Array.isArray(postData.profiles)
+          ? postData.profiles[0] || null
+          : postData.profiles,
+      } as Post
 
-      const isOwn = user.id === profileData.id
+      const canSee = await checkCanSeePost(normalizedPost, currentUserId)
 
-      if (!isOwn) {
-        const { data: blockedByMeData, error: blockedByMeError } = await supabase
-          .from('blocks')
-          .select('id')
-          .eq('blocker_id', user.id)
-          .eq('blocked_id', profileData.id)
-          .maybeSingle()
-
-        if (blockedByMeError) {
-          setMessage('Erro ao verificar bloqueio: ' + blockedByMeError.message)
-          setLoading(false)
-          return
-        }
-
-        const { data: hasBlockedMeData, error: hasBlockedMeError } = await supabase
-          .from('blocks')
-          .select('id')
-          .eq('blocker_id', profileData.id)
-          .eq('blocked_id', user.id)
-          .maybeSingle()
-
-        if (hasBlockedMeError) {
-          setMessage('Erro ao verificar bloqueio: ' + hasBlockedMeError.message)
-          setLoading(false)
-          return
-        }
-
-        const blockedByMe = !!blockedByMeData
-        const blockedMe = !!hasBlockedMeData
-
-        setIsBlockedByMe(blockedByMe)
-        setHasBlockedMe(blockedMe)
-
-        if (!blockedByMe && !blockedMe) {
-          const { data: followData } = await supabase
-            .from('follows')
-            .select('id')
-            .eq('follower_id', user.id)
-            .eq('following_id', profileData.id)
-            .maybeSingle()
-
-          setIsFollowing(!!followData)
-
-          const { data: postsData, error: postsError } = await supabase
-            .from('posts')
-            .select('id, content, category, created_at, user_id, image_url, visibility')
-            .eq('user_id', profileData.id)
-            .order('created_at', { ascending: false })
-
-          if (postsError) {
-            setMessage('Erro ao carregar posts: ' + postsError.message)
-            setLoading(false)
-            return
-          }
-
-          const visiblePosts = (postsData || []).filter((post: Post) => {
-            const visibility = post.visibility || 'public'
-            if (visibility === 'public') return true
-            if (visibility === 'followers') return !!followData
-            return false
-          })
-
-          setPosts(visiblePosts)
-
-          const { data: followersData, error: followersError } = await supabase
-            .from('follows')
-            .select('id')
-            .eq('following_id', profileData.id)
-
-          if (followersError) {
-            setMessage('Erro ao carregar seguidores: ' + followersError.message)
-            setLoading(false)
-            return
-          }
-
-          setFollowersCount(followersData?.length || 0)
-
-          const { data: followingData, error: followingError } = await supabase
-            .from('follows')
-            .select('id')
-            .eq('follower_id', profileData.id)
-
-          if (followingError) {
-            setMessage('Erro ao carregar seguindo: ' + followingError.message)
-            setLoading(false)
-            return
-          }
-
-          setFollowingCount(followingData?.length || 0)
-        } else {
-          setPosts([])
-          setFollowersCount(0)
-          setFollowingCount(0)
-          setIsFollowing(false)
-        }
-      } else {
-        const { data: postsData, error: postsError } = await supabase
-          .from('posts')
-          .select('id, content, category, created_at, user_id, image_url, visibility')
-          .eq('user_id', profileData.id)
-          .order('created_at', { ascending: false })
-
-        if (postsError) {
-          setMessage('Erro ao carregar posts: ' + postsError.message)
-          setLoading(false)
-          return
-        }
-
-        setPosts(postsData || [])
-
-        const { data: followersData, error: followersError } = await supabase
-          .from('follows')
-          .select('id')
-          .eq('following_id', profileData.id)
-
-        if (followersError) {
-          setMessage('Erro ao carregar seguidores: ' + followersError.message)
-          setLoading(false)
-          return
-        }
-
-        setFollowersCount(followersData?.length || 0)
-
-        const { data: followingData, error: followingError } = await supabase
-          .from('follows')
-          .select('id')
-          .eq('follower_id', profileData.id)
-
-        if (followingError) {
-          setMessage('Erro ao carregar seguindo: ' + followingError.message)
-          setLoading(false)
-          return
-        }
-
-        setFollowingCount(followingData?.length || 0)
+      if (!canSee) {
+        setPost(normalizedPost)
+        setMessage('Você não tem permissão para visualizar esta publicação.')
+        setLoading(false)
+        return
       }
+
+      const { data: mediaData, error: mediaError } = await supabase
+        .from('post_media')
+        .select('id, post_id, user_id, media_url, media_type, position, created_at')
+        .eq('post_id', postId)
+        .order('position', { ascending: true })
+
+      if (mediaError) {
+        console.error('Erro ao carregar mídias:', mediaError.message)
+      }
+
+      normalizedPost.media = (mediaData || []) as PostMedia[]
+
+      setPost(normalizedPost)
+
+      await Promise.all([
+        loadComments(),
+        loadLikes(),
+      ])
 
       setLoading(false)
     }
 
-    loadPage()
-  }, [username, router])
+    loadPostPage()
+  }, [postId])
 
-  async function refreshProfileState(profileId: string, currentUserId: string) {
-    const isOwn = currentUserId === profileId
+  async function checkCanSeePost(targetPost: Post, currentUserId: string) {
+    if (targetPost.visibility === 'public') return true
+    if (!currentUserId) return false
+    if (targetPost.user_id === currentUserId) return true
 
-    if (!isOwn) {
-      const { data: blockedByMeData } = await supabase
-        .from('blocks')
-        .select('id')
-        .eq('blocker_id', currentUserId)
-        .eq('blocked_id', profileId)
-        .maybeSingle()
+    if (targetPost.visibility === 'private') return false
 
-      const { data: hasBlockedMeData } = await supabase
-        .from('blocks')
-        .select('id')
-        .eq('blocker_id', profileId)
-        .eq('blocked_id', currentUserId)
-        .maybeSingle()
-
-      const blockedByMe = !!blockedByMeData
-      const blockedMe = !!hasBlockedMeData
-
-      setIsBlockedByMe(blockedByMe)
-      setHasBlockedMe(blockedMe)
-
-      if (blockedByMe || blockedMe) {
-        setPosts([])
-        setFollowersCount(0)
-        setFollowingCount(0)
-        setIsFollowing(false)
-        return
-      }
-
-      const { data: followData } = await supabase
+    if (targetPost.visibility === 'followers') {
+      const { data: followData, error } = await supabase
         .from('follows')
         .select('id')
         .eq('follower_id', currentUserId)
-        .eq('following_id', profileId)
+        .eq('following_id', targetPost.user_id)
         .maybeSingle()
 
-      setIsFollowing(!!followData)
-
-      const { data: postsData } = await supabase
-        .from('posts')
-        .select('id, content, category, created_at, user_id, image_url, visibility')
-        .eq('user_id', profileId)
-        .order('created_at', { ascending: false })
-
-      const visiblePosts = (postsData || []).filter((post: Post) => {
-        const visibility = post.visibility || 'public'
-        if (visibility === 'public') return true
-        if (visibility === 'followers') return !!followData
+      if (error) {
+        setMessage('Erro ao verificar permissão: ' + error.message)
         return false
-      })
+      }
 
-      setPosts(visiblePosts)
+      return !!followData
     }
 
-    const { data: followersData } = await supabase
-      .from('follows')
-      .select('id')
-      .eq('following_id', profileId)
-
-    setFollowersCount(followersData?.length || 0)
-
-    const { data: followingData } = await supabase
-      .from('follows')
-      .select('id')
-      .eq('follower_id', profileId)
-
-    setFollowingCount(followingData?.length || 0)
+    return false
   }
 
-  async function handleToggleFollow() {
-    if (!profile || !loggedUserId) return
-    if (loggedUserId === profile.id) return
-    if (isBlockedByMe || hasBlockedMe) {
-      setMessage('Não é possível seguir enquanto houver bloqueio entre vocês.')
-      return
-    }
-
-    setFollowLoading(true)
-    setMessage('')
-
-    const { data: existingFollow, error: checkError } = await supabase
-      .from('follows')
-      .select('id')
-      .eq('follower_id', loggedUserId)
-      .eq('following_id', profile.id)
-      .maybeSingle()
-
-    if (checkError) {
-      setMessage('Erro ao verificar seguimento: ' + checkError.message)
-      setFollowLoading(false)
-      return
-    }
-
-    if (existingFollow) {
-      const { error } = await supabase
-        .from('follows')
-        .delete()
-        .eq('id', existingFollow.id)
-
-      if (error) {
-        setMessage('Erro ao deixar de seguir: ' + error.message)
-        setFollowLoading(false)
-        return
-      }
-    } else {
-      const { error } = await supabase.from('follows').insert({
-        follower_id: loggedUserId,
-        following_id: profile.id,
-      })
-
-      if (error) {
-        setMessage('Erro ao seguir: ' + error.message)
-        setFollowLoading(false)
-        return
-      }
-    }
-
-    await refreshProfileState(profile.id, loggedUserId)
-    setFollowLoading(false)
-  }
-
-  async function handleToggleBlock() {
-    if (!profile || !loggedUserId) return
-    if (loggedUserId === profile.id) return
-
-    setBlockLoading(true)
-    setMessage('')
-
-    if (isBlockedByMe) {
-      const { error } = await supabase
-        .from('blocks')
-        .delete()
-        .eq('blocker_id', loggedUserId)
-        .eq('blocked_id', profile.id)
-
-      if (error) {
-        setMessage('Erro ao desbloquear usuário: ' + error.message)
-        setBlockLoading(false)
-        return
-      }
-
-      setMessage('Usuário desbloqueado com sucesso.')
-    } else {
-      await supabase
-        .from('follows')
-        .delete()
-        .eq('follower_id', loggedUserId)
-        .eq('following_id', profile.id)
-
-      await supabase
-        .from('follows')
-        .delete()
-        .eq('follower_id', profile.id)
-        .eq('following_id', loggedUserId)
-
-      const { error } = await supabase.from('blocks').insert({
-        blocker_id: loggedUserId,
-        blocked_id: profile.id,
-      })
-
-      if (error) {
-        setMessage('Erro ao bloquear usuário: ' + error.message)
-        setBlockLoading(false)
-        return
-      }
-
-      setMessage('Usuário bloqueado com sucesso.')
-    }
-
-    await refreshProfileState(profile.id, loggedUserId)
-    setBlockLoading(false)
-  }
-
-  async function handleReportUser() {
-    if (!profile || !loggedUserId) return
-    if (loggedUserId === profile.id) {
-      setMessage('Você não pode denunciar seu próprio perfil.')
-      return
-    }
-
-    const reason = window.prompt(
-      'Informe o motivo da denúncia.\nEx.: assédio, perfil falso, conteúdo ofensivo, spam'
-    )
-
-    if (!reason || !reason.trim()) {
-      return
-    }
-
-    setReportingUser(true)
-    setMessage('')
-
-    const { error } = await supabase.from('reports').insert({
-      reporter_id: loggedUserId,
-      reported_user_id: profile.id,
-      reason: reason.trim(),
-    })
+  async function loadComments() {
+    const { data, error } = await supabase
+      .from('comments')
+      .select(`
+        id,
+        post_id,
+        user_id,
+        content,
+        created_at,
+        profiles (
+          username,
+          display_name,
+          avatar_url
+        )
+      `)
+      .eq('post_id', postId)
+      .order('created_at', { ascending: true })
 
     if (error) {
-      setMessage('Erro ao denunciar usuário: ' + error.message)
-      setReportingUser(false)
+      setMessage('Erro ao carregar comentários: ' + error.message)
       return
     }
 
-    setReportedUser(true)
-    setMessage('Usuário denunciado com sucesso.')
-    setReportingUser(false)
+    const normalizedComments = (data || []).map((comment: any) => ({
+      ...comment,
+      profiles: Array.isArray(comment.profiles)
+        ? comment.profiles[0] || null
+        : comment.profiles,
+    })) as Comment[]
+
+    setComments(normalizedComments)
   }
 
-  async function loadFollowersList() {
-    if (!profile) return
+  async function loadLikes() {
+    const { data, error } = await supabase
+      .from('likes')
+      .select('id, post_id, user_id')
+      .eq('post_id', postId)
 
-    setLoadingFollowers(true)
-
-    const { data: followsData, error: followsError } = await supabase
-      .from('follows')
-      .select('follower_id')
-      .eq('following_id', profile.id)
-
-    if (followsError) {
-      setMessage('Erro ao carregar seguidores: ' + followsError.message)
-      setLoadingFollowers(false)
+    if (error) {
+      setMessage('Erro ao carregar curtidas: ' + error.message)
       return
     }
 
-    const followerIds = (followsData || []).map((item) => item.follower_id).filter(Boolean)
-
-    if (followerIds.length === 0) {
-      setFollowersList([])
-      setLoadingFollowers(false)
-      return
-    }
-
-    const { data: profilesData, error: profilesError } = await supabase
-      .from('profiles')
-      .select('id, username, display_name, avatar_url')
-      .in('id', followerIds)
-
-    if (profilesError) {
-      setMessage('Erro ao carregar seguidores: ' + profilesError.message)
-      setLoadingFollowers(false)
-      return
-    }
-
-    setFollowersList(profilesData || [])
-    setLoadingFollowers(false)
+    setLikes(data || [])
   }
 
-  async function loadFollowingList() {
-    if (!profile) return
-
-    setLoadingFollowing(true)
-
-    const { data: followsData, error: followsError } = await supabase
-      .from('follows')
-      .select('following_id')
-      .eq('follower_id', profile.id)
-
-    if (followsError) {
-      setMessage('Erro ao carregar seguindo: ' + followsError.message)
-      setLoadingFollowing(false)
+  async function handleToggleLike() {
+    if (!loggedUserId) {
+      router.push('/login')
       return
     }
 
-    const followingIds = (followsData || []).map((item) => item.following_id).filter(Boolean)
+    const existingLike = likes.find((like) => like.user_id === loggedUserId)
 
-    if (followingIds.length === 0) {
-      setFollowingList([])
-      setLoadingFollowing(false)
+    if (existingLike) {
+      const { error } = await supabase
+        .from('likes')
+        .delete()
+        .eq('id', existingLike.id)
+
+      if (error) {
+        setMessage('Erro ao remover curtida: ' + error.message)
+        return
+      }
+    } else {
+      const { error } = await supabase.from('likes').insert({
+        post_id: postId,
+        user_id: loggedUserId,
+      })
+
+      if (error) {
+        setMessage('Erro ao curtir: ' + error.message)
+        return
+      }
+
+      if (post && post.user_id !== loggedUserId) {
+        await supabase.from('notifications').insert({
+          user_id: post.user_id,
+          actor_id: loggedUserId,
+          type: 'like',
+          post_id: postId,
+        })
+      }
+    }
+
+    await loadLikes()
+  }
+
+  async function handleCreateComment(e: React.FormEvent) {
+    e.preventDefault()
+
+    if (!loggedUserId) {
+      router.push('/login')
       return
     }
 
-    const { data: profilesData, error: profilesError } = await supabase
-      .from('profiles')
-      .select('id, username, display_name, avatar_url')
-      .in('id', followingIds)
+    const text = commentInput.trim()
 
-    if (profilesError) {
-      setMessage('Erro ao carregar seguindo: ' + profilesError.message)
-      setLoadingFollowing(false)
+    if (!text) {
+      setMessage('Escreva um comentário antes de enviar.')
       return
     }
 
-    setFollowingList(profilesData || [])
-    setLoadingFollowing(false)
+    setSendingComment(true)
+    setMessage('')
+
+    const { data: insertedComment, error } = await supabase
+      .from('comments')
+      .insert({
+        post_id: postId,
+        user_id: loggedUserId,
+        content: text,
+      })
+      .select('id')
+      .single()
+
+    if (error) {
+      setMessage('Erro ao comentar: ' + error.message)
+      setSendingComment(false)
+      return
+    }
+
+    if (post && post.user_id !== loggedUserId) {
+      await supabase.from('notifications').insert({
+        user_id: post.user_id,
+        actor_id: loggedUserId,
+        type: 'comment',
+        post_id: postId,
+        comment_id: insertedComment?.id || null,
+      })
+    }
+
+    setCommentInput('')
+    setSendingComment(false)
+
+    await loadComments()
   }
 
-  async function handleOpenFollowers() {
-    setShowFollowersModal(true)
-    await loadFollowersList()
-  }
+  async function handleCopyLink() {
+    const url = `${window.location.origin}/post/${postId}`
 
-  async function handleOpenFollowing() {
-    setShowFollowingModal(true)
-    await loadFollowingList()
-  }
+    try {
+      await navigator.clipboard.writeText(url)
+      setCopySuccess(true)
 
-  function getVisibilityLabel(value?: Post['visibility']) {
-    if (value === 'followers') return 'Só seguidores'
-    if (value === 'private') return 'Privado'
-    return 'Público'
-  }
-
-  function renderProfileListItem(item: FollowProfile) {
-    const itemName = item.display_name || item.username
-
-    return (
-      <Link
-        key={item.id}
-        href={`/u/${item.username}`}
-        onClick={() => {
-          setShowFollowersModal(false)
-          setShowFollowingModal(false)
-        }}
-        className="flex items-center gap-3 p-3 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800 transition"
-      >
-        {item.avatar_url ? (
-          <img
-            src={item.avatar_url}
-            alt={itemName}
-            className="w-12 h-12 rounded-full object-cover border border-zinc-300 dark:border-zinc-700 shrink-0"
-          />
-        ) : (
-          <div className="w-12 h-12 rounded-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 flex items-center justify-center text-sm font-semibold text-zinc-700 dark:text-zinc-300 shrink-0">
-            {itemName.charAt(0).toUpperCase()}
-          </div>
-        )}
-
-        <div className="min-w-0">
-          <p className="font-semibold text-black dark:text-white break-words">{itemName}</p>
-          <p className="text-sm text-zinc-500 break-all">@{item.username}</p>
-        </div>
-      </Link>
-    )
+      setTimeout(() => {
+        setCopySuccess(false)
+      }, 2000)
+    } catch {
+      setMessage('Não foi possível copiar o link.')
+    }
   }
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-white text-black dark:bg-black dark:text-white flex items-center justify-center px-4">
-        <p>Carregando perfil...</p>
+      <main className="flex min-h-screen items-center justify-center bg-white px-4 text-black dark:bg-black dark:text-white">
+        <p>Carregando publicação...</p>
       </main>
     )
   }
 
-  if (!profile) {
+  if (!post) {
     return (
       <main className="min-h-screen bg-white text-black dark:bg-black dark:text-white">
-        <header className="border-b border-zinc-200 dark:border-zinc-800 px-4 sm:px-6 py-4">
-          <div className="max-w-4xl mx-auto flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-bold">EntreUS</h1>
-              <p className="text-sm text-zinc-500 dark:text-zinc-400">Só Entre Nós</p>
-            </div>
-
+        <header className="border-b border-zinc-200 px-4 py-4 dark:border-zinc-800">
+          <div className="mx-auto flex max-w-3xl items-center justify-between">
             <Link
               href="/feed"
-              className="w-full sm:w-auto text-center border border-zinc-300 dark:border-zinc-700 px-4 py-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-900"
+              className="inline-flex items-center gap-2 rounded-full border border-zinc-300 px-4 py-2 text-sm hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900"
             >
-              Voltar ao feed
+              <ArrowLeft className="h-4 w-4" />
+              Voltar
             </Link>
+
+            <strong>EntreUS</strong>
           </div>
         </header>
 
-        <section className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
-          <div className="bg-white dark:bg-zinc-900 rounded-2xl p-4 sm:p-6 border border-zinc-200 dark:border-zinc-800">
-            <p className="text-zinc-700 dark:text-zinc-300">{message || 'Perfil não encontrado.'}</p>
+        <section className="mx-auto max-w-3xl px-4 py-8">
+          <div className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900">
+            <p className="text-zinc-700 dark:text-zinc-300">
+              {message || 'Publicação não encontrada.'}
+            </p>
           </div>
         </section>
       </main>
     )
   }
 
-  const displayName = profile.display_name || profile.username
-  const isOwnProfile = loggedUserId === profile.id
+  const authorName =
+    post.profiles?.display_name || post.profiles?.username || 'Usuário'
+
+  const authorUsername = post.profiles?.username || 'usuario'
+  const authorAvatar = post.profiles?.avatar_url || ''
+  const userLiked = likes.some((like) => like.user_id === loggedUserId)
+  const postMedia = getPostMedia(post)
+
+  const blockedByVisibility =
+    message === 'Você não tem permissão para visualizar esta publicação.'
 
   return (
-    <main className="min-h-screen bg-white text-black dark:bg-black dark:text-white transition-colors">
-      <header className="border-b border-zinc-200 dark:border-zinc-800 px-4 sm:px-6 py-4">
-        <div className="max-w-4xl mx-auto flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold">EntreUS</h1>
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">Só Entre Nós</p>
-          </div>
+    <main className="min-h-screen bg-white text-black dark:bg-black dark:text-white">
+      <header className="sticky top-0 z-40 border-b border-zinc-200 bg-white/90 px-4 py-4 backdrop-blur dark:border-zinc-800 dark:bg-black/90">
+        <div className="mx-auto flex max-w-3xl items-center justify-between">
+          <button
+            type="button"
+            onClick={() => router.back()}
+            className="inline-flex items-center gap-2 rounded-full border border-zinc-300 px-4 py-2 text-sm hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Voltar
+          </button>
 
-          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
-            {isOwnProfile && (
-              <Link
-                href="/profile"
-                className="w-full sm:w-auto text-center border border-zinc-300 dark:border-zinc-700 px-4 py-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-900"
-              >
-                Meu perfil
-              </Link>
-            )}
-
-            <Link
-              href="/feed"
-              className="w-full sm:w-auto text-center border border-zinc-300 dark:border-zinc-700 px-4 py-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-900"
-            >
-              Voltar ao feed
-            </Link>
-          </div>
+          <Link href="/feed" className="font-bold">
+            EntreUS
+          </Link>
         </div>
       </header>
 
-      <section className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
-        <div className="bg-white dark:bg-zinc-900 rounded-2xl p-4 sm:p-6 border border-zinc-200 dark:border-zinc-800 mb-6">
-          <div className="flex flex-col gap-5">
-            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-              <div className="flex items-start gap-4 min-w-0">
-                {profile.avatar_url ? (
-                  <img
-                    src={profile.avatar_url}
-                    alt={displayName}
-                    className="w-20 h-20 rounded-full object-cover border border-zinc-300 dark:border-zinc-700 shrink-0"
-                  />
-                ) : (
-                  <div className="w-20 h-20 rounded-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 flex items-center justify-center text-2xl font-bold text-zinc-700 dark:text-zinc-300 shrink-0">
-                    {displayName.charAt(0).toUpperCase()}
-                  </div>
-                )}
+      <section className="mx-auto max-w-3xl px-4 py-6">
+        {blockedByVisibility ? (
+          <div className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900">
+            <h1 className="text-xl font-bold">Publicação restrita</h1>
+
+            <p className="mt-2 text-zinc-600 dark:text-zinc-400">
+              Essa publicação não está disponível para sua conta ou precisa de login.
+            </p>
+
+            <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+              <Link
+                href="/login"
+                className="rounded-xl bg-black px-5 py-3 text-center font-medium text-white hover:opacity-90 dark:bg-white dark:text-black"
+              >
+                Entrar
+              </Link>
+
+              <Link
+                href="/signup"
+                className="rounded-xl border border-zinc-300 px-5 py-3 text-center font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900"
+              >
+                Criar conta
+              </Link>
+            </div>
+          </div>
+        ) : (
+          <>
+            <article className="rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900 sm:p-6">
+              <div className="mb-4 flex items-start gap-3">
+                <Link href={`/u/${authorUsername}`} className="shrink-0">
+                  {authorAvatar ? (
+                    <img
+                      src={authorAvatar}
+                      alt={authorName}
+                      className="h-12 w-12 rounded-full border border-zinc-300 object-cover dark:border-zinc-700"
+                    />
+                  ) : (
+                    <div className="flex h-12 w-12 items-center justify-center rounded-full border border-zinc-300 bg-zinc-100 text-sm font-semibold text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                      {authorName.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                </Link>
 
                 <div className="min-w-0">
-                  <h2 className="text-2xl sm:text-3xl font-bold text-black dark:text-white break-words">
-                    {displayName}
-                  </h2>
-                  <p className="text-zinc-500 dark:text-zinc-400 mt-1 break-all">@{profile.username}</p>
-                </div>
-              </div>
-
-              {!isOwnProfile && !hasBlockedMe && (
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 w-full sm:w-auto">
-                  <button
-                    type="button"
-                    onClick={handleToggleFollow}
-                    disabled={followLoading || isBlockedByMe}
-                    className={`px-4 py-2 rounded-xl font-medium transition text-sm ${
-                      isFollowing
-                        ? 'border border-zinc-300 dark:border-zinc-700 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800'
-                        : 'bg-black text-white dark:bg-white dark:text-black hover:opacity-90'
-                    } ${followLoading || isBlockedByMe ? 'opacity-60 cursor-not-allowed' : ''}`}
+                  <Link
+                    href={`/u/${authorUsername}`}
+                    className="font-semibold text-black hover:underline dark:text-white"
                   >
-                    {followLoading ? 'Carregando...' : isFollowing ? 'Seguindo' : 'Seguir'}
-                  </button>
+                    {authorName}
+                  </Link>
 
-                  <button
-                    type="button"
-                    onClick={handleToggleBlock}
-                    disabled={blockLoading}
-                    className={`px-4 py-2 rounded-xl font-medium transition text-sm ${
-                      isBlockedByMe
-                        ? 'border border-zinc-300 dark:border-zinc-700 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800'
-                        : 'border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950'
-                    } ${blockLoading ? 'opacity-60 cursor-not-allowed' : ''}`}
-                  >
-                    {blockLoading
-                      ? 'Carregando...'
-                      : isBlockedByMe
-                      ? 'Desbloquear'
-                      : 'Bloquear'}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleReportUser}
-                    disabled={reportingUser || reportedUser}
-                    className={`px-4 py-2 rounded-xl font-medium transition text-sm ${
-                      reportedUser
-                        ? 'border border-green-300 dark:border-green-700 text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950'
-                        : 'border border-orange-300 dark:border-orange-700 text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950'
-                    } ${reportingUser ? 'opacity-60 cursor-not-allowed' : ''}`}
-                  >
-                    {reportingUser
-                      ? 'Enviando...'
-                      : reportedUser
-                      ? 'Usuário denunciado'
-                      : 'Denunciar'}
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <div className="grid grid-cols-3 gap-2 sm:gap-4 text-sm">
-              <button
-                type="button"
-                onClick={handleOpenFollowers}
-                className="text-left rounded-xl border border-zinc-200 dark:border-zinc-800 px-3 py-3 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition"
-              >
-                <span className="block font-semibold text-black dark:text-white text-base sm:text-lg">
-                  {followersCount}
-                </span>
-                <span className="text-zinc-600 dark:text-zinc-400">seguidores</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleOpenFollowing}
-                className="text-left rounded-xl border border-zinc-200 dark:border-zinc-800 px-3 py-3 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition"
-              >
-                <span className="block font-semibold text-black dark:text-white text-base sm:text-lg">
-                  {followingCount}
-                </span>
-                <span className="text-zinc-600 dark:text-zinc-400">seguindo</span>
-              </button>
-
-              <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 px-3 py-3">
-                <span className="block font-semibold text-black dark:text-white text-base sm:text-lg">
-                  {posts.length}
-                </span>
-                <span className="text-zinc-600 dark:text-zinc-400">publicações</span>
-              </div>
-            </div>
-
-            <div>
-              {hasBlockedMe ? (
-                <p className="text-zinc-700 dark:text-zinc-300">
-                  Você não pode visualizar este perfil porque este usuário te bloqueou.
-                </p>
-              ) : isBlockedByMe ? (
-                <p className="text-zinc-700 dark:text-zinc-300">
-                  Você bloqueou este usuário. Desbloqueie para voltar a ver o conteúdo dele.
-                </p>
-              ) : (
-                <p className="text-zinc-800 dark:text-zinc-200 whitespace-pre-wrap break-words text-sm sm:text-base">
-                  {profile.bio?.trim() || 'Este usuário ainda não adicionou uma bio.'}
-                </p>
-              )}
-            </div>
-
-            {message && (
-              <p className="text-sm text-zinc-600 dark:text-zinc-400">{message}</p>
-            )}
-          </div>
-        </div>
-
-        {!hasBlockedMe && !isBlockedByMe && (
-          <>
-            <div className="mb-4">
-              <h3 className="text-lg sm:text-xl font-semibold text-black dark:text-white break-words">
-                Publicações de {displayName}
-              </h3>
-              <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                {posts.length} publicação(ões)
-              </p>
-            </div>
-
-            <div className="space-y-4 sm:space-y-5">
-              {posts.length === 0 && (
-                <div className="bg-white dark:bg-zinc-900 rounded-2xl p-4 sm:p-6 border border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400">
-                  Nenhuma publicação visível ainda.
-                </div>
-              )}
-
-              {posts.map((post) => (
-                <article
-                  key={post.id}
-                  className="bg-white dark:bg-zinc-900 rounded-2xl p-4 sm:p-6 border border-zinc-200 dark:border-zinc-800"
-                >
-                  <div className="mb-3 flex items-center gap-3 min-w-0">
-                    {profile.avatar_url ? (
-                      <img
-                        src={profile.avatar_url}
-                        alt={displayName}
-                        className="w-12 h-12 rounded-full object-cover border border-zinc-300 dark:border-zinc-700 shrink-0"
-                      />
-                    ) : (
-                      <div className="w-12 h-12 rounded-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 flex items-center justify-center text-sm font-semibold text-zinc-700 dark:text-zinc-300 shrink-0">
-                        {displayName.charAt(0).toUpperCase()}
-                      </div>
-                    )}
-
-                    <div className="min-w-0">
-                      <p className="font-semibold text-black dark:text-white break-words">{displayName}</p>
-                      <p className="text-sm text-zinc-500 break-all">@{profile.username}</p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 mb-3 flex-wrap">
-                    <p className="text-sm text-zinc-500">
-                      {post.category || 'Sem categoria'}
-                    </p>
-                    <span className="text-xs px-2 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
-                      {getVisibilityLabel(post.visibility)}
-                    </span>
-                  </div>
-
-                  {post.content && (
-                    <p className="text-zinc-800 dark:text-zinc-200 whitespace-pre-wrap mb-4 break-words text-sm sm:text-base">
-                      {post.content}
-                    </p>
-                  )}
-
-                  {post.image_url && (
-                    <img
-                      src={post.image_url}
-                      alt="Imagem da publicação"
-                      className="w-full max-h-[24rem] sm:max-h-[32rem] object-cover rounded-2xl border border-zinc-200 dark:border-zinc-700"
-                    />
-                  )}
-
-                  <p className="text-xs text-zinc-500 dark:text-zinc-600 mt-4">
-                    {new Date(post.created_at).toLocaleString('pt-BR')}
+                  <p className="break-all text-sm text-zinc-500">
+                    @{authorUsername}
                   </p>
-                </article>
-              ))}
-            </div>
+                </div>
+              </div>
+
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <span className="text-sm text-zinc-500">
+                  {post.category || 'Sem categoria'}
+                </span>
+
+                <span className="rounded-full border border-zinc-200 bg-zinc-100 px-2 py-1 text-xs text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                  {getVisibilityLabel(post.visibility)}
+                </span>
+              </div>
+
+              {post.content && (
+                <p className="mb-4 whitespace-pre-wrap break-words text-base leading-relaxed text-zinc-800 dark:text-zinc-200">
+                  {post.content}
+                </p>
+              )}
+
+              <LinkPreview content={post.content} />
+
+              <PostMediaGallery media={postMedia} />
+
+              <p className="mt-4 text-xs text-zinc-500 dark:text-zinc-600">
+                {new Date(post.created_at).toLocaleString('pt-BR')}
+              </p>
+
+              <div className="mt-5 flex items-center justify-between border-t border-zinc-200 pt-4 text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const input = document.getElementById('single-post-comment-input')
+                    if (input instanceof HTMLInputElement) {
+                      input.focus()
+                    }
+                  }}
+                  className="inline-flex items-center gap-2 rounded-full px-3 py-2 hover:bg-blue-50 hover:text-blue-500 dark:hover:bg-blue-950/30"
+                >
+                  <MessageCircle className="h-5 w-5" />
+                  {comments.length}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleToggleLike}
+                  className={`inline-flex items-center gap-2 rounded-full px-3 py-2 ${
+                    userLiked
+                      ? 'text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30'
+                      : 'hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/30'
+                  }`}
+                >
+                  <Heart className={`h-5 w-5 ${userLiked ? 'fill-current' : ''}`} />
+                  {likes.length}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleCopyLink}
+                  className={`inline-flex items-center gap-2 rounded-full px-3 py-2 ${
+                    copySuccess
+                      ? 'text-green-500 hover:bg-green-50 dark:hover:bg-green-950/30'
+                      : 'hover:bg-green-50 hover:text-green-500 dark:hover:bg-green-950/30'
+                  }`}
+                >
+                  <Share2 className="h-5 w-5" />
+                  <span className="hidden sm:inline">
+                    {copySuccess ? 'Copiado' : 'Compartilhar'}
+                  </span>
+                </button>
+              </div>
+            </article>
+
+            {!canInteract && (
+              <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 p-4 text-blue-900 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200">
+                <p className="font-semibold">
+                  Entre no EntreUS para interagir com esta publicação.
+                </p>
+
+                <p className="mt-1 text-sm opacity-90">
+                  Crie sua conta para curtir, comentar, seguir perfis e participar da rede.
+                </p>
+
+                <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+                  <Link
+                    href="/login"
+                    className="rounded-xl bg-black px-5 py-3 text-center font-medium text-white hover:opacity-90 dark:bg-white dark:text-black"
+                  >
+                    Entrar
+                  </Link>
+
+                  <Link
+                    href="/signup"
+                    className="rounded-xl border border-blue-300 px-5 py-3 text-center font-medium hover:bg-blue-100 dark:border-blue-800 dark:hover:bg-blue-950"
+                  >
+                    Criar conta
+                  </Link>
+                </div>
+              </div>
+            )}
+
+            <section className="mt-5 rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900 sm:p-6">
+              <h2 className="mb-4 text-lg font-bold">Comentários</h2>
+
+              {canInteract ? (
+                <form onSubmit={handleCreateComment} className="mb-5 flex flex-col gap-3 sm:flex-row">
+                  <input
+                    id="single-post-comment-input"
+                    type="text"
+                    value={commentInput}
+                    onChange={(e) => setCommentInput(e.target.value)}
+                    placeholder="Escreva um comentário..."
+                    className="flex-1 rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800"
+                  />
+
+                  <button
+                    type="submit"
+                    disabled={sendingComment}
+                    className="rounded-xl bg-black px-5 py-3 font-medium text-white hover:opacity-90 disabled:opacity-60 dark:bg-white dark:text-black"
+                  >
+                    {sendingComment ? 'Enviando...' : 'Comentar'}
+                  </button>
+                </form>
+              ) : (
+                <p className="mb-5 text-sm text-zinc-500">
+                  Faça login para comentar.
+                </p>
+              )}
+
+              {message && !blockedByVisibility && (
+                <p className="mb-4 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-700 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300">
+                  {message}
+                </p>
+              )}
+
+              <div className="space-y-3">
+                {comments.length === 0 && (
+                  <p className="text-sm text-zinc-500">
+                    Nenhum comentário ainda.
+                  </p>
+                )}
+
+                {comments.map((comment) => {
+                  const commentAuthorName =
+                    comment.profiles?.display_name ||
+                    comment.profiles?.username ||
+                    'Usuário'
+
+                  const commentAuthorUsername =
+                    comment.profiles?.username || 'usuario'
+
+                  const commentAvatar = comment.profiles?.avatar_url || ''
+
+                  return (
+                    <div
+                      key={comment.id}
+                      className="rounded-xl bg-zinc-50 px-4 py-3 dark:bg-zinc-800"
+                    >
+                      <div className="flex items-start gap-3">
+                        <Link href={`/u/${commentAuthorUsername}`} className="shrink-0">
+                          {commentAvatar ? (
+                            <img
+                              src={commentAvatar}
+                              alt={commentAuthorName}
+                              className="h-10 w-10 rounded-full border border-zinc-300 object-cover dark:border-zinc-700"
+                            />
+                          ) : (
+                            <div className="flex h-10 w-10 items-center justify-center rounded-full border border-zinc-300 bg-zinc-100 text-xs font-semibold text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
+                              {commentAuthorName.charAt(0).toUpperCase()}
+                            </div>
+                          )}
+                        </Link>
+
+                        <div className="min-w-0 flex-1">
+                          <Link href={`/u/${commentAuthorUsername}`} className="hover:underline">
+                            <p className="font-semibold text-black dark:text-white">
+                              {commentAuthorName}
+                            </p>
+
+                            <p className="break-all text-xs text-zinc-500">
+                              @{commentAuthorUsername}
+                            </p>
+                          </Link>
+
+                          <p className="mt-2 break-words text-sm text-zinc-800 dark:text-zinc-200">
+                            {comment.content}
+                          </p>
+
+                          <p className="mt-2 text-xs text-zinc-500">
+                            {new Date(comment.created_at).toLocaleString('pt-BR')}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </section>
           </>
         )}
       </section>
-
-      {showFollowersModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-end sm:items-center justify-center p-0 sm:p-4 z-50">
-          <div className="w-full sm:max-w-md bg-white dark:bg-zinc-900 rounded-t-3xl sm:rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-xl max-h-[85vh] flex flex-col">
-            <div className="flex items-center justify-between px-4 sm:px-5 py-4 border-b border-zinc-200 dark:border-zinc-800">
-              <h3 className="text-lg font-semibold text-black dark:text-white">Seguidores</h3>
-              <button
-                type="button"
-                onClick={() => setShowFollowersModal(false)}
-                className="border border-zinc-300 dark:border-zinc-700 px-3 py-1 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800"
-              >
-                Fechar
-              </button>
-            </div>
-
-            <div className="p-3 sm:p-4 overflow-y-auto">
-              {loadingFollowers ? (
-                <p className="text-zinc-500 dark:text-zinc-400">Carregando seguidores...</p>
-              ) : followersList.length === 0 ? (
-                <p className="text-zinc-500 dark:text-zinc-400">Nenhum seguidor ainda.</p>
-              ) : (
-                <div className="space-y-2">{followersList.map(renderProfileListItem)}</div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showFollowingModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-end sm:items-center justify-center p-0 sm:p-4 z-50">
-          <div className="w-full sm:max-w-md bg-white dark:bg-zinc-900 rounded-t-3xl sm:rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-xl max-h-[85vh] flex flex-col">
-            <div className="flex items-center justify-between px-4 sm:px-5 py-4 border-b border-zinc-200 dark:border-zinc-800">
-              <h3 className="text-lg font-semibold text-black dark:text-white">Seguindo</h3>
-              <button
-                type="button"
-                onClick={() => setShowFollowingModal(false)}
-                className="border border-zinc-300 dark:border-zinc-700 px-3 py-1 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800"
-              >
-                Fechar
-              </button>
-            </div>
-
-            <div className="p-3 sm:p-4 overflow-y-auto">
-              {loadingFollowing ? (
-                <p className="text-zinc-500 dark:text-zinc-400">Carregando usuários...</p>
-              ) : followingList.length === 0 ? (
-                <p className="text-zinc-500 dark:text-zinc-400">Este usuário ainda não segue ninguém.</p>
-              ) : (
-                <div className="space-y-2">{followingList.map(renderProfileListItem)}</div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </main>
   )
 }
