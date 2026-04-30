@@ -262,13 +262,16 @@ export default function MobileNavigation({
             aria-label="Fechar opções de publicação"
           />
 
-          <div className="absolute bottom-24 right-5 z-[80] flex flex-col items-end gap-5">
+          <div className="absolute bottom-36 right-5 z-[80] flex flex-col items-end gap-6">
             <button
               type="button"
               onClick={handlePostAction}
               className="flex items-center gap-4 text-white"
             >
-              <span className="text-2xl font-medium drop-shadow">Publicar</span>
+              <span className="min-w-[120px] text-right text-2xl font-semibold drop-shadow">
+                Publicar
+              </span>
+
               <span className="flex h-14 w-14 items-center justify-center rounded-full bg-white text-black shadow-xl">
                 <PenLine className="h-6 w-6" />
               </span>
@@ -279,7 +282,10 @@ export default function MobileNavigation({
               onClick={handlePostAction}
               className="flex items-center gap-4 text-white"
             >
-              <span className="text-2xl font-medium drop-shadow">Fotos</span>
+              <span className="min-w-[120px] text-right text-2xl font-semibold drop-shadow">
+                Fotos
+              </span>
+
               <span className="flex h-14 w-14 items-center justify-center rounded-full bg-white text-black shadow-xl">
                 <ImagePlus className="h-6 w-6" />
               </span>
@@ -290,7 +296,10 @@ export default function MobileNavigation({
               onClick={handlePostAction}
               className="flex items-center gap-4 text-white"
             >
-              <span className="text-2xl font-medium drop-shadow">Vídeos</span>
+              <span className="min-w-[120px] text-right text-2xl font-semibold drop-shadow">
+                Vídeos
+              </span>
+
               <span className="flex h-14 w-14 items-center justify-center rounded-full bg-white text-black shadow-xl">
                 <Video className="h-6 w-6" />
               </span>
