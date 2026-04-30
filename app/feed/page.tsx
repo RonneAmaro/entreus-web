@@ -3,7 +3,9 @@
 import PostComposer from '../components/PostComposer'
 import AppSidebar from '../components/AppSidebar'
 import MobileNavigation from '../components/MobileNavigation'
+import PostMoreMenu from '../components/PostMoreMenu'
 import Link from 'next/link'
+import { Heart } from 'lucide-react'
 import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useTheme } from 'next-themes'
@@ -870,10 +872,10 @@ function FeedContent() {
                     : 'border-zinc-200 dark:border-zinc-800'
                 }`}
               >
-                <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="mb-3 flex items-start justify-between gap-3">
                   <Link
                     href={`/u/${authorUsername}`}
-                    className="flex items-center gap-3 hover:opacity-80 transition min-w-0"
+                    className="flex min-w-0 items-center gap-3 hover:opacity-80 transition"
                   >
                     {authorAvatar ? (
                       <img
@@ -898,15 +900,28 @@ function FeedContent() {
                     </div>
                   </Link>
 
-                  {!isOwnPost && !isBlockedRelation && (
+                  <PostMoreMenu
+                    isOwnPost={isOwnPost}
+                    copied={copiedPostId === post.id}
+                    reported={reportedPostIds.includes(post.id)}
+                    reporting={reportingPostId === post.id}
+                    onCopy={() => handleCopyPostLink(post.id)}
+                    onEdit={() => handleStartEdit(post)}
+                    onDelete={() => handleDeletePost(post.id)}
+                    onReport={() => handleReportPost(post.id, post.user_id)}
+                  />
+                </div>
+
+                {!isOwnPost && !isBlockedRelation && (
+                  <div className="mb-3">
                     <button
                       type="button"
                       onClick={() => handleToggleFollow(post.user_id)}
                       disabled={followLoadingUserId === post.user_id}
-                      className={`w-full sm:w-auto px-4 py-2 rounded-xl text-sm font-medium transition ${
+                      className={`rounded-full px-4 py-2 text-sm font-medium transition ${
                         isFollowingAuthor
-                          ? 'border border-zinc-300 dark:border-zinc-700 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800'
-                          : 'bg-black text-white dark:bg-white dark:text-black hover:opacity-90'
+                          ? 'border border-zinc-300 text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800'
+                          : 'bg-black text-white hover:opacity-90 dark:bg-white dark:text-black'
                       } ${
                         followLoadingUserId === post.user_id
                           ? 'opacity-60 cursor-not-allowed'
@@ -919,8 +934,8 @@ function FeedContent() {
                           ? 'Seguindo'
                           : 'Seguir'}
                     </button>
-                  )}
-                </div>
+                  </div>
+                )}
 
                 <div className="flex items-center gap-2 mb-3 flex-wrap">
                   <p className="text-sm text-zinc-500">
@@ -935,61 +950,6 @@ function FeedContent() {
                     <span className="text-xs px-2 py-1 rounded-full bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
                       Destaque da notificação
                     </span>
-                  )}
-                </div>
-
-                <div className="mb-4 flex gap-2 flex-wrap">
-                  {post.user_id === userId && (
-                    <>
-                      <button
-                        onClick={() => handleStartEdit(post)}
-                        className="text-sm border border-blue-400 dark:border-blue-700 text-blue-600 dark:text-blue-400 px-3 py-2 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-950"
-                      >
-                        Editar
-                      </button>
-
-                      <button
-                        onClick={() => handleDeletePost(post.id)}
-                        className="text-sm border border-red-400 dark:border-red-700 text-red-600 dark:text-red-400 px-3 py-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-950"
-                      >
-                        Excluir
-                      </button>
-                    </>
-                  )}
-
-                  <button
-                    type="button"
-                    onClick={() => handleCopyPostLink(post.id)}
-                    className={`text-sm px-3 py-2 rounded-lg border ${
-                      copiedPostId === post.id
-                        ? 'border-green-300 dark:border-green-700 text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950'
-                        : 'border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800'
-                    }`}
-                  >
-                    {copiedPostId === post.id ? 'Link copiado' : 'Copiar link'}
-                  </button>
-
-                  {post.user_id !== userId && (
-                    <button
-                      type="button"
-                      onClick={() => handleReportPost(post.id, post.user_id)}
-                      disabled={reportingPostId === post.id || reportedPostIds.includes(post.id)}
-                      className={`text-sm px-3 py-2 rounded-lg ${
-                        reportedPostIds.includes(post.id)
-                          ? 'border border-green-300 dark:border-green-700 text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950'
-                          : 'border border-orange-300 dark:border-orange-700 text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950'
-                      } ${
-                        reportingPostId === post.id
-                          ? 'opacity-60 cursor-not-allowed'
-                          : ''
-                      }`}
-                    >
-                      {reportingPostId === post.id
-                        ? 'Enviando...'
-                        : reportedPostIds.includes(post.id)
-                          ? 'Denunciado'
-                          : 'Denunciar'}
-                    </button>
                   )}
                 </div>
 
@@ -1048,24 +1008,25 @@ function FeedContent() {
                   </>
                 )}
 
-                <div className="mt-4 flex flex-wrap items-center gap-2 sm:gap-3">
+                <div className="mt-4 flex flex-wrap items-center gap-4">
                   <button
                     onClick={() => handleToggleLike(post.id)}
-                    className={`px-4 py-2 rounded-xl text-sm font-medium ${
+                    className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-medium transition ${
                       userLiked
-                        ? 'bg-black text-white dark:bg-white dark:text-black'
-                        : 'border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                        ? 'bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400'
+                        : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800'
                     }`}
                   >
-                    {userLiked ? 'Curtido' : 'Curtir'}
+                    <Heart
+                      className={`h-5 w-5 ${
+                        userLiked ? 'fill-current' : ''
+                      }`}
+                    />
+                    <span>{postLikes.length}</span>
                   </button>
-
-                  <span className="text-sm text-zinc-500 dark:text-zinc-400">
-                    {postLikes.length} curtida(s)
-                  </span>
                 </div>
 
-                <p className="text-xs text-zinc-500 dark:text-zinc-600 mt-4 mb-4">
+                <p className="text-xs text-zinc-500 dark:text-zinc-600 mt-3 mb-4">
                   {new Date(post.created_at).toLocaleString('pt-BR')}
                 </p>
 
