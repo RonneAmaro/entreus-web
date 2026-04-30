@@ -4,6 +4,7 @@ import PostComposer from '../components/PostComposer'
 import AppSidebar from '../components/AppSidebar'
 import MobileNavigation from '../components/MobileNavigation'
 import PostMoreMenu from '../components/PostMoreMenu'
+import PostMediaGallery from '../components/PostMediaGallery'
 import Link from 'next/link'
 import { Edit3, Heart, MoreHorizontal, Trash2 } from 'lucide-react'
 import { Suspense, useEffect, useMemo, useState } from 'react'
@@ -1242,35 +1243,7 @@ function FeedContent() {
                       </p>
                     )}
 
-                    {postMedia.length > 0 && (
-                      <div
-                        className={[
-                          'mb-4 grid gap-2 overflow-hidden rounded-2xl',
-                          postMedia.length === 1 ? 'grid-cols-1' : 'grid-cols-2',
-                        ].join(' ')}
-                      >
-                        {postMedia.map((mediaItem) => (
-                          <div
-                            key={mediaItem.id}
-                            className="overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900"
-                          >
-                            {mediaItem.media_type === 'image' ? (
-                              <img
-                                src={mediaItem.media_url}
-                                alt="Imagem da publicação"
-                                className="block h-64 w-full max-w-full object-cover sm:h-80"
-                              />
-                            ) : (
-                              <video
-                                src={mediaItem.media_url}
-                                controls
-                                className="block h-64 w-full max-w-full bg-black object-cover sm:h-80"
-                              />
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    <PostMediaGallery media={postMedia} />
                   </>
                 )}
 
