@@ -5,7 +5,7 @@ import AppSidebar from '../components/AppSidebar'
 import MobileNavigation from '../components/MobileNavigation'
 import PostMoreMenu from '../components/PostMoreMenu'
 import Link from 'next/link'
-import { Heart } from 'lucide-react'
+import { Edit3, Heart, MoreHorizontal, Trash2 } from 'lucide-react'
 import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useTheme } from 'next-themes'
@@ -74,6 +74,12 @@ type Like = {
   user_id: string
 }
 
+type CommentLike = {
+  id: string
+  comment_id: string
+  user_id: string
+}
+
 type Follow = {
   id?: string
   follower_id: string
@@ -97,9 +103,12 @@ function FeedContent() {
   const [posts, setPosts] = useState<Post[]>([])
   const [comments, setComments] = useState<Comment[]>([])
   const [likes, setLikes] = useState<Like[]>([])
+  const [commentLikes, setCommentLikes] = useState<CommentLike[]>([])
+
   const [blockedUserIds, setBlockedUserIds] = useState<string[]>([])
   const [follows, setFollows] = useState<Follow[]>([])
   const [followLoadingUserId, setFollowLoadingUserId] = useState<string | null>(null)
+
   const [reportingPostId, setReportingPostId] = useState<string | null>(null)
   const [reportedPostIds, setReportedPostIds] = useState<string[]>([])
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0)
@@ -109,6 +118,11 @@ function FeedContent() {
   const [editingPostId, setEditingPostId] = useState<string | null>(null)
   const [editContent, setEditContent] = useState('')
   const [savingEdit, setSavingEdit] = useState(false)
+
+  const [openCommentMenuId, setOpenCommentMenuId] = useState<string | null>(null)
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null)
+  const [editCommentContent, setEditCommentContent] = useState('')
+  const [savingCommentId, setSavingCommentId] = useState<string | null>(null)
 
   const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(true)
@@ -151,6 +165,7 @@ function FeedContent() {
         loadPosts(user.id, blockedIds, followsData),
         loadComments(blockedIds),
         loadLikes(),
+        loadCommentLikes(),
         loadUnreadNotificationsCount(user.id),
       ])
 
@@ -373,6 +388,19 @@ function FeedContent() {
     setLikes(data || [])
   }
 
+  async function loadCommentLikes() {
+    const { data, error } = await supabase
+      .from('comment_likes')
+      .select('id, comment_id, user_id')
+
+    if (error) {
+      setMessage('Erro ao carregar curtidas dos comentários: ' + error.message)
+      return
+    }
+
+    setCommentLikes(data || [])
+  }
+
   async function refreshAfterFollowChange() {
     const freshFollows = await loadFollows()
     setFollows(freshFollows)
@@ -591,7 +619,7 @@ function FeedContent() {
     const finalMediaFiles =
       mediaFiles.length > 0
         ? mediaFiles
-        : [imageFile, videoFile].filter(Boolean) as File[]
+        : ([imageFile, videoFile].filter(Boolean) as File[])
 
     if (!content.trim() && finalMediaFiles.length === 0) {
       setMessage('Escreva algo ou escolha uma mídia antes de publicar.')
@@ -660,6 +688,7 @@ function FeedContent() {
         await loadPosts()
         await loadComments()
         await loadLikes()
+        await loadCommentLikes()
         return
       }
     }
@@ -669,6 +698,7 @@ function FeedContent() {
     await loadPosts()
     await loadComments()
     await loadLikes()
+    await loadCommentLikes()
   }
 
   async function handleDeletePost(postId: string) {
@@ -692,6 +722,7 @@ function FeedContent() {
     await loadPosts()
     await loadComments()
     await loadLikes()
+    await loadCommentLikes()
   }
 
   function handleStartEdit(post: Post) {
@@ -778,6 +809,7 @@ function FeedContent() {
     setMessage('Comentário publicado com sucesso!')
 
     await loadComments()
+    await loadCommentLikes()
   }
 
   async function handleToggleLike(postId: string) {
@@ -827,6 +859,104 @@ function FeedContent() {
     }
 
     await loadLikes()
+  }
+
+  async function handleToggleCommentLike(commentId: string) {
+    if (!userId) return
+
+    const existingLike = commentLikes.find(
+      (like) => like.comment_id === commentId && like.user_id === userId
+    )
+
+    if (existingLike) {
+      const { error } = await supabase
+        .from('comment_likes')
+        .delete()
+        .eq('id', existingLike.id)
+
+      if (error) {
+        setMessage('Erro ao remover curtida do comentário: ' + error.message)
+        return
+      }
+    } else {
+      const { error } = await supabase.from('comment_likes').insert({
+        comment_id: commentId,
+        user_id: userId,
+      })
+
+      if (error) {
+        setMessage('Erro ao curtir comentário: ' + error.message)
+        return
+      }
+    }
+
+    await loadCommentLikes()
+  }
+
+  function handleStartEditComment(comment: Comment) {
+    setEditingCommentId(comment.id)
+    setEditCommentContent(comment.content)
+    setOpenCommentMenuId(null)
+  }
+
+  function handleCancelEditComment() {
+    setEditingCommentId(null)
+    setEditCommentContent('')
+    setSavingCommentId(null)
+  }
+
+  async function handleSaveCommentEdit(commentId: string) {
+    if (!editCommentContent.trim()) {
+      setMessage('O comentário não pode ficar vazio.')
+      return
+    }
+
+    setSavingCommentId(commentId)
+    setMessage('')
+
+    const { error } = await supabase
+      .from('comments')
+      .update({
+        content: editCommentContent.trim(),
+      })
+      .eq('id', commentId)
+      .eq('user_id', userId)
+
+    if (error) {
+      setMessage('Erro ao editar comentário: ' + error.message)
+      setSavingCommentId(null)
+      return
+    }
+
+    setMessage('Comentário editado com sucesso.')
+    setEditingCommentId(null)
+    setEditCommentContent('')
+    setSavingCommentId(null)
+
+    await loadComments()
+  }
+
+  async function handleDeleteComment(commentId: string) {
+    const confirmDelete = window.confirm('Tem certeza que deseja excluir este comentário?')
+
+    if (!confirmDelete) return
+
+    const { error } = await supabase
+      .from('comments')
+      .delete()
+      .eq('id', commentId)
+      .eq('user_id', userId)
+
+    if (error) {
+      setMessage('Erro ao excluir comentário: ' + error.message)
+      return
+    }
+
+    setMessage('Comentário excluído com sucesso.')
+    setOpenCommentMenuId(null)
+
+    await loadComments()
+    await loadCommentLikes()
   }
 
   async function handleLogout() {
@@ -1190,10 +1320,21 @@ function FeedContent() {
                       const commentAuthorAvatar =
                         comment.profiles?.avatar_url || ''
 
+                      const commentIsMine = comment.user_id === userId
+                      const isEditingThisComment = editingCommentId === comment.id
+
+                      const likesForComment = commentLikes.filter(
+                        (like) => like.comment_id === comment.id
+                      )
+
+                      const userLikedComment = likesForComment.some(
+                        (like) => like.user_id === userId
+                      )
+
                       return (
                         <div
                           key={comment.id}
-                          className="bg-zinc-50 dark:bg-zinc-800 rounded-xl px-4 py-3 text-sm"
+                          className="rounded-xl bg-zinc-50 px-4 py-3 text-sm dark:bg-zinc-800"
                         >
                           <div className="flex items-start gap-3">
                             <Link
@@ -1213,27 +1354,127 @@ function FeedContent() {
                               )}
                             </Link>
 
-                            <div className="flex-1 min-w-0">
-                              <Link
-                                href={`/u/${commentAuthorUsername}`}
-                                className="block hover:opacity-80 transition"
-                              >
-                                <p className="font-semibold text-black dark:text-white break-words">
-                                  {commentAuthorName}
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-start justify-between gap-2">
+                                <Link
+                                  href={`/u/${commentAuthorUsername}`}
+                                  className="block min-w-0 hover:opacity-80 transition"
+                                >
+                                  <p className="font-semibold text-black dark:text-white break-words">
+                                    {commentAuthorName}
+                                  </p>
+
+                                  <p className="text-xs text-zinc-500 break-all">
+                                    @{commentAuthorUsername}
+                                  </p>
+                                </Link>
+
+                                {commentIsMine && (
+                                  <div className="relative shrink-0">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setOpenCommentMenuId((current) =>
+                                          current === comment.id ? null : comment.id
+                                        )
+                                      }
+                                      className="flex h-8 w-8 items-center justify-center rounded-full text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                                      aria-label="Opções do comentário"
+                                    >
+                                      <MoreHorizontal className="h-4 w-4" />
+                                    </button>
+
+                                    {openCommentMenuId === comment.id && (
+                                      <>
+                                        <button
+                                          type="button"
+                                          onClick={() => setOpenCommentMenuId(null)}
+                                          className="fixed inset-0 z-40 cursor-default"
+                                          aria-label="Fechar menu"
+                                        />
+
+                                        <div className="absolute right-0 top-9 z-50 w-52 overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-xl dark:border-zinc-700 dark:bg-zinc-950">
+                                          <button
+                                            type="button"
+                                            onClick={() => handleStartEditComment(comment)}
+                                            className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-zinc-800 hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-900"
+                                          >
+                                            <Edit3 className="h-4 w-4" />
+                                            Editar comentário
+                                          </button>
+
+                                          <button
+                                            type="button"
+                                            onClick={() => handleDeleteComment(comment.id)}
+                                            className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30"
+                                          >
+                                            <Trash2 className="h-4 w-4" />
+                                            Excluir comentário
+                                          </button>
+                                        </div>
+                                      </>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+
+                              {isEditingThisComment ? (
+                                <div className="mt-3">
+                                  <textarea
+                                    value={editCommentContent}
+                                    onChange={(e) => setEditCommentContent(e.target.value)}
+                                    className="w-full min-h-24 resize-none rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white"
+                                  />
+
+                                  <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSaveCommentEdit(comment.id)}
+                                      disabled={savingCommentId === comment.id}
+                                      className="rounded-xl bg-black px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-60 dark:bg-white dark:text-black"
+                                    >
+                                      {savingCommentId === comment.id
+                                        ? 'Salvando...'
+                                        : 'Salvar'}
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={handleCancelEditComment}
+                                      className="rounded-xl border border-zinc-300 px-4 py-2 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900"
+                                    >
+                                      Cancelar
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <p className="text-zinc-800 dark:text-zinc-200 mt-2 break-words">
+                                  {comment.content}
                                 </p>
+                              )}
 
-                                <p className="text-xs text-zinc-500 break-all">
-                                  @{commentAuthorUsername}
+                              <div className="mt-2 flex items-center gap-3">
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleCommentLike(comment.id)}
+                                  className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium transition ${
+                                    userLikedComment
+                                      ? 'bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400'
+                                      : 'text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-700'
+                                  }`}
+                                >
+                                  <Heart
+                                    className={`h-4 w-4 ${
+                                      userLikedComment ? 'fill-current' : ''
+                                    }`}
+                                  />
+                                  <span>{likesForComment.length}</span>
+                                </button>
+
+                                <p className="text-xs text-zinc-500">
+                                  {new Date(comment.created_at).toLocaleString('pt-BR')}
                                 </p>
-                              </Link>
-
-                              <p className="text-zinc-800 dark:text-zinc-200 mt-2 break-words">
-                                {comment.content}
-                              </p>
-
-                              <p className="text-xs text-zinc-500 mt-2">
-                                {new Date(comment.created_at).toLocaleString('pt-BR')}
-                              </p>
+                              </div>
                             </div>
                           </div>
                         </div>
