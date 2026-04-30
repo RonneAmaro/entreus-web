@@ -1,138 +1,89 @@
-"use client";
+'use client'
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Globe,
+  Globe2,
   ImagePlus,
   Lock,
-  SendHorizontal,
+  Play,
+  Send,
   Tag,
+  Trash2,
   Users,
   Video,
-  X,
-} from "lucide-react";
+} from 'lucide-react'
 
-type VisibilityType = "public" | "followers" | "private";
+type VisibilityType = 'public' | 'followers' | 'private'
 
-type ComposerSubmitData = {
-  content: string;
-  category: string;
-  visibility: VisibilityType;
-  imageFile: File | null;
-  videoFile: File | null;
-};
+type MediaPreview = {
+  id: string
+  file: File
+  url: string
+  type: 'image' | 'video'
+}
 
 type PostComposerProps = {
-  userName?: string;
-  userAvatarUrl?: string | null;
-  submitting?: boolean;
-  onSubmit: (data: ComposerSubmitData) => Promise<void> | void;
-};
+  userName: string
+  userAvatarUrl?: string | null
+  submitting?: boolean
+  onSubmit: (data: {
+    content: string
+    category: string
+    visibility: VisibilityType
+    imageFile: File | null
+    videoFile: File | null
+    mediaFiles: File[]
+  }) => void | Promise<void>
+}
 
 const CATEGORY_OPTIONS = [
-  { value: "cotidiano", label: "Cotidiano" },
-  { value: "viagens", label: "Viagens" },
-  { value: "lugares", label: "Lugares" },
-  { value: "comida", label: "Comida" },
-  { value: "pensamentos", label: "Pensamentos" },
-  { value: "lifestyle", label: "Lifestyle" },
-  { value: "sensual", label: "Sensual" },
-  { value: "adulto", label: "Adulto" },
-];
+  { value: 'cotidiano', label: 'Cotidiano' },
+  { value: 'viagens', label: 'Viagens' },
+  { value: 'lugares', label: 'Lugares' },
+  { value: 'comida', label: 'Comida' },
+  { value: 'pensamentos', label: 'Pensamentos' },
+  { value: 'lifestyle', label: 'Lifestyle' },
+  { value: 'sensual', label: 'Sensual' },
+  { value: 'adulto', label: 'Adulto' },
+]
 
 const VISIBILITY_OPTIONS: {
-  value: VisibilityType;
-  label: string;
+  value: VisibilityType
+  label: string
+  icon: React.ReactNode
 }[] = [
-  { value: "public", label: "Público" },
-  { value: "followers", label: "Seguidores" },
-  { value: "private", label: "Privado" },
-];
+  {
+    value: 'public',
+    label: 'Público',
+    icon: <Globe2 className="h-4 w-4" />,
+  },
+  {
+    value: 'followers',
+    label: 'Só seguidores',
+    icon: <Users className="h-4 w-4" />,
+  },
+  {
+    value: 'private',
+    label: 'Privado',
+    icon: <Lock className="h-4 w-4" />,
+  },
+]
 
-function getVisibilityConfig(value: VisibilityType) {
-  if (value === "private") {
-    return {
-      label: "Privado",
-      icon: Lock,
-    };
-  }
+const MAX_MEDIA_FILES = 5
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024
+const MAX_VIDEO_SIZE = 30 * 1024 * 1024
 
-  if (value === "followers") {
-    return {
-      label: "Seguidores",
-      icon: Users,
-    };
-  }
-
-  return {
-    label: "Público",
-    icon: Globe,
-  };
+function getInitial(name: string) {
+  if (!name) return 'U'
+  return name.slice(0, 1).toUpperCase()
 }
 
-function getInitials(name?: string) {
-  if (!name) return "U";
-
-  const parts = name.trim().split(" ").filter(Boolean);
-  if (parts.length === 1) return parts[0].slice(0, 1).toUpperCase();
-
-  return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+function isImage(file: File) {
+  return ['image/jpeg', 'image/png', 'image/webp'].includes(file.type)
 }
 
-function IconActionButton({
-  tooltip,
-  active = false,
-  onClick,
-  children,
-}: {
-  tooltip: string;
-  active?: boolean;
-  onClick?: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      title={tooltip}
-      onClick={onClick}
-      className={[
-        "group relative flex h-11 w-11 items-center justify-center rounded-full border transition-all",
-        active
-          ? "border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-black"
-          : "border-zinc-200 bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800",
-      ].join(" ")}
-    >
-      {children}
-
-      <span className="pointer-events-none absolute -top-11 left-1/2 z-20 -translate-x-1/2 whitespace-nowrap rounded-lg bg-black px-2 py-1 text-xs text-white opacity-0 shadow-md transition-opacity duration-150 group-hover:opacity-100 dark:bg-white dark:text-black">
-        {tooltip}
-      </span>
-    </button>
-  );
-}
-
-function SmallChip({
-  children,
-  onRemove,
-}: {
-  children: React.ReactNode;
-  onRemove?: () => void;
-}) {
-  return (
-    <div className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-zinc-100 px-3 py-1.5 text-xs text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200">
-      {children}
-
-      {onRemove && (
-        <button
-          type="button"
-          onClick={onRemove}
-          className="rounded-full p-0.5 text-zinc-500 transition hover:bg-zinc-200 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-white"
-        >
-          <X className="h-3.5 w-3.5" />
-        </button>
-      )}
-    </div>
-  );
+function isVideo(file: File) {
+  return ['video/mp4', 'video/webm', 'video/ogg'].includes(file.type)
 }
 
 export default function PostComposer({
@@ -141,343 +92,299 @@ export default function PostComposer({
   submitting = false,
   onSubmit,
 }: PostComposerProps) {
-  const imageInputRef = useRef<HTMLInputElement | null>(null);
-  const videoInputRef = useRef<HTMLInputElement | null>(null);
+  const imageInputRef = useRef<HTMLInputElement | null>(null)
+  const videoInputRef = useRef<HTMLInputElement | null>(null)
 
-  const [content, setContent] = useState("");
-  const [category, setCategory] = useState("cotidiano");
-  const [visibility, setVisibility] = useState<VisibilityType>("public");
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [videoFile, setVideoFile] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [videoPreview, setVideoPreview] = useState<string | null>(null);
-  const [openPanel, setOpenPanel] = useState<"category" | "visibility" | null>(
-    null
-  );
+  const [content, setContent] = useState('')
+  const [category, setCategory] = useState('cotidiano')
+  const [visibility, setVisibility] = useState<VisibilityType>('public')
+  const [media, setMedia] = useState<MediaPreview[]>([])
+  const [error, setError] = useState('')
 
-  const firstName = useMemo(() => {
-    if (!userName) return "";
-    return userName.trim().split(" ")[0];
-  }, [userName]);
+  const selectedCategory = useMemo(() => {
+    return CATEGORY_OPTIONS.find((item) => item.value === category)
+  }, [category])
 
-  const selectedCategoryLabel =
-    CATEGORY_OPTIONS.find((item) => item.value === category)?.label || "Categoria";
-
-  const visibilityConfig = getVisibilityConfig(visibility);
-  const VisibilityIcon = visibilityConfig.icon;
+  const selectedVisibility = useMemo(() => {
+    return VISIBILITY_OPTIONS.find((item) => item.value === visibility)
+  }, [visibility])
 
   useEffect(() => {
-    if (!imageFile) {
-      setImagePreview(null);
-      return;
+    return () => {
+      media.forEach((item) => URL.revokeObjectURL(item.url))
+    }
+  }, [media])
+
+  function addFiles(files: FileList | null) {
+    if (!files || files.length === 0) return
+
+    setError('')
+
+    const currentMedia = [...media]
+    const availableSlots = MAX_MEDIA_FILES - currentMedia.length
+
+    if (availableSlots <= 0) {
+      setError(`Você pode adicionar no máximo ${MAX_MEDIA_FILES} mídias por publicação.`)
+      return
     }
 
-    const url = URL.createObjectURL(imageFile);
-    setImagePreview(url);
+    const selectedFiles = Array.from(files).slice(0, availableSlots)
+    const newMedia: MediaPreview[] = []
 
-    return () => URL.revokeObjectURL(url);
-  }, [imageFile]);
+    for (const file of selectedFiles) {
+      if (!isImage(file) && !isVideo(file)) {
+        setError('Envie apenas imagens JPG, PNG, WEBP ou vídeos MP4, WEBM, OGG.')
+        continue
+      }
 
-  useEffect(() => {
-    if (!videoFile) {
-      setVideoPreview(null);
-      return;
+      if (isImage(file) && file.size > MAX_IMAGE_SIZE) {
+        setError('Cada imagem deve ter no máximo 5MB.')
+        continue
+      }
+
+      if (isVideo(file) && file.size > MAX_VIDEO_SIZE) {
+        setError('Cada vídeo deve ter no máximo 30MB.')
+        continue
+      }
+
+      newMedia.push({
+        id: `${file.name}-${file.size}-${Date.now()}-${Math.random()}`,
+        file,
+        url: URL.createObjectURL(file),
+        type: isImage(file) ? 'image' : 'video',
+      })
     }
 
-    const url = URL.createObjectURL(videoFile);
-    setVideoPreview(url);
+    if (Array.from(files).length > availableSlots) {
+      setError(`Foram adicionadas apenas ${availableSlots} mídia(s). O limite é ${MAX_MEDIA_FILES}.`)
+    }
 
-    return () => URL.revokeObjectURL(url);
-  }, [videoFile]);
+    setMedia([...currentMedia, ...newMedia])
 
-  function handleImageChange(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0] || null;
-    setImageFile(file);
+    if (imageInputRef.current) imageInputRef.current.value = ''
+    if (videoInputRef.current) videoInputRef.current.value = ''
   }
 
-  function handleVideoChange(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0] || null;
-    setVideoFile(file);
+  function removeMedia(id: string) {
+    setMedia((current) => {
+      const itemToRemove = current.find((item) => item.id === id)
+
+      if (itemToRemove) {
+        URL.revokeObjectURL(itemToRemove.url)
+      }
+
+      return current.filter((item) => item.id !== id)
+    })
   }
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function handleSubmit() {
+    const trimmedContent = content.trim()
 
-    if (!content.trim() && !imageFile && !videoFile) {
-      alert("Escreva algo ou adicione uma imagem/vídeo antes de publicar.");
-      return;
+    if (!trimmedContent && media.length === 0) {
+      setError('Escreva algo ou adicione uma foto/vídeo antes de publicar.')
+      return
     }
+
+    setError('')
+
+    const imageFile = media.find((item) => item.type === 'image')?.file || null
+    const videoFile = media.find((item) => item.type === 'video')?.file || null
+    const mediaFiles = media.map((item) => item.file)
 
     await onSubmit({
-      content: content.trim(),
+      content: trimmedContent,
       category,
       visibility,
       imageFile,
       videoFile,
-    });
+      mediaFiles,
+    })
 
-    setContent("");
-    setCategory("cotidiano");
-    setVisibility("public");
-    setImageFile(null);
-    setVideoFile(null);
-    setImagePreview(null);
-    setVideoPreview(null);
-    setOpenPanel(null);
-
-    if (imageInputRef.current) imageInputRef.current.value = "";
-    if (videoInputRef.current) videoInputRef.current.value = "";
+    setContent('')
+    setMedia((current) => {
+      current.forEach((item) => URL.revokeObjectURL(item.url))
+      return []
+    })
   }
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="rounded-[28px] border border-zinc-200 bg-white p-4 shadow-sm transition-colors dark:border-zinc-800 dark:bg-zinc-950 sm:p-5"
-    >
-      <div className="flex items-start gap-3">
+    <div className="rounded-[28px] border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 sm:p-5">
+      <div className="flex gap-3">
         <div className="shrink-0">
           {userAvatarUrl ? (
             <img
               src={userAvatarUrl}
-              alt={userName || "Usuário"}
-              className="h-12 w-12 rounded-full object-cover border border-zinc-200 dark:border-zinc-800"
+              alt={userName}
+              className="h-11 w-11 rounded-full border border-zinc-200 object-cover dark:border-zinc-800"
             />
           ) : (
-            <div className="flex h-12 w-12 items-center justify-center rounded-full border border-zinc-200 bg-zinc-100 text-sm font-semibold text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200">
-              {getInitials(userName)}
+            <div className="flex h-11 w-11 items-center justify-center rounded-full border border-zinc-200 bg-zinc-100 text-sm font-bold text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200">
+              {getInitial(userName)}
             </div>
           )}
         </div>
 
-        <div className="flex-1">
-          <div className="rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3 transition-colors focus-within:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-900/70 dark:focus-within:border-zinc-600">
-            <textarea
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              rows={4}
-              placeholder={
-                firstName
-                  ? `No que você está pensando, ${firstName}?`
-                  : "No que você está pensando?"
-              }
-              className="min-h-[88px] w-full resize-none bg-transparent text-sm outline-none placeholder:text-zinc-400 dark:placeholder:text-zinc-500 sm:text-base"
-            />
-          </div>
-        </div>
-      </div>
+        <div className="min-w-0 flex-1">
+          <textarea
+            value={content}
+            onChange={(event) => setContent(event.target.value)}
+            placeholder={`No que você está pensando, ${userName}?`}
+            className="min-h-28 w-full resize-none rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-500 dark:focus:border-zinc-600 sm:text-base"
+          />
 
-      {(imagePreview || videoPreview) && (
-        <div className="mt-4 grid gap-3">
-          {imagePreview && (
-            <div className="relative overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-800">
-              <button
-                type="button"
-                onClick={() => {
-                  setImageFile(null);
-                  setImagePreview(null);
-                  if (imageInputRef.current) imageInputRef.current.value = "";
-                }}
-                className="absolute right-3 top-3 z-10 rounded-full bg-black/70 p-1 text-white transition hover:bg-black"
-              >
-                <X className="h-4 w-4" />
-              </button>
-
-              <img
-                src={imagePreview}
-                alt="Pré-visualização da imagem"
-                className="max-h-[360px] w-full object-cover"
-              />
-            </div>
-          )}
-
-          {videoPreview && (
-            <div className="relative overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-800">
-              <button
-                type="button"
-                onClick={() => {
-                  setVideoFile(null);
-                  setVideoPreview(null);
-                  if (videoInputRef.current) videoInputRef.current.value = "";
-                }}
-                className="absolute right-3 top-3 z-10 rounded-full bg-black/70 p-1 text-white transition hover:bg-black"
-              >
-                <X className="h-4 w-4" />
-              </button>
-
-              <video
-                src={videoPreview}
-                controls
-                className="max-h-[420px] w-full bg-black"
-              />
-            </div>
-          )}
-        </div>
-      )}
-
-      <input
-        ref={imageInputRef}
-        type="file"
-        accept="image/png,image/jpeg,image/jpg,image/webp"
-        onChange={handleImageChange}
-        className="hidden"
-      />
-
-      <input
-        ref={videoInputRef}
-        type="file"
-        accept="video/mp4,video/webm,video/ogg"
-        onChange={handleVideoChange}
-        className="hidden"
-      />
-
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        <IconActionButton
-          tooltip="Adicionar imagem"
-          onClick={() => imageInputRef.current?.click()}
-        >
-          <ImagePlus className="h-5 w-5 text-emerald-500" />
-        </IconActionButton>
-
-        <IconActionButton
-          tooltip="Adicionar vídeo"
-          onClick={() => videoInputRef.current?.click()}
-        >
-          <Video className="h-5 w-5 text-pink-500" />
-        </IconActionButton>
-
-        <IconActionButton
-          tooltip="Escolher categoria"
-          active={openPanel === "category"}
-          onClick={() =>
-            setOpenPanel((prev) => (prev === "category" ? null : "category"))
-          }
-        >
-          <Tag className="h-5 w-5 text-amber-500" />
-        </IconActionButton>
-
-        <IconActionButton
-          tooltip="Definir privacidade"
-          active={openPanel === "visibility"}
-          onClick={() =>
-            setOpenPanel((prev) => (prev === "visibility" ? null : "visibility"))
-          }
-        >
-          <VisibilityIcon className="h-5 w-5 text-sky-500" />
-        </IconActionButton>
-      </div>
-
-      {openPanel === "category" && (
-        <div className="mt-4 rounded-2xl border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-900">
-          <p className="mb-3 text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-            Categoria
-          </p>
-
-          <div className="flex flex-wrap gap-2">
-            {CATEGORY_OPTIONS.map((item) => (
-              <button
-                key={item.value}
-                type="button"
-                onClick={() => {
-                  setCategory(item.value);
-                  setOpenPanel(null);
-                }}
-                className={[
-                  "rounded-full border px-3 py-2 text-sm transition",
-                  category === item.value
-                    ? "border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-black"
-                    : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-200 dark:hover:bg-zinc-800",
-                ].join(" ")}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {openPanel === "visibility" && (
-        <div className="mt-4 rounded-2xl border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-900">
-          <p className="mb-3 text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-            Privacidade
-          </p>
-
-          <div className="flex flex-wrap gap-2">
-            {VISIBILITY_OPTIONS.map((item) => {
-              const config = getVisibilityConfig(item.value);
-              const Icon = config.icon;
-
-              return (
-                <button
-                  key={item.value}
-                  type="button"
-                  onClick={() => {
-                    setVisibility(item.value);
-                    setOpenPanel(null);
-                  }}
-                  className={[
-                    "inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm transition",
-                    visibility === item.value
-                      ? "border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-black"
-                      : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-200 dark:hover:bg-zinc-800",
-                  ].join(" ")}
+          {media.length > 0 && (
+            <div
+              className={[
+                'mt-4 grid gap-2',
+                media.length === 1 ? 'grid-cols-1' : 'grid-cols-2',
+              ].join(' ')}
+            >
+              {media.map((item) => (
+                <div
+                  key={item.id}
+                  className="relative overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900"
                 >
-                  <Icon className="h-4 w-4" />
-                  {item.label}
-                </button>
-              );
-            })}
+                  {item.type === 'image' ? (
+                    <img
+                      src={item.url}
+                      alt="Prévia da imagem"
+                      className="h-44 w-full object-cover sm:h-56"
+                    />
+                  ) : (
+                    <div className="relative">
+                      <video
+                        src={item.url}
+                        className="h-44 w-full bg-black object-cover sm:h-56"
+                        muted
+                        playsInline
+                      />
+
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-black/70 text-white">
+                          <Play className="h-6 w-6 fill-current" />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => removeMedia(item.id)}
+                    className="absolute right-2 top-2 flex h-9 w-9 items-center justify-center rounded-full bg-black/70 text-white transition hover:bg-black"
+                    title="Remover mídia"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+
+                  <div className="absolute bottom-2 left-2 rounded-full bg-black/70 px-2 py-1 text-xs font-medium text-white">
+                    {item.type === 'image' ? 'Imagem' : 'Vídeo'}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {error && (
+            <p className="mt-3 rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300">
+              {error}
+            </p>
+          )}
+
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                multiple
+                className="hidden"
+                onChange={(event) => addFiles(event.target.files)}
+              />
+
+              <input
+                ref={videoInputRef}
+                type="file"
+                accept="video/mp4,video/webm,video/ogg"
+                multiple
+                className="hidden"
+                onChange={(event) => addFiles(event.target.files)}
+              />
+
+              <button
+                type="button"
+                onClick={() => imageInputRef.current?.click()}
+                className="flex h-11 w-11 items-center justify-center rounded-full border border-zinc-200 bg-zinc-50 text-emerald-600 transition hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900 dark:text-emerald-400 dark:hover:bg-zinc-800"
+                title="Adicionar imagens"
+              >
+                <ImagePlus className="h-5 w-5" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => videoInputRef.current?.click()}
+                className="flex h-11 w-11 items-center justify-center rounded-full border border-zinc-200 bg-zinc-50 text-pink-600 transition hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900 dark:text-pink-400 dark:hover:bg-zinc-800"
+                title="Adicionar vídeos"
+              >
+                <Video className="h-5 w-5" />
+              </button>
+
+              <div className="relative">
+                <select
+                  value={category}
+                  onChange={(event) => setCategory(event.target.value)}
+                  className="h-10 appearance-none rounded-full border border-zinc-200 bg-zinc-50 pl-9 pr-4 text-sm font-medium text-zinc-700 outline-none transition hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                  title="Categoria"
+                >
+                  {CATEGORY_OPTIONS.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+
+                <Tag className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+              </div>
+
+              <div className="relative">
+                <select
+                  value={visibility}
+                  onChange={(event) => setVisibility(event.target.value as VisibilityType)}
+                  className="h-10 appearance-none rounded-full border border-zinc-200 bg-zinc-50 pl-9 pr-4 text-sm font-medium text-zinc-700 outline-none transition hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                  title="Privacidade"
+                >
+                  {VISIBILITY_OPTIONS.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+
+                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500">
+                  {selectedVisibility?.icon}
+                </span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              disabled={submitting}
+              onClick={handleSubmit}
+              className="flex h-11 min-w-[130px] items-center justify-center gap-2 rounded-full bg-zinc-900 px-5 text-sm font-bold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-black"
+            >
+              <Send className="h-4 w-4" />
+              {submitting ? 'Publicando...' : 'Publicar'}
+            </button>
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+            <span>{selectedCategory?.label}</span>
+            <span>•</span>
+            <span>{selectedVisibility?.label}</span>
+            <span>•</span>
+            <span>{media.length}/{MAX_MEDIA_FILES} mídias</span>
           </div>
         </div>
-      )}
-
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-2">
-          <SmallChip>
-            <Tag className="h-3.5 w-3.5" />
-            <span>{selectedCategoryLabel}</span>
-          </SmallChip>
-
-          <SmallChip>
-            <VisibilityIcon className="h-3.5 w-3.5" />
-            <span>{visibilityConfig.label}</span>
-          </SmallChip>
-
-          {imageFile && (
-            <SmallChip
-              onRemove={() => {
-                setImageFile(null);
-                setImagePreview(null);
-                if (imageInputRef.current) imageInputRef.current.value = "";
-              }}
-            >
-              <ImagePlus className="h-3.5 w-3.5 text-emerald-500" />
-              <span className="max-w-[140px] truncate">{imageFile.name}</span>
-            </SmallChip>
-          )}
-
-          {videoFile && (
-            <SmallChip
-              onRemove={() => {
-                setVideoFile(null);
-                setVideoPreview(null);
-                if (videoInputRef.current) videoInputRef.current.value = "";
-              }}
-            >
-              <Video className="h-3.5 w-3.5 text-pink-500" />
-              <span className="max-w-[140px] truncate">{videoFile.name}</span>
-            </SmallChip>
-          )}
-        </div>
-
-        <button
-          type="submit"
-          disabled={submitting}
-          className="inline-flex min-w-[130px] items-center justify-center gap-2 rounded-2xl bg-zinc-900 px-5 py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-black"
-        >
-          <SendHorizontal className="h-4 w-4" />
-          {submitting ? "Publicando..." : "Publicar"}
-        </button>
       </div>
-    </form>
-  );
+    </div>
+  )
 }

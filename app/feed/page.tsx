@@ -19,12 +19,23 @@ type ComposerSubmitData = {
   visibility: VisibilityType
   imageFile: File | null
   videoFile: File | null
+  mediaFiles?: File[]
 }
 
 type CurrentProfile = {
   username: string | null
   display_name: string | null
   avatar_url: string | null
+}
+
+type PostMedia = {
+  id: string
+  post_id: string
+  user_id: string
+  media_url: string
+  media_type: 'image' | 'video'
+  position: number
+  created_at?: string
 }
 
 type Post = {
@@ -41,6 +52,7 @@ type Post = {
     display_name: string | null
     avatar_url: string | null
   } | null
+  media?: PostMedia[]
 }
 
 type Comment = {
@@ -272,16 +284,46 @@ function FeedContent() {
       return
     }
 
-    const normalizedPosts = (data || [])
-      .map((post: any) => ({
+    const rawPosts = (data || []).map((post: any) => ({
+      ...post,
+      visibility: (post.visibility || 'public') as VisibilityType,
+      profiles: Array.isArray(post.profiles)
+        ? post.profiles[0] || null
+        : post.profiles,
+    })) as Post[]
+
+    const postIds = rawPosts.map((post) => post.id)
+
+    let mediaByPost: Record<string, PostMedia[]> = {}
+
+    if (postIds.length > 0) {
+      const { data: mediaData, error: mediaError } = await supabase
+        .from('post_media')
+        .select('id, post_id, user_id, media_url, media_type, position, created_at')
+        .in('post_id', postIds)
+        .order('position', { ascending: true })
+
+      if (mediaError) {
+        console.error('Erro ao carregar mídias dos posts:', mediaError.message)
+      }
+
+      mediaByPost = ((mediaData || []) as PostMedia[]).reduce(
+        (acc, mediaItem) => {
+          if (!acc[mediaItem.post_id]) acc[mediaItem.post_id] = []
+          acc[mediaItem.post_id].push(mediaItem)
+          return acc
+        },
+        {} as Record<string, PostMedia[]>
+      )
+    }
+
+    const normalizedPosts = rawPosts
+      .map((post) => ({
         ...post,
-        visibility: (post.visibility || 'public') as VisibilityType,
-        profiles: Array.isArray(post.profiles)
-          ? post.profiles[0] || null
-          : post.profiles,
+        media: mediaByPost[post.id] || [],
       }))
-      .filter((post: Post) => !currentBlockedIds.includes(post.user_id))
-      .filter((post: Post) => canSeePost(post, currentUserId, currentFollows))
+      .filter((post) => !currentBlockedIds.includes(post.user_id))
+      .filter((post) => canSeePost(post, currentUserId, currentFollows))
 
     setPosts(normalizedPosts)
   }
@@ -445,92 +487,97 @@ function FeedContent() {
     }
   }
 
-  async function uploadPostImage(file: File) {
-    if (!userId) return null
-
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp']
-
-    if (!allowedTypes.includes(file.type)) {
-      setMessage('Envie uma imagem JPG, PNG ou WEBP.')
-      return null
-    }
-
-    const maxSizeInBytes = 5 * 1024 * 1024
-
-    if (file.size > maxSizeInBytes) {
-      setMessage('A imagem do post deve ter no máximo 5MB.')
-      return null
-    }
-
-    setUploadingPostImage(true)
-
-    const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg'
-    const filePath = `${userId}/post-${Date.now()}.${fileExt}`
-
-    const { error: uploadError } = await supabase.storage
-      .from('post-images')
-      .upload(filePath, file, {
-        cacheControl: '3600',
-        upsert: true,
-      })
-
-    if (uploadError) {
-      setMessage('Erro ao enviar imagem do post: ' + uploadError.message)
-      setUploadingPostImage(false)
-      return null
-    }
-
-    const { data: publicUrlData } = supabase.storage
-      .from('post-images')
-      .getPublicUrl(filePath)
-
-    setUploadingPostImage(false)
-
-    return publicUrlData.publicUrl
+  function isImage(file: File) {
+    return ['image/jpeg', 'image/png', 'image/webp'].includes(file.type)
   }
 
-  async function uploadPostVideo(file: File) {
+  function isVideo(file: File) {
+    return ['video/mp4', 'video/webm', 'video/ogg'].includes(file.type)
+  }
+
+  async function uploadMediaFile(file: File) {
     if (!userId) return null
 
-    const allowedTypes = ['video/mp4', 'video/webm', 'video/ogg']
+    if (isImage(file)) {
+      const maxSizeInBytes = 5 * 1024 * 1024
 
-    if (!allowedTypes.includes(file.type)) {
-      setMessage('Envie um vídeo MP4, WEBM ou OGG.')
-      return null
+      if (file.size > maxSizeInBytes) {
+        setMessage('Cada imagem deve ter no máximo 5MB.')
+        return null
+      }
+
+      setUploadingPostImage(true)
+
+      const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg'
+      const filePath = `${userId}/post-${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2)}.${fileExt}`
+
+      const { error: uploadError } = await supabase.storage
+        .from('post-images')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: true,
+        })
+
+      setUploadingPostImage(false)
+
+      if (uploadError) {
+        setMessage('Erro ao enviar imagem do post: ' + uploadError.message)
+        return null
+      }
+
+      const { data: publicUrlData } = supabase.storage
+        .from('post-images')
+        .getPublicUrl(filePath)
+
+      return {
+        url: publicUrlData.publicUrl,
+        type: 'image' as const,
+      }
     }
 
-    const maxSizeInBytes = 30 * 1024 * 1024
+    if (isVideo(file)) {
+      const maxSizeInBytes = 30 * 1024 * 1024
 
-    if (file.size > maxSizeInBytes) {
-      setMessage('O vídeo deve ter no máximo 30MB.')
-      return null
-    }
+      if (file.size > maxSizeInBytes) {
+        setMessage('Cada vídeo deve ter no máximo 30MB.')
+        return null
+      }
 
-    setUploadingPostVideo(true)
+      setUploadingPostVideo(true)
 
-    const fileExt = file.name.split('.').pop()?.toLowerCase() || 'mp4'
-    const filePath = `${userId}/video-${Date.now()}.${fileExt}`
+      const fileExt = file.name.split('.').pop()?.toLowerCase() || 'mp4'
+      const filePath = `${userId}/video-${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2)}.${fileExt}`
 
-    const { error: uploadError } = await supabase.storage
-      .from('post-videos')
-      .upload(filePath, file, {
-        cacheControl: '3600',
-        upsert: true,
-      })
+      const { error: uploadError } = await supabase.storage
+        .from('post-videos')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: true,
+        })
 
-    if (uploadError) {
-      setMessage('Erro ao enviar vídeo do post: ' + uploadError.message)
       setUploadingPostVideo(false)
-      return null
+
+      if (uploadError) {
+        setMessage('Erro ao enviar vídeo do post: ' + uploadError.message)
+        return null
+      }
+
+      const { data: publicUrlData } = supabase.storage
+        .from('post-videos')
+        .getPublicUrl(filePath)
+
+      return {
+        url: publicUrlData.publicUrl,
+        type: 'video' as const,
+      }
     }
 
-    const { data: publicUrlData } = supabase.storage
-      .from('post-videos')
-      .getPublicUrl(filePath)
-
-    setUploadingPostVideo(false)
-
-    return publicUrlData.publicUrl
+    setMessage('Envie apenas imagens JPG, PNG, WEBP ou vídeos MP4, WEBM, OGG.')
+    return null
   }
 
   async function handleCreatePost({
@@ -539,40 +586,82 @@ function FeedContent() {
     visibility,
     imageFile,
     videoFile,
+    mediaFiles = [],
   }: ComposerSubmitData) {
-    if (!content.trim() && !imageFile && !videoFile) {
+    const finalMediaFiles =
+      mediaFiles.length > 0
+        ? mediaFiles
+        : [imageFile, videoFile].filter(Boolean) as File[]
+
+    if (!content.trim() && finalMediaFiles.length === 0) {
       setMessage('Escreva algo ou escolha uma mídia antes de publicar.')
+      return
+    }
+
+    if (finalMediaFiles.length > 5) {
+      setMessage('Você pode publicar no máximo 5 mídias por publicação.')
       return
     }
 
     setMessage('')
 
-    let uploadedImageUrl: string | null = null
-    let uploadedVideoUrl: string | null = null
+    const uploadedMedia: {
+      url: string
+      type: 'image' | 'video'
+    }[] = []
 
-    if (imageFile) {
-      uploadedImageUrl = await uploadPostImage(imageFile)
-      if (imageFile && !uploadedImageUrl) return
+    for (const file of finalMediaFiles) {
+      const uploaded = await uploadMediaFile(file)
+
+      if (!uploaded) {
+        return
+      }
+
+      uploadedMedia.push(uploaded)
     }
 
-    if (videoFile) {
-      uploadedVideoUrl = await uploadPostVideo(videoFile)
-      if (videoFile && !uploadedVideoUrl) return
-    }
+    const firstImage = uploadedMedia.find((item) => item.type === 'image')?.url || null
+    const firstVideo = uploadedMedia.find((item) => item.type === 'video')?.url || null
 
-    const { error } = await supabase.from('posts').insert({
-      user_id: userId,
-      content: content.trim() || null,
-      category,
-      image_url: uploadedImageUrl,
-      video_url: uploadedVideoUrl,
-      visibility,
-      is_sensitive: category === 'sensual' || category === 'adulto',
-    })
+    const { data: insertedPost, error } = await supabase
+      .from('posts')
+      .insert({
+        user_id: userId,
+        content: content.trim() || null,
+        category,
+        image_url: firstImage,
+        video_url: firstVideo,
+        visibility,
+        is_sensitive: category === 'sensual' || category === 'adulto',
+      })
+      .select('id')
+      .single()
 
     if (error) {
       setMessage('Erro ao publicar: ' + error.message)
       return
+    }
+
+    if (insertedPost?.id && uploadedMedia.length > 0) {
+      const mediaRows = uploadedMedia.map((item, index) => ({
+        post_id: insertedPost.id,
+        user_id: userId,
+        media_url: item.url,
+        media_type: item.type,
+        position: index,
+      }))
+
+      const { error: mediaError } = await supabase
+        .from('post_media')
+        .insert(mediaRows)
+
+      if (mediaError) {
+        setMessage('Post criado, mas houve erro ao salvar mídias: ' + mediaError.message)
+        await loadPosts()
+        await loadComments()
+        await loadLikes()
+        return
+      }
     }
 
     setMessage('Publicado com sucesso!')
@@ -770,6 +859,38 @@ function FeedContent() {
     return 'Privado'
   }
 
+  function getPostMedia(post: Post): PostMedia[] {
+    if (post.media && post.media.length > 0) {
+      return post.media
+    }
+
+    const legacyMedia: PostMedia[] = []
+
+    if (post.image_url) {
+      legacyMedia.push({
+        id: `${post.id}-legacy-image`,
+        post_id: post.id,
+        user_id: post.user_id,
+        media_url: post.image_url,
+        media_type: 'image',
+        position: 0,
+      })
+    }
+
+    if (post.video_url) {
+      legacyMedia.push({
+        id: `${post.id}-legacy-video`,
+        post_id: post.id,
+        user_id: post.user_id,
+        media_url: post.video_url,
+        media_type: 'video',
+        position: legacyMedia.length,
+      })
+    }
+
+    return legacyMedia
+  }
+
   const followStateMap = useMemo(() => {
     const map = new Map<string, boolean>()
 
@@ -791,7 +912,7 @@ function FeedContent() {
   }
 
   return (
-    <main className="min-h-screen bg-white text-black dark:bg-black dark:text-white transition-colors">
+    <main className="min-h-screen overflow-x-hidden bg-white text-black dark:bg-black dark:text-white transition-colors">
       <AppSidebar
         unreadNotificationsCount={unreadNotificationsCount}
         mounted={mounted}
@@ -812,7 +933,7 @@ function FeedContent() {
         onPostClick={handlePostComposerFocus}
       />
 
-      <section className="mx-auto max-w-2xl px-4 py-20 pb-24 sm:px-6 lg:ml-[300px] lg:mr-auto lg:py-8">
+      <section className="mx-auto w-full max-w-2xl overflow-x-hidden px-4 py-20 pb-24 sm:px-6 lg:ml-[300px] lg:mr-auto lg:py-8">
         <div className="mb-4 sm:mb-6 text-sm text-zinc-500 dark:text-zinc-400 break-all">
           Logado como:{' '}
           <span className="text-black dark:text-white">
@@ -861,6 +982,7 @@ function FeedContent() {
             const isBlockedRelation = blockedUserIds.includes(post.user_id)
             const isFollowingAuthor = followStateMap.get(post.user_id) || false
             const isHighlighted = highlightedPostId === post.id
+            const postMedia = getPostMedia(post)
 
             return (
               <article
@@ -990,20 +1112,34 @@ function FeedContent() {
                       </p>
                     )}
 
-                    {post.image_url && (
-                      <img
-                        src={post.image_url}
-                        alt="Imagem da publicação"
-                        className="w-full max-h-[24rem] sm:max-h-[32rem] object-cover rounded-2xl border border-zinc-200 dark:border-zinc-700 mb-4"
-                      />
-                    )}
-
-                    {post.video_url && (
-                      <video
-                        src={post.video_url}
-                        controls
-                        className="w-full max-h-[24rem] sm:max-h-[32rem] rounded-2xl border border-zinc-200 dark:border-zinc-700 bg-black"
-                      />
+                    {postMedia.length > 0 && (
+                      <div
+                        className={[
+                          'mb-4 grid gap-2 overflow-hidden rounded-2xl',
+                          postMedia.length === 1 ? 'grid-cols-1' : 'grid-cols-2',
+                        ].join(' ')}
+                      >
+                        {postMedia.map((mediaItem) => (
+                          <div
+                            key={mediaItem.id}
+                            className="overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900"
+                          >
+                            {mediaItem.media_type === 'image' ? (
+                              <img
+                                src={mediaItem.media_url}
+                                alt="Imagem da publicação"
+                                className="block h-64 w-full max-w-full object-cover sm:h-80"
+                              />
+                            ) : (
+                              <video
+                                src={mediaItem.media_url}
+                                controls
+                                className="block h-64 w-full max-w-full bg-black object-cover sm:h-80"
+                              />
+                            )}
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </>
                 )}
