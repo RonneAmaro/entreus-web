@@ -7,15 +7,18 @@ import {
   Bell,
   Compass,
   Home,
+  ImagePlus,
   LogOut,
   Menu,
   Moon,
   PenLine,
+  Plus,
   Settings,
   Shield,
   Sun,
   User,
   UserX,
+  Video,
   X,
 } from 'lucide-react'
 
@@ -48,9 +51,15 @@ export default function MobileNavigation({
   onPostClick,
 }: MobileNavigationProps) {
   const [open, setOpen] = useState(false)
+  const [openPostMenu, setOpenPostMenu] = useState(false)
 
   function closeMenu() {
     setOpen(false)
+  }
+
+  function handlePostAction() {
+    setOpenPostMenu(false)
+    onPostClick()
   }
 
   return (
@@ -244,13 +253,72 @@ export default function MobileNavigation({
         </div>
       )}
 
-      <nav className="fixed bottom-0 left-0 z-50 grid h-16 w-full grid-cols-5 border-t border-zinc-200 bg-white dark:border-zinc-800 dark:bg-black lg:hidden">
+      {openPostMenu && (
+        <div className="fixed inset-0 z-[70] bg-black/70 backdrop-blur-[1px] lg:hidden">
+          <button
+            type="button"
+            onClick={() => setOpenPostMenu(false)}
+            className="absolute inset-0"
+            aria-label="Fechar opções de publicação"
+          />
+
+          <div className="absolute bottom-24 right-5 z-[80] flex flex-col items-end gap-5">
+            <button
+              type="button"
+              onClick={handlePostAction}
+              className="flex items-center gap-4 text-white"
+            >
+              <span className="text-2xl font-medium drop-shadow">Publicar</span>
+              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-white text-black shadow-xl">
+                <PenLine className="h-6 w-6" />
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handlePostAction}
+              className="flex items-center gap-4 text-white"
+            >
+              <span className="text-2xl font-medium drop-shadow">Fotos</span>
+              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-white text-black shadow-xl">
+                <ImagePlus className="h-6 w-6" />
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handlePostAction}
+              className="flex items-center gap-4 text-white"
+            >
+              <span className="text-2xl font-medium drop-shadow">Vídeos</span>
+              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-white text-black shadow-xl">
+                <Video className="h-6 w-6" />
+              </span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      <button
+        type="button"
+        onClick={() => setOpenPostMenu((current) => !current)}
+        className="fixed bottom-20 right-5 z-[75] flex h-16 w-16 items-center justify-center rounded-full bg-blue-500 text-white shadow-2xl transition hover:bg-blue-400 active:scale-95 dark:bg-blue-500 lg:hidden"
+        aria-label="Abrir opções de publicação"
+      >
+        {openPostMenu ? (
+          <X className="h-8 w-8" />
+        ) : (
+          <Plus className="h-9 w-9" />
+        )}
+      </button>
+
+      <nav className="fixed bottom-0 left-0 z-50 grid h-16 w-full grid-cols-4 border-t border-zinc-200 bg-white dark:border-zinc-800 dark:bg-black lg:hidden">
         <Link
           href="/feed"
           className="flex items-center justify-center text-zinc-800 dark:text-zinc-100"
           aria-label="Página inicial"
         >
-          <Home className="h-6 w-6" />
+          <Home className="h-7 w-7" />
         </Link>
 
         <Link
@@ -258,29 +326,18 @@ export default function MobileNavigation({
           className="flex items-center justify-center text-zinc-800 dark:text-zinc-100"
           aria-label="Explorar"
         >
-          <Compass className="h-6 w-6" />
+          <Compass className="h-7 w-7" />
         </Link>
-
-        <button
-          type="button"
-          onClick={onPostClick}
-          className="flex items-center justify-center"
-          aria-label="Postar"
-        >
-          <span className="flex h-11 w-11 items-center justify-center rounded-full bg-zinc-900 text-white dark:bg-white dark:text-black">
-            <PenLine className="h-5 w-5" />
-          </span>
-        </button>
 
         <Link
           href="/notifications"
           className="relative flex items-center justify-center text-zinc-800 dark:text-zinc-100"
           aria-label="Notificações"
         >
-          <Bell className="h-6 w-6" />
+          <Bell className="h-7 w-7" />
 
           {unreadNotificationsCount > 0 && (
-            <span className="absolute right-5 top-2 flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white">
+            <span className="absolute right-8 top-2 flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white">
               {unreadNotificationsCount > 99 ? '99+' : unreadNotificationsCount}
             </span>
           )}
@@ -291,7 +348,7 @@ export default function MobileNavigation({
           className="flex items-center justify-center text-zinc-800 dark:text-zinc-100"
           aria-label="Perfil"
         >
-          <User className="h-6 w-6" />
+          <User className="h-7 w-7" />
         </Link>
       </nav>
     </>

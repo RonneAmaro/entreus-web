@@ -207,18 +207,20 @@ export default function PostComposer({
     })
   }
 
+  const canPublish = content.trim().length > 0 || media.length > 0
+
   return (
-    <div className="rounded-[28px] border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 sm:p-5">
+    <div className="border-b border-zinc-200 bg-white px-4 py-3 dark:border-zinc-800 dark:bg-black sm:rounded-2xl sm:border sm:px-4 sm:py-4">
       <div className="flex gap-3">
-        <div className="shrink-0">
+        <div className="shrink-0 pt-1">
           {userAvatarUrl ? (
             <img
               src={userAvatarUrl}
               alt={userName}
-              className="h-11 w-11 rounded-full border border-zinc-200 object-cover dark:border-zinc-800"
+              className="h-10 w-10 rounded-full border border-zinc-200 object-cover dark:border-zinc-800 sm:h-11 sm:w-11"
             />
           ) : (
-            <div className="flex h-11 w-11 items-center justify-center rounded-full border border-zinc-200 bg-zinc-100 text-sm font-bold text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full border border-zinc-200 bg-zinc-100 text-sm font-bold text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200 sm:h-11 sm:w-11">
               {getInitial(userName)}
             </div>
           )}
@@ -228,14 +230,14 @@ export default function PostComposer({
           <textarea
             value={content}
             onChange={(event) => setContent(event.target.value)}
-            placeholder={`No que você está pensando, ${userName}?`}
-            className="min-h-28 w-full resize-none rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-900 outline-none transition placeholder:text-zinc-400 focus:border-zinc-400 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100 dark:placeholder:text-zinc-500 dark:focus:border-zinc-600 sm:text-base"
+            placeholder={`O que está acontecendo, ${userName}?`}
+            className="min-h-[68px] w-full resize-none border-0 bg-transparent px-0 py-2 text-lg text-zinc-900 outline-none placeholder:text-zinc-500 dark:text-zinc-100 dark:placeholder:text-zinc-500 sm:min-h-[78px] sm:text-xl"
           />
 
           {media.length > 0 && (
             <div
               className={[
-                'mt-4 grid gap-2',
+                'mt-3 grid gap-2 overflow-hidden rounded-2xl',
                 media.length === 1 ? 'grid-cols-1' : 'grid-cols-2',
               ].join(' ')}
             >
@@ -248,20 +250,20 @@ export default function PostComposer({
                     <img
                       src={item.url}
                       alt="Prévia da imagem"
-                      className="h-44 w-full object-cover sm:h-56"
+                      className="h-40 w-full object-cover sm:h-56"
                     />
                   ) : (
                     <div className="relative">
                       <video
                         src={item.url}
-                        className="h-44 w-full bg-black object-cover sm:h-56"
+                        className="h-40 w-full bg-black object-cover sm:h-56"
                         muted
                         playsInline
                       />
 
                       <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-                        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-black/70 text-white">
-                          <Play className="h-6 w-6 fill-current" />
+                        <div className="flex h-11 w-11 items-center justify-center rounded-full bg-black/70 text-white">
+                          <Play className="h-5 w-5 fill-current" />
                         </div>
                       </div>
                     </div>
@@ -270,13 +272,13 @@ export default function PostComposer({
                   <button
                     type="button"
                     onClick={() => removeMedia(item.id)}
-                    className="absolute right-2 top-2 flex h-9 w-9 items-center justify-center rounded-full bg-black/70 text-white transition hover:bg-black"
+                    className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/70 text-white transition hover:bg-black"
                     title="Remover mídia"
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
 
-                  <div className="absolute bottom-2 left-2 rounded-full bg-black/70 px-2 py-1 text-xs font-medium text-white">
+                  <div className="absolute bottom-2 left-2 rounded-full bg-black/70 px-2 py-1 text-[11px] font-medium text-white">
                     {item.type === 'image' ? 'Imagem' : 'Vídeo'}
                   </div>
                 </div>
@@ -290,98 +292,100 @@ export default function PostComposer({
             </p>
           )}
 
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <input
-                ref={imageInputRef}
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                multiple
-                className="hidden"
-                onChange={(event) => addFiles(event.target.files)}
-              />
+          <div className="mt-3 border-t border-zinc-200 pt-3 dark:border-zinc-800">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                <input
+                  ref={imageInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  multiple
+                  className="hidden"
+                  onChange={(event) => addFiles(event.target.files)}
+                />
 
-              <input
-                ref={videoInputRef}
-                type="file"
-                accept="video/mp4,video/webm,video/ogg"
-                multiple
-                className="hidden"
-                onChange={(event) => addFiles(event.target.files)}
-              />
+                <input
+                  ref={videoInputRef}
+                  type="file"
+                  accept="video/mp4,video/webm,video/ogg"
+                  multiple
+                  className="hidden"
+                  onChange={(event) => addFiles(event.target.files)}
+                />
+
+                <button
+                  type="button"
+                  onClick={() => imageInputRef.current?.click()}
+                  className="flex h-9 w-9 items-center justify-center rounded-full text-blue-500 transition hover:bg-blue-50 dark:hover:bg-blue-950/30"
+                  title="Adicionar imagens"
+                >
+                  <ImagePlus className="h-5 w-5" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => videoInputRef.current?.click()}
+                  className="flex h-9 w-9 items-center justify-center rounded-full text-blue-500 transition hover:bg-blue-50 dark:hover:bg-blue-950/30"
+                  title="Adicionar vídeos"
+                >
+                  <Video className="h-5 w-5" />
+                </button>
+
+                <div className="relative">
+                  <select
+                    value={category}
+                    onChange={(event) => setCategory(event.target.value)}
+                    className="h-9 max-w-[142px] appearance-none rounded-full border border-zinc-200 bg-transparent pl-8 pr-3 text-xs font-semibold text-zinc-700 outline-none transition hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-900 sm:max-w-none sm:text-sm"
+                    title="Categoria"
+                  >
+                    {CATEGORY_OPTIONS.map((item) => (
+                      <option key={item.value} value={item.value}>
+                        {item.label}
+                      </option>
+                    ))}
+                  </select>
+
+                  <Tag className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+                </div>
+
+                <div className="relative">
+                  <select
+                    value={visibility}
+                    onChange={(event) => setVisibility(event.target.value as VisibilityType)}
+                    className="h-9 max-w-[132px] appearance-none rounded-full border border-zinc-200 bg-transparent pl-8 pr-3 text-xs font-semibold text-zinc-700 outline-none transition hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-900 sm:max-w-none sm:text-sm"
+                    title="Privacidade"
+                  >
+                    {VISIBILITY_OPTIONS.map((item) => (
+                      <option key={item.value} value={item.value}>
+                        {item.label}
+                      </option>
+                    ))}
+                  </select>
+
+                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500">
+                    {selectedVisibility?.icon}
+                  </span>
+                </div>
+              </div>
 
               <button
                 type="button"
-                onClick={() => imageInputRef.current?.click()}
-                className="flex h-11 w-11 items-center justify-center rounded-full border border-zinc-200 bg-zinc-50 text-emerald-600 transition hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900 dark:text-emerald-400 dark:hover:bg-zinc-800"
-                title="Adicionar imagens"
+                disabled={submitting || !canPublish}
+                onClick={handleSubmit}
+                className="flex h-9 min-w-[98px] items-center justify-center gap-2 rounded-full bg-zinc-900 px-5 text-sm font-bold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-black"
               >
-                <ImagePlus className="h-5 w-5" />
+                <Send className="h-4 w-4" />
+                {submitting ? 'Publicando...' : 'Postar'}
               </button>
-
-              <button
-                type="button"
-                onClick={() => videoInputRef.current?.click()}
-                className="flex h-11 w-11 items-center justify-center rounded-full border border-zinc-200 bg-zinc-50 text-pink-600 transition hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900 dark:text-pink-400 dark:hover:bg-zinc-800"
-                title="Adicionar vídeos"
-              >
-                <Video className="h-5 w-5" />
-              </button>
-
-              <div className="relative">
-                <select
-                  value={category}
-                  onChange={(event) => setCategory(event.target.value)}
-                  className="h-10 appearance-none rounded-full border border-zinc-200 bg-zinc-50 pl-9 pr-4 text-sm font-medium text-zinc-700 outline-none transition hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
-                  title="Categoria"
-                >
-                  {CATEGORY_OPTIONS.map((item) => (
-                    <option key={item.value} value={item.value}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-
-                <Tag className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
-              </div>
-
-              <div className="relative">
-                <select
-                  value={visibility}
-                  onChange={(event) => setVisibility(event.target.value as VisibilityType)}
-                  className="h-10 appearance-none rounded-full border border-zinc-200 bg-zinc-50 pl-9 pr-4 text-sm font-medium text-zinc-700 outline-none transition hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
-                  title="Privacidade"
-                >
-                  {VISIBILITY_OPTIONS.map((item) => (
-                    <option key={item.value} value={item.value}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-
-                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500">
-                  {selectedVisibility?.icon}
-                </span>
-              </div>
             </div>
 
-            <button
-              type="button"
-              disabled={submitting}
-              onClick={handleSubmit}
-              className="flex h-11 min-w-[130px] items-center justify-center gap-2 rounded-full bg-zinc-900 px-5 text-sm font-bold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-black"
-            >
-              <Send className="h-4 w-4" />
-              {submitting ? 'Publicando...' : 'Publicar'}
-            </button>
-          </div>
-
-          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
-            <span>{selectedCategory?.label}</span>
-            <span>•</span>
-            <span>{selectedVisibility?.label}</span>
-            <span>•</span>
-            <span>{media.length}/{MAX_MEDIA_FILES} mídias</span>
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-zinc-500 dark:text-zinc-500">
+              <span>{selectedCategory?.label}</span>
+              <span>•</span>
+              <span>{selectedVisibility?.label}</span>
+              <span>•</span>
+              <span>{media.length}/{MAX_MEDIA_FILES} mídias</span>
+            </div>
           </div>
         </div>
       </div>
