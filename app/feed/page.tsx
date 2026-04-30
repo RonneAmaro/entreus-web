@@ -5,8 +5,9 @@ import AppSidebar from '../components/AppSidebar'
 import MobileNavigation from '../components/MobileNavigation'
 import PostMoreMenu from '../components/PostMoreMenu'
 import PostMediaGallery from '../components/PostMediaGallery'
+import PostActions from '../components/PostActions'
 import Link from 'next/link'
-import { Edit3, Heart, MoreHorizontal, Trash2 } from 'lucide-react'
+import { Edit3, MoreHorizontal, Trash2 } from 'lucide-react'
 import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useTheme } from 'next-themes'
@@ -983,6 +984,18 @@ function FeedContent() {
     }
   }
 
+  function handleFocusCommentInput(postId: string) {
+    const input = document.getElementById(`comment-input-${postId}`)
+
+    if (input instanceof HTMLInputElement) {
+      input.scrollIntoView({ behavior: 'smooth', block: 'center' })
+
+      setTimeout(() => {
+        input.focus()
+      }, 300)
+    }
+  }
+
   function getVisibilityLabel(value: Post['visibility']) {
     if (value === 'public') return 'Público'
     if (value === 'followers') return 'Só seguidores'
@@ -1247,23 +1260,15 @@ function FeedContent() {
                   </>
                 )}
 
-                <div className="mt-4 flex flex-wrap items-center gap-4">
-                  <button
-                    onClick={() => handleToggleLike(post.id)}
-                    className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-medium transition ${
-                      userLiked
-                        ? 'bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400'
-                        : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800'
-                    }`}
-                  >
-                    <Heart
-                      className={`h-5 w-5 ${
-                        userLiked ? 'fill-current' : ''
-                      }`}
-                    />
-                    <span>{postLikes.length}</span>
-                  </button>
-                </div>
+                <PostActions
+                  commentsCount={postComments.length}
+                  likesCount={postLikes.length}
+                  liked={userLiked}
+                  copied={copiedPostId === post.id}
+                  onLike={() => handleToggleLike(post.id)}
+                  onCommentClick={() => handleFocusCommentInput(post.id)}
+                  onShare={() => handleCopyPostLink(post.id)}
+                />
 
                 <p className="text-xs text-zinc-500 dark:text-zinc-600 mt-3 mb-4">
                   {new Date(post.created_at).toLocaleString('pt-BR')}
@@ -1436,11 +1441,7 @@ function FeedContent() {
                                       : 'text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-700'
                                   }`}
                                 >
-                                  <Heart
-                                    className={`h-4 w-4 ${
-                                      userLikedComment ? 'fill-current' : ''
-                                    }`}
-                                  />
+                                  <span>{userLikedComment ? '♥' : '♡'}</span>
                                   <span>{likesForComment.length}</span>
                                 </button>
 
@@ -1457,6 +1458,7 @@ function FeedContent() {
 
                   <div className="flex flex-col sm:flex-row gap-3">
                     <input
+                      id={`comment-input-${post.id}`}
                       type="text"
                       value={commentInputs[post.id] || ''}
                       onChange={(e) =>
