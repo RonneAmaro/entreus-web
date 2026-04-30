@@ -30,6 +30,7 @@ export default function AppSidebar({
       composer.scrollIntoView({ behavior: 'smooth', block: 'center' })
 
       const textarea = composer.querySelector('textarea')
+
       if (textarea instanceof HTMLTextAreaElement) {
         setTimeout(() => textarea.focus(), 350)
       }
@@ -37,7 +38,7 @@ export default function AppSidebar({
   }
 
   return (
-    <aside className="hidden lg:flex fixed left-0 top-0 z-40 h-screen w-[270px] flex-col border-r border-zinc-200 bg-white px-5 py-5 dark:border-zinc-800 dark:bg-black">
+    <aside className="fixed left-0 top-0 z-40 hidden h-screen w-[270px] flex-col border-r border-zinc-200 bg-white px-5 py-5 dark:border-zinc-800 dark:bg-black lg:flex">
       <Link href="/feed" className="mb-8 flex items-center">
         <Image
           src="/logo.png"
@@ -102,12 +103,22 @@ export default function AppSidebar({
           </button>
 
           {openMoreMenu && (
-            <MoreMenu
-              mounted={mounted}
-              theme={theme}
-              onToggleTheme={onToggleTheme}
-              onLogout={onLogout}
-            />
+            <>
+              <button
+                type="button"
+                onClick={() => setOpenMoreMenu(false)}
+                className="fixed inset-0 z-[998] cursor-default bg-transparent"
+                aria-label="Fechar menu"
+              />
+
+              <MoreMenu
+                mounted={mounted}
+                theme={theme}
+                onToggleTheme={onToggleTheme}
+                onLogout={onLogout}
+                onClose={() => setOpenMoreMenu(false)}
+              />
+            </>
           )}
         </div>
 

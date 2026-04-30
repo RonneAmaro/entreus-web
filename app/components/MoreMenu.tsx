@@ -8,6 +8,7 @@ type MoreMenuProps = {
   theme?: string
   onToggleTheme: () => void
   onLogout: () => void
+  onClose: () => void
 }
 
 export default function MoreMenu({
@@ -15,13 +16,24 @@ export default function MoreMenu({
   theme,
   onToggleTheme,
   onLogout,
+  onClose,
 }: MoreMenuProps) {
+  function handleThemeClick() {
+    onToggleTheme()
+    onClose()
+  }
+
+  function handleLogoutClick() {
+    onClose()
+    onLogout()
+  }
+
   return (
-    <div className="absolute bottom-14 left-0 z-50 w-64 overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-xl dark:border-zinc-800 dark:bg-zinc-950">
+    <div className="absolute left-0 top-12 z-[999] w-64 overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-xl dark:border-zinc-800 dark:bg-zinc-950">
       {mounted && (
         <button
           type="button"
-          onClick={onToggleTheme}
+          onClick={handleThemeClick}
           className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-zinc-800 transition hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-900"
         >
           {theme === 'dark' ? (
@@ -36,6 +48,7 @@ export default function MoreMenu({
 
       <Link
         href="/privacy"
+        onClick={onClose}
         className="flex items-center gap-3 px-4 py-3 text-sm text-zinc-800 transition hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-900"
       >
         <Shield className="h-5 w-5" />
@@ -44,6 +57,7 @@ export default function MoreMenu({
 
       <Link
         href="/blocked"
+        onClick={onClose}
         className="flex items-center gap-3 px-4 py-3 text-sm text-zinc-800 transition hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-900"
       >
         <UserX className="h-5 w-5" />
@@ -52,7 +66,7 @@ export default function MoreMenu({
 
       <button
         type="button"
-        onClick={onLogout}
+        onClick={handleLogoutClick}
         className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-red-600 transition hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30"
       >
         <LogOut className="h-5 w-5" />
