@@ -9,11 +9,6 @@ export const metadata: Metadata = {
   },
   description:
     'EntreUS é uma rede social privada focada em conexão, lifestyle, liberdade, privacidade e interações reais.',
-  icons: {
-    icon: '/favicon.ico',
-    shortcut: '/favicon.ico',
-    apple: '/apple-icon.png',
-  },
   openGraph: {
     title: 'EntreUS — Só Entre Nós',
     description:
