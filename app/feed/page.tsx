@@ -30,6 +30,7 @@ type CurrentProfile = {
   username: string | null
   display_name: string | null
   avatar_url: string | null
+  show_sensitive_content: boolean
 }
 
 type PostMedia = {
@@ -152,13 +153,26 @@ function FeedContent() {
 
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select('username, display_name, avatar_url')
+        .select('username, display_name, avatar_url, show_sensitive_content')
         .eq('id', user.id)
         .single()
 
-      if (!profileError && profileData) {
-        setCurrentProfile(profileData as CurrentProfile)
+      const loadedCurrentProfile: CurrentProfile | null =
+        !profileError && profileData
+          ? {
+              username: profileData.username,
+              display_name: profileData.display_name,
+              avatar_url: profileData.avatar_url,
+              show_sensitive_content: profileData.show_sensitive_content || false,
+            }
+          : null
+
+      if (loadedCurrentProfile) {
+        setCurrentProfile(loadedCurrentProfile)
       }
+
+      const allowSensitiveContent =
+        loadedCurrentProfile?.show_sensitive_content || false
 
       const blockedIds = await loadBlockedUserIds(user.id)
       setBlockedUserIds(blockedIds)
@@ -167,7 +181,7 @@ function FeedContent() {
       setFollows(followsData)
 
       await Promise.all([
-        loadPosts(user.id, blockedIds, followsData),
+        loadPosts(user.id, blockedIds, followsData, allowSensitiveContent),
         loadComments(blockedIds),
         loadLikes(),
         loadCommentLikes(),
@@ -275,10 +289,19 @@ function FeedContent() {
     return false
   }
 
+  function isSensitivePost(post: Post) {
+    return (
+      post.is_sensitive ||
+      post.category === 'adulto' ||
+      post.category === 'sensual'
+    )
+  }
+
   async function loadPosts(
     currentUserId: string = userId,
     currentBlockedIds: string[] = blockedUserIds,
-    currentFollows: Follow[] = follows
+    currentFollows: Follow[] = follows,
+    allowSensitiveContent: boolean = currentProfile?.show_sensitive_content || false
   ) {
     const { data, error } = await supabase
       .from('posts')
@@ -346,6 +369,12 @@ function FeedContent() {
       }))
       .filter((post) => !currentBlockedIds.includes(post.user_id))
       .filter((post) => canSeePost(post, currentUserId, currentFollows))
+      .filter((post) => {
+        if (post.user_id === currentUserId) return true
+        if (allowSensitiveContent) return true
+
+        return !isSensitivePost(post)
+      })
 
     setPosts(normalizedPosts)
   }
@@ -411,7 +440,13 @@ function FeedContent() {
   async function refreshAfterFollowChange() {
     const freshFollows = await loadFollows()
     setFollows(freshFollows)
-    await loadPosts(userId, blockedUserIds, freshFollows)
+
+    await loadPosts(
+      userId,
+      blockedUserIds,
+      freshFollows,
+      currentProfile?.show_sensitive_content || false
+    )
   }
 
   async function handleToggleFollow(targetUserId: string) {
@@ -702,7 +737,12 @@ function FeedContent() {
 
     setMessage('Publicado com sucesso!')
 
-    await loadPosts()
+    await loadPosts(
+      userId,
+      blockedUserIds,
+      follows,
+      currentProfile?.show_sensitive_content || false
+    )
     await loadComments()
     await loadLikes()
     await loadCommentLikes()
@@ -726,7 +766,12 @@ function FeedContent() {
 
     setMessage('Post excluído com sucesso!')
 
-    await loadPosts()
+    await loadPosts(
+      userId,
+      blockedUserIds,
+      follows,
+      currentProfile?.show_sensitive_content || false
+    )
     await loadComments()
     await loadLikes()
     await loadCommentLikes()
@@ -770,7 +815,12 @@ function FeedContent() {
     setEditContent('')
     setSavingEdit(false)
 
-    await loadPosts()
+    await loadPosts(
+      userId,
+      blockedUserIds,
+      follows,
+      currentProfile?.show_sensitive_content || false
+    )
   }
 
   async function handleCreateComment(postId: string) {
@@ -1090,6 +1140,16 @@ function FeedContent() {
           </span>
         </div>
 
+        {currentProfile && !currentProfile.show_sensitive_content && (
+          <div className="mb-4 rounded-2xl border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-800 dark:border-yellow-900/60 dark:bg-yellow-950/20 dark:text-yellow-300">
+            Conteúdos 18+ estão ocultos no seu feed. Você pode alterar isso em{' '}
+            <Link href="/profile" className="font-semibold underline">
+              Meu perfil
+            </Link>
+            .
+          </div>
+        )}
+
         <div id="post-composer" className="mb-6 scroll-mt-24">
           <PostComposer
             userName={currentProfile?.display_name || currentProfile?.username || email || 'Usuário'}
@@ -1133,10 +1193,7 @@ function FeedContent() {
             const isHighlighted = highlightedPostId === post.id
             const postMedia = getPostMedia(post)
 
-            const isSensitivePost =
-              post.is_sensitive ||
-              post.category === 'adulto' ||
-              post.category === 'sensual'
+            const isSensitivePostItem = isSensitivePost(post)
 
             return (
               <article
@@ -1222,7 +1279,7 @@ function FeedContent() {
                     {getVisibilityLabel(post.visibility)}
                   </span>
 
-                  {isSensitivePost && (
+                  {isSensitivePostItem && (
                     <span className="text-xs px-2 py-1 rounded-full bg-yellow-50 dark:bg-yellow-950 text-yellow-700 dark:text-yellow-300 border border-yellow-200 dark:border-yellow-800">
                       18+
                     </span>
@@ -1266,7 +1323,7 @@ function FeedContent() {
                   </div>
                 ) : (
                   <>
-                    {isSensitivePost ? (
+                    {isSensitivePostItem ? (
                       <SensitiveContent>
                         {post.content && (
                           <p className="text-zinc-800 dark:text-zinc-200 whitespace-pre-wrap mb-4 break-words text-sm sm:text-base">
