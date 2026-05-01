@@ -7,6 +7,7 @@ import { ArrowLeft, Heart, MessageCircle, Share2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import LinkPreview from '@/app/components/LinkPreview'
 import PostMediaGallery from '@/app/components/PostMediaGallery'
+import SensitiveContent from '@/app/components/SensitiveContent'
 
 type VisibilityType = 'public' | 'followers' | 'private'
 
@@ -35,6 +36,7 @@ type Post = {
   image_url: string | null
   video_url: string | null
   visibility: VisibilityType
+  is_sensitive: boolean | null
   profiles: Profile | null
   media?: PostMedia[]
 }
@@ -138,6 +140,7 @@ export default function PostPage() {
           image_url,
           video_url,
           visibility,
+          is_sensitive,
           profiles (
             username,
             display_name,
@@ -162,6 +165,7 @@ export default function PostPage() {
       const normalizedPost = {
         ...postData,
         visibility: (postData.visibility || 'public') as VisibilityType,
+        is_sensitive: postData.is_sensitive || false,
         profiles: Array.isArray(postData.profiles)
           ? postData.profiles[0] || null
           : postData.profiles,
@@ -425,6 +429,11 @@ export default function PostPage() {
   const userLiked = likes.some((like) => like.user_id === loggedUserId)
   const postMedia = getPostMedia(post)
 
+  const isSensitivePost =
+    post.is_sensitive ||
+    post.category === 'adulto' ||
+    post.category === 'sensual'
+
   const blockedByVisibility =
     message === 'Você não tem permissão para visualizar esta publicação.'
 
@@ -512,17 +521,39 @@ export default function PostPage() {
                 <span className="rounded-full border border-zinc-200 bg-zinc-100 px-2 py-1 text-xs text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
                   {getVisibilityLabel(post.visibility)}
                 </span>
+
+                {isSensitivePost && (
+                  <span className="rounded-full border border-yellow-200 bg-yellow-50 px-2 py-1 text-xs text-yellow-700 dark:border-yellow-800 dark:bg-yellow-950 dark:text-yellow-300">
+                    18+
+                  </span>
+                )}
               </div>
 
-              {post.content && (
-                <p className="mb-4 whitespace-pre-wrap break-words text-base leading-relaxed text-zinc-800 dark:text-zinc-200">
-                  {post.content}
-                </p>
+              {isSensitivePost ? (
+                <SensitiveContent>
+                  {post.content && (
+                    <p className="mb-4 whitespace-pre-wrap break-words text-base leading-relaxed text-zinc-800 dark:text-zinc-200">
+                      {post.content}
+                    </p>
+                  )}
+
+                  <LinkPreview content={post.content} />
+
+                  <PostMediaGallery media={postMedia} />
+                </SensitiveContent>
+              ) : (
+                <>
+                  {post.content && (
+                    <p className="mb-4 whitespace-pre-wrap break-words text-base leading-relaxed text-zinc-800 dark:text-zinc-200">
+                      {post.content}
+                    </p>
+                  )}
+
+                  <LinkPreview content={post.content} />
+
+                  <PostMediaGallery media={postMedia} />
+                </>
               )}
-
-              <LinkPreview content={post.content} />
-
-              <PostMediaGallery media={postMedia} />
 
               <p className="mt-4 text-xs text-zinc-500 dark:text-zinc-600">
                 {new Date(post.created_at).toLocaleString('pt-BR')}
