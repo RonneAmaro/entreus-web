@@ -727,10 +727,17 @@ function FeedContent() {
 
       if (mediaError) {
         setMessage('Post criado, mas houve erro ao salvar mídias: ' + mediaError.message)
-        await loadPosts()
+
+        await loadPosts(
+          userId,
+          blockedUserIds,
+          follows,
+          currentProfile?.show_sensitive_content || false
+        )
         await loadComments()
         await loadLikes()
         await loadCommentLikes()
+
         return
       }
     }
@@ -1195,6 +1202,9 @@ function FeedContent() {
 
             const isSensitivePostItem = isSensitivePost(post)
 
+            const shouldShowSensitiveWarning =
+              isSensitivePostItem && !currentProfile?.show_sensitive_content
+
             return (
               <article
                 id={`post-${post.id}`}
@@ -1323,7 +1333,7 @@ function FeedContent() {
                   </div>
                 ) : (
                   <>
-                    {isSensitivePostItem ? (
+                    {shouldShowSensitiveWarning ? (
                       <SensitiveContent>
                         {post.content && (
                           <p className="text-zinc-800 dark:text-zinc-200 whitespace-pre-wrap mb-4 break-words text-sm sm:text-base">
