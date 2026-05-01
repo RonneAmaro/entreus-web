@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { ShieldAlert } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
 type Profile = {
@@ -13,6 +14,7 @@ type Profile = {
   avatar_url: string | null
   country: string | null
   birth_date: string | null
+  show_sensitive_content: boolean
 }
 
 export default function ProfilePage() {
@@ -33,6 +35,7 @@ export default function ProfilePage() {
   const [birthDate, setBirthDate] = useState('')
   const [avatarUrl, setAvatarUrl] = useState('')
   const [avatarPreview, setAvatarPreview] = useState('')
+  const [showSensitiveContent, setShowSensitiveContent] = useState(false)
 
   useEffect(() => {
     async function loadPage() {
@@ -49,7 +52,9 @@ export default function ProfilePage() {
 
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, username, display_name, bio, avatar_url, country, birth_date')
+        .select(
+          'id, username, display_name, bio, avatar_url, country, birth_date, show_sensitive_content'
+        )
         .eq('id', user.id)
         .maybeSingle()
 
@@ -67,6 +72,7 @@ export default function ProfilePage() {
         avatar_url: '',
         country: '',
         birth_date: '',
+        show_sensitive_content: false,
       }
 
       setProfile(loadedProfile)
@@ -77,6 +83,7 @@ export default function ProfilePage() {
       setBirthDate(loadedProfile.birth_date || '')
       setAvatarUrl(loadedProfile.avatar_url || '')
       setAvatarPreview(loadedProfile.avatar_url || '')
+      setShowSensitiveContent(loadedProfile.show_sensitive_content || false)
 
       setLoading(false)
     }
@@ -96,12 +103,14 @@ export default function ProfilePage() {
     if (!file || !userId) return
 
     const allowedTypes = ['image/jpeg', 'image/png', 'image/webp']
+
     if (!allowedTypes.includes(file.type)) {
       setMessage('Envie uma imagem JPG, PNG ou WEBP.')
       return
     }
 
     const maxSizeInBytes = 5 * 1024 * 1024
+
     if (file.size > maxSizeInBytes) {
       setMessage('O avatar deve ter no máximo 5MB.')
       return
@@ -181,6 +190,7 @@ export default function ProfilePage() {
       avatar_url: avatarUrl || null,
       country: country.trim() || null,
       birth_date: birthDate || null,
+      show_sensitive_content: showSensitiveContent,
       updated_at: new Date().toISOString(),
     }
 
@@ -207,6 +217,7 @@ export default function ProfilePage() {
             avatar_url: avatarUrl || null,
             country: country.trim() || null,
             birth_date: birthDate || null,
+            show_sensitive_content: showSensitiveContent,
           }
     )
 
@@ -291,7 +302,9 @@ export default function ProfilePage() {
                 </label>
 
                 {uploadingAvatar && (
-                  <p className="text-sm text-zinc-500 dark:text-zinc-400">Enviando avatar...</p>
+                  <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                    Enviando avatar...
+                  </p>
                 )}
               </div>
 
@@ -299,6 +312,7 @@ export default function ProfilePage() {
                 <h2 className="text-2xl font-bold text-black dark:text-white break-words">
                   {profileName}
                 </h2>
+
                 <p className="text-zinc-500 dark:text-zinc-400 mt-1 break-all">
                   @{username || 'seu_username'}
                 </p>
@@ -316,6 +330,7 @@ export default function ProfilePage() {
                 <label className="block text-sm mb-2 text-zinc-700 dark:text-zinc-300">
                   Nome de exibição
                 </label>
+
                 <input
                   type="text"
                   value={displayName}
@@ -329,6 +344,7 @@ export default function ProfilePage() {
                 <label className="block text-sm mb-2 text-zinc-700 dark:text-zinc-300">
                   Username
                 </label>
+
                 <input
                   type="text"
                   value={username}
@@ -336,6 +352,7 @@ export default function ProfilePage() {
                   placeholder="seu_username"
                   className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 px-4 py-3 outline-none focus:border-zinc-500 text-sm sm:text-base"
                 />
+
                 <p className="text-xs text-zinc-500 mt-2">
                   Use letras minúsculas, números e underline.
                 </p>
@@ -345,6 +362,7 @@ export default function ProfilePage() {
                 <label className="block text-sm mb-2 text-zinc-700 dark:text-zinc-300">
                   Bio
                 </label>
+
                 <textarea
                   value={bio}
                   onChange={(e) => setBio(e.target.value)}
@@ -358,6 +376,7 @@ export default function ProfilePage() {
                   <label className="block text-sm mb-2 text-zinc-700 dark:text-zinc-300">
                     País
                   </label>
+
                   <input
                     type="text"
                     value={country}
@@ -371,12 +390,48 @@ export default function ProfilePage() {
                   <label className="block text-sm mb-2 text-zinc-700 dark:text-zinc-300">
                     Data de nascimento
                   </label>
+
                   <input
                     type="date"
                     value={birthDate}
                     onChange={(e) => setBirthDate(e.target.value)}
                     className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 px-4 py-3 outline-none focus:border-zinc-500 text-sm sm:text-base"
                   />
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-yellow-200 bg-yellow-50 p-4 dark:border-yellow-900/60 dark:bg-yellow-950/20">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="flex gap-3">
+                    <div className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-yellow-100 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-300">
+                      <ShieldAlert className="h-5 w-5" />
+                    </div>
+
+                    <div>
+                      <h3 className="font-semibold text-zinc-900 dark:text-white">
+                        Preferência de conteúdo 18+
+                      </h3>
+
+                      <p className="mt-1 text-sm text-zinc-700 dark:text-zinc-300">
+                        Quando ativado, publicações adultas ou sensíveis poderão aparecer no seu feed com aviso antes da visualização.
+                      </p>
+
+                      <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-500">
+                        Quando desativado, o feed poderá ocultar esse tipo de conteúdo.
+                      </p>
+                    </div>
+                  </div>
+
+                  <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-yellow-300 bg-white px-4 py-3 text-sm font-medium text-zinc-900 dark:border-yellow-800 dark:bg-zinc-950 dark:text-white">
+                    <input
+                      type="checkbox"
+                      checked={showSensitiveContent}
+                      onChange={(e) => setShowSensitiveContent(e.target.checked)}
+                      className="h-5 w-5 accent-yellow-600"
+                    />
+
+                    Permitir 18+
+                  </label>
                 </div>
               </div>
             </div>
