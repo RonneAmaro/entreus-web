@@ -5,6 +5,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import {
   Bell,
+  Bookmark,
   Compass,
   Home,
   ImagePlus,
@@ -190,6 +191,15 @@ export default function MobileNavigation({
               >
                 <Bell className="h-5 w-5" />
                 Notificações
+              </Link>
+
+              <Link
+                href="/saved"
+                onClick={closeMenu}
+                className="flex items-center gap-3 rounded-2xl px-3 py-3 text-base font-medium hover:bg-zinc-100 dark:hover:bg-zinc-900"
+              >
+                <Bookmark className="h-5 w-5" />
+                Salvos
               </Link>
 
               <div className="my-4 border-t border-zinc-200 dark:border-zinc-800" />

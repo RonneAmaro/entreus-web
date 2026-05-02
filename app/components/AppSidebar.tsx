@@ -3,7 +3,15 @@
 import { useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { Bell, Compass, Home, MoreHorizontal, PenLine, User } from 'lucide-react'
+import {
+  Bell,
+  Bookmark,
+  Compass,
+  Home,
+  MoreHorizontal,
+  PenLine,
+  User,
+} from 'lucide-react'
 import MoreMenu from './MoreMenu'
 
 type AppSidebarProps = {
@@ -82,6 +90,14 @@ export default function AppSidebar({
           </div>
 
           <span>Notificações</span>
+        </Link>
+
+        <Link
+          href="/saved"
+          className="flex items-center gap-4 rounded-full px-4 py-3 text-lg font-medium text-zinc-900 transition hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-900"
+        >
+          <Bookmark className="h-6 w-6" />
+          <span>Salvos</span>
         </Link>
 
         <Link
