@@ -78,6 +78,13 @@ type SavedBookmark = {
   created_at: string
 }
 
+type Repost = {
+  id: string
+  post_id: string
+  user_id: string
+  created_at: string
+}
+
 export default function SavedPage() {
   const router = useRouter()
   const { theme, setTheme } = useTheme()
@@ -91,6 +98,7 @@ export default function SavedPage() {
   const [likes, setLikes] = useState<Like[]>([])
   const [comments, setComments] = useState<Comment[]>([])
   const [bookmarks, setBookmarks] = useState<SavedBookmark[]>([])
+  const [reposts, setReposts] = useState<Repost[]>([])
   const [blockedUserIds, setBlockedUserIds] = useState<string[]>([])
   const [follows, setFollows] = useState<Follow[]>([])
 
@@ -157,6 +165,7 @@ export default function SavedPage() {
         ),
         loadLikes(),
         loadComments(blockedIds),
+        loadReposts(),
         loadUnreadNotificationsCount(user.id),
       ])
 
@@ -244,7 +253,9 @@ export default function SavedPage() {
   }
 
   async function loadLikes() {
-    const { data, error } = await supabase.from('likes').select('*')
+    const { data, error } = await supabase
+      .from('likes')
+      .select('id, post_id, user_id')
 
     if (error) {
       setMessage('Erro ao carregar curtidas: ' + error.message)
@@ -252,6 +263,20 @@ export default function SavedPage() {
     }
 
     setLikes(data || [])
+  }
+
+  async function loadReposts() {
+    const { data, error } = await supabase
+      .from('reposts')
+      .select('id, post_id, user_id, created_at')
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      setMessage('Erro ao carregar reposts: ' + error.message)
+      return
+    }
+
+    setReposts(data || [])
   }
 
   async function loadComments(currentBlockedIds: string[] = blockedUserIds) {
@@ -472,20 +497,89 @@ export default function SavedPage() {
     }
   }
 
+  async function handleToggleRepost(postId: string) {
+    if (!userId) return
+
+    setMessage('')
+
+    const repostedPost = posts.find((post) => post.id === postId)
+
+    if (repostedPost?.user_id === userId) {
+      setMessage('Você não precisa repostar sua própria publicação.')
+      return
+    }
+
+    const existingRepost = reposts.find(
+      (repost) => repost.post_id === postId && repost.user_id === userId
+    )
+
+    if (existingRepost) {
+      setReposts((current) =>
+        current.filter((repost) => repost.id !== existingRepost.id)
+      )
+
+      const { error } = await supabase
+        .from('reposts')
+        .delete()
+        .eq('post_id', postId)
+        .eq('user_id', userId)
+
+      if (error) {
+        setMessage('Erro ao remover repost: ' + error.message)
+        await loadReposts()
+      }
+
+      return
+    }
+
+    const optimisticRepost: Repost = {
+      id: crypto.randomUUID(),
+      post_id: postId,
+      user_id: userId,
+      created_at: new Date().toISOString(),
+    }
+
+    setReposts((current) => [optimisticRepost, ...current])
+
+    const { data, error } = await supabase
+      .from('reposts')
+      .insert({
+        post_id: postId,
+        user_id: userId,
+      })
+      .select('id, post_id, user_id, created_at')
+      .single()
+
+    if (error) {
+      setMessage('Erro ao repostar: ' + error.message)
+      await loadReposts()
+      return
+    }
+
+    if (data) {
+      setReposts((current) =>
+        current.map((repost) =>
+          repost.id === optimisticRepost.id ? data : repost
+        )
+      )
+    }
+
+    if (repostedPost && repostedPost.user_id !== userId) {
+      await supabase.from('notifications').insert({
+        user_id: repostedPost.user_id,
+        actor_id: userId,
+        type: 'repost',
+        post_id: postId,
+      })
+    }
+  }
+
   async function handleToggleLike(postId: string) {
     if (!userId) return
 
-    const { data: existingLike, error: checkError } = await supabase
-      .from('likes')
-      .select('id')
-      .eq('post_id', postId)
-      .eq('user_id', userId)
-      .maybeSingle()
-
-    if (checkError) {
-      setMessage('Erro ao verificar curtida: ' + checkError.message)
-      return
-    }
+    const existingLike = likes.find(
+      (like) => like.post_id === postId && like.user_id === userId
+    )
 
     if (existingLike) {
       setLikes((current) => current.filter((like) => like.id !== existingLike.id))
@@ -691,12 +785,17 @@ export default function SavedPage() {
           {posts.map((post) => {
             const postComments = comments.filter((comment) => comment.post_id === post.id)
             const postLikes = likes.filter((like) => like.post_id === post.id)
+            const postReposts = reposts.filter((repost) => repost.post_id === post.id)
 
             const userLiked = likes.some(
               (like) => like.post_id === post.id && like.user_id === userId
             )
 
             const postSaved = savedPostIds.has(post.id)
+
+            const postReposted = reposts.some(
+              (repost) => repost.post_id === post.id && repost.user_id === userId
+            )
 
             const authorName =
               post.profiles?.display_name || post.profiles?.username || 'Usuário'
@@ -769,6 +868,12 @@ export default function SavedPage() {
                     </span>
                   )}
 
+                  {postReposted && (
+                    <span className="rounded-full border border-green-200 bg-green-50 px-2 py-1 text-xs text-green-700 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
+                      Repostado
+                    </span>
+                  )}
+
                   {postSaved && (
                     <span className="rounded-full border border-yellow-200 bg-yellow-50 px-2 py-1 text-xs text-yellow-700 dark:border-yellow-800 dark:bg-yellow-950 dark:text-yellow-300">
                       Salvo
@@ -805,11 +910,14 @@ export default function SavedPage() {
                 <PostActions
                   commentsCount={postComments.length}
                   likesCount={postLikes.length}
+                  repostsCount={postReposts.length}
                   liked={userLiked}
+                  reposted={postReposted}
                   saved={postSaved}
                   copied={copiedPostId === post.id}
                   onLike={() => handleToggleLike(post.id)}
                   onCommentClick={() => router.push(`/post/${post.id}`)}
+                  onRepost={() => handleToggleRepost(post.id)}
                   onSave={() => handleToggleBookmark(post.id)}
                   onShare={() => handleCopyPostLink(post.id)}
                 />
