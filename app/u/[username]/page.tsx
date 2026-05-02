@@ -1,9 +1,16 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { Repeat2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import PostMediaGallery from '../../components/PostMediaGallery'
+import PostActions from '../../components/PostActions'
+import LinkPreview from '../../components/LinkPreview'
+import SensitiveContent from '../../components/SensitiveContent'
+
+type VisibilityType = 'public' | 'followers' | 'private'
 
 type Profile = {
   id: string
@@ -11,6 +18,23 @@ type Profile = {
   display_name: string | null
   bio: string | null
   avatar_url: string | null
+  show_sensitive_content?: boolean | null
+}
+
+type ProfileSummary = {
+  username: string
+  display_name: string | null
+  avatar_url: string | null
+}
+
+type PostMedia = {
+  id: string
+  post_id: string
+  user_id: string
+  media_url: string
+  media_type: 'image' | 'video'
+  position: number
+  created_at?: string
 }
 
 type Post = {
@@ -19,8 +43,12 @@ type Post = {
   category: string | null
   created_at: string
   user_id: string
-  image_url?: string | null
-  visibility?: 'public' | 'followers' | 'private'
+  image_url: string | null
+  video_url: string | null
+  visibility: VisibilityType
+  is_sensitive: boolean | null
+  profiles: ProfileSummary | null
+  media?: PostMedia[]
 }
 
 type FollowProfile = {
@@ -30,14 +58,63 @@ type FollowProfile = {
   avatar_url: string | null
 }
 
+type Like = {
+  id: string
+  post_id: string
+  user_id: string
+}
+
+type Comment = {
+  id: string
+  post_id: string
+  user_id: string
+}
+
+type BookmarkItem = {
+  id: string
+  post_id: string
+  user_id: string
+  created_at: string
+}
+
+type Repost = {
+  id: string
+  post_id: string
+  user_id: string
+  created_at: string
+  profiles: ProfileSummary | null
+}
+
+type FeedItem =
+  | {
+      type: 'post'
+      id: string
+      created_at: string
+      post: Post
+    }
+  | {
+      type: 'repost'
+      id: string
+      created_at: string
+      post: Post
+      repost: Repost
+    }
+
 export default function PublicProfilePage() {
   const params = useParams()
   const router = useRouter()
   const username = typeof params.username === 'string' ? params.username : ''
 
   const [loggedUserId, setLoggedUserId] = useState('')
+  const [loggedProfile, setLoggedProfile] = useState<Profile | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
+
   const [posts, setPosts] = useState<Post[]>([])
+  const [likes, setLikes] = useState<Like[]>([])
+  const [comments, setComments] = useState<Comment[]>([])
+  const [bookmarks, setBookmarks] = useState<BookmarkItem[]>([])
+  const [reposts, setReposts] = useState<Repost[]>([])
+
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState('')
 
@@ -52,6 +129,10 @@ export default function PublicProfilePage() {
 
   const [isBlockedByMe, setIsBlockedByMe] = useState(false)
   const [hasBlockedMe, setHasBlockedMe] = useState(false)
+
+  const [copiedPostId, setCopiedPostId] = useState<string | null>(null)
+  const [reportingPostId, setReportingPostId] = useState<string | null>(null)
+  const [reportedPostIds, setReportedPostIds] = useState<string[]>([])
 
   const [showFollowersModal, setShowFollowersModal] = useState(false)
   const [showFollowingModal, setShowFollowingModal] = useState(false)
@@ -76,6 +157,14 @@ export default function PublicProfilePage() {
 
       setLoggedUserId(user.id)
 
+      const { data: loggedProfileData } = await supabase
+        .from('profiles')
+        .select('id, username, display_name, bio, avatar_url, show_sensitive_content')
+        .eq('id', user.id)
+        .maybeSingle()
+
+      setLoggedProfile(loggedProfileData || null)
+
       if (!username) {
         setMessage('Usuário inválido.')
         setLoading(false)
@@ -84,7 +173,7 @@ export default function PublicProfilePage() {
 
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select('id, username, display_name, bio, avatar_url')
+        .select('id, username, display_name, bio, avatar_url, show_sensitive_content')
         .eq('username', username)
         .maybeSingle()
 
@@ -103,6 +192,10 @@ export default function PublicProfilePage() {
       setProfile(profileData)
 
       const isOwn = user.id === profileData.id
+
+      let blockedByMe = false
+      let blockedMe = false
+      let currentFollowData: { id: string } | null = null
 
       if (!isOwn) {
         const { data: blockedByMeData, error: blockedByMeError } = await supabase
@@ -131,8 +224,8 @@ export default function PublicProfilePage() {
           return
         }
 
-        const blockedByMe = !!blockedByMeData
-        const blockedMe = !!hasBlockedMeData
+        blockedByMe = !!blockedByMeData
+        blockedMe = !!hasBlockedMeData
 
         setIsBlockedByMe(blockedByMe)
         setHasBlockedMe(blockedMe)
@@ -145,100 +238,31 @@ export default function PublicProfilePage() {
             .eq('following_id', profileData.id)
             .maybeSingle()
 
+          currentFollowData = followData || null
           setIsFollowing(!!followData)
-
-          const { data: postsData, error: postsError } = await supabase
-            .from('posts')
-            .select('id, content, category, created_at, user_id, image_url, visibility')
-            .eq('user_id', profileData.id)
-            .order('created_at', { ascending: false })
-
-          if (postsError) {
-            setMessage('Erro ao carregar posts: ' + postsError.message)
-            setLoading(false)
-            return
-          }
-
-          const visiblePosts = (postsData || []).filter((post: Post) => {
-            const visibility = post.visibility || 'public'
-            if (visibility === 'public') return true
-            if (visibility === 'followers') return !!followData
-            return false
-          })
-
-          setPosts(visiblePosts)
-
-          const { data: followersData, error: followersError } = await supabase
-            .from('follows')
-            .select('id')
-            .eq('following_id', profileData.id)
-
-          if (followersError) {
-            setMessage('Erro ao carregar seguidores: ' + followersError.message)
-            setLoading(false)
-            return
-          }
-
-          setFollowersCount(followersData?.length || 0)
-
-          const { data: followingData, error: followingError } = await supabase
-            .from('follows')
-            .select('id')
-            .eq('follower_id', profileData.id)
-
-          if (followingError) {
-            setMessage('Erro ao carregar seguindo: ' + followingError.message)
-            setLoading(false)
-            return
-          }
-
-          setFollowingCount(followingData?.length || 0)
-        } else {
-          setPosts([])
-          setFollowersCount(0)
-          setFollowingCount(0)
-          setIsFollowing(false)
         }
+      }
+
+      if (!blockedByMe && !blockedMe) {
+        await Promise.all([
+          loadPublicProfileActivity(
+            profileData,
+            user.id,
+            isOwn,
+            !!currentFollowData,
+            loggedProfileData?.show_sensitive_content || false
+          ),
+          loadCounts(profileData.id),
+          loadLikes(),
+          loadComments(),
+          loadBookmarks(user.id),
+          loadAllReposts(profileData),
+        ])
       } else {
-        const { data: postsData, error: postsError } = await supabase
-          .from('posts')
-          .select('id, content, category, created_at, user_id, image_url, visibility')
-          .eq('user_id', profileData.id)
-          .order('created_at', { ascending: false })
-
-        if (postsError) {
-          setMessage('Erro ao carregar posts: ' + postsError.message)
-          setLoading(false)
-          return
-        }
-
-        setPosts(postsData || [])
-
-        const { data: followersData, error: followersError } = await supabase
-          .from('follows')
-          .select('id')
-          .eq('following_id', profileData.id)
-
-        if (followersError) {
-          setMessage('Erro ao carregar seguidores: ' + followersError.message)
-          setLoading(false)
-          return
-        }
-
-        setFollowersCount(followersData?.length || 0)
-
-        const { data: followingData, error: followingError } = await supabase
-          .from('follows')
-          .select('id')
-          .eq('follower_id', profileData.id)
-
-        if (followingError) {
-          setMessage('Erro ao carregar seguindo: ' + followingError.message)
-          setLoading(false)
-          return
-        }
-
-        setFollowingCount(followingData?.length || 0)
+        setPosts([])
+        setFollowersCount(0)
+        setFollowingCount(0)
+        setIsFollowing(false)
       }
 
       setLoading(false)
@@ -247,8 +271,357 @@ export default function PublicProfilePage() {
     loadPage()
   }, [username, router])
 
+  async function loadCounts(profileId: string) {
+    const { data: followersData, error: followersError } = await supabase
+      .from('follows')
+      .select('id')
+      .eq('following_id', profileId)
+
+    if (followersError) {
+      setMessage('Erro ao carregar seguidores: ' + followersError.message)
+      return
+    }
+
+    setFollowersCount(followersData?.length || 0)
+
+    const { data: followingData, error: followingError } = await supabase
+      .from('follows')
+      .select('id')
+      .eq('follower_id', profileId)
+
+    if (followingError) {
+      setMessage('Erro ao carregar seguindo: ' + followingError.message)
+      return
+    }
+
+    setFollowingCount(followingData?.length || 0)
+  }
+
+  async function loadLikes() {
+    const { data, error } = await supabase
+      .from('likes')
+      .select('id, post_id, user_id')
+
+    if (error) {
+      setMessage('Erro ao carregar curtidas: ' + error.message)
+      return
+    }
+
+    setLikes(data || [])
+  }
+
+  async function loadComments() {
+    const { data, error } = await supabase
+      .from('comments')
+      .select('id, post_id, user_id')
+
+    if (error) {
+      setMessage('Erro ao carregar comentários: ' + error.message)
+      return
+    }
+
+    setComments(data || [])
+  }
+
+  async function loadBookmarks(currentUserId: string = loggedUserId) {
+    if (!currentUserId) return
+
+    const { data, error } = await supabase
+      .from('bookmarks')
+      .select('id, post_id, user_id, created_at')
+      .eq('user_id', currentUserId)
+
+    if (error) {
+      setMessage('Erro ao carregar salvos: ' + error.message)
+      return
+    }
+
+    setBookmarks(data || [])
+  }
+
+  async function loadAllReposts(profileData: Profile | null = profile) {
+    const { data, error } = await supabase
+      .from('reposts')
+      .select('id, post_id, user_id, created_at')
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      setMessage('Erro ao carregar reposts: ' + error.message)
+      return
+    }
+
+    const rawReposts = data || []
+
+    const repostUserIds = Array.from(
+      new Set(rawReposts.map((repost) => repost.user_id).filter(Boolean))
+    )
+
+    let profilesById: Record<string, ProfileSummary> = {}
+
+    if (repostUserIds.length > 0) {
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, username, display_name, avatar_url')
+        .in('id', repostUserIds)
+
+      if (profilesError) {
+        console.error('Erro ao carregar perfis dos reposts:', profilesError.message)
+      }
+
+      profilesById = ((profilesData || []) as (ProfileSummary & { id: string })[]).reduce(
+        (acc, item) => {
+          acc[item.id] = {
+            username: item.username,
+            display_name: item.display_name,
+            avatar_url: item.avatar_url,
+          }
+
+          return acc
+        },
+        {} as Record<string, ProfileSummary>
+      )
+    }
+
+    const normalizedReposts: Repost[] = rawReposts.map((repost) => ({
+      ...repost,
+      profiles:
+        profilesById[repost.user_id] ||
+        (profileData && repost.user_id === profileData.id
+          ? {
+              username: profileData.username,
+              display_name: profileData.display_name,
+              avatar_url: profileData.avatar_url,
+            }
+          : null),
+    }))
+
+    setReposts(normalizedReposts)
+  }
+
+  async function loadPublicProfileActivity(
+    profileData: Profile,
+    currentUserId: string,
+    isOwn: boolean,
+    currentIsFollowing: boolean,
+    allowSensitiveContent: boolean
+  ) {
+    const { data: repostsData, error: repostsError } = await supabase
+      .from('reposts')
+      .select('id, post_id, user_id, created_at')
+      .eq('user_id', profileData.id)
+      .order('created_at', { ascending: false })
+
+    if (repostsError) {
+      setMessage('Erro ao carregar reposts do perfil: ' + repostsError.message)
+      return
+    }
+
+    const repostPostIds = (repostsData || []).map((repost) => repost.post_id)
+
+    const { data: ownPostsData, error: ownPostsError } = await supabase
+      .from('posts')
+      .select(`
+        id,
+        content,
+        category,
+        created_at,
+        user_id,
+        image_url,
+        video_url,
+        visibility,
+        is_sensitive,
+        profiles (
+          username,
+          display_name,
+          avatar_url
+        )
+      `)
+      .eq('user_id', profileData.id)
+      .order('created_at', { ascending: false })
+
+    if (ownPostsError) {
+      setMessage('Erro ao carregar publicações: ' + ownPostsError.message)
+      return
+    }
+
+    const ownPosts = ((ownPostsData || []) as any[])
+      .map((post) => ({
+        ...post,
+        visibility: (post.visibility || 'public') as VisibilityType,
+        is_sensitive: post.is_sensitive || false,
+        profiles: Array.isArray(post.profiles)
+          ? post.profiles[0] || null
+          : post.profiles,
+      }))
+      .filter((post: Post) => canSeePost(post, currentUserId, isOwn, currentIsFollowing))
+
+    let repostedPosts: Post[] = []
+
+    if (repostPostIds.length > 0) {
+      const { data: repostedPostsData, error: repostedPostsError } = await supabase
+        .from('posts')
+        .select(`
+          id,
+          content,
+          category,
+          created_at,
+          user_id,
+          image_url,
+          video_url,
+          visibility,
+          is_sensitive,
+          profiles (
+            username,
+            display_name,
+            avatar_url
+          )
+        `)
+        .in('id', repostPostIds)
+
+      if (repostedPostsError) {
+        setMessage('Erro ao carregar posts repostados: ' + repostedPostsError.message)
+        return
+      }
+
+      repostedPosts = ((repostedPostsData || []) as any[])
+        .map((post) => ({
+          ...post,
+          visibility: (post.visibility || 'public') as VisibilityType,
+          is_sensitive: post.is_sensitive || false,
+          profiles: Array.isArray(post.profiles)
+            ? post.profiles[0] || null
+            : post.profiles,
+        }))
+        .filter((post: Post) =>
+          canSeePost(post, currentUserId, post.user_id === currentUserId, currentIsFollowing)
+        )
+        .filter((post: Post) => {
+          if (post.user_id === currentUserId) return true
+          if (allowSensitiveContent) return true
+
+          return !isSensitivePost(post)
+        })
+    }
+
+    const allPostsMap = new Map<string, Post>()
+
+    for (const post of [...ownPosts, ...repostedPosts]) {
+      allPostsMap.set(post.id, post)
+    }
+
+    const allPosts = Array.from(allPostsMap.values())
+    const allPostIds = allPosts.map((post) => post.id)
+
+    let mediaByPost: Record<string, PostMedia[]> = {}
+
+    if (allPostIds.length > 0) {
+      const { data: mediaData, error: mediaError } = await supabase
+        .from('post_media')
+        .select('id, post_id, user_id, media_url, media_type, position, created_at')
+        .in('post_id', allPostIds)
+        .order('position', { ascending: true })
+
+      if (mediaError) {
+        console.error('Erro ao carregar mídias do perfil público:', mediaError.message)
+      }
+
+      mediaByPost = ((mediaData || []) as PostMedia[]).reduce(
+        (acc, mediaItem) => {
+          if (!acc[mediaItem.post_id]) acc[mediaItem.post_id] = []
+          acc[mediaItem.post_id].push(mediaItem)
+          return acc
+        },
+        {} as Record<string, PostMedia[]>
+      )
+    }
+
+    const normalizedPosts = allPosts.map((post) => ({
+      ...post,
+      media: mediaByPost[post.id] || [],
+    }))
+
+    setPosts(normalizedPosts)
+
+    const profileReposts: Repost[] = (repostsData || []).map((repost) => ({
+      ...repost,
+      profiles: {
+        username: profileData.username,
+        display_name: profileData.display_name,
+        avatar_url: profileData.avatar_url,
+      },
+    }))
+
+    setReposts((current) => {
+      const otherReposts = current.filter((repost) => repost.user_id !== profileData.id)
+      return [...otherReposts, ...profileReposts]
+    })
+  }
+
+  function canSeePost(
+    post: Post,
+    currentUserId: string,
+    isOwn: boolean,
+    currentIsFollowing: boolean
+  ) {
+    if (post.user_id === currentUserId) return true
+    if (isOwn) return true
+    if (post.visibility === 'public') return true
+    if (post.visibility === 'followers') return currentIsFollowing
+    return false
+  }
+
+  function isSensitivePost(post: Post) {
+    return (
+      post.is_sensitive ||
+      post.category === 'adulto' ||
+      post.category === 'sensual'
+    )
+  }
+
+  function getVisibilityLabel(value?: Post['visibility']) {
+    if (value === 'followers') return 'Só seguidores'
+    if (value === 'private') return 'Privado'
+    return 'Público'
+  }
+
+  function getPostMedia(post: Post): PostMedia[] {
+    if (post.media && post.media.length > 0) {
+      return post.media
+    }
+
+    const legacyMedia: PostMedia[] = []
+
+    if (post.image_url) {
+      legacyMedia.push({
+        id: `${post.id}-legacy-image`,
+        post_id: post.id,
+        user_id: post.user_id,
+        media_url: post.image_url,
+        media_type: 'image',
+        position: 0,
+      })
+    }
+
+    if (post.video_url) {
+      legacyMedia.push({
+        id: `${post.id}-legacy-video`,
+        post_id: post.id,
+        user_id: post.user_id,
+        media_url: post.video_url,
+        media_type: 'video',
+        position: legacyMedia.length,
+      })
+    }
+
+    return legacyMedia
+  }
+
   async function refreshProfileState(profileId: string, currentUserId: string) {
+    if (!profile) return
+
     const isOwn = currentUserId === profileId
+
+    let currentIsFollowing = isFollowing
 
     if (!isOwn) {
       const { data: blockedByMeData } = await supabase
@@ -286,37 +659,21 @@ export default function PublicProfilePage() {
         .eq('following_id', profileId)
         .maybeSingle()
 
-      setIsFollowing(!!followData)
-
-      const { data: postsData } = await supabase
-        .from('posts')
-        .select('id, content, category, created_at, user_id, image_url, visibility')
-        .eq('user_id', profileId)
-        .order('created_at', { ascending: false })
-
-      const visiblePosts = (postsData || []).filter((post: Post) => {
-        const visibility = post.visibility || 'public'
-        if (visibility === 'public') return true
-        if (visibility === 'followers') return !!followData
-        return false
-      })
-
-      setPosts(visiblePosts)
+      currentIsFollowing = !!followData
+      setIsFollowing(currentIsFollowing)
     }
 
-    const { data: followersData } = await supabase
-      .from('follows')
-      .select('id')
-      .eq('following_id', profileId)
-
-    setFollowersCount(followersData?.length || 0)
-
-    const { data: followingData } = await supabase
-      .from('follows')
-      .select('id')
-      .eq('follower_id', profileId)
-
-    setFollowingCount(followingData?.length || 0)
+    await Promise.all([
+      loadPublicProfileActivity(
+        profile,
+        currentUserId,
+        isOwn,
+        currentIsFollowing,
+        loggedProfile?.show_sensitive_content || false
+      ),
+      loadCounts(profileId),
+      loadAllReposts(profile),
+    ])
   }
 
   async function handleToggleFollow() {
@@ -458,6 +815,244 @@ export default function PublicProfilePage() {
     setReportingUser(false)
   }
 
+  async function handleToggleBookmark(postId: string) {
+    if (!loggedUserId) return
+
+    const existingBookmark = bookmarks.find(
+      (bookmark) => bookmark.post_id === postId && bookmark.user_id === loggedUserId
+    )
+
+    if (existingBookmark) {
+      setBookmarks((current) =>
+        current.filter((bookmark) => bookmark.id !== existingBookmark.id)
+      )
+
+      const { error } = await supabase
+        .from('bookmarks')
+        .delete()
+        .eq('post_id', postId)
+        .eq('user_id', loggedUserId)
+
+      if (error) {
+        setMessage('Erro ao remover dos salvos: ' + error.message)
+        await loadBookmarks(loggedUserId)
+      }
+
+      return
+    }
+
+    const optimisticBookmark: BookmarkItem = {
+      id: crypto.randomUUID(),
+      post_id: postId,
+      user_id: loggedUserId,
+      created_at: new Date().toISOString(),
+    }
+
+    setBookmarks((current) => [...current, optimisticBookmark])
+
+    const { data, error } = await supabase
+      .from('bookmarks')
+      .insert({
+        post_id: postId,
+        user_id: loggedUserId,
+      })
+      .select('id, post_id, user_id, created_at')
+      .single()
+
+    if (error) {
+      setMessage('Erro ao salvar post: ' + error.message)
+      await loadBookmarks(loggedUserId)
+      return
+    }
+
+    if (data) {
+      setBookmarks((current) =>
+        current.map((bookmark) =>
+          bookmark.id === optimisticBookmark.id ? data : bookmark
+        )
+      )
+    }
+  }
+
+  async function handleToggleRepost(postId: string) {
+    if (!loggedUserId || !loggedProfile) return
+
+    const repostedPost = posts.find((post) => post.id === postId)
+
+    if (repostedPost?.user_id === loggedUserId) {
+      setMessage('Você não precisa repostar sua própria publicação.')
+      return
+    }
+
+    const existingRepost = reposts.find(
+      (repost) => repost.post_id === postId && repost.user_id === loggedUserId
+    )
+
+    if (existingRepost) {
+      setReposts((current) =>
+        current.filter((repost) => repost.id !== existingRepost.id)
+      )
+
+      const { error } = await supabase
+        .from('reposts')
+        .delete()
+        .eq('post_id', postId)
+        .eq('user_id', loggedUserId)
+
+      if (error) {
+        setMessage('Erro ao remover repost: ' + error.message)
+        if (profile) await loadAllReposts(profile)
+      }
+
+      return
+    }
+
+    const optimisticRepost: Repost = {
+      id: crypto.randomUUID(),
+      post_id: postId,
+      user_id: loggedUserId,
+      created_at: new Date().toISOString(),
+      profiles: {
+        username: loggedProfile.username,
+        display_name: loggedProfile.display_name,
+        avatar_url: loggedProfile.avatar_url,
+      },
+    }
+
+    setReposts((current) => [optimisticRepost, ...current])
+
+    const { data, error } = await supabase
+      .from('reposts')
+      .insert({
+        post_id: postId,
+        user_id: loggedUserId,
+      })
+      .select('id, post_id, user_id, created_at')
+      .single()
+
+    if (error) {
+      setMessage('Erro ao repostar: ' + error.message)
+      if (profile) await loadAllReposts(profile)
+      return
+    }
+
+    if (data) {
+      setReposts((current) =>
+        current.map((repost) =>
+          repost.id === optimisticRepost.id
+            ? {
+                ...data,
+                profiles: optimisticRepost.profiles,
+              }
+            : repost
+        )
+      )
+    }
+  }
+
+  async function handleToggleLike(postId: string) {
+    if (!loggedUserId) return
+
+    const existingLike = likes.find(
+      (like) => like.post_id === postId && like.user_id === loggedUserId
+    )
+
+    if (existingLike) {
+      setLikes((current) => current.filter((like) => like.id !== existingLike.id))
+
+      const { error } = await supabase
+        .from('likes')
+        .delete()
+        .eq('id', existingLike.id)
+
+      if (error) {
+        setMessage('Erro ao remover curtida: ' + error.message)
+        await loadLikes()
+      }
+
+      return
+    }
+
+    const optimisticLike: Like = {
+      id: crypto.randomUUID(),
+      post_id: postId,
+      user_id: loggedUserId,
+    }
+
+    setLikes((current) => [...current, optimisticLike])
+
+    const { data, error } = await supabase
+      .from('likes')
+      .insert({
+        post_id: postId,
+        user_id: loggedUserId,
+      })
+      .select('id, post_id, user_id')
+      .single()
+
+    if (error) {
+      setMessage('Erro ao curtir: ' + error.message)
+      await loadLikes()
+      return
+    }
+
+    if (data) {
+      setLikes((current) =>
+        current.map((like) => (like.id === optimisticLike.id ? data : like))
+      )
+    }
+  }
+
+  async function handleCopyPostLink(postId: string) {
+    const url = `${window.location.origin}/post/${postId}`
+
+    try {
+      await navigator.clipboard.writeText(url)
+      setCopiedPostId(postId)
+
+      setTimeout(() => {
+        setCopiedPostId((current) => (current === postId ? null : current))
+      }, 2000)
+    } catch {
+      setMessage('Não foi possível copiar o link do post.')
+    }
+  }
+
+  async function handleReportPost(postId: string, postOwnerId: string) {
+    if (!loggedUserId) return
+
+    if (postOwnerId === loggedUserId) {
+      setMessage('Você não pode denunciar sua própria publicação.')
+      return
+    }
+
+    const reason = window.prompt(
+      'Informe o motivo da denúncia.\nEx.: spam, nudez indevida, assédio, conteúdo ofensivo'
+    )
+
+    if (!reason || !reason.trim()) return
+
+    setReportingPostId(postId)
+    setMessage('')
+
+    const { error } = await supabase.from('reports').insert({
+      reporter_id: loggedUserId,
+      reported_post_id: postId,
+      reported_user_id: postOwnerId,
+      reason: reason.trim(),
+    })
+
+    if (error) {
+      setMessage('Erro ao denunciar publicação: ' + error.message)
+      setReportingPostId(null)
+      return
+    }
+
+    setReportedPostIds((prev) => [...prev, postId])
+    setMessage('Publicação denunciada com sucesso.')
+    setReportingPostId(null)
+  }
+
   async function loadFollowersList() {
     if (!profile) return
 
@@ -546,12 +1141,6 @@ export default function PublicProfilePage() {
     await loadFollowingList()
   }
 
-  function getVisibilityLabel(value?: Post['visibility']) {
-    if (value === 'followers') return 'Só seguidores'
-    if (value === 'private') return 'Privado'
-    return 'Público'
-  }
-
   function renderProfileListItem(item: FollowProfile) {
     const itemName = item.display_name || item.username
 
@@ -584,6 +1173,46 @@ export default function PublicProfilePage() {
       </Link>
     )
   }
+
+  const feedItems = useMemo<FeedItem[]>(() => {
+    if (!profile) return []
+
+    const postMap = new Map<string, Post>()
+
+    for (const post of posts) {
+      postMap.set(post.id, post)
+    }
+
+    const ownPostItems: FeedItem[] = posts
+      .filter((post) => post.user_id === profile.id)
+      .map((post) => ({
+        type: 'post',
+        id: `post-${post.id}`,
+        created_at: post.created_at,
+        post,
+      }))
+
+    const profileRepostItems = reposts
+      .filter((repost) => repost.user_id === profile.id)
+      .map((repost) => {
+        const originalPost = postMap.get(repost.post_id)
+
+        if (!originalPost) return null
+
+        return {
+          type: 'repost' as const,
+          id: `repost-${repost.id}`,
+          created_at: repost.created_at,
+          post: originalPost,
+          repost,
+        }
+      })
+      .filter((item): item is Extract<FeedItem, { type: 'repost' }> => item !== null)
+
+    return [...ownPostItems, ...profileRepostItems].sort((a, b) => {
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    })
+  }, [posts, reposts, profile])
 
   if (loading) {
     return (
@@ -699,8 +1328,8 @@ export default function PublicProfilePage() {
                   {blockLoading
                     ? 'Carregando...'
                     : isBlockedByMe
-                    ? 'Desbloquear'
-                    : 'Bloquear'}
+                      ? 'Desbloquear'
+                      : 'Bloquear'}
                 </button>
 
                 <button
@@ -716,8 +1345,8 @@ export default function PublicProfilePage() {
                   {reportingUser
                     ? 'Enviando...'
                     : reportedUser
-                    ? 'Usuário denunciado'
-                    : 'Denunciar usuário'}
+                      ? 'Usuário denunciado'
+                      : 'Denunciar usuário'}
                 </button>
               </div>
             )}
@@ -741,7 +1370,14 @@ export default function PublicProfilePage() {
             </button>
 
             <p>
-              <span className="font-semibold text-black dark:text-white">{posts.length}</span> publicações
+              <span className="font-semibold text-black dark:text-white">{feedItems.length}</span> atividades
+            </p>
+
+            <p>
+              <span className="font-semibold text-black dark:text-white">
+                {feedItems.filter((item) => item.type === 'repost').length}
+              </span>{' '}
+              reposts
             </p>
           </div>
 
@@ -770,72 +1406,182 @@ export default function PublicProfilePage() {
           <>
             <div className="mb-4">
               <h3 className="text-lg font-semibold text-black dark:text-white">
-                Publicações de {displayName}
+                Atividades de {displayName}
               </h3>
+
               <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                {posts.length} publicação(ões)
+                Publicações e reposts deste perfil
               </p>
             </div>
 
             <div className="space-y-4">
-              {posts.length === 0 && (
+              {feedItems.length === 0 && (
                 <div className="bg-white dark:bg-zinc-900 rounded-2xl p-6 border border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400">
-                  Nenhuma publicação visível ainda.
+                  Nenhuma atividade visível ainda.
                 </div>
               )}
 
-              {posts.map((post) => (
-                <article
-                  key={post.id}
-                  className="bg-white dark:bg-zinc-900 rounded-2xl p-6 border border-zinc-200 dark:border-zinc-800"
-                >
-                  <div className="mb-3 flex items-center gap-3">
-                    {profile.avatar_url ? (
-                      <img
-                        src={profile.avatar_url}
-                        alt={displayName}
-                        className="w-12 h-12 rounded-full object-cover border border-zinc-300 dark:border-zinc-700"
-                      />
-                    ) : (
-                      <div className="w-12 h-12 rounded-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 flex items-center justify-center text-sm font-semibold text-zinc-700 dark:text-zinc-300">
-                        {displayName.charAt(0).toUpperCase()}
-                      </div>
+              {feedItems.map((item) => {
+                const post = item.post
+
+                const postComments = comments.filter((comment) => comment.post_id === post.id)
+                const postLikes = likes.filter((like) => like.post_id === post.id)
+                const postReposts = reposts.filter((repost) => repost.post_id === post.id)
+
+                const userLiked = likes.some(
+                  (like) => like.post_id === post.id && like.user_id === loggedUserId
+                )
+
+                const postSaved = bookmarks.some(
+                  (bookmark) => bookmark.post_id === post.id && bookmark.user_id === loggedUserId
+                )
+
+                const postReposted = reposts.some(
+                  (repost) => repost.post_id === post.id && repost.user_id === loggedUserId
+                )
+
+                const authorName =
+                  post.profiles?.display_name || post.profiles?.username || 'Usuário'
+
+                const authorUsername = post.profiles?.username || 'usuario'
+                const authorAvatar = post.profiles?.avatar_url || ''
+                const postMedia = getPostMedia(post)
+                const isSensitivePostItem = isSensitivePost(post)
+
+                const shouldShowSensitiveWarning =
+                  isSensitivePostItem && !loggedProfile?.show_sensitive_content
+
+                return (
+                  <article
+                    key={item.id}
+                    className="bg-white dark:bg-zinc-900 rounded-2xl p-6 border border-zinc-200 dark:border-zinc-800"
+                  >
+                    {item.type === 'repost' && (
+                      <Link
+                        href={`/u/${profile.username}`}
+                        className="mb-4 flex items-center gap-2 text-sm font-medium text-green-600 transition hover:opacity-80 dark:text-green-400"
+                      >
+                        {profile.avatar_url ? (
+                          <img
+                            src={profile.avatar_url}
+                            alt={displayName}
+                            className="h-7 w-7 rounded-full border border-green-200 object-cover dark:border-green-800"
+                          />
+                        ) : (
+                          <div className="flex h-7 w-7 items-center justify-center rounded-full border border-green-200 bg-green-50 text-xs font-bold text-green-700 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
+                            {displayName.charAt(0).toUpperCase()}
+                          </div>
+                        )}
+
+                        <Repeat2 className="h-4 w-4" />
+
+                        <span>
+                          {isOwnProfile ? 'Você repostou' : `${displayName} repostou`}
+                        </span>
+                      </Link>
                     )}
 
-                    <div>
-                      <p className="font-semibold text-black dark:text-white">{displayName}</p>
-                      <p className="text-sm text-zinc-500">@{profile.username}</p>
+                    <div className="mb-3 flex items-center gap-3">
+                      <Link
+                        href={`/u/${authorUsername}`}
+                        className="flex items-center gap-3 hover:opacity-80 transition"
+                      >
+                        {authorAvatar ? (
+                          <img
+                            src={authorAvatar}
+                            alt={authorName}
+                            className="w-12 h-12 rounded-full object-cover border border-zinc-300 dark:border-zinc-700"
+                          />
+                        ) : (
+                          <div className="w-12 h-12 rounded-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 flex items-center justify-center text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+                            {authorName.charAt(0).toUpperCase()}
+                          </div>
+                        )}
+
+                        <div>
+                          <p className="font-semibold text-black dark:text-white">{authorName}</p>
+                          <p className="text-sm text-zinc-500">@{authorUsername}</p>
+                        </div>
+                      </Link>
                     </div>
-                  </div>
 
-                  <div className="flex items-center gap-2 mb-2 flex-wrap">
-                    <p className="text-sm text-zinc-500">
-                      {post.category || 'Sem categoria'}
-                    </p>
-                    <span className="text-xs px-2 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
-                      {getVisibilityLabel(post.visibility)}
-                    </span>
-                  </div>
+                    <div className="flex items-center gap-2 mb-2 flex-wrap">
+                      <p className="text-sm text-zinc-500">
+                        {post.category || 'Sem categoria'}
+                      </p>
 
-                  {post.content && (
-                    <p className="text-zinc-800 dark:text-zinc-200 whitespace-pre-wrap mb-4">
-                      {post.content}
-                    </p>
-                  )}
+                      <span className="text-xs px-2 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
+                        {getVisibilityLabel(post.visibility)}
+                      </span>
 
-                  {post.image_url && (
-                    <img
-                      src={post.image_url}
-                      alt="Imagem da publicação"
-                      className="w-full max-h-[32rem] object-cover rounded-2xl border border-zinc-200 dark:border-zinc-700"
+                      {isSensitivePostItem && (
+                        <span className="text-xs px-2 py-1 rounded-full bg-yellow-50 dark:bg-yellow-950 text-yellow-700 dark:text-yellow-300 border border-yellow-200 dark:border-yellow-800">
+                          18+
+                        </span>
+                      )}
+
+                      {postReposted && (
+                        <span className="text-xs px-2 py-1 rounded-full bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800">
+                          Repostado
+                        </span>
+                      )}
+
+                      {postSaved && (
+                        <span className="text-xs px-2 py-1 rounded-full bg-yellow-50 dark:bg-yellow-950 text-yellow-700 dark:text-yellow-300 border border-yellow-200 dark:border-yellow-800">
+                          Salvo
+                        </span>
+                      )}
+                    </div>
+
+                    {shouldShowSensitiveWarning ? (
+                      <SensitiveContent>
+                        {post.content && (
+                          <p className="text-zinc-800 dark:text-zinc-200 whitespace-pre-wrap mb-4">
+                            {post.content}
+                          </p>
+                        )}
+
+                        <LinkPreview content={post.content} />
+
+                        <PostMediaGallery media={postMedia} />
+                      </SensitiveContent>
+                    ) : (
+                      <>
+                        {post.content && (
+                          <p className="text-zinc-800 dark:text-zinc-200 whitespace-pre-wrap mb-4">
+                            {post.content}
+                          </p>
+                        )}
+
+                        <LinkPreview content={post.content} />
+
+                        <PostMediaGallery media={postMedia} />
+                      </>
+                    )}
+
+                    <PostActions
+                      commentsCount={postComments.length}
+                      likesCount={postLikes.length}
+                      repostsCount={postReposts.length}
+                      liked={userLiked}
+                      reposted={postReposted}
+                      saved={postSaved}
+                      copied={copiedPostId === post.id}
+                      onLike={() => handleToggleLike(post.id)}
+                      onCommentClick={() => router.push(`/post/${post.id}`)}
+                      onRepost={() => handleToggleRepost(post.id)}
+                      onSave={() => handleToggleBookmark(post.id)}
+                      onShare={() => handleCopyPostLink(post.id)}
                     />
-                  )}
 
-                  <p className="text-xs text-zinc-500 dark:text-zinc-600 mt-4">
-                    {new Date(post.created_at).toLocaleString('pt-BR')}
-                  </p>
-                </article>
-              ))}
+                    <p className="text-xs text-zinc-500 dark:text-zinc-600 mt-4">
+                      {item.type === 'repost'
+                        ? `Repostado em ${new Date(item.repost.created_at).toLocaleString('pt-BR')}`
+                        : `Publicado em ${new Date(post.created_at).toLocaleString('pt-BR')}`}
+                    </p>
+                  </article>
+                )
+              })}
             </div>
           </>
         )}
