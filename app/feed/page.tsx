@@ -9,7 +9,7 @@ import PostActions from '../components/PostActions'
 import LinkPreview from '../components/LinkPreview'
 import SensitiveContent from '../components/SensitiveContent'
 import Link from 'next/link'
-import { Edit3, MoreHorizontal, Trash2 } from 'lucide-react'
+import { Edit3, MoreHorizontal, Repeat2, Trash2 } from 'lucide-react'
 import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useTheme } from 'next-themes'
@@ -33,6 +33,12 @@ type CurrentProfile = {
   show_sensitive_content: boolean
 }
 
+type ProfileSummary = {
+  username: string
+  display_name: string | null
+  avatar_url: string | null
+}
+
 type PostMedia = {
   id: string
   post_id: string
@@ -53,11 +59,7 @@ type Post = {
   video_url: string | null
   visibility: VisibilityType
   is_sensitive: boolean | null
-  profiles: {
-    username: string
-    display_name: string | null
-    avatar_url: string | null
-  } | null
+  profiles: ProfileSummary | null
   media?: PostMedia[]
 }
 
@@ -67,11 +69,7 @@ type Comment = {
   user_id: string
   content: string
   created_at: string
-  profiles: {
-    username: string
-    display_name: string | null
-    avatar_url: string | null
-  } | null
+  profiles: ProfileSummary | null
 }
 
 type Like = {
@@ -104,7 +102,23 @@ type Repost = {
   post_id: string
   user_id: string
   created_at: string
+  profiles: ProfileSummary | null
 }
+
+type FeedItem =
+  | {
+      type: 'post'
+      id: string
+      created_at: string
+      post: Post
+    }
+  | {
+      type: 'repost'
+      id: string
+      created_at: string
+      post: Post
+      repost: Repost
+    }
 
 function FeedContent() {
   const router = useRouter()
@@ -202,7 +216,7 @@ function FeedContent() {
         loadLikes(),
         loadCommentLikes(),
         loadBookmarks(user.id),
-        loadReposts(),
+        loadReposts(blockedIds),
         loadUnreadNotificationsCount(user.id),
       ])
 
@@ -306,17 +320,57 @@ function FeedContent() {
     setBookmarks(data || [])
   }
 
-  async function loadReposts() {
+  async function loadReposts(currentBlockedIds: string[] = blockedUserIds) {
     const { data, error } = await supabase
       .from('reposts')
       .select('id, post_id, user_id, created_at')
+      .order('created_at', { ascending: false })
 
     if (error) {
       setMessage('Erro ao carregar reposts: ' + error.message)
       return
     }
 
-    setReposts(data || [])
+    const rawReposts = (data || []) as Omit<Repost, 'profiles'>[]
+
+    const repostUserIds = Array.from(
+      new Set(rawReposts.map((repost) => repost.user_id).filter(Boolean))
+    )
+
+    let profilesById: Record<string, ProfileSummary> = {}
+
+    if (repostUserIds.length > 0) {
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, username, display_name, avatar_url')
+        .in('id', repostUserIds)
+
+      if (profilesError) {
+        console.error('Erro ao carregar perfis dos reposts:', profilesError.message)
+      }
+
+      profilesById = ((profilesData || []) as (ProfileSummary & { id: string })[]).reduce(
+        (acc, profile) => {
+          acc[profile.id] = {
+            username: profile.username,
+            display_name: profile.display_name,
+            avatar_url: profile.avatar_url,
+          }
+
+          return acc
+        },
+        {} as Record<string, ProfileSummary>
+      )
+    }
+
+    const normalizedReposts: Repost[] = rawReposts
+      .filter((repost) => !currentBlockedIds.includes(repost.user_id))
+      .map((repost) => ({
+        ...repost,
+        profiles: profilesById[repost.user_id] || null,
+      }))
+
+    setReposts(normalizedReposts)
   }
 
   function canSeePost(post: Post, currentUserId: string, currentFollows: Follow[]) {
@@ -694,7 +748,7 @@ function FeedContent() {
 
       if (error) {
         setMessage('Erro ao remover repost: ' + error.message)
-        await loadReposts()
+        await loadReposts(blockedUserIds)
       }
 
       return
@@ -705,9 +759,16 @@ function FeedContent() {
       post_id: postId,
       user_id: userId,
       created_at: new Date().toISOString(),
+      profiles: currentProfile
+        ? {
+            username: currentProfile.username || 'usuario',
+            display_name: currentProfile.display_name,
+            avatar_url: currentProfile.avatar_url,
+          }
+        : null,
     }
 
-    setReposts((current) => [...current, optimisticRepost])
+    setReposts((current) => [optimisticRepost, ...current])
 
     const { data, error } = await supabase
       .from('reposts')
@@ -720,14 +781,19 @@ function FeedContent() {
 
     if (error) {
       setMessage('Erro ao repostar: ' + error.message)
-      await loadReposts()
+      await loadReposts(blockedUserIds)
       return
     }
 
     if (data) {
+      const savedRepost: Repost = {
+        ...data,
+        profiles: optimisticRepost.profiles,
+      }
+
       setReposts((current) =>
         current.map((repost) =>
-          repost.id === optimisticRepost.id ? data : repost
+          repost.id === optimisticRepost.id ? savedRepost : repost
         )
       )
     }
@@ -923,7 +989,7 @@ function FeedContent() {
         await loadLikes()
         await loadCommentLikes()
         await loadBookmarks(userId)
-        await loadReposts()
+        await loadReposts(blockedUserIds)
 
         return
       }
@@ -941,7 +1007,7 @@ function FeedContent() {
     await loadLikes()
     await loadCommentLikes()
     await loadBookmarks(userId)
-    await loadReposts()
+    await loadReposts(blockedUserIds)
   }
 
   async function handleDeletePost(postId: string) {
@@ -972,7 +1038,7 @@ function FeedContent() {
     await loadLikes()
     await loadCommentLikes()
     await loadBookmarks(userId)
-    await loadReposts()
+    await loadReposts(blockedUserIds)
   }
 
   function handleStartEdit(post: Post) {
@@ -1300,6 +1366,41 @@ function FeedContent() {
     return map
   }, [follows, userId])
 
+  const feedItems = useMemo<FeedItem[]>(() => {
+    const postMap = new Map<string, Post>()
+
+    for (const post of posts) {
+      postMap.set(post.id, post)
+    }
+
+    const postItems: FeedItem[] = posts.map((post) => ({
+      type: 'post',
+      id: `post-${post.id}`,
+      created_at: post.created_at,
+      post,
+    }))
+
+    const repostItems: FeedItem[] = reposts
+      .map((repost) => {
+        const originalPost = postMap.get(repost.post_id)
+
+        if (!originalPost) return null
+
+        return {
+          type: 'repost' as const,
+          id: `repost-${repost.id}`,
+          created_at: repost.created_at,
+          post: originalPost,
+          repost,
+        }
+      })
+      .filter((item): item is FeedItem => Boolean(item))
+
+    return [...postItems, ...repostItems].sort((a, b) => {
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    })
+  }, [posts, reposts])
+
   if (loading) {
     return (
       <main className="min-h-screen bg-white text-black dark:bg-black dark:text-white flex items-center justify-center px-4">
@@ -1364,13 +1465,15 @@ function FeedContent() {
         </div>
 
         <div className="space-y-4 sm:space-y-5">
-          {posts.length === 0 && (
+          {feedItems.length === 0 && (
             <div className="bg-white dark:bg-zinc-900 rounded-2xl p-4 sm:p-6 border border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400">
               Nenhuma publicação ainda.
             </div>
           )}
 
-          {posts.map((post) => {
+          {feedItems.map((item) => {
+            const post = item.post
+
             const postComments = comments.filter((comment) => comment.post_id === post.id)
             const postLikes = likes.filter((like) => like.post_id === post.id)
             const postReposts = reposts.filter((repost) => repost.post_id === post.id)
@@ -1405,16 +1508,56 @@ function FeedContent() {
             const shouldShowSensitiveWarning =
               isSensitivePostItem && !currentProfile?.show_sensitive_content
 
+            const reposterName =
+              item.type === 'repost'
+                ? item.repost.profiles?.display_name ||
+                  item.repost.profiles?.username ||
+                  'Usuário'
+                : ''
+
+            const reposterUsername =
+              item.type === 'repost'
+                ? item.repost.profiles?.username || 'usuario'
+                : 'usuario'
+
+            const reposterAvatar =
+              item.type === 'repost' ? item.repost.profiles?.avatar_url || '' : ''
+
             return (
               <article
-                id={`post-${post.id}`}
-                key={post.id}
+                id={item.type === 'post' ? `post-${post.id}` : `repost-${item.id}`}
+                key={item.id}
                 className={`bg-white dark:bg-zinc-900 rounded-2xl p-4 sm:p-6 border transition ${
                   isHighlighted
                     ? 'border-blue-500 dark:border-blue-400 ring-2 ring-blue-200 dark:ring-blue-900'
                     : 'border-zinc-200 dark:border-zinc-800'
                 }`}
               >
+                {item.type === 'repost' && (
+                  <Link
+                    href={`/u/${reposterUsername}`}
+                    className="mb-4 flex items-center gap-2 text-sm font-medium text-green-600 transition hover:opacity-80 dark:text-green-400"
+                  >
+                    {reposterAvatar ? (
+                      <img
+                        src={reposterAvatar}
+                        alt={reposterName}
+                        className="h-7 w-7 rounded-full border border-green-200 object-cover dark:border-green-800"
+                      />
+                    ) : (
+                      <div className="flex h-7 w-7 items-center justify-center rounded-full border border-green-200 bg-green-50 text-xs font-bold text-green-700 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
+                        {reposterName.charAt(0).toUpperCase()}
+                      </div>
+                    )}
+
+                    <Repeat2 className="h-4 w-4" />
+
+                    <span>
+                      {item.repost.user_id === userId ? 'Você repostou' : `${reposterName} repostou`}
+                    </span>
+                  </Link>
+                )}
+
                 <div className="mb-3 flex items-start justify-between gap-3">
                   <Link
                     href={`/u/${authorUsername}`}
@@ -1589,7 +1732,9 @@ function FeedContent() {
                 />
 
                 <p className="text-xs text-zinc-500 dark:text-zinc-600 mt-3 mb-4">
-                  {new Date(post.created_at).toLocaleString('pt-BR')}
+                  {item.type === 'repost'
+                    ? `Repostado em ${new Date(item.repost.created_at).toLocaleString('pt-BR')}`
+                    : new Date(post.created_at).toLocaleString('pt-BR')}
                 </p>
 
                 <div className="border-t border-zinc-200 dark:border-zinc-800 pt-4">
