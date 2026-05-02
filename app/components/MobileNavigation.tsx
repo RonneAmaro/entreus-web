@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import {
   Bell,
   Bookmark,
@@ -51,6 +52,7 @@ export default function MobileNavigation({
   onLogout,
   onPostClick,
 }: MobileNavigationProps) {
+  const pathname = usePathname()
   const [open, setOpen] = useState(false)
   const [openPostMenu, setOpenPostMenu] = useState(false)
 
@@ -61,6 +63,55 @@ export default function MobileNavigation({
   function handlePostAction() {
     setOpenPostMenu(false)
     onPostClick()
+  }
+
+  function isActive(path: string) {
+    if (path === '/feed') {
+      return pathname === '/feed' || pathname === '/'
+    }
+
+    return pathname === path || pathname.startsWith(`${path}/`)
+  }
+
+  function drawerLinkClass(path: string) {
+    const active = isActive(path)
+
+    return [
+      'flex items-center gap-3 rounded-2xl px-3 py-3 text-base font-medium transition',
+      active
+        ? 'bg-zinc-900 text-white dark:bg-white dark:text-black'
+        : 'hover:bg-zinc-100 dark:hover:bg-zinc-900',
+    ].join(' ')
+  }
+
+  function drawerIconClass(path: string) {
+    return `h-5 w-5 ${isActive(path) ? 'stroke-[2.5]' : ''}`
+  }
+
+  function bottomLinkClass(path: string) {
+    const active = isActive(path)
+
+    return [
+      'relative flex items-center justify-center transition',
+      active
+        ? 'text-blue-500 dark:text-blue-400'
+        : 'text-zinc-800 dark:text-zinc-100',
+    ].join(' ')
+  }
+
+  function bottomIconWrapperClass(path: string) {
+    const active = isActive(path)
+
+    return [
+      'flex h-11 w-11 items-center justify-center rounded-full transition',
+      active
+        ? 'bg-blue-50 dark:bg-blue-950/40'
+        : 'hover:bg-zinc-100 dark:hover:bg-zinc-900',
+    ].join(' ')
+  }
+
+  function bottomIconClass(path: string) {
+    return `h-6 w-6 ${isActive(path) ? 'stroke-[2.6]' : ''}`
   }
 
   return (
@@ -160,45 +211,53 @@ export default function MobileNavigation({
               <Link
                 href="/profile"
                 onClick={closeMenu}
-                className="flex items-center gap-3 rounded-2xl px-3 py-3 text-base font-medium hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                className={drawerLinkClass('/profile')}
               >
-                <User className="h-5 w-5" />
+                <User className={drawerIconClass('/profile')} />
                 Meu perfil
               </Link>
 
               <Link
                 href="/feed"
                 onClick={closeMenu}
-                className="flex items-center gap-3 rounded-2xl px-3 py-3 text-base font-medium hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                className={drawerLinkClass('/feed')}
               >
-                <Home className="h-5 w-5" />
+                <Home className={drawerIconClass('/feed')} />
                 Página inicial
               </Link>
 
               <Link
                 href="/search"
                 onClick={closeMenu}
-                className="flex items-center gap-3 rounded-2xl px-3 py-3 text-base font-medium hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                className={drawerLinkClass('/search')}
               >
-                <Compass className="h-5 w-5" />
+                <Compass className={drawerIconClass('/search')} />
                 Explorar
               </Link>
 
               <Link
                 href="/notifications"
                 onClick={closeMenu}
-                className="flex items-center gap-3 rounded-2xl px-3 py-3 text-base font-medium hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                className={drawerLinkClass('/notifications')}
               >
-                <Bell className="h-5 w-5" />
+                <div className="relative">
+                  <Bell className={drawerIconClass('/notifications')} />
+
+                  {unreadNotificationsCount > 0 && (
+                    <span className="absolute -right-2 -top-2 flex min-h-[16px] min-w-[16px] items-center justify-center rounded-full bg-red-600 px-1 text-[9px] font-bold text-white">
+                      {unreadNotificationsCount > 99 ? '99+' : unreadNotificationsCount}
+                    </span>
+                  )}
+                </div>
                 Notificações
               </Link>
 
               <Link
                 href="/saved"
                 onClick={closeMenu}
-                className="flex items-center gap-3 rounded-2xl px-3 py-3 text-base font-medium hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                className={drawerLinkClass('/saved')}
               >
-                <Bookmark className="h-5 w-5" />
+                <Bookmark className={drawerIconClass('/saved')} />
                 Salvos
               </Link>
 
@@ -207,27 +266,27 @@ export default function MobileNavigation({
               <Link
                 href="/privacy"
                 onClick={closeMenu}
-                className="flex items-center gap-3 rounded-2xl px-3 py-3 text-base font-medium hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                className={drawerLinkClass('/privacy')}
               >
-                <Shield className="h-5 w-5" />
+                <Shield className={drawerIconClass('/privacy')} />
                 Privacidade
               </Link>
 
               <Link
                 href="/blocked"
                 onClick={closeMenu}
-                className="flex items-center gap-3 rounded-2xl px-3 py-3 text-base font-medium hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                className={drawerLinkClass('/blocked')}
               >
-                <UserX className="h-5 w-5" />
+                <UserX className={drawerIconClass('/blocked')} />
                 Bloqueados
               </Link>
 
               <Link
                 href="/settings"
                 onClick={closeMenu}
-                className="flex items-center gap-3 rounded-2xl px-3 py-3 text-base font-medium hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                className={drawerLinkClass('/settings')}
               >
-                <Settings className="h-5 w-5" />
+                <Settings className={drawerIconClass('/settings')} />
                 Configurações
               </Link>
 
@@ -334,48 +393,58 @@ export default function MobileNavigation({
       <nav className="fixed bottom-0 left-0 z-50 grid h-16 w-full grid-cols-5 border-t border-zinc-200 bg-white dark:border-zinc-800 dark:bg-black lg:hidden">
         <Link
           href="/feed"
-          className="flex items-center justify-center text-zinc-800 dark:text-zinc-100"
+          className={bottomLinkClass('/feed')}
           aria-label="Página inicial"
         >
-          <Home className="h-6 w-6" />
+          <span className={bottomIconWrapperClass('/feed')}>
+            <Home className={bottomIconClass('/feed')} />
+          </span>
         </Link>
 
         <Link
           href="/search"
-          className="flex items-center justify-center text-zinc-800 dark:text-zinc-100"
+          className={bottomLinkClass('/search')}
           aria-label="Explorar"
         >
-          <Compass className="h-6 w-6" />
+          <span className={bottomIconWrapperClass('/search')}>
+            <Compass className={bottomIconClass('/search')} />
+          </span>
         </Link>
 
         <Link
           href="/saved"
-          className="flex items-center justify-center text-zinc-800 dark:text-zinc-100"
+          className={bottomLinkClass('/saved')}
           aria-label="Salvos"
         >
-          <Bookmark className="h-6 w-6" />
+          <span className={bottomIconWrapperClass('/saved')}>
+            <Bookmark className={bottomIconClass('/saved')} />
+          </span>
         </Link>
 
         <Link
           href="/notifications"
-          className="relative flex items-center justify-center text-zinc-800 dark:text-zinc-100"
+          className={bottomLinkClass('/notifications')}
           aria-label="Notificações"
         >
-          <Bell className="h-6 w-6" />
+          <span className={`${bottomIconWrapperClass('/notifications')} relative`}>
+            <Bell className={bottomIconClass('/notifications')} />
 
-          {unreadNotificationsCount > 0 && (
-            <span className="absolute left-1/2 top-2 ml-2 flex min-h-[17px] min-w-[17px] items-center justify-center rounded-full bg-red-600 px-1 text-[9px] font-bold text-white">
-              {unreadNotificationsCount > 99 ? '99+' : unreadNotificationsCount}
-            </span>
-          )}
+            {unreadNotificationsCount > 0 && (
+              <span className="absolute left-1/2 top-1 ml-2 flex min-h-[17px] min-w-[17px] items-center justify-center rounded-full bg-red-600 px-1 text-[9px] font-bold text-white">
+                {unreadNotificationsCount > 99 ? '99+' : unreadNotificationsCount}
+              </span>
+            )}
+          </span>
         </Link>
 
         <Link
           href="/profile"
-          className="flex items-center justify-center text-zinc-800 dark:text-zinc-100"
+          className={bottomLinkClass('/profile')}
           aria-label="Perfil"
         >
-          <User className="h-6 w-6" />
+          <span className={bottomIconWrapperClass('/profile')}>
+            <User className={bottomIconClass('/profile')} />
+          </span>
         </Link>
       </nav>
     </>

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import {
   Bell,
   Bookmark,
@@ -29,6 +30,7 @@ export default function AppSidebar({
   onToggleTheme,
   onLogout,
 }: AppSidebarProps) {
+  const pathname = usePathname()
   const [openMoreMenu, setOpenMoreMenu] = useState(false)
 
   function handlePostClick() {
@@ -45,6 +47,34 @@ export default function AppSidebar({
     }
   }
 
+  function isActive(path: string) {
+    if (path === '/feed') {
+      return pathname === '/feed' || pathname === '/'
+    }
+
+    return pathname === path || pathname.startsWith(`${path}/`)
+  }
+
+  function navLinkClass(path: string) {
+    const active = isActive(path)
+
+    return [
+      'flex items-center gap-4 rounded-full px-4 py-3 text-lg font-medium transition',
+      active
+        ? 'bg-zinc-900 text-white shadow-sm hover:bg-zinc-800 dark:bg-white dark:text-black dark:hover:bg-zinc-200'
+        : 'text-zinc-900 hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-900',
+    ].join(' ')
+  }
+
+  function navIconClass(path: string) {
+    return `h-6 w-6 shrink-0 ${isActive(path) ? 'stroke-[2.5]' : ''}`
+  }
+
+  const isMoreActive =
+    pathname === '/privacy' ||
+    pathname === '/blocked' ||
+    pathname === '/settings'
+
   return (
     <aside className="fixed left-0 top-0 z-40 hidden h-screen w-[270px] flex-col border-r border-zinc-200 bg-white dark:border-zinc-800 dark:bg-black lg:flex">
       <div className="flex h-full flex-col overflow-y-auto px-5 py-5">
@@ -60,28 +90,19 @@ export default function AppSidebar({
         </Link>
 
         <nav className="flex flex-col gap-2 pb-4">
-          <Link
-            href="/feed"
-            className="flex items-center gap-4 rounded-full px-4 py-3 text-lg font-medium text-zinc-900 transition hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-900"
-          >
-            <Home className="h-6 w-6 shrink-0" />
+          <Link href="/feed" className={navLinkClass('/feed')}>
+            <Home className={navIconClass('/feed')} />
             <span>Página inicial</span>
           </Link>
 
-          <Link
-            href="/search"
-            className="flex items-center gap-4 rounded-full px-4 py-3 text-lg font-medium text-zinc-900 transition hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-900"
-          >
-            <Compass className="h-6 w-6 shrink-0" />
+          <Link href="/search" className={navLinkClass('/search')}>
+            <Compass className={navIconClass('/search')} />
             <span>Explorar</span>
           </Link>
 
-          <Link
-            href="/notifications"
-            className="relative flex items-center gap-4 rounded-full px-4 py-3 text-lg font-medium text-zinc-900 transition hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-900"
-          >
+          <Link href="/notifications" className={`relative ${navLinkClass('/notifications')}`}>
             <div className="relative shrink-0">
-              <Bell className="h-6 w-6" />
+              <Bell className={navIconClass('/notifications')} />
 
               {unreadNotificationsCount > 0 && (
                 <span className="absolute -right-2 -top-2 flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white">
@@ -93,19 +114,13 @@ export default function AppSidebar({
             <span>Notificações</span>
           </Link>
 
-          <Link
-            href="/saved"
-            className="flex items-center gap-4 rounded-full px-4 py-3 text-lg font-medium text-zinc-900 transition hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-900"
-          >
-            <Bookmark className="h-6 w-6 shrink-0" />
+          <Link href="/saved" className={navLinkClass('/saved')}>
+            <Bookmark className={navIconClass('/saved')} />
             <span>Salvos</span>
           </Link>
 
-          <Link
-            href="/profile"
-            className="flex items-center gap-4 rounded-full px-4 py-3 text-lg font-medium text-zinc-900 transition hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-900"
-          >
-            <User className="h-6 w-6 shrink-0" />
+          <Link href="/profile" className={navLinkClass('/profile')}>
+            <User className={navIconClass('/profile')} />
             <span>Perfil</span>
           </Link>
 
@@ -113,9 +128,14 @@ export default function AppSidebar({
             <button
               type="button"
               onClick={() => setOpenMoreMenu((current) => !current)}
-              className="flex w-full items-center gap-4 rounded-full px-4 py-3 text-lg font-medium text-zinc-900 transition hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-900"
+              className={[
+                'flex w-full items-center gap-4 rounded-full px-4 py-3 text-lg font-medium transition',
+                isMoreActive
+                  ? 'bg-zinc-900 text-white shadow-sm hover:bg-zinc-800 dark:bg-white dark:text-black dark:hover:bg-zinc-200'
+                  : 'text-zinc-900 hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-900',
+              ].join(' ')}
             >
-              <MoreHorizontal className="h-6 w-6 shrink-0" />
+              <MoreHorizontal className={`h-6 w-6 shrink-0 ${isMoreActive ? 'stroke-[2.5]' : ''}`} />
               <span>Mais</span>
             </button>
 
