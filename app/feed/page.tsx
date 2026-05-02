@@ -92,6 +92,13 @@ type Follow = {
   following_id: string
 }
 
+type Bookmark = {
+  id: string
+  post_id: string
+  user_id: string
+  created_at: string
+}
+
 function FeedContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -110,6 +117,7 @@ function FeedContent() {
   const [comments, setComments] = useState<Comment[]>([])
   const [likes, setLikes] = useState<Like[]>([])
   const [commentLikes, setCommentLikes] = useState<CommentLike[]>([])
+  const [bookmarks, setBookmarks] = useState<Bookmark[]>([])
 
   const [blockedUserIds, setBlockedUserIds] = useState<string[]>([])
   const [follows, setFollows] = useState<Follow[]>([])
@@ -185,6 +193,7 @@ function FeedContent() {
         loadComments(blockedIds),
         loadLikes(),
         loadCommentLikes(),
+        loadBookmarks(user.id),
         loadUnreadNotificationsCount(user.id),
       ])
 
@@ -270,6 +279,22 @@ function FeedContent() {
     }
 
     return data || []
+  }
+
+  async function loadBookmarks(currentUserId: string = userId) {
+    if (!currentUserId) return
+
+    const { data, error } = await supabase
+      .from('bookmarks')
+      .select('id, post_id, user_id, created_at')
+      .eq('user_id', currentUserId)
+
+    if (error) {
+      setMessage('Erro ao carregar posts salvos: ' + error.message)
+      return
+    }
+
+    setBookmarks(data || [])
   }
 
   function canSeePost(post: Post, currentUserId: string, currentFollows: Follow[]) {
@@ -557,6 +582,67 @@ function FeedContent() {
     }
   }
 
+  async function handleToggleBookmark(postId: string) {
+    if (!userId) return
+
+    setMessage('')
+
+    const existingBookmark = bookmarks.find(
+      (bookmark) => bookmark.post_id === postId && bookmark.user_id === userId
+    )
+
+    if (existingBookmark) {
+      setBookmarks((current) =>
+        current.filter((bookmark) => bookmark.id !== existingBookmark.id)
+      )
+
+      const { error } = await supabase
+        .from('bookmarks')
+        .delete()
+        .eq('post_id', postId)
+        .eq('user_id', userId)
+
+      if (error) {
+        setMessage('Erro ao remover dos salvos: ' + error.message)
+        await loadBookmarks(userId)
+      }
+
+      return
+    }
+
+    const optimisticBookmark: Bookmark = {
+      id: crypto.randomUUID(),
+      post_id: postId,
+      user_id: userId,
+      created_at: new Date().toISOString(),
+    }
+
+    setBookmarks((current) => [...current, optimisticBookmark])
+
+    const { data, error } = await supabase
+      .from('bookmarks')
+      .insert({
+        post_id: postId,
+        user_id: userId,
+      })
+      .select('id, post_id, user_id, created_at')
+      .single()
+
+    if (error) {
+      setMessage('Erro ao salvar post: ' + error.message)
+      await loadBookmarks(userId)
+      return
+    }
+
+    if (data) {
+      setBookmarks((current) =>
+        current.map((bookmark) =>
+          bookmark.id === optimisticBookmark.id ? data : bookmark
+        )
+      )
+    }
+  }
+
   function isImage(file: File) {
     return ['image/jpeg', 'image/png', 'image/webp'].includes(file.type)
   }
@@ -737,6 +823,7 @@ function FeedContent() {
         await loadComments()
         await loadLikes()
         await loadCommentLikes()
+        await loadBookmarks(userId)
 
         return
       }
@@ -753,6 +840,7 @@ function FeedContent() {
     await loadComments()
     await loadLikes()
     await loadCommentLikes()
+    await loadBookmarks(userId)
   }
 
   async function handleDeletePost(postId: string) {
@@ -782,6 +870,7 @@ function FeedContent() {
     await loadComments()
     await loadLikes()
     await loadCommentLikes()
+    await loadBookmarks(userId)
   }
 
   function handleStartEdit(post: Post) {
@@ -1187,6 +1276,10 @@ function FeedContent() {
               (like) => like.post_id === post.id && like.user_id === userId
             )
 
+            const postSaved = bookmarks.some(
+              (bookmark) => bookmark.post_id === post.id && bookmark.user_id === userId
+            )
+
             const isEditing = editingPostId === post.id
 
             const authorName =
@@ -1295,6 +1388,12 @@ function FeedContent() {
                     </span>
                   )}
 
+                  {postSaved && (
+                    <span className="text-xs px-2 py-1 rounded-full bg-yellow-50 dark:bg-yellow-950 text-yellow-700 dark:text-yellow-300 border border-yellow-200 dark:border-yellow-800">
+                      Salvo
+                    </span>
+                  )}
+
                   {isHighlighted && (
                     <span className="text-xs px-2 py-1 rounded-full bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
                       Destaque da notificação
@@ -1365,9 +1464,11 @@ function FeedContent() {
                   commentsCount={postComments.length}
                   likesCount={postLikes.length}
                   liked={userLiked}
+                  saved={postSaved}
                   copied={copiedPostId === post.id}
                   onLike={() => handleToggleLike(post.id)}
                   onCommentClick={() => handleFocusCommentInput(post.id)}
+                  onSave={() => handleToggleBookmark(post.id)}
                   onShare={() => handleCopyPostLink(post.id)}
                 />
 
