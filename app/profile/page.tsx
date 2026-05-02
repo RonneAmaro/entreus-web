@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Bookmark, Repeat2, ShieldAlert } from 'lucide-react'
+import { Repeat2, ShieldAlert } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import PostMoreMenu from '../components/PostMoreMenu'
 import PostMediaGallery from '../components/PostMediaGallery'

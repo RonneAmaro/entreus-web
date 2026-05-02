@@ -1380,7 +1380,7 @@ function FeedContent() {
       post,
     }))
 
-    const repostItems: FeedItem[] = reposts
+    const repostItems = reposts
       .map((repost) => {
         const originalPost = postMap.get(repost.post_id)
 
@@ -1394,7 +1394,7 @@ function FeedContent() {
           repost,
         }
       })
-      .filter((item): item is FeedItem => Boolean(item))
+      .filter((item): item is Extract<FeedItem, { type: 'repost' }> => item !== null)
 
     return [...postItems, ...repostItems].sort((a, b) => {
       return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
