@@ -10,7 +10,7 @@ import LinkPreview from '../components/LinkPreview'
 import SensitiveContent from '../components/SensitiveContent'
 import Link from 'next/link'
 import { Edit3, MoreHorizontal, Repeat2, Trash2 } from 'lucide-react'
-import { Suspense, useEffect, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import { supabase } from '@/lib/supabase'
@@ -107,18 +107,18 @@ type Repost = {
 
 type FeedItem =
   | {
-      type: 'post'
-      id: string
-      created_at: string
-      post: Post
-    }
+    type: 'post'
+    id: string
+    created_at: string
+    post: Post
+  }
   | {
-      type: 'repost'
-      id: string
-      created_at: string
-      post: Post
-      repost: Repost
-    }
+    type: 'repost'
+    id: string
+    created_at: string
+    post: Post
+    repost: Repost
+  }
 
 function FeedContent() {
   const router = useRouter()
@@ -140,6 +140,8 @@ function FeedContent() {
   const [commentLikes, setCommentLikes] = useState<CommentLike[]>([])
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([])
   const [reposts, setReposts] = useState<Repost[]>([])
+
+  const likeActionInProgressRef = useRef<Set<string>>(new Set())
 
   const [blockedUserIds, setBlockedUserIds] = useState<string[]>([])
   const [follows, setFollows] = useState<Follow[]>([])
@@ -190,11 +192,11 @@ function FeedContent() {
       const loadedCurrentProfile: CurrentProfile | null =
         !profileError && profileData
           ? {
-              username: profileData.username,
-              display_name: profileData.display_name,
-              avatar_url: profileData.avatar_url,
-              show_sensitive_content: profileData.show_sensitive_content || false,
-            }
+            username: profileData.username,
+            display_name: profileData.display_name,
+            avatar_url: profileData.avatar_url,
+            show_sensitive_content: profileData.show_sensitive_content || false,
+          }
           : null
 
       if (loadedCurrentProfile) {
@@ -761,10 +763,10 @@ function FeedContent() {
       created_at: new Date().toISOString(),
       profiles: currentProfile
         ? {
-            username: currentProfile.username || 'usuario',
-            display_name: currentProfile.display_name,
-            avatar_url: currentProfile.avatar_url,
-          }
+          username: currentProfile.username || 'usuario',
+          display_name: currentProfile.display_name,
+          avatar_url: currentProfile.avatar_url,
+        }
         : null,
     }
 
@@ -1134,19 +1136,26 @@ function FeedContent() {
   }
 
   async function handleToggleLike(postId: string) {
-    const { data: existingLike, error: checkError } = await supabase
-      .from('likes')
-      .select('id')
-      .eq('post_id', postId)
-      .eq('user_id', userId)
-      .maybeSingle()
+    if (!userId) return
 
-    if (checkError) {
-      setMessage('Erro ao verificar curtida: ' + checkError.message)
+    if (likeActionInProgressRef.current.has(postId)) {
       return
     }
 
+    likeActionInProgressRef.current.add(postId)
+    setMessage('')
+
+    const existingLike = likes.find(
+      (like) => like.post_id === postId && like.user_id === userId
+    )
+
     if (existingLike) {
+      setLikes((current) =>
+        current.filter(
+          (like) => !(like.post_id === postId && like.user_id === userId)
+        )
+      )
+
       const { error } = await supabase
         .from('likes')
         .delete()
@@ -1154,32 +1163,57 @@ function FeedContent() {
 
       if (error) {
         setMessage('Erro ao remover curtida: ' + error.message)
-        return
+        await loadLikes()
       }
-    } else {
-      const { error } = await supabase.from('likes').insert({
+
+      likeActionInProgressRef.current.delete(postId)
+      return
+    }
+
+    const optimisticLike: Like = {
+      id: crypto.randomUUID(),
+      post_id: postId,
+      user_id: userId,
+    }
+
+    setLikes((current) => [...current, optimisticLike])
+
+    const { data, error } = await supabase
+      .from('likes')
+      .insert({
         post_id: postId,
         user_id: userId,
       })
+      .select('id, post_id, user_id')
+      .single()
 
-      if (error) {
-        setMessage('Erro ao curtir: ' + error.message)
-        return
-      }
-
-      const likedPost = posts.find((post) => post.id === postId)
-
-      if (likedPost && likedPost.user_id !== userId) {
-        await supabase.from('notifications').insert({
-          user_id: likedPost.user_id,
-          actor_id: userId,
-          type: 'like',
-          post_id: postId,
-        })
-      }
+    if (error) {
+      setMessage('Erro ao curtir: ' + error.message)
+      await loadLikes()
+      likeActionInProgressRef.current.delete(postId)
+      return
     }
 
-    await loadLikes()
+    if (data) {
+      setLikes((current) =>
+        current.map((like) =>
+          like.id === optimisticLike.id ? data : like
+        )
+      )
+    }
+
+    const likedPost = posts.find((post) => post.id === postId)
+
+    if (likedPost && likedPost.user_id !== userId) {
+      await supabase.from('notifications').insert({
+        user_id: likedPost.user_id,
+        actor_id: userId,
+        type: 'like',
+        post_id: postId,
+      })
+    }
+
+    likeActionInProgressRef.current.delete(postId)
   }
 
   async function handleToggleCommentLike(commentId: string) {
@@ -1511,8 +1545,8 @@ function FeedContent() {
             const reposterName =
               item.type === 'repost'
                 ? item.repost.profiles?.display_name ||
-                  item.repost.profiles?.username ||
-                  'Usuário'
+                item.repost.profiles?.username ||
+                'Usuário'
                 : ''
 
             const reposterUsername =
@@ -1527,11 +1561,10 @@ function FeedContent() {
               <article
                 id={item.type === 'post' ? `post-${post.id}` : `repost-${item.id}`}
                 key={item.id}
-                className={`bg-white dark:bg-zinc-900 rounded-2xl p-4 sm:p-6 border transition ${
-                  isHighlighted
+                className={`bg-white dark:bg-zinc-900 rounded-2xl p-4 sm:p-6 border transition ${isHighlighted
                     ? 'border-blue-500 dark:border-blue-400 ring-2 ring-blue-200 dark:ring-blue-900'
                     : 'border-zinc-200 dark:border-zinc-800'
-                }`}
+                  }`}
               >
                 {item.type === 'repost' && (
                   <Link
@@ -1604,15 +1637,13 @@ function FeedContent() {
                       type="button"
                       onClick={() => handleToggleFollow(post.user_id)}
                       disabled={followLoadingUserId === post.user_id}
-                      className={`rounded-full px-4 py-2 text-sm font-medium transition ${
-                        isFollowingAuthor
+                      className={`rounded-full px-4 py-2 text-sm font-medium transition ${isFollowingAuthor
                           ? 'border border-zinc-300 text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800'
                           : 'bg-black text-white hover:opacity-90 dark:bg-white dark:text-black'
-                      } ${
-                        followLoadingUserId === post.user_id
+                        } ${followLoadingUserId === post.user_id
                           ? 'opacity-60 cursor-not-allowed'
                           : ''
-                      }`}
+                        }`}
                     >
                       {followLoadingUserId === post.user_id
                         ? 'Carregando...'
@@ -1669,11 +1700,10 @@ function FeedContent() {
                       <button
                         onClick={() => handleSaveEdit(post.id)}
                         disabled={savingEdit}
-                        className={`w-full sm:w-auto px-4 py-2 rounded-xl font-medium ${
-                          savingEdit
+                        className={`w-full sm:w-auto px-4 py-2 rounded-xl font-medium ${savingEdit
                             ? 'bg-zinc-300 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300 cursor-not-allowed'
                             : 'bg-black text-white dark:bg-white dark:text-black hover:opacity-90'
-                        }`}
+                          }`}
                       >
                         {savingEdit ? 'Salvando...' : 'Salvar'}
                       </button>
@@ -1898,11 +1928,10 @@ function FeedContent() {
                                 <button
                                   type="button"
                                   onClick={() => handleToggleCommentLike(comment.id)}
-                                  className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium transition ${
-                                    userLikedComment
+                                  className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium transition ${userLikedComment
                                       ? 'bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400'
                                       : 'text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-700'
-                                  }`}
+                                    }`}
                                 >
                                   <span>{userLikedComment ? '♥' : '♡'}</span>
                                   <span>{likesForComment.length}</span>
