@@ -1,13 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Heart, MessageCircle, Share2 } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import LinkPreview from '@/app/components/LinkPreview'
-import PostMediaGallery from '@/app/components/PostMediaGallery'
-import SensitiveContent from '@/app/components/SensitiveContent'
+import PostCard from '@/app/components/PostCard'
 
 type VisibilityType = 'public' | 'followers' | 'private'
 
@@ -15,6 +13,13 @@ type Profile = {
   username: string
   display_name: string | null
   avatar_url: string | null
+}
+
+type CurrentProfile = {
+  username: string | null
+  display_name: string | null
+  avatar_url: string | null
+  show_sensitive_content: boolean
 }
 
 type PostMedia = {
@@ -56,42 +61,18 @@ type Like = {
   user_id: string
 }
 
-function getVisibilityLabel(value: VisibilityType) {
-  if (value === 'followers') return 'Só seguidores'
-  if (value === 'private') return 'Privado'
-  return 'Público'
+type Bookmark = {
+  id: string
+  post_id: string
+  user_id: string
+  created_at: string
 }
 
-function getPostMedia(post: Post): PostMedia[] {
-  if (post.media && post.media.length > 0) {
-    return post.media
-  }
-
-  const legacyMedia: PostMedia[] = []
-
-  if (post.image_url) {
-    legacyMedia.push({
-      id: `${post.id}-legacy-image`,
-      post_id: post.id,
-      user_id: post.user_id,
-      media_url: post.image_url,
-      media_type: 'image',
-      position: 0,
-    })
-  }
-
-  if (post.video_url) {
-    legacyMedia.push({
-      id: `${post.id}-legacy-video`,
-      post_id: post.id,
-      user_id: post.user_id,
-      media_url: post.video_url,
-      media_type: 'video',
-      position: legacyMedia.length,
-    })
-  }
-
-  return legacyMedia
+type Repost = {
+  id: string
+  post_id: string
+  user_id: string
+  created_at: string
 }
 
 export default function PostPage() {
@@ -100,20 +81,27 @@ export default function PostPage() {
   const postId = typeof params.id === 'string' ? params.id : ''
 
   const [loggedUserId, setLoggedUserId] = useState('')
+  const [currentProfile, setCurrentProfile] = useState<CurrentProfile | null>(null)
+
   const [post, setPost] = useState<Post | null>(null)
   const [comments, setComments] = useState<Comment[]>([])
   const [likes, setLikes] = useState<Like[]>([])
+  const [bookmarks, setBookmarks] = useState<Bookmark[]>([])
+  const [reposts, setReposts] = useState<Repost[]>([])
+
   const [commentInput, setCommentInput] = useState('')
   const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(true)
   const [sendingComment, setSendingComment] = useState(false)
-  const [copySuccess, setCopySuccess] = useState(false)
+  const [copiedPostId, setCopiedPostId] = useState<string | null>(null)
   const [canInteract, setCanInteract] = useState(false)
+  const [permissionDenied, setPermissionDenied] = useState(false)
 
   useEffect(() => {
     async function loadPostPage() {
       setLoading(true)
       setMessage('')
+      setPermissionDenied(false)
 
       if (!postId) {
         setMessage('Publicação inválida.')
@@ -128,6 +116,23 @@ export default function PostPage() {
       const currentUserId = user?.id || ''
       setLoggedUserId(currentUserId)
       setCanInteract(!!currentUserId)
+
+      if (currentUserId) {
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('username, display_name, avatar_url, show_sensitive_content')
+          .eq('id', currentUserId)
+          .maybeSingle()
+
+        if (profileData) {
+          setCurrentProfile({
+            username: profileData.username,
+            display_name: profileData.display_name,
+            avatar_url: profileData.avatar_url,
+            show_sensitive_content: profileData.show_sensitive_content || false,
+          })
+        }
+      }
 
       const { data: postData, error: postError } = await supabase
         .from('posts')
@@ -175,6 +180,7 @@ export default function PostPage() {
 
       if (!canSee) {
         setPost(normalizedPost)
+        setPermissionDenied(true)
         setMessage('Você não tem permissão para visualizar esta publicação.')
         setLoading(false)
         return
@@ -197,6 +203,8 @@ export default function PostPage() {
       await Promise.all([
         loadComments(),
         loadLikes(),
+        loadReposts(),
+        currentUserId ? loadBookmarks(currentUserId) : Promise.resolve(),
       ])
 
       setLoading(false)
@@ -278,15 +286,53 @@ export default function PostPage() {
     setLikes(data || [])
   }
 
+  async function loadBookmarks(currentUserId: string) {
+    const { data, error } = await supabase
+      .from('bookmarks')
+      .select('id, post_id, user_id, created_at')
+      .eq('user_id', currentUserId)
+      .eq('post_id', postId)
+
+    if (error) {
+      setMessage('Erro ao carregar salvos: ' + error.message)
+      return
+    }
+
+    setBookmarks(data || [])
+  }
+
+  async function loadReposts() {
+    const { data, error } = await supabase
+      .from('reposts')
+      .select('id, post_id, user_id, created_at')
+      .eq('post_id', postId)
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      setMessage('Erro ao carregar reposts: ' + error.message)
+      return
+    }
+
+    setReposts(data || [])
+  }
+
   async function handleToggleLike() {
     if (!loggedUserId) {
       router.push('/login')
       return
     }
 
+    if (!post) return
+
+    setMessage('')
+
     const existingLike = likes.find((like) => like.user_id === loggedUserId)
 
     if (existingLike) {
+      setLikes((current) =>
+        current.filter((like) => like.id !== existingLike.id)
+      )
+
       const { error } = await supabase
         .from('likes')
         .delete()
@@ -294,30 +340,195 @@ export default function PostPage() {
 
       if (error) {
         setMessage('Erro ao remover curtida: ' + error.message)
-        return
+        await loadLikes()
       }
-    } else {
-      const { error } = await supabase.from('likes').insert({
+
+      return
+    }
+
+    const optimisticLike: Like = {
+      id: crypto.randomUUID(),
+      post_id: postId,
+      user_id: loggedUserId,
+    }
+
+    setLikes((current) => [...current, optimisticLike])
+
+    const { data, error } = await supabase
+      .from('likes')
+      .insert({
         post_id: postId,
         user_id: loggedUserId,
       })
+      .select('id, post_id, user_id')
+      .single()
 
-      if (error) {
-        setMessage('Erro ao curtir: ' + error.message)
-        return
-      }
-
-      if (post && post.user_id !== loggedUserId) {
-        await supabase.from('notifications').insert({
-          user_id: post.user_id,
-          actor_id: loggedUserId,
-          type: 'like',
-          post_id: postId,
-        })
-      }
+    if (error) {
+      setMessage('Erro ao curtir: ' + error.message)
+      await loadLikes()
+      return
     }
 
-    await loadLikes()
+    if (data) {
+      setLikes((current) =>
+        current.map((like) => (like.id === optimisticLike.id ? data : like))
+      )
+    }
+
+    if (post.user_id !== loggedUserId) {
+      await supabase.from('notifications').insert({
+        user_id: post.user_id,
+        actor_id: loggedUserId,
+        type: 'like',
+        post_id: postId,
+      })
+    }
+  }
+
+  async function handleToggleBookmark() {
+    if (!loggedUserId) {
+      router.push('/login')
+      return
+    }
+
+    if (!post) return
+
+    setMessage('')
+
+    const existingBookmark = bookmarks.find(
+      (bookmark) => bookmark.post_id === postId && bookmark.user_id === loggedUserId
+    )
+
+    if (existingBookmark) {
+      setBookmarks((current) =>
+        current.filter((bookmark) => bookmark.id !== existingBookmark.id)
+      )
+
+      const { error } = await supabase
+        .from('bookmarks')
+        .delete()
+        .eq('post_id', postId)
+        .eq('user_id', loggedUserId)
+
+      if (error) {
+        setMessage('Erro ao remover dos salvos: ' + error.message)
+        await loadBookmarks(loggedUserId)
+      }
+
+      return
+    }
+
+    const optimisticBookmark: Bookmark = {
+      id: crypto.randomUUID(),
+      post_id: postId,
+      user_id: loggedUserId,
+      created_at: new Date().toISOString(),
+    }
+
+    setBookmarks((current) => [...current, optimisticBookmark])
+
+    const { data, error } = await supabase
+      .from('bookmarks')
+      .insert({
+        post_id: postId,
+        user_id: loggedUserId,
+      })
+      .select('id, post_id, user_id, created_at')
+      .single()
+
+    if (error) {
+      setMessage('Erro ao salvar post: ' + error.message)
+      await loadBookmarks(loggedUserId)
+      return
+    }
+
+    if (data) {
+      setBookmarks((current) =>
+        current.map((bookmark) =>
+          bookmark.id === optimisticBookmark.id ? data : bookmark
+        )
+      )
+    }
+  }
+
+  async function handleToggleRepost() {
+    if (!loggedUserId) {
+      router.push('/login')
+      return
+    }
+
+    if (!post) return
+
+    setMessage('')
+
+    if (post.user_id === loggedUserId) {
+      setMessage('Você não precisa repostar sua própria publicação.')
+      return
+    }
+
+    const existingRepost = reposts.find(
+      (repost) => repost.post_id === postId && repost.user_id === loggedUserId
+    )
+
+    if (existingRepost) {
+      setReposts((current) =>
+        current.filter((repost) => repost.id !== existingRepost.id)
+      )
+
+      const { error } = await supabase
+        .from('reposts')
+        .delete()
+        .eq('post_id', postId)
+        .eq('user_id', loggedUserId)
+
+      if (error) {
+        setMessage('Erro ao remover repost: ' + error.message)
+        await loadReposts()
+      }
+
+      return
+    }
+
+    const optimisticRepost: Repost = {
+      id: crypto.randomUUID(),
+      post_id: postId,
+      user_id: loggedUserId,
+      created_at: new Date().toISOString(),
+    }
+
+    setReposts((current) => [optimisticRepost, ...current])
+
+    const { data, error } = await supabase
+      .from('reposts')
+      .insert({
+        post_id: postId,
+        user_id: loggedUserId,
+      })
+      .select('id, post_id, user_id, created_at')
+      .single()
+
+    if (error) {
+      setMessage('Erro ao repostar: ' + error.message)
+      await loadReposts()
+      return
+    }
+
+    if (data) {
+      setReposts((current) =>
+        current.map((repost) =>
+          repost.id === optimisticRepost.id ? data : repost
+        )
+      )
+    }
+
+    if (post.user_id !== loggedUserId) {
+      await supabase.from('notifications').insert({
+        user_id: post.user_id,
+        actor_id: loggedUserId,
+        type: 'repost',
+        post_id: postId,
+      })
+    }
   }
 
   async function handleCreateComment(e: React.FormEvent) {
@@ -375,15 +586,84 @@ export default function PostPage() {
 
     try {
       await navigator.clipboard.writeText(url)
-      setCopySuccess(true)
+      setCopiedPostId(postId)
 
       setTimeout(() => {
-        setCopySuccess(false)
+        setCopiedPostId((current) => (current === postId ? null : current))
       }, 2000)
     } catch {
       setMessage('Não foi possível copiar o link.')
     }
   }
+
+  async function handleDeletePost() {
+    if (!loggedUserId || !post) return
+
+    const confirmDelete = window.confirm('Tem certeza que deseja excluir esta publicação?')
+
+    if (!confirmDelete) return
+
+    const { error } = await supabase
+      .from('posts')
+      .delete()
+      .eq('id', post.id)
+      .eq('user_id', loggedUserId)
+
+    if (error) {
+      setMessage('Erro ao excluir publicação: ' + error.message)
+      return
+    }
+
+    router.push('/feed')
+  }
+
+  async function handleReportPost() {
+    if (!loggedUserId || !post) {
+      router.push('/login')
+      return
+    }
+
+    if (post.user_id === loggedUserId) {
+      setMessage('Você não pode denunciar sua própria publicação.')
+      return
+    }
+
+    const reason = window.prompt(
+      'Informe o motivo da denúncia.\nEx.: spam, nudez indevida, assédio, conteúdo ofensivo'
+    )
+
+    if (!reason || !reason.trim()) return
+
+    const { error } = await supabase.from('reports').insert({
+      reporter_id: loggedUserId,
+      reported_post_id: post.id,
+      reported_user_id: post.user_id,
+      reason: reason.trim(),
+    })
+
+    if (error) {
+      setMessage('Erro ao denunciar publicação: ' + error.message)
+      return
+    }
+
+    setMessage('Publicação denunciada com sucesso.')
+  }
+
+  const userLiked = useMemo(() => {
+    return likes.some((like) => like.user_id === loggedUserId)
+  }, [likes, loggedUserId])
+
+  const postSaved = useMemo(() => {
+    return bookmarks.some(
+      (bookmark) => bookmark.post_id === postId && bookmark.user_id === loggedUserId
+    )
+  }, [bookmarks, postId, loggedUserId])
+
+  const postReposted = useMemo(() => {
+    return reposts.some(
+      (repost) => repost.post_id === postId && repost.user_id === loggedUserId
+    )
+  }, [reposts, postId, loggedUserId])
 
   if (loading) {
     return (
@@ -421,22 +701,6 @@ export default function PostPage() {
     )
   }
 
-  const authorName =
-    post.profiles?.display_name || post.profiles?.username || 'Usuário'
-
-  const authorUsername = post.profiles?.username || 'usuario'
-  const authorAvatar = post.profiles?.avatar_url || ''
-  const userLiked = likes.some((like) => like.user_id === loggedUserId)
-  const postMedia = getPostMedia(post)
-
-  const isSensitivePost =
-    post.is_sensitive ||
-    post.category === 'adulto' ||
-    post.category === 'sensual'
-
-  const blockedByVisibility =
-    message === 'Você não tem permissão para visualizar esta publicação.'
-
   return (
     <main className="min-h-screen bg-white text-black dark:bg-black dark:text-white">
       <header className="sticky top-0 z-40 border-b border-zinc-200 bg-white/90 px-4 py-4 backdrop-blur dark:border-zinc-800 dark:bg-black/90">
@@ -457,7 +721,7 @@ export default function PostPage() {
       </header>
 
       <section className="mx-auto max-w-3xl px-4 py-6">
-        {blockedByVisibility ? (
+        {permissionDenied ? (
           <div className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900">
             <h1 className="text-xl font-bold">Publicação restrita</h1>
 
@@ -483,126 +747,35 @@ export default function PostPage() {
           </div>
         ) : (
           <>
-            <article className="rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900 sm:p-6">
-              <div className="mb-4 flex items-start gap-3">
-                <Link href={`/u/${authorUsername}`} className="shrink-0">
-                  {authorAvatar ? (
-                    <img
-                      src={authorAvatar}
-                      alt={authorName}
-                      className="h-12 w-12 rounded-full border border-zinc-300 object-cover dark:border-zinc-700"
-                    />
-                  ) : (
-                    <div className="flex h-12 w-12 items-center justify-center rounded-full border border-zinc-300 bg-zinc-100 text-sm font-semibold text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
-                      {authorName.charAt(0).toUpperCase()}
-                    </div>
-                  )}
-                </Link>
+            <PostCard
+              post={post}
+              currentUserId={loggedUserId}
+              commentsCount={comments.length}
+              likesCount={likes.length}
+              repostsCount={reposts.length}
+              liked={userLiked}
+              saved={postSaved}
+              reposted={postReposted}
+              copied={copiedPostId === post.id}
+              showSensitiveContent={currentProfile?.show_sensitive_content || false}
+              footerLabel={`Publicado em ${new Date(post.created_at).toLocaleString('pt-BR')}`}
+              onLike={handleToggleLike}
+              onCommentClick={() => {
+                const input = document.getElementById('single-post-comment-input')
 
-                <div className="min-w-0">
-                  <Link
-                    href={`/u/${authorUsername}`}
-                    className="font-semibold text-black hover:underline dark:text-white"
-                  >
-                    {authorName}
-                  </Link>
-
-                  <p className="break-all text-sm text-zinc-500">
-                    @{authorUsername}
-                  </p>
-                </div>
-              </div>
-
-              <div className="mb-3 flex flex-wrap items-center gap-2">
-                <span className="text-sm text-zinc-500">
-                  {post.category || 'Sem categoria'}
-                </span>
-
-                <span className="rounded-full border border-zinc-200 bg-zinc-100 px-2 py-1 text-xs text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
-                  {getVisibilityLabel(post.visibility)}
-                </span>
-
-                {isSensitivePost && (
-                  <span className="rounded-full border border-yellow-200 bg-yellow-50 px-2 py-1 text-xs text-yellow-700 dark:border-yellow-800 dark:bg-yellow-950 dark:text-yellow-300">
-                    18+
-                  </span>
-                )}
-              </div>
-
-              {isSensitivePost ? (
-                <SensitiveContent>
-                  {post.content && (
-                    <p className="mb-4 whitespace-pre-wrap break-words text-base leading-relaxed text-zinc-800 dark:text-zinc-200">
-                      {post.content}
-                    </p>
-                  )}
-
-                  <LinkPreview content={post.content} />
-
-                  <PostMediaGallery media={postMedia} />
-                </SensitiveContent>
-              ) : (
-                <>
-                  {post.content && (
-                    <p className="mb-4 whitespace-pre-wrap break-words text-base leading-relaxed text-zinc-800 dark:text-zinc-200">
-                      {post.content}
-                    </p>
-                  )}
-
-                  <LinkPreview content={post.content} />
-
-                  <PostMediaGallery media={postMedia} />
-                </>
-              )}
-
-              <p className="mt-4 text-xs text-zinc-500 dark:text-zinc-600">
-                {new Date(post.created_at).toLocaleString('pt-BR')}
-              </p>
-
-              <div className="mt-5 flex items-center justify-between border-t border-zinc-200 pt-4 text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const input = document.getElementById('single-post-comment-input')
-                    if (input instanceof HTMLInputElement) {
-                      input.focus()
-                    }
-                  }}
-                  className="inline-flex items-center gap-2 rounded-full px-3 py-2 hover:bg-blue-50 hover:text-blue-500 dark:hover:bg-blue-950/30"
-                >
-                  <MessageCircle className="h-5 w-5" />
-                  {comments.length}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleToggleLike}
-                  className={`inline-flex items-center gap-2 rounded-full px-3 py-2 ${
-                    userLiked
-                      ? 'text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30'
-                      : 'hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/30'
-                  }`}
-                >
-                  <Heart className={`h-5 w-5 ${userLiked ? 'fill-current' : ''}`} />
-                  {likes.length}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleCopyLink}
-                  className={`inline-flex items-center gap-2 rounded-full px-3 py-2 ${
-                    copySuccess
-                      ? 'text-green-500 hover:bg-green-50 dark:hover:bg-green-950/30'
-                      : 'hover:bg-green-50 hover:text-green-500 dark:hover:bg-green-950/30'
-                  }`}
-                >
-                  <Share2 className="h-5 w-5" />
-                  <span className="hidden sm:inline">
-                    {copySuccess ? 'Copiado' : 'Compartilhar'}
-                  </span>
-                </button>
-              </div>
-            </article>
+                if (input instanceof HTMLInputElement) {
+                  input.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                  setTimeout(() => input.focus(), 250)
+                }
+              }}
+              onRepost={handleToggleRepost}
+              onSave={handleToggleBookmark}
+              onShare={handleCopyLink}
+              onCopy={handleCopyLink}
+              onEdit={() => router.push(`/post/${post.id}`)}
+              onDelete={handleDeletePost}
+              onReport={handleReportPost}
+            />
 
             {!canInteract && (
               <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 p-4 text-blue-900 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200">
@@ -636,7 +809,10 @@ export default function PostPage() {
               <h2 className="mb-4 text-lg font-bold">Comentários</h2>
 
               {canInteract ? (
-                <form onSubmit={handleCreateComment} className="mb-5 flex flex-col gap-3 sm:flex-row">
+                <form
+                  onSubmit={handleCreateComment}
+                  className="mb-5 flex flex-col gap-3 sm:flex-row"
+                >
                   <input
                     id="single-post-comment-input"
                     type="text"
@@ -660,7 +836,7 @@ export default function PostPage() {
                 </p>
               )}
 
-              {message && !blockedByVisibility && (
+              {message && !permissionDenied && (
                 <p className="mb-4 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-700 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300">
                   {message}
                 </p>

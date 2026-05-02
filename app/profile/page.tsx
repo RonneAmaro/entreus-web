@@ -3,13 +3,9 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Repeat2, ShieldAlert } from 'lucide-react'
+import { ShieldAlert } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import PostMoreMenu from '../components/PostMoreMenu'
-import PostMediaGallery from '../components/PostMediaGallery'
-import PostActions from '../components/PostActions'
-import LinkPreview from '../components/LinkPreview'
-import SensitiveContent from '../components/SensitiveContent'
+import PostCard from '../components/PostCard'
 
 type VisibilityType = 'public' | 'followers' | 'private'
 
@@ -83,18 +79,18 @@ type Repost = {
 
 type FeedItem =
   | {
-    type: 'post'
-    id: string
-    created_at: string
-    post: Post
-  }
+      type: 'post'
+      id: string
+      created_at: string
+      post: Post
+    }
   | {
-    type: 'repost'
-    id: string
-    created_at: string
-    post: Post
-    repost: Repost
-  }
+      type: 'repost'
+      id: string
+      created_at: string
+      post: Post
+      repost: Repost
+    }
 
 export default function ProfilePage() {
   const router = useRouter()
@@ -195,53 +191,6 @@ export default function ProfilePage() {
       .slice(0, 30)
   }
 
-  function isSensitivePost(post: Post) {
-    return (
-      post.is_sensitive ||
-      post.category === 'adulto' ||
-      post.category === 'sensual'
-    )
-  }
-
-  function getVisibilityLabel(value: Post['visibility']) {
-    if (value === 'public') return 'Público'
-    if (value === 'followers') return 'Só seguidores'
-
-    return 'Privado'
-  }
-
-  function getPostMedia(post: Post): PostMedia[] {
-    if (post.media && post.media.length > 0) {
-      return post.media
-    }
-
-    const legacyMedia: PostMedia[] = []
-
-    if (post.image_url) {
-      legacyMedia.push({
-        id: `${post.id}-legacy-image`,
-        post_id: post.id,
-        user_id: post.user_id,
-        media_url: post.image_url,
-        media_type: 'image',
-        position: 0,
-      })
-    }
-
-    if (post.video_url) {
-      legacyMedia.push({
-        id: `${post.id}-legacy-video`,
-        post_id: post.id,
-        user_id: post.user_id,
-        media_url: post.video_url,
-        media_type: 'video',
-        position: legacyMedia.length,
-      })
-    }
-
-    return legacyMedia
-  }
-
   async function loadLikes() {
     const { data, error } = await supabase
       .from('likes')
@@ -336,10 +285,10 @@ export default function ProfilePage() {
           profilesById[repost.user_id] ||
           (isCurrentUser && currentProfileData
             ? {
-              username: currentProfileData.username || 'usuario',
-              display_name: currentProfileData.display_name,
-              avatar_url: currentProfileData.avatar_url,
-            }
+                username: currentProfileData.username || 'usuario',
+                display_name: currentProfileData.display_name,
+                avatar_url: currentProfileData.avatar_url,
+              }
             : null),
       }
     })
@@ -591,21 +540,16 @@ export default function ProfilePage() {
       return
     }
 
-    const updatedProfile: Profile = profile
-      ? {
-        ...profile,
-        ...payload,
-      }
-      : {
-        id: userId,
-        username: normalizedUsername,
-        display_name: displayName.trim() || null,
-        bio: bio.trim() || null,
-        avatar_url: avatarUrl || null,
-        country: country.trim() || null,
-        birth_date: birthDate || null,
-        show_sensitive_content: showSensitiveContent,
-      }
+    const updatedProfile: Profile = {
+      id: userId,
+      username: normalizedUsername,
+      display_name: displayName.trim() || null,
+      bio: bio.trim() || null,
+      avatar_url: avatarUrl || null,
+      country: country.trim() || null,
+      birth_date: birthDate || null,
+      show_sensitive_content: showSensitiveContent,
+    }
 
     setUsername(normalizedUsername)
     setProfile(updatedProfile)
@@ -743,9 +687,9 @@ export default function ProfilePage() {
         current.map((repost) =>
           repost.id === optimisticRepost.id
             ? {
-              ...data,
-              profiles: optimisticRepost.profiles,
-            }
+                ...data,
+                profiles: optimisticRepost.profiles,
+              }
             : repost
         )
       )
@@ -919,7 +863,7 @@ export default function ProfilePage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-white text-black dark:bg-black dark:text-white flex items-center justify-center px-4">
+      <main className="flex min-h-screen items-center justify-center bg-white px-4 text-black dark:bg-black dark:text-white">
         <p>Carregando perfil...</p>
       </main>
     )
@@ -929,19 +873,19 @@ export default function ProfilePage() {
   const profileName = displayName || username || 'Usuário'
 
   return (
-    <main className="min-h-screen bg-white text-black dark:bg-black dark:text-white transition-colors">
-      <header className="border-b border-zinc-200 dark:border-zinc-800 px-4 sm:px-6 py-4">
-        <div className="max-w-4xl mx-auto flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <main className="min-h-screen bg-white text-black transition-colors dark:bg-black dark:text-white">
+      <header className="border-b border-zinc-200 px-4 py-4 dark:border-zinc-800 sm:px-6">
+        <div className="mx-auto flex max-w-4xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold">EntreUS</h1>
+            <h1 className="text-2xl font-bold sm:text-3xl">EntreUS</h1>
             <p className="text-sm text-zinc-500 dark:text-zinc-400">Meu perfil</p>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
             {username && (
               <Link
                 href={publicProfileUrl}
-                className="w-full sm:w-auto text-center border border-zinc-300 dark:border-zinc-700 px-4 py-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                className="w-full rounded-xl border border-zinc-300 px-4 py-2 text-center hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900 sm:w-auto"
               >
                 Ver perfil público
               </Link>
@@ -949,7 +893,7 @@ export default function ProfilePage() {
 
             <Link
               href="/feed"
-              className="w-full sm:w-auto text-center border border-zinc-300 dark:border-zinc-700 px-4 py-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-900"
+              className="w-full rounded-xl border border-zinc-300 px-4 py-2 text-center hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900 sm:w-auto"
             >
               Voltar ao feed
             </Link>
@@ -957,28 +901,28 @@ export default function ProfilePage() {
         </div>
       </header>
 
-      <section className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+      <section className="mx-auto max-w-4xl px-4 py-6 sm:px-6 sm:py-8">
         {message && (
-          <div className="mb-4 bg-white dark:bg-zinc-900 rounded-2xl p-4 border border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300">
+          <div className="mb-4 rounded-2xl border border-zinc-200 bg-white p-4 text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300">
             {message}
           </div>
         )}
 
         <form
           onSubmit={handleSaveProfile}
-          className="bg-white dark:bg-zinc-900 rounded-2xl p-4 sm:p-6 border border-zinc-200 dark:border-zinc-800"
+          className="rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900 sm:p-6"
         >
           <div className="flex flex-col gap-6">
-            <div className="flex flex-col sm:flex-row gap-4 sm:items-start">
-              <div className="flex flex-col items-center sm:items-start gap-3">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+              <div className="flex flex-col items-center gap-3 sm:items-start">
                 {avatarPreview ? (
                   <img
                     src={avatarPreview}
                     alt={profileName}
-                    className="w-24 h-24 rounded-full object-cover border border-zinc-300 dark:border-zinc-700"
+                    className="h-24 w-24 rounded-full border border-zinc-300 object-cover dark:border-zinc-700"
                   />
                 ) : (
-                  <div className="w-24 h-24 rounded-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 flex items-center justify-center text-3xl font-bold text-zinc-700 dark:text-zinc-300">
+                  <div className="flex h-24 w-24 items-center justify-center rounded-full border border-zinc-300 bg-zinc-100 text-3xl font-bold text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
                     {profileName.charAt(0).toUpperCase()}
                   </div>
                 )}
@@ -989,7 +933,7 @@ export default function ProfilePage() {
                     type="file"
                     accept="image/png,image/jpeg,image/webp"
                     onChange={(e) => handleAvatarSelect(e.target.files?.[0] || null)}
-                    className="block w-full text-sm rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 px-3 py-2"
+                    className="block w-full rounded-xl border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800"
                   />
                 </label>
 
@@ -1000,17 +944,17 @@ export default function ProfilePage() {
                 )}
               </div>
 
-              <div className="flex-1 min-w-0">
-                <h2 className="text-2xl font-bold text-black dark:text-white break-words">
+              <div className="min-w-0 flex-1">
+                <h2 className="break-words text-2xl font-bold text-black dark:text-white">
                   {profileName}
                 </h2>
 
-                <p className="text-zinc-500 dark:text-zinc-400 mt-1 break-all">
+                <p className="mt-1 break-all text-zinc-500 dark:text-zinc-400">
                   @{username || 'seu_username'}
                 </p>
 
                 {bio && (
-                  <p className="mt-3 text-sm sm:text-base text-zinc-700 dark:text-zinc-300 whitespace-pre-wrap break-words">
+                  <p className="mt-3 whitespace-pre-wrap break-words text-sm text-zinc-700 dark:text-zinc-300 sm:text-base">
                     {bio}
                   </p>
                 )}
@@ -1033,7 +977,7 @@ export default function ProfilePage() {
 
             <div className="grid grid-cols-1 gap-4">
               <div>
-                <label className="block text-sm mb-2 text-zinc-700 dark:text-zinc-300">
+                <label className="mb-2 block text-sm text-zinc-700 dark:text-zinc-300">
                   Nome de exibição
                 </label>
 
@@ -1042,12 +986,12 @@ export default function ProfilePage() {
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
                   placeholder="Seu nome visível"
-                  className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 px-4 py-3 outline-none focus:border-zinc-500 text-sm sm:text-base"
+                  className="w-full rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 sm:text-base"
                 />
               </div>
 
               <div>
-                <label className="block text-sm mb-2 text-zinc-700 dark:text-zinc-300">
+                <label className="mb-2 block text-sm text-zinc-700 dark:text-zinc-300">
                   Username
                 </label>
 
@@ -1056,16 +1000,16 @@ export default function ProfilePage() {
                   value={username}
                   onChange={(e) => setUsername(sanitizeUsername(e.target.value))}
                   placeholder="seu_username"
-                  className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 px-4 py-3 outline-none focus:border-zinc-500 text-sm sm:text-base"
+                  className="w-full rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 sm:text-base"
                 />
 
-                <p className="text-xs text-zinc-500 mt-2">
+                <p className="mt-2 text-xs text-zinc-500">
                   Use letras minúsculas, números e underline.
                 </p>
               </div>
 
               <div>
-                <label className="block text-sm mb-2 text-zinc-700 dark:text-zinc-300">
+                <label className="mb-2 block text-sm text-zinc-700 dark:text-zinc-300">
                   Bio
                 </label>
 
@@ -1073,13 +1017,13 @@ export default function ProfilePage() {
                   value={bio}
                   onChange={(e) => setBio(e.target.value)}
                   placeholder="Fale um pouco sobre você..."
-                  className="w-full min-h-28 rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 px-4 py-3 outline-none focus:border-zinc-500 resize-none text-sm sm:text-base"
+                  className="min-h-28 w-full resize-none rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 sm:text-base"
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
-                  <label className="block text-sm mb-2 text-zinc-700 dark:text-zinc-300">
+                  <label className="mb-2 block text-sm text-zinc-700 dark:text-zinc-300">
                     País
                   </label>
 
@@ -1088,12 +1032,12 @@ export default function ProfilePage() {
                     value={country}
                     onChange={(e) => setCountry(e.target.value)}
                     placeholder="Brasil"
-                    className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 px-4 py-3 outline-none focus:border-zinc-500 text-sm sm:text-base"
+                    className="w-full rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 sm:text-base"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm mb-2 text-zinc-700 dark:text-zinc-300">
+                  <label className="mb-2 block text-sm text-zinc-700 dark:text-zinc-300">
                     Data de nascimento
                   </label>
 
@@ -1101,7 +1045,7 @@ export default function ProfilePage() {
                     type="date"
                     value={birthDate}
                     onChange={(e) => setBirthDate(e.target.value)}
-                    className="w-full rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 px-4 py-3 outline-none focus:border-zinc-500 text-sm sm:text-base"
+                    className="w-full rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 sm:text-base"
                   />
                 </div>
               </div>
@@ -1142,14 +1086,15 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row">
               <button
                 type="submit"
                 disabled={saving || uploadingAvatar}
-                className={`w-full sm:w-auto px-6 py-3 rounded-xl font-medium ${saving || uploadingAvatar
-                    ? 'bg-zinc-300 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300 cursor-not-allowed'
-                    : 'bg-black text-white dark:bg-white dark:text-black hover:opacity-90'
-                  }`}
+                className={`w-full rounded-xl px-6 py-3 font-medium sm:w-auto ${
+                  saving || uploadingAvatar
+                    ? 'cursor-not-allowed bg-zinc-300 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300'
+                    : 'bg-black text-white hover:opacity-90 dark:bg-white dark:text-black'
+                }`}
               >
                 {saving ? 'Salvando...' : 'Salvar perfil'}
               </button>
@@ -1157,7 +1102,7 @@ export default function ProfilePage() {
               {username && (
                 <Link
                   href={publicProfileUrl}
-                  className="w-full sm:w-auto text-center border border-zinc-300 dark:border-zinc-700 px-6 py-3 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                  className="w-full rounded-xl border border-zinc-300 px-6 py-3 text-center hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900 sm:w-auto"
                 >
                   Abrir perfil público
                 </Link>
@@ -1218,158 +1163,37 @@ export default function ProfilePage() {
                 (repost) => repost.post_id === post.id && repost.user_id === userId
               )
 
-              const authorName =
-                post.profiles?.display_name || post.profiles?.username || 'Usuário'
-
-              const authorUsername = post.profiles?.username || 'usuario'
-              const authorAvatar = post.profiles?.avatar_url || ''
-              const isOwnPost = post.user_id === userId
-              const postMedia = getPostMedia(post)
-              const isSensitivePostItem = isSensitivePost(post)
-
-              const shouldShowSensitiveWarning =
-                isSensitivePostItem && !showSensitiveContent
-
               return (
-                <article
+                <PostCard
                   key={item.id}
-                  className="rounded-2xl border border-zinc-200 bg-white p-4 transition dark:border-zinc-800 dark:bg-zinc-900 sm:p-6"
-                >
-                  {item.type === 'repost' && (
-                    <Link
-                      href={`/u/${username || 'usuario'}`}
-                      className="mb-4 flex items-center gap-2 text-sm font-medium text-green-600 transition hover:opacity-80 dark:text-green-400"
-                    >
-                      {avatarPreview ? (
-                        <img
-                          src={avatarPreview}
-                          alt={profileName}
-                          className="h-7 w-7 rounded-full border border-green-200 object-cover dark:border-green-800"
-                        />
-                      ) : (
-                        <div className="flex h-7 w-7 items-center justify-center rounded-full border border-green-200 bg-green-50 text-xs font-bold text-green-700 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
-                          {profileName.charAt(0).toUpperCase()}
-                        </div>
-                      )}
-
-                      <Repeat2 className="h-4 w-4" />
-                      <span>Você repostou</span>
-                    </Link>
-                  )}
-
-                  <div className="mb-3 flex items-start justify-between gap-3">
-                    <Link
-                      href={`/u/${authorUsername}`}
-                      className="flex min-w-0 items-center gap-3 transition hover:opacity-80"
-                    >
-                      {authorAvatar ? (
-                        <img
-                          src={authorAvatar}
-                          alt={authorName}
-                          className="h-12 w-12 shrink-0 rounded-full border border-zinc-300 object-cover dark:border-zinc-700"
-                        />
-                      ) : (
-                        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-zinc-300 bg-zinc-100 text-sm font-semibold text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
-                          {authorName.charAt(0).toUpperCase()}
-                        </div>
-                      )}
-
-                      <div className="min-w-0">
-                        <p className="break-words font-semibold text-black dark:text-white">
-                          {authorName}
-                        </p>
-
-                        <p className="break-all text-sm text-zinc-500">
-                          @{authorUsername}
-                        </p>
-                      </div>
-                    </Link>
-
-                    <PostMoreMenu
-                      isOwnPost={isOwnPost}
-                      copied={copiedPostId === post.id}
-                      reported={reportedPostIds.includes(post.id)}
-                      reporting={reportingPostId === post.id}
-                      onCopy={() => handleCopyPostLink(post.id)}
-                      onEdit={() => router.push(`/post/${post.id}`)}
-                      onDelete={() => handleDeletePost(post.id)}
-                      onReport={() => handleReportPost(post.id, post.user_id)}
-                    />
-                  </div>
-
-                  <div className="mb-3 flex flex-wrap items-center gap-2">
-                    <p className="text-sm text-zinc-500">{post.category}</p>
-
-                    <span className="rounded-full border border-zinc-200 bg-zinc-100 px-2 py-1 text-xs text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
-                      {getVisibilityLabel(post.visibility)}
-                    </span>
-
-                    {isSensitivePostItem && (
-                      <span className="rounded-full border border-yellow-200 bg-yellow-50 px-2 py-1 text-xs text-yellow-700 dark:border-yellow-800 dark:bg-yellow-950 dark:text-yellow-300">
-                        18+
-                      </span>
-                    )}
-
-                    {postReposted && (
-                      <span className="rounded-full border border-green-200 bg-green-50 px-2 py-1 text-xs text-green-700 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
-                        Repostado
-                      </span>
-                    )}
-
-                    {postSaved && (
-                      <span className="rounded-full border border-yellow-200 bg-yellow-50 px-2 py-1 text-xs text-yellow-700 dark:border-yellow-800 dark:bg-yellow-950 dark:text-yellow-300">
-                        Salvo
-                      </span>
-                    )}
-                  </div>
-
-                  {shouldShowSensitiveWarning ? (
-                    <SensitiveContent>
-                      {post.content && (
-                        <p className="mb-4 whitespace-pre-wrap break-words text-sm text-zinc-800 dark:text-zinc-200 sm:text-base">
-                          {post.content}
-                        </p>
-                      )}
-
-                      <LinkPreview content={post.content} />
-
-                      <PostMediaGallery media={postMedia} />
-                    </SensitiveContent>
-                  ) : (
-                    <>
-                      {post.content && (
-                        <p className="mb-4 whitespace-pre-wrap break-words text-sm text-zinc-800 dark:text-zinc-200 sm:text-base">
-                          {post.content}
-                        </p>
-                      )}
-
-                      <LinkPreview content={post.content} />
-
-                      <PostMediaGallery media={postMedia} />
-                    </>
-                  )}
-
-                  <PostActions
-                    commentsCount={postComments.length}
-                    likesCount={postLikes.length}
-                    repostsCount={postReposts.length}
-                    liked={userLiked}
-                    reposted={postReposted}
-                    saved={postSaved}
-                    copied={copiedPostId === post.id}
-                    onLike={() => handleToggleLike(post.id)}
-                    onCommentClick={() => router.push(`/post/${post.id}`)}
-                    onRepost={() => handleToggleRepost(post.id)}
-                    onSave={() => handleToggleBookmark(post.id)}
-                    onShare={() => handleCopyPostLink(post.id)}
-                  />
-
-                  <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-600">
-                    {item.type === 'repost'
-                      ? `Repostado em ${new Date(item.repost.created_at).toLocaleString('pt-BR')}`
-                      : `Publicado em ${new Date(post.created_at).toLocaleString('pt-BR')}`}
-                  </p>
-                </article>
+                  post={post}
+                  currentUserId={userId}
+                  commentsCount={postComments.length}
+                  likesCount={postLikes.length}
+                  repostsCount={postReposts.length}
+                  liked={userLiked}
+                  saved={postSaved}
+                  reposted={postReposted}
+                  copied={copiedPostId === post.id}
+                  reported={reportedPostIds.includes(post.id)}
+                  reporting={reportingPostId === post.id}
+                  showSensitiveContent={showSensitiveContent}
+                  repostInfo={item.type === 'repost' ? item.repost : null}
+                  footerLabel={
+                    item.type === 'post'
+                      ? `Publicado em ${new Date(post.created_at).toLocaleString('pt-BR')}`
+                      : undefined
+                  }
+                  onLike={() => handleToggleLike(post.id)}
+                  onCommentClick={() => router.push(`/post/${post.id}`)}
+                  onRepost={() => handleToggleRepost(post.id)}
+                  onSave={() => handleToggleBookmark(post.id)}
+                  onShare={() => handleCopyPostLink(post.id)}
+                  onCopy={() => handleCopyPostLink(post.id)}
+                  onEdit={() => router.push(`/post/${post.id}`)}
+                  onDelete={() => handleDeletePost(post.id)}
+                  onReport={() => handleReportPost(post.id, post.user_id)}
+                />
               )
             })}
           </div>

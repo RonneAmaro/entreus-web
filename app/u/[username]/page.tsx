@@ -3,12 +3,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Repeat2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import PostMediaGallery from '../../components/PostMediaGallery'
-import PostActions from '../../components/PostActions'
-import LinkPreview from '../../components/LinkPreview'
-import SensitiveContent from '../../components/SensitiveContent'
+import PostCard from '../../components/PostCard'
 
 type VisibilityType = 'public' | 'followers' | 'private'
 
@@ -578,44 +574,6 @@ export default function PublicProfilePage() {
     )
   }
 
-  function getVisibilityLabel(value?: Post['visibility']) {
-    if (value === 'followers') return 'Só seguidores'
-    if (value === 'private') return 'Privado'
-    return 'Público'
-  }
-
-  function getPostMedia(post: Post): PostMedia[] {
-    if (post.media && post.media.length > 0) {
-      return post.media
-    }
-
-    const legacyMedia: PostMedia[] = []
-
-    if (post.image_url) {
-      legacyMedia.push({
-        id: `${post.id}-legacy-image`,
-        post_id: post.id,
-        user_id: post.user_id,
-        media_url: post.image_url,
-        media_type: 'image',
-        position: 0,
-      })
-    }
-
-    if (post.video_url) {
-      legacyMedia.push({
-        id: `${post.id}-legacy-video`,
-        post_id: post.id,
-        user_id: post.user_id,
-        media_url: post.video_url,
-        media_type: 'video',
-        position: legacyMedia.length,
-      })
-    }
-
-    return legacyMedia
-  }
-
   async function refreshProfileState(profileId: string, currentUserId: string) {
     if (!profile) return
 
@@ -722,6 +680,12 @@ export default function PublicProfilePage() {
         setFollowLoading(false)
         return
       }
+
+      await supabase.from('notifications').insert({
+        user_id: profile.id,
+        actor_id: loggedUserId,
+        type: 'follow',
+      })
     }
 
     await refreshProfileState(profile.id, loggedUserId)
@@ -791,9 +755,7 @@ export default function PublicProfilePage() {
       'Informe o motivo da denúncia.\nEx.: assédio, perfil falso, conteúdo ofensivo, spam'
     )
 
-    if (!reason || !reason.trim()) {
-      return
-    }
+    if (!reason || !reason.trim()) return
 
     setReportingUser(true)
     setMessage('')
@@ -948,6 +910,15 @@ export default function PublicProfilePage() {
         )
       )
     }
+
+    if (repostedPost && repostedPost.user_id !== loggedUserId) {
+      await supabase.from('notifications').insert({
+        user_id: repostedPost.user_id,
+        actor_id: loggedUserId,
+        type: 'repost',
+        post_id: postId,
+      })
+    }
   }
 
   async function handleToggleLike(postId: string) {
@@ -1000,6 +971,17 @@ export default function PublicProfilePage() {
       setLikes((current) =>
         current.map((like) => (like.id === optimisticLike.id ? data : like))
       )
+    }
+
+    const likedPost = posts.find((post) => post.id === postId)
+
+    if (likedPost && likedPost.user_id !== loggedUserId) {
+      await supabase.from('notifications').insert({
+        user_id: likedPost.user_id,
+        actor_id: loggedUserId,
+        type: 'like',
+        post_id: postId,
+      })
     }
   }
 
@@ -1152,16 +1134,16 @@ export default function PublicProfilePage() {
           setShowFollowersModal(false)
           setShowFollowingModal(false)
         }}
-        className="flex items-center gap-3 p-3 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800 transition"
+        className="flex items-center gap-3 rounded-xl p-3 transition hover:bg-zinc-100 dark:hover:bg-zinc-800"
       >
         {item.avatar_url ? (
           <img
             src={item.avatar_url}
             alt={itemName}
-            className="w-12 h-12 rounded-full object-cover border border-zinc-300 dark:border-zinc-700"
+            className="h-12 w-12 rounded-full border border-zinc-300 object-cover dark:border-zinc-700"
           />
         ) : (
-          <div className="w-12 h-12 rounded-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 flex items-center justify-center text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full border border-zinc-300 bg-zinc-100 text-sm font-semibold text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
             {itemName.charAt(0).toUpperCase()}
           </div>
         )}
@@ -1216,7 +1198,7 @@ export default function PublicProfilePage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-white text-black dark:bg-black dark:text-white flex items-center justify-center">
+      <main className="flex min-h-screen items-center justify-center bg-white text-black dark:bg-black dark:text-white">
         <p>Carregando perfil...</p>
       </main>
     )
@@ -1225,7 +1207,7 @@ export default function PublicProfilePage() {
   if (!profile) {
     return (
       <main className="min-h-screen bg-white text-black dark:bg-black dark:text-white">
-        <header className="border-b border-zinc-200 dark:border-zinc-800 px-6 py-4 flex items-center justify-between">
+        <header className="flex items-center justify-between border-b border-zinc-200 px-6 py-4 dark:border-zinc-800">
           <div>
             <h1 className="text-2xl font-bold">EntreUS</h1>
             <p className="text-sm text-zinc-500 dark:text-zinc-400">Só Entre Nós</p>
@@ -1233,15 +1215,17 @@ export default function PublicProfilePage() {
 
           <Link
             href="/feed"
-            className="border border-zinc-300 dark:border-zinc-700 px-4 py-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-900"
+            className="rounded-xl border border-zinc-300 px-4 py-2 hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900"
           >
             Voltar ao feed
           </Link>
         </header>
 
-        <section className="max-w-3xl mx-auto px-6 py-8">
-          <div className="bg-white dark:bg-zinc-900 rounded-2xl p-6 border border-zinc-200 dark:border-zinc-800">
-            <p className="text-zinc-700 dark:text-zinc-300">{message || 'Perfil não encontrado.'}</p>
+        <section className="mx-auto max-w-3xl px-6 py-8">
+          <div className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900">
+            <p className="text-zinc-700 dark:text-zinc-300">
+              {message || 'Perfil não encontrado.'}
+            </p>
           </div>
         </section>
       </main>
@@ -1252,8 +1236,8 @@ export default function PublicProfilePage() {
   const isOwnProfile = loggedUserId === profile.id
 
   return (
-    <main className="min-h-screen bg-white text-black dark:bg-black dark:text-white transition-colors">
-      <header className="border-b border-zinc-200 dark:border-zinc-800 px-6 py-4 flex items-center justify-between">
+    <main className="min-h-screen bg-white text-black transition-colors dark:bg-black dark:text-white">
+      <header className="flex items-center justify-between border-b border-zinc-200 px-6 py-4 dark:border-zinc-800">
         <div>
           <h1 className="text-2xl font-bold">EntreUS</h1>
           <p className="text-sm text-zinc-500 dark:text-zinc-400">Só Entre Nós</p>
@@ -1263,7 +1247,7 @@ export default function PublicProfilePage() {
           {isOwnProfile && (
             <Link
               href="/profile"
-              className="border border-zinc-300 dark:border-zinc-700 px-4 py-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-900"
+              className="rounded-xl border border-zinc-300 px-4 py-2 hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900"
             >
               Meu perfil
             </Link>
@@ -1271,46 +1255,51 @@ export default function PublicProfilePage() {
 
           <Link
             href="/feed"
-            className="border border-zinc-300 dark:border-zinc-700 px-4 py-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-900"
+            className="rounded-xl border border-zinc-300 px-4 py-2 hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900"
           >
             Voltar ao feed
           </Link>
         </div>
       </header>
 
-      <section className="max-w-3xl mx-auto px-6 py-8">
-        <div className="bg-white dark:bg-zinc-900 rounded-2xl p-6 border border-zinc-200 dark:border-zinc-800 mb-6">
-          <div className="flex items-start justify-between gap-4 flex-col sm:flex-row">
+      <section className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
+        <div className="mb-6 rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900">
+          <div className="flex flex-col items-start justify-between gap-4 sm:flex-row">
             <div className="flex items-start gap-4">
               {profile.avatar_url ? (
                 <img
                   src={profile.avatar_url}
                   alt={displayName}
-                  className="w-20 h-20 rounded-full object-cover border border-zinc-300 dark:border-zinc-700"
+                  className="h-20 w-20 rounded-full border border-zinc-300 object-cover dark:border-zinc-700"
                 />
               ) : (
-                <div className="w-20 h-20 rounded-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 flex items-center justify-center text-2xl font-bold text-zinc-700 dark:text-zinc-300">
+                <div className="flex h-20 w-20 items-center justify-center rounded-full border border-zinc-300 bg-zinc-100 text-2xl font-bold text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
                   {displayName.charAt(0).toUpperCase()}
                 </div>
               )}
 
               <div>
-                <h2 className="text-2xl font-bold text-black dark:text-white">{displayName}</h2>
-                <p className="text-zinc-500 dark:text-zinc-400 mt-1">@{profile.username}</p>
+                <h2 className="text-2xl font-bold text-black dark:text-white">
+                  {displayName}
+                </h2>
+
+                <p className="mt-1 text-zinc-500 dark:text-zinc-400">
+                  @{profile.username}
+                </p>
               </div>
             </div>
 
             {!isOwnProfile && !hasBlockedMe && (
-              <div className="flex gap-3 flex-wrap">
+              <div className="flex flex-wrap gap-3">
                 <button
                   type="button"
                   onClick={handleToggleFollow}
                   disabled={followLoading || isBlockedByMe}
-                  className={`px-4 py-2 rounded-xl font-medium transition ${
+                  className={`rounded-xl px-4 py-2 font-medium transition ${
                     isFollowing
-                      ? 'border border-zinc-300 dark:border-zinc-700 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800'
-                      : 'bg-black text-white dark:bg-white dark:text-black hover:opacity-90'
-                  } ${followLoading || isBlockedByMe ? 'opacity-60 cursor-not-allowed' : ''}`}
+                      ? 'border border-zinc-300 text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800'
+                      : 'bg-black text-white hover:opacity-90 dark:bg-white dark:text-black'
+                  } ${followLoading || isBlockedByMe ? 'cursor-not-allowed opacity-60' : ''}`}
                 >
                   {followLoading ? 'Carregando...' : isFollowing ? 'Seguindo' : 'Seguir'}
                 </button>
@@ -1319,11 +1308,11 @@ export default function PublicProfilePage() {
                   type="button"
                   onClick={handleToggleBlock}
                   disabled={blockLoading}
-                  className={`px-4 py-2 rounded-xl font-medium transition ${
+                  className={`rounded-xl px-4 py-2 font-medium transition ${
                     isBlockedByMe
-                      ? 'border border-zinc-300 dark:border-zinc-700 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800'
-                      : 'border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950'
-                  } ${blockLoading ? 'opacity-60 cursor-not-allowed' : ''}`}
+                      ? 'border border-zinc-300 text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800'
+                      : 'border border-red-300 text-red-600 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-950'
+                  } ${blockLoading ? 'cursor-not-allowed opacity-60' : ''}`}
                 >
                   {blockLoading
                     ? 'Carregando...'
@@ -1336,11 +1325,11 @@ export default function PublicProfilePage() {
                   type="button"
                   onClick={handleReportUser}
                   disabled={reportingUser || reportedUser}
-                  className={`px-4 py-2 rounded-xl font-medium transition ${
+                  className={`rounded-xl px-4 py-2 font-medium transition ${
                     reportedUser
-                      ? 'border border-green-300 dark:border-green-700 text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950'
-                      : 'border border-orange-300 dark:border-orange-700 text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950'
-                  } ${reportingUser ? 'opacity-60 cursor-not-allowed' : ''}`}
+                      ? 'border border-green-300 bg-green-50 text-green-600 dark:border-green-700 dark:bg-green-950 dark:text-green-400'
+                      : 'border border-orange-300 text-orange-600 hover:bg-orange-50 dark:border-orange-700 dark:text-orange-400 dark:hover:bg-orange-950'
+                  } ${reportingUser ? 'cursor-not-allowed opacity-60' : ''}`}
                 >
                   {reportingUser
                     ? 'Enviando...'
@@ -1352,25 +1341,34 @@ export default function PublicProfilePage() {
             )}
           </div>
 
-          <div className="mt-4 flex gap-6 text-sm text-zinc-700 dark:text-zinc-300 flex-wrap">
+          <div className="mt-4 flex flex-wrap gap-6 text-sm text-zinc-700 dark:text-zinc-300">
             <button
               type="button"
               onClick={handleOpenFollowers}
-              className="text-left hover:opacity-80 transition"
+              className="text-left transition hover:opacity-80"
             >
-              <span className="font-semibold text-black dark:text-white">{followersCount}</span> seguidores
+              <span className="font-semibold text-black dark:text-white">
+                {followersCount}
+              </span>{' '}
+              seguidores
             </button>
 
             <button
               type="button"
               onClick={handleOpenFollowing}
-              className="text-left hover:opacity-80 transition"
+              className="text-left transition hover:opacity-80"
             >
-              <span className="font-semibold text-black dark:text-white">{followingCount}</span> seguindo
+              <span className="font-semibold text-black dark:text-white">
+                {followingCount}
+              </span>{' '}
+              seguindo
             </button>
 
             <p>
-              <span className="font-semibold text-black dark:text-white">{feedItems.length}</span> atividades
+              <span className="font-semibold text-black dark:text-white">
+                {feedItems.length}
+              </span>{' '}
+              atividades
             </p>
 
             <p>
@@ -1391,14 +1389,16 @@ export default function PublicProfilePage() {
                 Você bloqueou este usuário. Desbloqueie para voltar a ver o conteúdo dele.
               </p>
             ) : (
-              <p className="text-zinc-800 dark:text-zinc-200 whitespace-pre-wrap">
+              <p className="whitespace-pre-wrap text-zinc-800 dark:text-zinc-200">
                 {profile.bio?.trim() || 'Este usuário ainda não adicionou uma bio.'}
               </p>
             )}
           </div>
 
           {message && (
-            <p className="mt-4 text-sm text-zinc-600 dark:text-zinc-400">{message}</p>
+            <p className="mt-4 text-sm text-zinc-600 dark:text-zinc-400">
+              {message}
+            </p>
           )}
         </div>
 
@@ -1416,7 +1416,7 @@ export default function PublicProfilePage() {
 
             <div className="space-y-4">
               {feedItems.length === 0 && (
-                <div className="bg-white dark:bg-zinc-900 rounded-2xl p-6 border border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400">
+                <div className="rounded-2xl border border-zinc-200 bg-white p-6 text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
                   Nenhuma atividade visível ainda.
                 </div>
               )}
@@ -1440,146 +1440,38 @@ export default function PublicProfilePage() {
                   (repost) => repost.post_id === post.id && repost.user_id === loggedUserId
                 )
 
-                const authorName =
-                  post.profiles?.display_name || post.profiles?.username || 'Usuário'
-
-                const authorUsername = post.profiles?.username || 'usuario'
-                const authorAvatar = post.profiles?.avatar_url || ''
-                const postMedia = getPostMedia(post)
-                const isSensitivePostItem = isSensitivePost(post)
-
-                const shouldShowSensitiveWarning =
-                  isSensitivePostItem && !loggedProfile?.show_sensitive_content
-
                 return (
-                  <article
+                  <PostCard
                     key={item.id}
-                    className="bg-white dark:bg-zinc-900 rounded-2xl p-6 border border-zinc-200 dark:border-zinc-800"
-                  >
-                    {item.type === 'repost' && (
-                      <Link
-                        href={`/u/${profile.username}`}
-                        className="mb-4 flex items-center gap-2 text-sm font-medium text-green-600 transition hover:opacity-80 dark:text-green-400"
-                      >
-                        {profile.avatar_url ? (
-                          <img
-                            src={profile.avatar_url}
-                            alt={displayName}
-                            className="h-7 w-7 rounded-full border border-green-200 object-cover dark:border-green-800"
-                          />
-                        ) : (
-                          <div className="flex h-7 w-7 items-center justify-center rounded-full border border-green-200 bg-green-50 text-xs font-bold text-green-700 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
-                            {displayName.charAt(0).toUpperCase()}
-                          </div>
-                        )}
-
-                        <Repeat2 className="h-4 w-4" />
-
-                        <span>
-                          {isOwnProfile ? 'Você repostou' : `${displayName} repostou`}
-                        </span>
-                      </Link>
-                    )}
-
-                    <div className="mb-3 flex items-center gap-3">
-                      <Link
-                        href={`/u/${authorUsername}`}
-                        className="flex items-center gap-3 hover:opacity-80 transition"
-                      >
-                        {authorAvatar ? (
-                          <img
-                            src={authorAvatar}
-                            alt={authorName}
-                            className="w-12 h-12 rounded-full object-cover border border-zinc-300 dark:border-zinc-700"
-                          />
-                        ) : (
-                          <div className="w-12 h-12 rounded-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 flex items-center justify-center text-sm font-semibold text-zinc-700 dark:text-zinc-300">
-                            {authorName.charAt(0).toUpperCase()}
-                          </div>
-                        )}
-
-                        <div>
-                          <p className="font-semibold text-black dark:text-white">{authorName}</p>
-                          <p className="text-sm text-zinc-500">@{authorUsername}</p>
-                        </div>
-                      </Link>
-                    </div>
-
-                    <div className="flex items-center gap-2 mb-2 flex-wrap">
-                      <p className="text-sm text-zinc-500">
-                        {post.category || 'Sem categoria'}
-                      </p>
-
-                      <span className="text-xs px-2 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
-                        {getVisibilityLabel(post.visibility)}
-                      </span>
-
-                      {isSensitivePostItem && (
-                        <span className="text-xs px-2 py-1 rounded-full bg-yellow-50 dark:bg-yellow-950 text-yellow-700 dark:text-yellow-300 border border-yellow-200 dark:border-yellow-800">
-                          18+
-                        </span>
-                      )}
-
-                      {postReposted && (
-                        <span className="text-xs px-2 py-1 rounded-full bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800">
-                          Repostado
-                        </span>
-                      )}
-
-                      {postSaved && (
-                        <span className="text-xs px-2 py-1 rounded-full bg-yellow-50 dark:bg-yellow-950 text-yellow-700 dark:text-yellow-300 border border-yellow-200 dark:border-yellow-800">
-                          Salvo
-                        </span>
-                      )}
-                    </div>
-
-                    {shouldShowSensitiveWarning ? (
-                      <SensitiveContent>
-                        {post.content && (
-                          <p className="text-zinc-800 dark:text-zinc-200 whitespace-pre-wrap mb-4">
-                            {post.content}
-                          </p>
-                        )}
-
-                        <LinkPreview content={post.content} />
-
-                        <PostMediaGallery media={postMedia} />
-                      </SensitiveContent>
-                    ) : (
-                      <>
-                        {post.content && (
-                          <p className="text-zinc-800 dark:text-zinc-200 whitespace-pre-wrap mb-4">
-                            {post.content}
-                          </p>
-                        )}
-
-                        <LinkPreview content={post.content} />
-
-                        <PostMediaGallery media={postMedia} />
-                      </>
-                    )}
-
-                    <PostActions
-                      commentsCount={postComments.length}
-                      likesCount={postLikes.length}
-                      repostsCount={postReposts.length}
-                      liked={userLiked}
-                      reposted={postReposted}
-                      saved={postSaved}
-                      copied={copiedPostId === post.id}
-                      onLike={() => handleToggleLike(post.id)}
-                      onCommentClick={() => router.push(`/post/${post.id}`)}
-                      onRepost={() => handleToggleRepost(post.id)}
-                      onSave={() => handleToggleBookmark(post.id)}
-                      onShare={() => handleCopyPostLink(post.id)}
-                    />
-
-                    <p className="text-xs text-zinc-500 dark:text-zinc-600 mt-4">
-                      {item.type === 'repost'
-                        ? `Repostado em ${new Date(item.repost.created_at).toLocaleString('pt-BR')}`
-                        : `Publicado em ${new Date(post.created_at).toLocaleString('pt-BR')}`}
-                    </p>
-                  </article>
+                    post={post}
+                    currentUserId={loggedUserId}
+                    commentsCount={postComments.length}
+                    likesCount={postLikes.length}
+                    repostsCount={postReposts.length}
+                    liked={userLiked}
+                    saved={postSaved}
+                    reposted={postReposted}
+                    copied={copiedPostId === post.id}
+                    reported={reportedPostIds.includes(post.id)}
+                    reporting={reportingPostId === post.id}
+                    showSensitiveContent={loggedProfile?.show_sensitive_content || false}
+                    repostInfo={item.type === 'repost' ? item.repost : null}
+                    footerLabel={
+                      item.type === 'post'
+                        ? `Publicado em ${new Date(post.created_at).toLocaleString('pt-BR')}`
+                        : undefined
+                    }
+                    showMenu
+                    onLike={() => handleToggleLike(post.id)}
+                    onCommentClick={() => router.push(`/post/${post.id}`)}
+                    onRepost={() => handleToggleRepost(post.id)}
+                    onSave={() => handleToggleBookmark(post.id)}
+                    onShare={() => handleCopyPostLink(post.id)}
+                    onCopy={() => handleCopyPostLink(post.id)}
+                    onEdit={() => router.push(`/post/${post.id}`)}
+                    onDelete={() => router.push(`/post/${post.id}`)}
+                    onReport={() => handleReportPost(post.id, post.user_id)}
+                  />
                 )
               })}
             </div>
@@ -1588,24 +1480,31 @@ export default function PublicProfilePage() {
       </section>
 
       {showFollowersModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
-          <div className="w-full max-w-md bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-xl">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-200 dark:border-zinc-800">
-              <h3 className="text-lg font-semibold text-black dark:text-white">Seguidores</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white shadow-xl dark:border-zinc-800 dark:bg-zinc-900">
+            <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-4 dark:border-zinc-800">
+              <h3 className="text-lg font-semibold text-black dark:text-white">
+                Seguidores
+              </h3>
+
               <button
                 type="button"
                 onClick={() => setShowFollowersModal(false)}
-                className="border border-zinc-300 dark:border-zinc-700 px-3 py-1 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                className="rounded-lg border border-zinc-300 px-3 py-1 hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
               >
                 Fechar
               </button>
             </div>
 
-            <div className="p-4 max-h-[70vh] overflow-y-auto">
+            <div className="max-h-[70vh] overflow-y-auto p-4">
               {loadingFollowers ? (
-                <p className="text-zinc-500 dark:text-zinc-400">Carregando seguidores...</p>
+                <p className="text-zinc-500 dark:text-zinc-400">
+                  Carregando seguidores...
+                </p>
               ) : followersList.length === 0 ? (
-                <p className="text-zinc-500 dark:text-zinc-400">Nenhum seguidor ainda.</p>
+                <p className="text-zinc-500 dark:text-zinc-400">
+                  Nenhum seguidor ainda.
+                </p>
               ) : (
                 <div className="space-y-2">{followersList.map(renderProfileListItem)}</div>
               )}
@@ -1615,24 +1514,31 @@ export default function PublicProfilePage() {
       )}
 
       {showFollowingModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
-          <div className="w-full max-w-md bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-xl">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-zinc-200 dark:border-zinc-800">
-              <h3 className="text-lg font-semibold text-black dark:text-white">Seguindo</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white shadow-xl dark:border-zinc-800 dark:bg-zinc-900">
+            <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-4 dark:border-zinc-800">
+              <h3 className="text-lg font-semibold text-black dark:text-white">
+                Seguindo
+              </h3>
+
               <button
                 type="button"
                 onClick={() => setShowFollowingModal(false)}
-                className="border border-zinc-300 dark:border-zinc-700 px-3 py-1 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                className="rounded-lg border border-zinc-300 px-3 py-1 hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
               >
                 Fechar
               </button>
             </div>
 
-            <div className="p-4 max-h-[70vh] overflow-y-auto">
+            <div className="max-h-[70vh] overflow-y-auto p-4">
               {loadingFollowing ? (
-                <p className="text-zinc-500 dark:text-zinc-400">Carregando usuários...</p>
+                <p className="text-zinc-500 dark:text-zinc-400">
+                  Carregando usuários...
+                </p>
               ) : followingList.length === 0 ? (
-                <p className="text-zinc-500 dark:text-zinc-400">Este usuário ainda não segue ninguém.</p>
+                <p className="text-zinc-500 dark:text-zinc-400">
+                  Este usuário ainda não segue ninguém.
+                </p>
               ) : (
                 <div className="space-y-2">{followingList.map(renderProfileListItem)}</div>
               )}

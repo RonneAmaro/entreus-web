@@ -2,11 +2,7 @@
 
 import AppSidebar from '../components/AppSidebar'
 import MobileNavigation from '../components/MobileNavigation'
-import PostMoreMenu from '../components/PostMoreMenu'
-import PostMediaGallery from '../components/PostMediaGallery'
-import PostActions from '../components/PostActions'
-import LinkPreview from '../components/LinkPreview'
-import SensitiveContent from '../components/SensitiveContent'
+import PostCard from '../components/PostCard'
 import Link from 'next/link'
 import { Bookmark } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
@@ -21,6 +17,12 @@ type CurrentProfile = {
   display_name: string | null
   avatar_url: string | null
   show_sensitive_content: boolean
+}
+
+type ProfileSummary = {
+  username: string
+  display_name: string | null
+  avatar_url: string | null
 }
 
 type PostMedia = {
@@ -43,11 +45,7 @@ type Post = {
   video_url: string | null
   visibility: VisibilityType
   is_sensitive: boolean | null
-  profiles: {
-    username: string
-    display_name: string | null
-    avatar_url: string | null
-  } | null
+  profiles: ProfileSummary | null
   media?: PostMedia[]
 }
 
@@ -421,43 +419,19 @@ export default function SavedPage() {
     setPosts(normalizedPosts)
   }
 
-  function getPostMedia(post: Post): PostMedia[] {
-    if (post.media && post.media.length > 0) {
-      return post.media
-    }
+  async function refreshSavedPosts() {
+    if (!userId) return
 
-    const legacyMedia: PostMedia[] = []
+    const freshBookmarks = await loadBookmarks(userId)
+    setBookmarks(freshBookmarks)
 
-    if (post.image_url) {
-      legacyMedia.push({
-        id: `${post.id}-legacy-image`,
-        post_id: post.id,
-        user_id: post.user_id,
-        media_url: post.image_url,
-        media_type: 'image',
-        position: 0,
-      })
-    }
-
-    if (post.video_url) {
-      legacyMedia.push({
-        id: `${post.id}-legacy-video`,
-        post_id: post.id,
-        user_id: post.user_id,
-        media_url: post.video_url,
-        media_type: 'video',
-        position: legacyMedia.length,
-      })
-    }
-
-    return legacyMedia
-  }
-
-  function getVisibilityLabel(value: Post['visibility']) {
-    if (value === 'public') return 'Público'
-    if (value === 'followers') return 'Só seguidores'
-
-    return 'Privado'
+    await loadSavedPosts(
+      userId,
+      freshBookmarks,
+      blockedUserIds,
+      follows,
+      currentProfile?.show_sensitive_content || false
+    )
   }
 
   async function handleToggleBookmark(postId: string) {
@@ -483,17 +457,7 @@ export default function SavedPage() {
 
     if (error) {
       setMessage('Erro ao remover post dos salvos: ' + error.message)
-
-      const freshBookmarks = await loadBookmarks(userId)
-      setBookmarks(freshBookmarks)
-
-      await loadSavedPosts(
-        userId,
-        freshBookmarks,
-        blockedUserIds,
-        follows,
-        currentProfile?.show_sensitive_content || false
-      )
+      await refreshSavedPosts()
     }
   }
 
@@ -577,12 +541,18 @@ export default function SavedPage() {
   async function handleToggleLike(postId: string) {
     if (!userId) return
 
+    setMessage('')
+
     const existingLike = likes.find(
       (like) => like.post_id === postId && like.user_id === userId
     )
 
     if (existingLike) {
-      setLikes((current) => current.filter((like) => like.id !== existingLike.id))
+      setLikes((current) =>
+        current.filter(
+          (like) => !(like.post_id === postId && like.user_id === userId)
+        )
+      )
 
       const { error } = await supabase
         .from('likes')
@@ -797,139 +767,32 @@ export default function SavedPage() {
               (repost) => repost.post_id === post.id && repost.user_id === userId
             )
 
-            const authorName =
-              post.profiles?.display_name || post.profiles?.username || 'Usuário'
-
-            const authorUsername = post.profiles?.username || 'usuario'
-            const authorAvatar = post.profiles?.avatar_url || ''
-            const isOwnPost = post.user_id === userId
-            const postMedia = getPostMedia(post)
-
-            const isSensitivePostItem = isSensitivePost(post)
-
-            const shouldShowSensitiveWarning =
-              isSensitivePostItem && !currentProfile?.show_sensitive_content
-
             return (
-              <article
+              <PostCard
                 key={post.id}
-                className="rounded-2xl border border-zinc-200 bg-white p-4 transition dark:border-zinc-800 dark:bg-zinc-900 sm:p-6"
-              >
-                <div className="mb-3 flex items-start justify-between gap-3">
-                  <Link
-                    href={`/u/${authorUsername}`}
-                    className="flex min-w-0 items-center gap-3 transition hover:opacity-80"
-                  >
-                    {authorAvatar ? (
-                      <img
-                        src={authorAvatar}
-                        alt={authorName}
-                        className="h-12 w-12 shrink-0 rounded-full border border-zinc-300 object-cover dark:border-zinc-700"
-                      />
-                    ) : (
-                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-zinc-300 bg-zinc-100 text-sm font-semibold text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
-                        {authorName.charAt(0).toUpperCase()}
-                      </div>
-                    )}
-
-                    <div className="min-w-0">
-                      <p className="break-words font-semibold text-black dark:text-white">
-                        {authorName}
-                      </p>
-
-                      <p className="break-all text-sm text-zinc-500">
-                        @{authorUsername}
-                      </p>
-                    </div>
-                  </Link>
-
-                  <PostMoreMenu
-                    isOwnPost={isOwnPost}
-                    copied={copiedPostId === post.id}
-                    reported={reportedPostIds.includes(post.id)}
-                    reporting={reportingPostId === post.id}
-                    onCopy={() => handleCopyPostLink(post.id)}
-                    onEdit={() => router.push(`/post/${post.id}`)}
-                    onDelete={() => router.push(`/post/${post.id}`)}
-                    onReport={() => handleReportPost(post.id, post.user_id)}
-                  />
-                </div>
-
-                <div className="mb-3 flex flex-wrap items-center gap-2">
-                  <p className="text-sm text-zinc-500">{post.category}</p>
-
-                  <span className="rounded-full border border-zinc-200 bg-zinc-100 px-2 py-1 text-xs text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
-                    {getVisibilityLabel(post.visibility)}
-                  </span>
-
-                  {isSensitivePostItem && (
-                    <span className="rounded-full border border-yellow-200 bg-yellow-50 px-2 py-1 text-xs text-yellow-700 dark:border-yellow-800 dark:bg-yellow-950 dark:text-yellow-300">
-                      18+
-                    </span>
-                  )}
-
-                  {postReposted && (
-                    <span className="rounded-full border border-green-200 bg-green-50 px-2 py-1 text-xs text-green-700 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
-                      Repostado
-                    </span>
-                  )}
-
-                  {postSaved && (
-                    <span className="rounded-full border border-yellow-200 bg-yellow-50 px-2 py-1 text-xs text-yellow-700 dark:border-yellow-800 dark:bg-yellow-950 dark:text-yellow-300">
-                      Salvo
-                    </span>
-                  )}
-                </div>
-
-                {shouldShowSensitiveWarning ? (
-                  <SensitiveContent>
-                    {post.content && (
-                      <p className="mb-4 whitespace-pre-wrap break-words text-sm text-zinc-800 dark:text-zinc-200 sm:text-base">
-                        {post.content}
-                      </p>
-                    )}
-
-                    <LinkPreview content={post.content} />
-
-                    <PostMediaGallery media={postMedia} />
-                  </SensitiveContent>
-                ) : (
-                  <>
-                    {post.content && (
-                      <p className="mb-4 whitespace-pre-wrap break-words text-sm text-zinc-800 dark:text-zinc-200 sm:text-base">
-                        {post.content}
-                      </p>
-                    )}
-
-                    <LinkPreview content={post.content} />
-
-                    <PostMediaGallery media={postMedia} />
-                  </>
-                )}
-
-                <PostActions
-                  commentsCount={postComments.length}
-                  likesCount={postLikes.length}
-                  repostsCount={postReposts.length}
-                  liked={userLiked}
-                  reposted={postReposted}
-                  saved={postSaved}
-                  copied={copiedPostId === post.id}
-                  onLike={() => handleToggleLike(post.id)}
-                  onCommentClick={() => router.push(`/post/${post.id}`)}
-                  onRepost={() => handleToggleRepost(post.id)}
-                  onSave={() => handleToggleBookmark(post.id)}
-                  onShare={() => handleCopyPostLink(post.id)}
-                />
-
-                <p className="mb-1 mt-3 text-xs text-zinc-500 dark:text-zinc-600">
-                  Salvo em sua lista
-                </p>
-
-                <p className="text-xs text-zinc-500 dark:text-zinc-600">
-                  Publicado em {new Date(post.created_at).toLocaleString('pt-BR')}
-                </p>
-              </article>
+                post={post}
+                currentUserId={userId}
+                commentsCount={postComments.length}
+                likesCount={postLikes.length}
+                repostsCount={postReposts.length}
+                liked={userLiked}
+                saved={postSaved}
+                reposted={postReposted}
+                copied={copiedPostId === post.id}
+                reported={reportedPostIds.includes(post.id)}
+                reporting={reportingPostId === post.id}
+                showSensitiveContent={currentProfile?.show_sensitive_content || false}
+                footerLabel={`Publicado em ${new Date(post.created_at).toLocaleString('pt-BR')}`}
+                onLike={() => handleToggleLike(post.id)}
+                onCommentClick={() => router.push(`/post/${post.id}`)}
+                onRepost={() => handleToggleRepost(post.id)}
+                onSave={() => handleToggleBookmark(post.id)}
+                onShare={() => handleCopyPostLink(post.id)}
+                onCopy={() => handleCopyPostLink(post.id)}
+                onEdit={() => router.push(`/post/${post.id}`)}
+                onDelete={() => router.push(`/post/${post.id}`)}
+                onReport={() => handleReportPost(post.id, post.user_id)}
+              />
             )
           })}
         </div>
