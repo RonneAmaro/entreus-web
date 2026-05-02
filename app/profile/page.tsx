@@ -83,18 +83,18 @@ type Repost = {
 
 type FeedItem =
   | {
-      type: 'post'
-      id: string
-      created_at: string
-      post: Post
-    }
+    type: 'post'
+    id: string
+    created_at: string
+    post: Post
+  }
   | {
-      type: 'repost'
-      id: string
-      created_at: string
-      post: Post
-      repost: Repost
-    }
+    type: 'repost'
+    id: string
+    created_at: string
+    post: Post
+    repost: Repost
+  }
 
 export default function ProfilePage() {
   const router = useRouter()
@@ -336,10 +336,10 @@ export default function ProfilePage() {
           profilesById[repost.user_id] ||
           (isCurrentUser && currentProfileData
             ? {
-                username: currentProfileData.username || 'usuario',
-                display_name: currentProfileData.display_name,
-                avatar_url: currentProfileData.avatar_url,
-              }
+              username: currentProfileData.username || 'usuario',
+              display_name: currentProfileData.display_name,
+              avatar_url: currentProfileData.avatar_url,
+            }
             : null),
       }
     })
@@ -593,19 +593,19 @@ export default function ProfilePage() {
 
     const updatedProfile: Profile = profile
       ? {
-          ...profile,
-          ...payload,
-        }
+        ...profile,
+        ...payload,
+      }
       : {
-          id: userId,
-          username: normalizedUsername,
-          display_name: displayName.trim() || null,
-          bio: bio.trim() || null,
-          avatar_url: avatarUrl || null,
-          country: country.trim() || null,
-          birth_date: birthDate || null,
-          show_sensitive_content: showSensitiveContent,
-        }
+        id: userId,
+        username: normalizedUsername,
+        display_name: displayName.trim() || null,
+        bio: bio.trim() || null,
+        avatar_url: avatarUrl || null,
+        country: country.trim() || null,
+        birth_date: birthDate || null,
+        show_sensitive_content: showSensitiveContent,
+      }
 
     setUsername(normalizedUsername)
     setProfile(updatedProfile)
@@ -743,9 +743,9 @@ export default function ProfilePage() {
         current.map((repost) =>
           repost.id === optimisticRepost.id
             ? {
-                ...data,
-                profiles: optimisticRepost.profiles,
-              }
+              ...data,
+              profiles: optimisticRepost.profiles,
+            }
             : repost
         )
       )
@@ -895,7 +895,7 @@ export default function ProfilePage() {
         post,
       }))
 
-    const myRepostItems: FeedItem[] = reposts
+    const myRepostItems = reposts
       .filter((repost) => repost.user_id === userId)
       .map((repost) => {
         const originalPost = postMap.get(repost.post_id)
@@ -910,7 +910,7 @@ export default function ProfilePage() {
           repost,
         }
       })
-      .filter((item): item is FeedItem => Boolean(item))
+      .filter((item): item is Extract<FeedItem, { type: 'repost' }> => item !== null)
 
     return [...ownPostItems, ...myRepostItems].sort((a, b) => {
       return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
@@ -1146,11 +1146,10 @@ export default function ProfilePage() {
               <button
                 type="submit"
                 disabled={saving || uploadingAvatar}
-                className={`w-full sm:w-auto px-6 py-3 rounded-xl font-medium ${
-                  saving || uploadingAvatar
+                className={`w-full sm:w-auto px-6 py-3 rounded-xl font-medium ${saving || uploadingAvatar
                     ? 'bg-zinc-300 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300 cursor-not-allowed'
                     : 'bg-black text-white dark:bg-white dark:text-black hover:opacity-90'
-                }`}
+                  }`}
               >
                 {saving ? 'Salvando...' : 'Salvar perfil'}
               </button>
