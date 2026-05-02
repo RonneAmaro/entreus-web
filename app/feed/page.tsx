@@ -99,6 +99,13 @@ type Bookmark = {
   created_at: string
 }
 
+type Repost = {
+  id: string
+  post_id: string
+  user_id: string
+  created_at: string
+}
+
 function FeedContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -118,6 +125,7 @@ function FeedContent() {
   const [likes, setLikes] = useState<Like[]>([])
   const [commentLikes, setCommentLikes] = useState<CommentLike[]>([])
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([])
+  const [reposts, setReposts] = useState<Repost[]>([])
 
   const [blockedUserIds, setBlockedUserIds] = useState<string[]>([])
   const [follows, setFollows] = useState<Follow[]>([])
@@ -194,6 +202,7 @@ function FeedContent() {
         loadLikes(),
         loadCommentLikes(),
         loadBookmarks(user.id),
+        loadReposts(),
         loadUnreadNotificationsCount(user.id),
       ])
 
@@ -295,6 +304,19 @@ function FeedContent() {
     }
 
     setBookmarks(data || [])
+  }
+
+  async function loadReposts() {
+    const { data, error } = await supabase
+      .from('reposts')
+      .select('id, post_id, user_id, created_at')
+
+    if (error) {
+      setMessage('Erro ao carregar reposts: ' + error.message)
+      return
+    }
+
+    setReposts(data || [])
   }
 
   function canSeePost(post: Post, currentUserId: string, currentFollows: Follow[]) {
@@ -643,6 +665,83 @@ function FeedContent() {
     }
   }
 
+  async function handleToggleRepost(postId: string) {
+    if (!userId) return
+
+    setMessage('')
+
+    const repostedPost = posts.find((post) => post.id === postId)
+
+    if (repostedPost?.user_id === userId) {
+      setMessage('Você não precisa repostar sua própria publicação.')
+      return
+    }
+
+    const existingRepost = reposts.find(
+      (repost) => repost.post_id === postId && repost.user_id === userId
+    )
+
+    if (existingRepost) {
+      setReposts((current) =>
+        current.filter((repost) => repost.id !== existingRepost.id)
+      )
+
+      const { error } = await supabase
+        .from('reposts')
+        .delete()
+        .eq('post_id', postId)
+        .eq('user_id', userId)
+
+      if (error) {
+        setMessage('Erro ao remover repost: ' + error.message)
+        await loadReposts()
+      }
+
+      return
+    }
+
+    const optimisticRepost: Repost = {
+      id: crypto.randomUUID(),
+      post_id: postId,
+      user_id: userId,
+      created_at: new Date().toISOString(),
+    }
+
+    setReposts((current) => [...current, optimisticRepost])
+
+    const { data, error } = await supabase
+      .from('reposts')
+      .insert({
+        post_id: postId,
+        user_id: userId,
+      })
+      .select('id, post_id, user_id, created_at')
+      .single()
+
+    if (error) {
+      setMessage('Erro ao repostar: ' + error.message)
+      await loadReposts()
+      return
+    }
+
+    if (data) {
+      setReposts((current) =>
+        current.map((repost) =>
+          repost.id === optimisticRepost.id ? data : repost
+        )
+      )
+    }
+
+    if (repostedPost && repostedPost.user_id !== userId) {
+      await supabase.from('notifications').insert({
+        user_id: repostedPost.user_id,
+        actor_id: userId,
+        type: 'repost',
+        post_id: postId,
+      })
+    }
+  }
+
   function isImage(file: File) {
     return ['image/jpeg', 'image/png', 'image/webp'].includes(file.type)
   }
@@ -824,6 +923,7 @@ function FeedContent() {
         await loadLikes()
         await loadCommentLikes()
         await loadBookmarks(userId)
+        await loadReposts()
 
         return
       }
@@ -841,6 +941,7 @@ function FeedContent() {
     await loadLikes()
     await loadCommentLikes()
     await loadBookmarks(userId)
+    await loadReposts()
   }
 
   async function handleDeletePost(postId: string) {
@@ -871,6 +972,7 @@ function FeedContent() {
     await loadLikes()
     await loadCommentLikes()
     await loadBookmarks(userId)
+    await loadReposts()
   }
 
   function handleStartEdit(post: Post) {
@@ -1271,6 +1373,7 @@ function FeedContent() {
           {posts.map((post) => {
             const postComments = comments.filter((comment) => comment.post_id === post.id)
             const postLikes = likes.filter((like) => like.post_id === post.id)
+            const postReposts = reposts.filter((repost) => repost.post_id === post.id)
 
             const userLiked = likes.some(
               (like) => like.post_id === post.id && like.user_id === userId
@@ -1278,6 +1381,10 @@ function FeedContent() {
 
             const postSaved = bookmarks.some(
               (bookmark) => bookmark.post_id === post.id && bookmark.user_id === userId
+            )
+
+            const postReposted = reposts.some(
+              (repost) => repost.post_id === post.id && repost.user_id === userId
             )
 
             const isEditing = editingPostId === post.id
@@ -1388,6 +1495,12 @@ function FeedContent() {
                     </span>
                   )}
 
+                  {postReposted && (
+                    <span className="text-xs px-2 py-1 rounded-full bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800">
+                      Repostado
+                    </span>
+                  )}
+
                   {postSaved && (
                     <span className="text-xs px-2 py-1 rounded-full bg-yellow-50 dark:bg-yellow-950 text-yellow-700 dark:text-yellow-300 border border-yellow-200 dark:border-yellow-800">
                       Salvo
@@ -1463,11 +1576,14 @@ function FeedContent() {
                 <PostActions
                   commentsCount={postComments.length}
                   likesCount={postLikes.length}
+                  repostsCount={postReposts.length}
                   liked={userLiked}
+                  reposted={postReposted}
                   saved={postSaved}
                   copied={copiedPostId === post.id}
                   onLike={() => handleToggleLike(post.id)}
                   onCommentClick={() => handleFocusCommentInput(post.id)}
+                  onRepost={() => handleToggleRepost(post.id)}
                   onSave={() => handleToggleBookmark(post.id)}
                   onShare={() => handleCopyPostLink(post.id)}
                 />

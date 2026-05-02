@@ -1,15 +1,18 @@
 'use client'
 
-import { Bookmark, Heart, MessageCircle, Share2 } from 'lucide-react'
+import { Bookmark, Heart, MessageCircle, Repeat2, Share2 } from 'lucide-react'
 
 type PostActionsProps = {
   commentsCount: number
   likesCount: number
+  repostsCount?: number
   liked: boolean
+  reposted?: boolean
   saved?: boolean
   copied?: boolean
   onLike: () => void
   onCommentClick: () => void
+  onRepost?: () => void
   onSave?: () => void
   onShare: () => void
 }
@@ -17,11 +20,14 @@ type PostActionsProps = {
 export default function PostActions({
   commentsCount,
   likesCount,
+  repostsCount = 0,
   liked,
+  reposted = false,
   saved = false,
   copied = false,
   onLike,
   onCommentClick,
+  onRepost,
   onSave,
   onShare,
 }: PostActionsProps) {
@@ -30,7 +36,7 @@ export default function PostActions({
       <button
         type="button"
         onClick={onLike}
-        className={`group flex items-center gap-2 rounded-full px-3 py-2 text-sm transition ${
+        className={`group flex items-center gap-2 rounded-full px-2 py-2 text-sm transition sm:px-3 ${
           liked
             ? 'text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30'
             : 'hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/30'
@@ -38,23 +44,37 @@ export default function PostActions({
         title={liked ? 'Remover curtida' : 'Curtir'}
       >
         <Heart className={`h-5 w-5 ${liked ? 'fill-current' : ''}`} />
-        <span className="min-w-[18px] text-left">{likesCount}</span>
+        <span className="min-w-[16px] text-left">{likesCount}</span>
       </button>
 
       <button
         type="button"
         onClick={onCommentClick}
-        className="group flex items-center gap-2 rounded-full px-3 py-2 text-sm transition hover:bg-blue-50 hover:text-blue-500 dark:hover:bg-blue-950/30"
+        className="group flex items-center gap-2 rounded-full px-2 py-2 text-sm transition hover:bg-blue-50 hover:text-blue-500 dark:hover:bg-blue-950/30 sm:px-3"
         title="Comentar"
       >
         <MessageCircle className="h-5 w-5" />
-        <span className="min-w-[18px] text-left">{commentsCount}</span>
+        <span className="min-w-[16px] text-left">{commentsCount}</span>
+      </button>
+
+      <button
+        type="button"
+        onClick={onRepost}
+        className={`group flex items-center gap-2 rounded-full px-2 py-2 text-sm transition sm:px-3 ${
+          reposted
+            ? 'text-green-500 hover:bg-green-50 dark:hover:bg-green-950/30'
+            : 'hover:bg-green-50 hover:text-green-500 dark:hover:bg-green-950/30'
+        }`}
+        title={reposted ? 'Remover repost' : 'Repostar'}
+      >
+        <Repeat2 className="h-5 w-5" />
+        <span className="min-w-[16px] text-left">{repostsCount}</span>
       </button>
 
       <button
         type="button"
         onClick={onSave}
-        className={`group flex items-center gap-2 rounded-full px-3 py-2 text-sm transition ${
+        className={`group flex items-center gap-2 rounded-full px-2 py-2 text-sm transition sm:px-3 ${
           saved
             ? 'text-yellow-500 hover:bg-yellow-50 dark:hover:bg-yellow-950/30'
             : 'hover:bg-yellow-50 hover:text-yellow-500 dark:hover:bg-yellow-950/30'
@@ -68,7 +88,7 @@ export default function PostActions({
       <button
         type="button"
         onClick={onShare}
-        className={`group flex items-center gap-2 rounded-full px-3 py-2 text-sm transition ${
+        className={`group flex items-center gap-2 rounded-full px-2 py-2 text-sm transition sm:px-3 ${
           copied
             ? 'text-green-500 hover:bg-green-50 dark:hover:bg-green-950/30'
             : 'hover:bg-green-50 hover:text-green-500 dark:hover:bg-green-950/30'
