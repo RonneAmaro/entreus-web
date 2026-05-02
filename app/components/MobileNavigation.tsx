@@ -331,13 +331,13 @@ export default function MobileNavigation({
         )}
       </button>
 
-      <nav className="fixed bottom-0 left-0 z-50 grid h-16 w-full grid-cols-4 border-t border-zinc-200 bg-white dark:border-zinc-800 dark:bg-black lg:hidden">
+      <nav className="fixed bottom-0 left-0 z-50 grid h-16 w-full grid-cols-5 border-t border-zinc-200 bg-white dark:border-zinc-800 dark:bg-black lg:hidden">
         <Link
           href="/feed"
           className="flex items-center justify-center text-zinc-800 dark:text-zinc-100"
           aria-label="Página inicial"
         >
-          <Home className="h-7 w-7" />
+          <Home className="h-6 w-6" />
         </Link>
 
         <Link
@@ -345,7 +345,15 @@ export default function MobileNavigation({
           className="flex items-center justify-center text-zinc-800 dark:text-zinc-100"
           aria-label="Explorar"
         >
-          <Compass className="h-7 w-7" />
+          <Compass className="h-6 w-6" />
+        </Link>
+
+        <Link
+          href="/saved"
+          className="flex items-center justify-center text-zinc-800 dark:text-zinc-100"
+          aria-label="Salvos"
+        >
+          <Bookmark className="h-6 w-6" />
         </Link>
 
         <Link
@@ -353,10 +361,10 @@ export default function MobileNavigation({
           className="relative flex items-center justify-center text-zinc-800 dark:text-zinc-100"
           aria-label="Notificações"
         >
-          <Bell className="h-7 w-7" />
+          <Bell className="h-6 w-6" />
 
           {unreadNotificationsCount > 0 && (
-            <span className="absolute right-8 top-2 flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white">
+            <span className="absolute left-1/2 top-2 ml-2 flex min-h-[17px] min-w-[17px] items-center justify-center rounded-full bg-red-600 px-1 text-[9px] font-bold text-white">
               {unreadNotificationsCount > 99 ? '99+' : unreadNotificationsCount}
             </span>
           )}
@@ -367,7 +375,7 @@ export default function MobileNavigation({
           className="flex items-center justify-center text-zinc-800 dark:text-zinc-100"
           aria-label="Perfil"
         >
-          <User className="h-7 w-7" />
+          <User className="h-6 w-6" />
         </Link>
       </nav>
     </>
