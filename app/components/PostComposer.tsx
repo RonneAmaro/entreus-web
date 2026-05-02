@@ -231,7 +231,7 @@ export default function PostComposer({
             value={content}
             onChange={(event) => setContent(event.target.value)}
             placeholder={`O que está acontecendo, ${userName}?`}
-            className="min-h-[68px] w-full resize-none border-0 bg-transparent px-0 py-2 text-lg text-zinc-900 outline-none placeholder:text-zinc-500 dark:text-zinc-100 dark:placeholder:text-zinc-500 sm:min-h-[78px] sm:text-xl"
+            className="min-h-[76px] w-full resize-none border-0 bg-transparent px-0 py-2 text-lg text-zinc-900 outline-none placeholder:text-zinc-500 dark:text-zinc-100 dark:placeholder:text-zinc-500 sm:min-h-[92px] sm:text-xl"
           />
 
           {media.length > 0 && (
@@ -292,99 +292,101 @@ export default function PostComposer({
             </p>
           )}
 
-          <div className="mt-3 border-t border-zinc-200 pt-3 dark:border-zinc-800">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                <input
-                  ref={imageInputRef}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  multiple
-                  className="hidden"
-                  onChange={(event) => addFiles(event.target.files)}
-                />
+          <div className="mt-4 border-t border-zinc-200 pt-3 dark:border-zinc-800">
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                  <input
+                    ref={imageInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    multiple
+                    className="hidden"
+                    onChange={(event) => addFiles(event.target.files)}
+                  />
 
-                <input
-                  ref={videoInputRef}
-                  type="file"
-                  accept="video/mp4,video/webm,video/ogg"
-                  multiple
-                  className="hidden"
-                  onChange={(event) => addFiles(event.target.files)}
-                />
+                  <input
+                    ref={videoInputRef}
+                    type="file"
+                    accept="video/mp4,video/webm,video/ogg"
+                    multiple
+                    className="hidden"
+                    onChange={(event) => addFiles(event.target.files)}
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => imageInputRef.current?.click()}
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-blue-500 transition hover:bg-blue-50 dark:hover:bg-blue-950/30"
+                    title="Adicionar imagens"
+                  >
+                    <ImagePlus className="h-5 w-5" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => videoInputRef.current?.click()}
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-blue-500 transition hover:bg-blue-50 dark:hover:bg-blue-950/30"
+                    title="Adicionar vídeos"
+                  >
+                    <Video className="h-5 w-5" />
+                  </button>
+
+                  <div className="relative min-w-[132px] flex-1 sm:flex-none">
+                    <select
+                      value={category}
+                      onChange={(event) => setCategory(event.target.value)}
+                      className="h-10 w-full appearance-none rounded-full border border-zinc-200 bg-transparent pl-9 pr-4 text-sm font-semibold text-zinc-700 outline-none transition hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-900 sm:w-[150px]"
+                      title="Categoria"
+                    >
+                      {CATEGORY_OPTIONS.map((item) => (
+                        <option key={item.value} value={item.value}>
+                          {item.label}
+                        </option>
+                      ))}
+                    </select>
+
+                    <Tag className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+                  </div>
+
+                  <div className="relative min-w-[132px] flex-1 sm:flex-none">
+                    <select
+                      value={visibility}
+                      onChange={(event) => setVisibility(event.target.value as VisibilityType)}
+                      className="h-10 w-full appearance-none rounded-full border border-zinc-200 bg-transparent pl-9 pr-4 text-sm font-semibold text-zinc-700 outline-none transition hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-900 sm:w-[150px]"
+                      title="Privacidade"
+                    >
+                      {VISIBILITY_OPTIONS.map((item) => (
+                        <option key={item.value} value={item.value}>
+                          {item.label}
+                        </option>
+                      ))}
+                    </select>
+
+                    <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500">
+                      {selectedVisibility?.icon}
+                    </span>
+                  </div>
+                </div>
 
                 <button
                   type="button"
-                  onClick={() => imageInputRef.current?.click()}
-                  className="flex h-9 w-9 items-center justify-center rounded-full text-blue-500 transition hover:bg-blue-50 dark:hover:bg-blue-950/30"
-                  title="Adicionar imagens"
+                  disabled={submitting || !canPublish}
+                  onClick={handleSubmit}
+                  className="flex h-10 w-full items-center justify-center gap-2 rounded-full bg-zinc-900 px-6 text-sm font-bold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-black sm:w-auto sm:min-w-[110px]"
                 >
-                  <ImagePlus className="h-5 w-5" />
+                  <Send className="h-4 w-4" />
+                  {submitting ? 'Publicando...' : 'Postar'}
                 </button>
-
-                <button
-                  type="button"
-                  onClick={() => videoInputRef.current?.click()}
-                  className="flex h-9 w-9 items-center justify-center rounded-full text-blue-500 transition hover:bg-blue-50 dark:hover:bg-blue-950/30"
-                  title="Adicionar vídeos"
-                >
-                  <Video className="h-5 w-5" />
-                </button>
-
-                <div className="relative">
-                  <select
-                    value={category}
-                    onChange={(event) => setCategory(event.target.value)}
-                    className="h-9 max-w-[142px] appearance-none rounded-full border border-zinc-200 bg-transparent pl-8 pr-3 text-xs font-semibold text-zinc-700 outline-none transition hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-900 sm:max-w-none sm:text-sm"
-                    title="Categoria"
-                  >
-                    {CATEGORY_OPTIONS.map((item) => (
-                      <option key={item.value} value={item.value}>
-                        {item.label}
-                      </option>
-                    ))}
-                  </select>
-
-                  <Tag className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
-                </div>
-
-                <div className="relative">
-                  <select
-                    value={visibility}
-                    onChange={(event) => setVisibility(event.target.value as VisibilityType)}
-                    className="h-9 max-w-[132px] appearance-none rounded-full border border-zinc-200 bg-transparent pl-8 pr-3 text-xs font-semibold text-zinc-700 outline-none transition hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-900 sm:max-w-none sm:text-sm"
-                    title="Privacidade"
-                  >
-                    {VISIBILITY_OPTIONS.map((item) => (
-                      <option key={item.value} value={item.value}>
-                        {item.label}
-                      </option>
-                    ))}
-                  </select>
-
-                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500">
-                    {selectedVisibility?.icon}
-                  </span>
-                </div>
               </div>
 
-              <button
-                type="button"
-                disabled={submitting || !canPublish}
-                onClick={handleSubmit}
-                className="flex h-9 min-w-[98px] items-center justify-center gap-2 rounded-full bg-zinc-900 px-5 text-sm font-bold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-black"
-              >
-                <Send className="h-4 w-4" />
-                {submitting ? 'Publicando...' : 'Postar'}
-              </button>
-            </div>
-
-            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-zinc-500 dark:text-zinc-500">
-              <span>{selectedCategory?.label}</span>
-              <span>•</span>
-              <span>{selectedVisibility?.label}</span>
-              <span>•</span>
-              <span>{media.length}/{MAX_MEDIA_FILES} mídias</span>
+              <div className="flex flex-wrap items-center gap-2 pl-1 text-xs text-zinc-500 dark:text-zinc-500">
+                <span>{selectedCategory?.label}</span>
+                <span>•</span>
+                <span>{selectedVisibility?.label}</span>
+                <span>•</span>
+                <span>{media.length}/{MAX_MEDIA_FILES} mídias</span>
+              </div>
             </div>
           </div>
         </div>
