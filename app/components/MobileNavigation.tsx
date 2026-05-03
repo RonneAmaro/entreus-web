@@ -116,7 +116,7 @@ export default function MobileNavigation({
 
   return (
     <>
-      <header className="fixed left-0 top-0 z-50 flex h-16 w-full items-center justify-between border-b border-zinc-200 bg-white px-4 dark:border-zinc-800 dark:bg-black lg:hidden">
+      <header className="fixed left-0 top-0 z-50 flex h-14 w-full items-center justify-between border-b border-zinc-200 bg-white px-4 dark:border-zinc-800 dark:bg-black lg:hidden">
         <button
           type="button"
           onClick={() => setOpen(true)}
@@ -138,13 +138,17 @@ export default function MobileNavigation({
           )}
         </button>
 
-        <Link href="/feed" className="flex items-center justify-center">
+        <Link
+          href="/feed"
+          className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center"
+          aria-label="Ir para a página inicial"
+        >
           <Image
             src="/logo.png"
             alt="EntreUS"
-            width={120}
-            height={50}
-            className="h-auto w-[105px] object-contain"
+            width={96}
+            height={44}
+            className="h-auto w-[82px] object-contain"
             priority
           />
         </Link>
