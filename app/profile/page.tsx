@@ -1,8 +1,12 @@
 'use client'
 
+import AppSidebar from '../components/AppSidebar'
+import MobileNavigation from '../components/MobileNavigation'
+import BrandHeader from '../components/BrandHeader'
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTheme } from 'next-themes'
 import { ShieldAlert } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import PostCard from '../components/PostCard'
@@ -94,14 +98,18 @@ type FeedItem =
 
 export default function ProfilePage() {
   const router = useRouter()
+  const { theme, setTheme } = useTheme()
 
+  const [mounted, setMounted] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
   const [message, setMessage] = useState('')
 
   const [userId, setUserId] = useState('')
+  const [email, setEmail] = useState('')
   const [profile, setProfile] = useState<Profile | null>(null)
+  const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0)
 
   const [username, setUsername] = useState('')
   const [displayName, setDisplayName] = useState('')
@@ -122,6 +130,10 @@ export default function ProfilePage() {
   const [reportedPostIds, setReportedPostIds] = useState<string[]>([])
 
   useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  useEffect(() => {
     async function loadPage() {
       const {
         data: { user },
@@ -133,6 +145,7 @@ export default function ProfilePage() {
       }
 
       setUserId(user.id)
+      setEmail(user.email || '')
 
       const { data, error } = await supabase
         .from('profiles')
@@ -175,6 +188,7 @@ export default function ProfilePage() {
         loadComments(),
         loadBookmarks(user.id),
         loadReposts(loadedProfile),
+        loadUnreadNotificationsCount(user.id),
       ])
 
       setLoading(false)
@@ -182,6 +196,21 @@ export default function ProfilePage() {
 
     loadPage()
   }, [router])
+
+  async function loadUnreadNotificationsCount(currentUserId: string) {
+    const { count, error } = await supabase
+      .from('notifications')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', currentUserId)
+      .eq('read', false)
+
+    if (error) {
+      setMessage('Erro ao carregar notificações: ' + error.message)
+      return
+    }
+
+    setUnreadNotificationsCount(count || 0)
+  }
 
   function sanitizeUsername(value: string) {
     return value
@@ -823,6 +852,19 @@ export default function ProfilePage() {
     setReportingPostId(null)
   }
 
+  async function handleLogout() {
+    await supabase.auth.signOut()
+    router.push('/login')
+  }
+
+  function handleToggleTheme() {
+    setTheme(theme === 'dark' ? 'light' : 'dark')
+  }
+
+  function handlePostClick() {
+    router.push('/feed')
+  }
+
   const feedItems = useMemo<FeedItem[]>(() => {
     const postMap = new Map<string, Post>()
 
@@ -863,7 +905,7 @@ export default function ProfilePage() {
 
   if (loading) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-white px-4 text-black dark:bg-black dark:text-white">
+      <main className="flex min-h-screen items-center justify-center bg-zinc-50 px-4 text-black dark:bg-black dark:text-white">
         <p>Carregando perfil...</p>
       </main>
     )
@@ -873,44 +915,62 @@ export default function ProfilePage() {
   const profileName = displayName || username || 'Usuário'
 
   return (
-    <main className="min-h-screen bg-white text-black transition-colors dark:bg-black dark:text-white">
-      <header className="border-b border-zinc-200 px-4 py-4 dark:border-zinc-800 sm:px-6">
-        <div className="mx-auto flex max-w-4xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold sm:text-3xl">EntreUS</h1>
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">Meu perfil</p>
-          </div>
+    <main className="min-h-screen overflow-x-hidden bg-zinc-50 text-black transition-colors dark:bg-black dark:text-white">
+      <AppSidebar
+        unreadNotificationsCount={unreadNotificationsCount}
+        mounted={mounted}
+        theme={theme}
+        onToggleTheme={handleToggleTheme}
+        onLogout={handleLogout}
+      />
 
-          <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
-            {username && (
+      <MobileNavigation
+        email={email}
+        displayName={displayName || username || 'Minha conta'}
+        avatarUrl={avatarPreview || avatarUrl || null}
+        unreadNotificationsCount={unreadNotificationsCount}
+        mounted={mounted}
+        theme={theme}
+        onToggleTheme={handleToggleTheme}
+        onLogout={handleLogout}
+        onPostClick={handlePostClick}
+      />
+
+      <section className="w-full max-w-4xl overflow-x-hidden px-4 py-20 pb-24 sm:px-6 lg:ml-[calc(270px+((100vw-270px-56rem)/2))] lg:py-8">
+        <BrandHeader
+          subtitle="Meu perfil"
+          description="Edite suas informações, personalize sua presença e acompanhe suas publicações e reposts."
+          compact
+          rightContent={
+            <div className="flex flex-wrap gap-2">
+              {username && (
+                <Link
+                  href={publicProfileUrl}
+                  className="rounded-full border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-900 transition hover:bg-zinc-100 dark:border-zinc-700 dark:bg-black dark:text-white dark:hover:bg-zinc-900"
+                >
+                  Ver perfil público
+                </Link>
+              )}
+
               <Link
-                href={publicProfileUrl}
-                className="w-full rounded-xl border border-zinc-300 px-4 py-2 text-center hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900 sm:w-auto"
+                href="/feed"
+                className="rounded-full border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-900 transition hover:bg-zinc-100 dark:border-zinc-700 dark:bg-black dark:text-white dark:hover:bg-zinc-900"
               >
-                Ver perfil público
+                Voltar ao feed
               </Link>
-            )}
+            </div>
+          }
+        />
 
-            <Link
-              href="/feed"
-              className="w-full rounded-xl border border-zinc-300 px-4 py-2 text-center hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900 sm:w-auto"
-            >
-              Voltar ao feed
-            </Link>
-          </div>
-        </div>
-      </header>
-
-      <section className="mx-auto max-w-4xl px-4 py-6 sm:px-6 sm:py-8">
         {message && (
-          <div className="mb-4 rounded-2xl border border-zinc-200 bg-white p-4 text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300">
+          <div className="mt-5 rounded-2xl border border-zinc-200 bg-white p-4 text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300">
             {message}
           </div>
         )}
 
         <form
           onSubmit={handleSaveProfile}
-          className="rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900 sm:p-6"
+          className="mt-5 rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900 sm:p-6"
         >
           <div className="flex flex-col gap-6">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
@@ -986,7 +1046,7 @@ export default function ProfilePage() {
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
                   placeholder="Seu nome visível"
-                  className="w-full rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 sm:text-base"
+                  className="w-full rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none transition focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 sm:text-base"
                 />
               </div>
 
@@ -1000,7 +1060,7 @@ export default function ProfilePage() {
                   value={username}
                   onChange={(e) => setUsername(sanitizeUsername(e.target.value))}
                   placeholder="seu_username"
-                  className="w-full rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 sm:text-base"
+                  className="w-full rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none transition focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 sm:text-base"
                 />
 
                 <p className="mt-2 text-xs text-zinc-500">
@@ -1017,7 +1077,7 @@ export default function ProfilePage() {
                   value={bio}
                   onChange={(e) => setBio(e.target.value)}
                   placeholder="Fale um pouco sobre você..."
-                  className="min-h-28 w-full resize-none rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 sm:text-base"
+                  className="min-h-28 w-full resize-none rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none transition focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 sm:text-base"
                 />
               </div>
 
@@ -1032,7 +1092,7 @@ export default function ProfilePage() {
                     value={country}
                     onChange={(e) => setCountry(e.target.value)}
                     placeholder="Brasil"
-                    className="w-full rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 sm:text-base"
+                    className="w-full rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none transition focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 sm:text-base"
                   />
                 </div>
 
@@ -1045,7 +1105,7 @@ export default function ProfilePage() {
                     type="date"
                     value={birthDate}
                     onChange={(e) => setBirthDate(e.target.value)}
-                    className="w-full rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 sm:text-base"
+                    className="w-full rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none transition focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 sm:text-base"
                   />
                 </div>
               </div>
@@ -1125,7 +1185,7 @@ export default function ProfilePage() {
 
             <Link
               href="/feed"
-              className="rounded-full border border-zinc-300 px-4 py-2 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900"
+              className="rounded-full border border-zinc-300 bg-white px-4 py-2 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:bg-black dark:hover:bg-zinc-900"
             >
               Ir ao feed
             </Link>

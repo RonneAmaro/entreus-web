@@ -23,8 +23,8 @@ export default function BrandHeader({
   compact = false,
 }: BrandHeaderProps) {
   return (
-    <header className="border-b border-zinc-200 bg-white px-4 py-4 transition-colors dark:border-zinc-800 dark:bg-black sm:px-6">
-      <div className="mx-auto flex max-w-4xl flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <header className="border-b border-zinc-200 bg-transparent pb-4 transition-colors dark:border-zinc-800">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 items-center gap-3">
           {backHref && (
             <Link
@@ -38,13 +38,13 @@ export default function BrandHeader({
           )}
 
           <Link href="/feed" className="flex min-w-0 items-center gap-3">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-950 dark:border-zinc-800 dark:bg-zinc-950">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-950 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
               <Image
-                src="/logo.png"
-                alt="Logo EntreUS"
-                width={44}
-                height={44}
-                className="h-full w-full object-contain p-1"
+                src="/logo-icon.png"
+                alt="Ícone EntreUS"
+                width={48}
+                height={48}
+                className="h-full w-full object-contain p-1.5"
                 priority
               />
             </div>
@@ -75,11 +75,9 @@ export default function BrandHeader({
       </div>
 
       {description && (
-        <div className="mx-auto mt-3 max-w-4xl">
-          <p className="max-w-2xl text-sm text-zinc-500 dark:text-zinc-400">
-            {description}
-          </p>
-        </div>
+        <p className="mt-3 max-w-2xl text-sm text-zinc-500 dark:text-zinc-400">
+          {description}
+        </p>
       )}
     </header>
   )
