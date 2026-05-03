@@ -1,35 +1,86 @@
-import Image from "next/image";
+'use client'
+
+import Image from 'next/image'
+import Link from 'next/link'
+import { ArrowLeft } from 'lucide-react'
+import type { ReactNode } from 'react'
 
 type BrandHeaderProps = {
-  size?: "small" | "medium" | "large";
-  showSlogan?: boolean;
-};
+  subtitle?: string
+  description?: string
+  backHref?: string
+  backLabel?: string
+  rightContent?: ReactNode
+  compact?: boolean
+}
 
 export default function BrandHeader({
-  size = "medium",
-  showSlogan = true,
+  subtitle,
+  description,
+  backHref,
+  backLabel = 'Voltar',
+  rightContent,
+  compact = false,
 }: BrandHeaderProps) {
-  const logoSize =
-    size === "small" ? 70 :
-    size === "medium" ? 95 :
-    120;
-
   return (
-    <div className="flex flex-col items-center justify-center">
-      <Image
-        src="/logo.png"
-        alt="Logo EntreUS"
-        width={logoSize}
-        height={logoSize}
-        priority
-        className="object-contain"
-      />
+    <header className="border-b border-zinc-200 bg-white px-4 py-4 transition-colors dark:border-zinc-800 dark:bg-black sm:px-6">
+      <div className="mx-auto flex max-w-4xl flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-center gap-3">
+          {backHref && (
+            <Link
+              href={backHref}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-300 text-zinc-800 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-100 dark:hover:bg-zinc-900"
+              aria-label={backLabel}
+              title={backLabel}
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </Link>
+          )}
 
-      {showSlogan && (
-        <span className="mt-1 text-sm font-medium text-gray-600 dark:text-gray-300">
-          Só Entre Nós
-        </span>
+          <Link href="/feed" className="flex min-w-0 items-center gap-3">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-950 dark:border-zinc-800 dark:bg-zinc-950">
+              <Image
+                src="/logo.png"
+                alt="Logo EntreUS"
+                width={44}
+                height={44}
+                className="h-full w-full object-contain p-1"
+                priority
+              />
+            </div>
+
+            <div className="min-w-0">
+              <h1
+                className={`truncate font-extrabold tracking-tight text-zinc-950 dark:text-white ${
+                  compact ? 'text-2xl' : 'text-3xl'
+                }`}
+              >
+                Entre<span className="text-blue-500">US</span>
+              </h1>
+
+              {subtitle && (
+                <p className="truncate text-sm text-zinc-500 dark:text-zinc-400">
+                  {subtitle}
+                </p>
+              )}
+            </div>
+          </Link>
+        </div>
+
+        {rightContent && (
+          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+            {rightContent}
+          </div>
+        )}
+      </div>
+
+      {description && (
+        <div className="mx-auto mt-3 max-w-4xl">
+          <p className="max-w-2xl text-sm text-zinc-500 dark:text-zinc-400">
+            {description}
+          </p>
+        </div>
       )}
-    </div>
-  );
+    </header>
+  )
 }

@@ -1,71 +1,142 @@
 'use client'
 
+import AppSidebar from '../components/AppSidebar'
+import MobileNavigation from '../components/MobileNavigation'
+import BrandHeader from '../components/BrandHeader'
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
+import { Bell, CheckCheck, Heart, MessageCircle, Repeat2, UserPlus } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTheme } from 'next-themes'
 import { supabase } from '@/lib/supabase'
 
-type NotificationRow = {
-  id: string
-  user_id: string
-  actor_id: string
-  type: 'follow' | 'like' | 'comment'
-  post_id: string | null
-  comment_id: string | null
-  created_at: string
-  read: boolean
+type CurrentProfile = {
+  username: string | null
+  display_name: string | null
+  avatar_url: string | null
+  show_sensitive_content?: boolean | null
 }
 
-type ActorProfile = {
+type Notification = {
   id: string
-  username: string
+  user_id: string
+  actor_id: string | null
+  type: string
+  post_id: string | null
+  comment_id: string | null
+  read: boolean | null
+  created_at: string
+}
+
+type ProfileSummary = {
+  id: string
+  username: string | null
   display_name: string | null
   avatar_url: string | null
 }
 
-type PostPreview = {
+type PostSummary = {
   id: string
   content: string | null
-  image_url: string | null
 }
 
-type CommentPreview = {
+type CommentSummary = {
   id: string
-  content: string
+  content: string | null
 }
 
-type NotificationItem = {
-  id: string
-  user_id: string
-  actor_id: string
-  type: 'follow' | 'like' | 'comment'
-  post_id: string | null
-  comment_id: string | null
-  created_at: string
-  read: boolean
-  actor_profile: {
-    username: string
-    display_name: string | null
-    avatar_url: string | null
-  } | null
-  post_preview: {
-    content: string | null
-    image_url: string | null
-  } | null
-  comment_preview: {
-    content: string
-  } | null
+type NotificationView = Notification & {
+  actor: ProfileSummary | null
+  post: PostSummary | null
+  comment: CommentSummary | null
+}
+
+function getInitial(text: string) {
+  if (!text) return 'U'
+  return text.slice(0, 1).toUpperCase()
+}
+
+function getNotificationIcon(type: string) {
+  if (type === 'like') return <Heart className="h-5 w-5 text-red-500" />
+  if (type === 'comment') return <MessageCircle className="h-5 w-5 text-blue-500" />
+  if (type === 'repost') return <Repeat2 className="h-5 w-5 text-green-500" />
+  if (type === 'follow') return <UserPlus className="h-5 w-5 text-blue-500" />
+
+  return <Bell className="h-5 w-5 text-zinc-500" />
+}
+
+function getNotificationTitle(notification: NotificationView) {
+  const actorName =
+    notification.actor?.display_name ||
+    notification.actor?.username ||
+    'Alguém'
+
+  if (notification.type === 'like') {
+    return `${actorName} curtiu sua publicação.`
+  }
+
+  if (notification.type === 'comment') {
+    return `${actorName} comentou na sua publicação.`
+  }
+
+  if (notification.type === 'repost') {
+    return `${actorName} repostou sua publicação.`
+  }
+
+  if (notification.type === 'follow') {
+    return `${actorName} começou a seguir você.`
+  }
+
+  return `${actorName} interagiu com você.`
+}
+
+function getPostPreview(content: string | null) {
+  if (!content) return 'Publicação sem texto.'
+
+  const clean = content.replace(/\s+/g, ' ').trim()
+
+  if (clean.length <= 120) return clean
+
+  return `${clean.slice(0, 120)}...`
+}
+
+function getNotificationHref(notification: NotificationView) {
+  if (notification.type === 'follow' && notification.actor?.username) {
+    return `/u/${notification.actor.username}`
+  }
+
+  if (notification.post_id) {
+    return `/feed?post=${notification.post_id}`
+  }
+
+  return '/notifications'
 }
 
 export default function NotificationsPage() {
   const router = useRouter()
+  const { theme, setTheme } = useTheme()
 
-  const [loading, setLoading] = useState(true)
-  const [notifications, setNotifications] = useState<NotificationItem[]>([])
+  const [mounted, setMounted] = useState(false)
+  const [userId, setUserId] = useState('')
+  const [email, setEmail] = useState('')
+  const [currentProfile, setCurrentProfile] = useState<CurrentProfile | null>(null)
+
+  const [notifications, setNotifications] = useState<NotificationView[]>([])
+  const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0)
+
   const [message, setMessage] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [markingAll, setMarkingAll] = useState(false)
 
   useEffect(() => {
-    async function loadNotifications() {
+    setMounted(true)
+  }, [])
+
+  useEffect(() => {
+    async function loadPage() {
+      setLoading(true)
+      setMessage('')
+
       const {
         data: { user },
       } = await supabase.auth.getUser()
@@ -75,259 +146,380 @@ export default function NotificationsPage() {
         return
       }
 
-      const { data, error } = await supabase
-        .from('notifications')
-        .select(`
-          id,
-          user_id,
-          actor_id,
-          type,
-          post_id,
-          comment_id,
-          created_at,
-          read
-        `)
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
+      setUserId(user.id)
+      setEmail(user.email || '')
 
-      if (error) {
-        setMessage('Erro ao carregar notificações: ' + error.message)
-        setLoading(false)
-        return
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('username, display_name, avatar_url, show_sensitive_content')
+        .eq('id', user.id)
+        .maybeSingle()
+
+      if (profileData) {
+        setCurrentProfile({
+          username: profileData.username,
+          display_name: profileData.display_name,
+          avatar_url: profileData.avatar_url,
+          show_sensitive_content: profileData.show_sensitive_content || false,
+        })
       }
 
-      const notificationsData: NotificationRow[] = data || []
-
-      const actorIds = [...new Set(notificationsData.map((item) => item.actor_id).filter(Boolean))]
-      const postIds = [...new Set(notificationsData.map((item) => item.post_id).filter(Boolean))] as string[]
-      const commentIds = [...new Set(notificationsData.map((item) => item.comment_id).filter(Boolean))] as string[]
-
-      let actorProfilesMap: Record<string, ActorProfile> = {}
-      let postsMap: Record<string, PostPreview> = {}
-      let commentsMap: Record<string, CommentPreview> = {}
-
-      if (actorIds.length > 0) {
-        const { data: profilesData, error: profilesError } = await supabase
-          .from('profiles')
-          .select('id, username, display_name, avatar_url')
-          .in('id', actorIds)
-
-        if (profilesError) {
-          setMessage('Erro ao carregar perfis das notificações: ' + profilesError.message)
-          setLoading(false)
-          return
-        }
-
-        actorProfilesMap = Object.fromEntries(
-          (profilesData || []).map((profile) => [profile.id, profile])
-        )
-      }
-
-      if (postIds.length > 0) {
-        const { data: postsData, error: postsError } = await supabase
-          .from('posts')
-          .select('id, content, image_url')
-          .in('id', postIds)
-
-        if (postsError) {
-          setMessage('Erro ao carregar posts das notificações: ' + postsError.message)
-          setLoading(false)
-          return
-        }
-
-        postsMap = Object.fromEntries(
-          (postsData || []).map((post) => [post.id, post])
-        )
-      }
-
-      if (commentIds.length > 0) {
-        const { data: commentsData, error: commentsError } = await supabase
-          .from('comments')
-          .select('id, content')
-          .in('id', commentIds)
-
-        if (commentsError) {
-          setMessage('Erro ao carregar comentários das notificações: ' + commentsError.message)
-          setLoading(false)
-          return
-        }
-
-        commentsMap = Object.fromEntries(
-          (commentsData || []).map((comment) => [comment.id, comment])
-        )
-      }
-
-      const finalNotifications: NotificationItem[] = notificationsData.map((item) => ({
-        ...item,
-        actor_profile: actorProfilesMap[item.actor_id]
-          ? {
-              username: actorProfilesMap[item.actor_id].username,
-              display_name: actorProfilesMap[item.actor_id].display_name,
-              avatar_url: actorProfilesMap[item.actor_id].avatar_url,
-            }
-          : null,
-        post_preview: item.post_id && postsMap[item.post_id]
-          ? {
-              content: postsMap[item.post_id].content,
-              image_url: postsMap[item.post_id].image_url,
-            }
-          : null,
-        comment_preview: item.comment_id && commentsMap[item.comment_id]
-          ? {
-              content: commentsMap[item.comment_id].content,
-            }
-          : null,
-      }))
-
-      setNotifications(finalNotifications)
-
-      const unreadIds = finalNotifications.filter((item) => !item.read).map((item) => item.id)
-
-      if (unreadIds.length > 0) {
-        await supabase
-          .from('notifications')
-          .update({ read: true })
-          .in('id', unreadIds)
-      }
+      await Promise.all([
+        loadNotifications(user.id),
+        loadUnreadNotificationsCount(user.id),
+      ])
 
       setLoading(false)
     }
 
-    loadNotifications()
+    loadPage()
   }, [router])
 
-  function truncateText(text: string | null | undefined, max = 90) {
-    if (!text || !text.trim()) return ''
-    const clean = text.trim()
-    if (clean.length <= max) return clean
-    return clean.slice(0, max) + '...'
+  async function loadUnreadNotificationsCount(currentUserId: string = userId) {
+    if (!currentUserId) return
+
+    const { count, error } = await supabase
+      .from('notifications')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', currentUserId)
+      .eq('read', false)
+
+    if (error) {
+      setMessage('Erro ao carregar contagem de notificações: ' + error.message)
+      return
+    }
+
+    setUnreadNotificationsCount(count || 0)
   }
 
-  function getNotificationTitle(item: NotificationItem) {
-    const actorName =
-      item.actor_profile?.display_name || item.actor_profile?.username || 'Usuário'
+  async function loadNotifications(currentUserId: string = userId) {
+    if (!currentUserId) return
 
-    if (item.type === 'follow') {
-      return `${actorName} começou a seguir você.`
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('id, user_id, actor_id, type, post_id, comment_id, read, created_at')
+      .eq('user_id', currentUserId)
+      .order('created_at', { ascending: false })
+      .limit(80)
+
+    if (error) {
+      setMessage('Erro ao carregar notificações: ' + error.message)
+      return
     }
 
-    if (item.type === 'like') {
-      return `${actorName} curtiu sua publicação.`
+    const rawNotifications = (data || []) as Notification[]
+
+    const actorIds = Array.from(
+      new Set(rawNotifications.map((item) => item.actor_id).filter(Boolean))
+    ) as string[]
+
+    const postIds = Array.from(
+      new Set(rawNotifications.map((item) => item.post_id).filter(Boolean))
+    ) as string[]
+
+    const commentIds = Array.from(
+      new Set(rawNotifications.map((item) => item.comment_id).filter(Boolean))
+    ) as string[]
+
+    let profilesById: Record<string, ProfileSummary> = {}
+    let postsById: Record<string, PostSummary> = {}
+    let commentsById: Record<string, CommentSummary> = {}
+
+    if (actorIds.length > 0) {
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, username, display_name, avatar_url')
+        .in('id', actorIds)
+
+      if (profilesError) {
+        console.error('Erro ao carregar perfis das notificações:', profilesError.message)
+      }
+
+      profilesById = ((profilesData || []) as ProfileSummary[]).reduce(
+        (acc, profile) => {
+          acc[profile.id] = profile
+          return acc
+        },
+        {} as Record<string, ProfileSummary>
+      )
     }
 
-    if (item.type === 'comment') {
-      return `${actorName} comentou na sua publicação.`
+    if (postIds.length > 0) {
+      const { data: postsData, error: postsError } = await supabase
+        .from('posts')
+        .select('id, content')
+        .in('id', postIds)
+
+      if (postsError) {
+        console.error('Erro ao carregar posts das notificações:', postsError.message)
+      }
+
+      postsById = ((postsData || []) as PostSummary[]).reduce(
+        (acc, post) => {
+          acc[post.id] = post
+          return acc
+        },
+        {} as Record<string, PostSummary>
+      )
     }
 
-    return 'Você recebeu uma nova notificação.'
+    if (commentIds.length > 0) {
+      const { data: commentsData, error: commentsError } = await supabase
+        .from('comments')
+        .select('id, content')
+        .in('id', commentIds)
+
+      if (commentsError) {
+        console.error('Erro ao carregar comentários das notificações:', commentsError.message)
+      }
+
+      commentsById = ((commentsData || []) as CommentSummary[]).reduce(
+        (acc, comment) => {
+          acc[comment.id] = comment
+          return acc
+        },
+        {} as Record<string, CommentSummary>
+      )
+    }
+
+    const normalizedNotifications: NotificationView[] = rawNotifications.map((item) => ({
+      ...item,
+      actor: item.actor_id ? profilesById[item.actor_id] || null : null,
+      post: item.post_id ? postsById[item.post_id] || null : null,
+      comment: item.comment_id ? commentsById[item.comment_id] || null : null,
+    }))
+
+    setNotifications(normalizedNotifications)
   }
 
-  function getNotificationLink(item: NotificationItem) {
-    if (item.post_id) {
-      return `/feed?post=${item.post_id}`
+  async function handleMarkNotificationAsRead(notificationId: string) {
+    if (!userId) return
+
+    setNotifications((current) =>
+      current.map((notification) =>
+        notification.id === notificationId
+          ? { ...notification, read: true }
+          : notification
+      )
+    )
+
+    const { error } = await supabase
+      .from('notifications')
+      .update({ read: true })
+      .eq('id', notificationId)
+      .eq('user_id', userId)
+
+    if (error) {
+      setMessage('Erro ao marcar notificação como lida: ' + error.message)
+      await loadNotifications(userId)
+      return
     }
 
-    if (item.actor_profile?.username) {
-      return `/u/${item.actor_profile.username}`
-    }
-
-    return '/feed'
+    await loadUnreadNotificationsCount(userId)
   }
+
+  async function handleMarkAllAsRead() {
+    if (!userId) return
+
+    setMarkingAll(true)
+    setMessage('')
+
+    setNotifications((current) =>
+      current.map((notification) => ({
+        ...notification,
+        read: true,
+      }))
+    )
+
+    const { error } = await supabase
+      .from('notifications')
+      .update({ read: true })
+      .eq('user_id', userId)
+      .eq('read', false)
+
+    if (error) {
+      setMessage('Erro ao marcar notificações como lidas: ' + error.message)
+      await loadNotifications(userId)
+      await loadUnreadNotificationsCount(userId)
+      setMarkingAll(false)
+      return
+    }
+
+    setUnreadNotificationsCount(0)
+    setMarkingAll(false)
+  }
+
+  async function handleLogout() {
+    await supabase.auth.signOut()
+    router.push('/login')
+  }
+
+  function handleToggleTheme() {
+    setTheme(theme === 'dark' ? 'light' : 'dark')
+  }
+
+  function handlePostClick() {
+    router.push('/feed')
+  }
+
+  const hasUnread = useMemo(() => {
+    return notifications.some((notification) => !notification.read)
+  }, [notifications])
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-white text-black dark:bg-black dark:text-white flex items-center justify-center px-4">
+      <main className="flex min-h-screen items-center justify-center bg-zinc-50 px-4 text-black dark:bg-black dark:text-white">
         <p>Carregando notificações...</p>
       </main>
     )
   }
 
   return (
-    <main className="min-h-screen bg-white text-black dark:bg-black dark:text-white transition-colors">
-      <header className="border-b border-zinc-200 dark:border-zinc-800 px-4 sm:px-6 py-4">
-        <div className="max-w-4xl mx-auto flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold">EntreUS</h1>
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">Notificações</p>
-          </div>
+    <main className="min-h-screen overflow-x-hidden bg-zinc-50 text-black transition-colors dark:bg-black dark:text-white">
+      <AppSidebar
+        unreadNotificationsCount={unreadNotificationsCount}
+        mounted={mounted}
+        theme={theme}
+        onToggleTheme={handleToggleTheme}
+        onLogout={handleLogout}
+      />
 
-          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
-            <Link
-              href="/feed"
-              className="w-full sm:w-auto text-center border border-zinc-300 dark:border-zinc-700 px-4 py-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-900"
-            >
-              Voltar ao feed
-            </Link>
-          </div>
-        </div>
-      </header>
+      <MobileNavigation
+        email={email}
+        displayName={currentProfile?.display_name || currentProfile?.username || 'Minha conta'}
+        avatarUrl={currentProfile?.avatar_url || null}
+        unreadNotificationsCount={unreadNotificationsCount}
+        mounted={mounted}
+        theme={theme}
+        onToggleTheme={handleToggleTheme}
+        onLogout={handleLogout}
+        onPostClick={handlePostClick}
+      />
 
-      <section className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+      <section className="w-full max-w-3xl overflow-x-hidden px-4 py-20 pb-24 sm:px-6 lg:ml-[calc(270px+((100vw-270px-48rem)/2))] lg:py-8">
+        <BrandHeader
+          subtitle="Notificações"
+          description="Acompanhe curtidas, comentários, reposts e novos seguidores."
+          compact
+          rightContent={
+            hasUnread ? (
+              <button
+                type="button"
+                onClick={handleMarkAllAsRead}
+                disabled={markingAll}
+                className="inline-flex items-center justify-center gap-2 rounded-full border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-900 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-black dark:text-white dark:hover:bg-zinc-900"
+              >
+                <CheckCheck className="h-4 w-4" />
+                {markingAll ? 'Marcando...' : 'Marcar como lidas'}
+              </button>
+            ) : null
+          }
+        />
+
         {message && (
-          <div className="mb-4 bg-white dark:bg-zinc-900 rounded-2xl p-4 border border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300">
+          <p className="mt-4 rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300">
             {message}
-          </div>
+          </p>
         )}
 
-        <div className="space-y-4">
+        <div className="mt-5 space-y-4">
           {notifications.length === 0 && (
-            <div className="bg-white dark:bg-zinc-900 rounded-2xl p-4 sm:p-6 border border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400">
-              Nenhuma notificação ainda.
+            <div className="rounded-2xl border border-zinc-200 bg-white p-6 text-center text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
+              <Bell className="mx-auto mb-3 h-10 w-10 text-zinc-400" />
+
+              <p className="font-medium text-zinc-800 dark:text-zinc-200">
+                Nenhuma notificação ainda.
+              </p>
+
+              <p className="mt-1 text-sm">
+                Quando alguém curtir, comentar, repostar ou seguir você, aparecerá aqui.
+              </p>
+
+              <Link
+                href="/feed"
+                className="mt-5 inline-flex rounded-full bg-black px-5 py-2 text-sm font-semibold text-white transition hover:opacity-90 dark:bg-white dark:text-black"
+              >
+                Voltar para o feed
+              </Link>
             </div>
           )}
 
-          {notifications.map((item) => {
+          {notifications.map((notification) => {
             const actorName =
-              item.actor_profile?.display_name || item.actor_profile?.username || 'Usuário'
+              notification.actor?.display_name ||
+              notification.actor?.username ||
+              'Usuário'
+
+            const actorUsername = notification.actor?.username || 'usuario'
+            const actorAvatar = notification.actor?.avatar_url || ''
+            const href = getNotificationHref(notification)
+            const unread = !notification.read
 
             return (
               <Link
-                key={item.id}
-                href={getNotificationLink(item)}
-                className="block bg-white dark:bg-zinc-900 rounded-2xl p-4 sm:p-5 border border-zinc-200 dark:border-zinc-800 hover:opacity-95 transition"
+                key={notification.id}
+                href={href}
+                onClick={() => handleMarkNotificationAsRead(notification.id)}
+                className={`block rounded-2xl border p-4 transition hover:-translate-y-[1px] hover:shadow-sm dark:hover:bg-zinc-900 sm:p-5 ${
+                  unread
+                    ? 'border-blue-200 bg-blue-50 dark:border-blue-900/60 dark:bg-blue-950/20'
+                    : 'border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900'
+                }`}
               >
-                <div className="flex items-start gap-3 sm:gap-4">
-                  {item.actor_profile?.avatar_url ? (
-                    <img
-                      src={item.actor_profile.avatar_url}
-                      alt={actorName}
-                      className="w-12 h-12 rounded-full object-cover border border-zinc-300 dark:border-zinc-700 shrink-0"
-                    />
-                  ) : (
-                    <div className="w-12 h-12 rounded-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 flex items-center justify-center text-sm font-semibold text-zinc-700 dark:text-zinc-300 shrink-0">
-                      {actorName.charAt(0).toUpperCase()}
-                    </div>
-                  )}
-
-                  <div className="flex-1 min-w-0">
-                    <p className="text-black dark:text-white font-medium break-words text-sm sm:text-base">
-                      {getNotificationTitle(item)}
-                    </p>
-
-                    {item.type === 'comment' && item.comment_preview?.content && (
-                      <p className="mt-2 text-sm text-zinc-700 dark:text-zinc-300 break-words">
-                        <span className="font-medium">Comentário:</span>{' '}
-                        "{truncateText(item.comment_preview.content, 120)}"
-                      </p>
-                    )}
-
-                    {(item.type === 'comment' || item.type === 'like') && (
-                      <div className="mt-2">
-                        {item.post_preview?.content ? (
-                          <p className="text-sm text-zinc-500 dark:text-zinc-400 break-words">
-                            <span className="font-medium">No post:</span>{' '}
-                            "{truncateText(item.post_preview.content, 120)}"
-                          </p>
-                        ) : item.post_preview?.image_url ? (
-                          <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                            <span className="font-medium">No post:</span> publicação com imagem
-                          </p>
-                        ) : null}
+                <div className="flex items-start gap-4">
+                  <div className="relative shrink-0">
+                    {actorAvatar ? (
+                      <img
+                        src={actorAvatar}
+                        alt={actorName}
+                        className="h-12 w-12 rounded-full border border-zinc-300 object-cover dark:border-zinc-700"
+                      />
+                    ) : (
+                      <div className="flex h-12 w-12 items-center justify-center rounded-full border border-zinc-300 bg-zinc-100 text-sm font-bold text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                        {getInitial(actorName)}
                       </div>
                     )}
 
-                    <p className="text-xs sm:text-sm text-zinc-500 mt-3">
-                      {new Date(item.created_at).toLocaleString('pt-BR')}
+                    <div className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-white shadow dark:border-zinc-900 dark:bg-zinc-900">
+                      {getNotificationIcon(notification.type)}
+                    </div>
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <p className="break-words font-semibold text-zinc-950 dark:text-white">
+                          {getNotificationTitle(notification)}
+                        </p>
+
+                        {notification.actor?.username && (
+                          <p className="mt-0.5 text-sm text-zinc-500">
+                            @{actorUsername}
+                          </p>
+                        )}
+                      </div>
+
+                      {unread && (
+                        <span className="mt-1 w-fit rounded-full bg-blue-500 px-2 py-1 text-[11px] font-bold text-white">
+                          Nova
+                        </span>
+                      )}
+                    </div>
+
+                    {notification.comment?.content && (
+                      <p className="mt-3 rounded-xl bg-zinc-100 px-3 py-2 text-sm text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                        Comentário: “{notification.comment.content}”
+                      </p>
+                    )}
+
+                    {notification.post && (
+                      <p className="mt-3 text-sm text-zinc-500 dark:text-zinc-400">
+                        No post: “{getPostPreview(notification.post.content)}”
+                      </p>
+                    )}
+
+                    <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-500">
+                      {new Date(notification.created_at).toLocaleString('pt-BR')}
                     </p>
                   </div>
                 </div>
