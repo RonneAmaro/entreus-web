@@ -78,15 +78,21 @@ export default function AppSidebar({
   return (
     <aside className="fixed left-0 top-0 z-40 hidden h-screen w-[270px] flex-col border-r border-zinc-200 bg-white dark:border-zinc-800 dark:bg-black lg:flex">
       <div className="flex h-full flex-col overflow-y-auto px-5 py-5">
-        <Link href="/feed" className="mb-8 flex shrink-0 items-center">
-          <Image
-            src="/logo.png"
-            alt="Logo EntreUS"
-            width={180}
-            height={80}
-            className="h-auto w-[160px] object-contain"
-            priority
-          />
+        <Link
+          href="/feed"
+          className="mb-8 flex w-full shrink-0 items-center justify-center"
+          aria-label="Ir para a página inicial da EntreUS"
+        >
+          <div className="flex w-full justify-center">
+            <Image
+              src="/logo.png"
+              alt="Logo EntreUS"
+              width={220}
+              height={180}
+              className="mx-auto block h-auto w-full max-w-[185px] object-contain"
+              priority
+            />
+          </div>
         </Link>
 
         <nav className="flex flex-col gap-2 pb-4">
@@ -170,9 +176,11 @@ export default function AppSidebar({
         </nav>
 
         <div className="mt-auto rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-xs text-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400">
-          EntreUS
-          <br />
-          Só Entre Nós
+          <p className="font-bold tracking-tight text-zinc-900 dark:text-white">
+            Entre<span className="text-blue-500">US</span>
+          </p>
+
+          <p>Só Entre Nós</p>
         </div>
       </div>
     </aside>
