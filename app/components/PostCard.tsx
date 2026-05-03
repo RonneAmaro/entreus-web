@@ -7,6 +7,7 @@ import PostMediaGallery from './PostMediaGallery'
 import LinkPreview from './LinkPreview'
 import SensitiveContent from './SensitiveContent'
 import PostMoreMenu from './PostMoreMenu'
+import UserBadges from './UserBadges'
 
 export type VisibilityType = 'public' | 'followers' | 'private'
 
@@ -182,11 +183,10 @@ export default function PostCard({
   return (
     <article
       id={`post-${post.id}`}
-      className={`rounded-2xl border bg-white p-4 transition dark:bg-zinc-900 sm:p-6 ${
-        highlighted
+      className={`rounded-2xl border bg-white p-4 transition dark:bg-zinc-900 sm:p-6 ${highlighted
           ? 'border-blue-500 ring-2 ring-blue-200 dark:border-blue-400 dark:ring-blue-900'
           : 'border-zinc-200 dark:border-zinc-800'
-      }`}
+        }`}
     >
       {repostInfo && (
         <Link
@@ -229,8 +229,12 @@ export default function PostCard({
           )}
 
           <div className="min-w-0">
-            <p className="break-words font-semibold text-black dark:text-white">
-              {authorName}
+            <p className="inline-flex max-w-full items-center gap-1 break-words font-semibold text-black dark:text-white">
+              <UserBadges userId={post.user_id} size="sm" max={1} />
+
+              <span className="min-w-0 break-words">
+                {authorName}
+              </span>
             </p>
 
             <p className="break-all text-sm text-zinc-500">
@@ -246,9 +250,9 @@ export default function PostCard({
             reported={reported}
             reporting={reporting}
             onCopy={onCopy || onShare}
-            onEdit={onEdit || (() => {})}
-            onDelete={onDelete || (() => {})}
-            onReport={onReport || (() => {})}
+            onEdit={onEdit || (() => { })}
+            onDelete={onDelete || (() => { })}
+            onReport={onReport || (() => { })}
           />
         )}
       </div>
@@ -259,11 +263,10 @@ export default function PostCard({
             type="button"
             onClick={onFollowAuthor}
             disabled={followLoading}
-            className={`rounded-full px-4 py-2 text-sm font-medium transition ${
-              isFollowingAuthor
+            className={`rounded-full px-4 py-2 text-sm font-medium transition ${isFollowingAuthor
                 ? 'border border-zinc-300 text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800'
                 : 'bg-black text-white hover:opacity-90 dark:bg-white dark:text-black'
-            } ${followLoading ? 'cursor-not-allowed opacity-60' : ''}`}
+              } ${followLoading ? 'cursor-not-allowed opacity-60' : ''}`}
           >
             {followLoading
               ? 'Carregando...'
