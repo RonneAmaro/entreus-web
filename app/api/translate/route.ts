@@ -1,11 +1,66 @@
 import { NextResponse } from 'next/server'
 
+type MyMemoryResponse = {
+  responseData?: {
+    translatedText?: string
+    match?: number
+  }
+  responseStatus?: number
+  responseDetails?: string
+  matches?: Array<{
+    translation?: string
+  }>
+}
+
+function normalizeLanguage(language: string) {
+  const clean = language.trim().toLowerCase()
+
+  if (!clean || clean === 'auto') return 'auto'
+
+  const map: Record<string, string> = {
+    'pt-br': 'pt',
+    'pt-pt': 'pt',
+    br: 'pt',
+    portuguese: 'pt',
+    portugues: 'pt',
+    português: 'pt',
+    english: 'en',
+    ingles: 'en',
+    inglês: 'en',
+    spanish: 'es',
+    espanhol: 'es',
+    korean: 'ko',
+    coreano: 'ko',
+    indonesian: 'id',
+    indonesio: 'id',
+    indonésio: 'id',
+    french: 'fr',
+    frances: 'fr',
+    francês: 'fr',
+  }
+
+  if (map[clean]) return map[clean]
+
+  return clean.split('-')[0] || 'pt'
+}
+
+function getFallbackSourceLanguage(targetLanguage: string) {
+  // O MyMemory precisa de langpair.
+  // Como o botão manda sourceLanguage "auto", usamos um fallback simples.
+  // Para maioria dos seus posts atuais, pt funciona bem.
+  if (targetLanguage === 'pt') return 'en'
+  return 'pt'
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json()
+
     const text = String(body?.text || '').trim()
-    const targetLanguage = String(body?.targetLanguage || 'pt').trim() || 'pt'
-    const sourceLanguage = String(body?.sourceLanguage || 'auto').trim() || 'auto'
+    const targetLanguage = normalizeLanguage(String(body?.targetLanguage || 'pt'))
+    const requestedSourceLanguage = normalizeLanguage(
+      String(body?.sourceLanguage || 'auto')
+    )
 
     if (!text) {
       return NextResponse.json(
@@ -14,53 +69,77 @@ export async function POST(request: Request) {
       )
     }
 
-    const apiUrl = process.env.TRANSLATE_API_URL
-    const apiKey = process.env.TRANSLATE_API_KEY
-
-    if (!apiUrl) {
+    if (text.length > 4500) {
       return NextResponse.json(
         {
           error:
-            'Tradutor ainda não configurado. Defina TRANSLATE_API_URL no .env.local.',
+            'Este texto está muito grande para tradução gratuita agora. Tente traduzir uma publicação menor.',
         },
-        { status: 501 }
+        { status: 413 }
       )
     }
 
-    const endpoint = `${apiUrl.replace(/\/$/, '')}/translate`
+    const sourceLanguage =
+      requestedSourceLanguage === 'auto'
+        ? getFallbackSourceLanguage(targetLanguage)
+        : requestedSourceLanguage
 
-    const response = await fetch(endpoint, {
-      method: 'POST',
+    if (sourceLanguage === targetLanguage) {
+      return NextResponse.json(
+        {
+          error:
+            'O idioma de origem e destino ficaram iguais. Tente mudar o idioma do navegador ou traduzir um texto em outro idioma.',
+        },
+        { status: 400 }
+      )
+    }
+
+    const contactEmail = process.env.TRANSLATE_CONTACT_EMAIL || ''
+    const langpair = `${sourceLanguage}|${targetLanguage}`
+
+    const url = new URL('https://api.mymemory.translated.net/get')
+    url.searchParams.set('q', text)
+    url.searchParams.set('langpair', langpair)
+
+    if (contactEmail) {
+      url.searchParams.set('de', contactEmail)
+    }
+
+    const response = await fetch(url.toString(), {
+      method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
+        Accept: 'application/json',
       },
-      body: JSON.stringify({
-        q: text,
-        source: sourceLanguage,
-        target: targetLanguage,
-        format: 'text',
-        ...(apiKey ? { api_key: apiKey } : {}),
-      }),
+      cache: 'no-store',
     })
 
-    const data = await response.json().catch(() => null)
+    const data = (await response.json().catch(() => null)) as MyMemoryResponse | null
 
     if (!response.ok) {
       return NextResponse.json(
         {
           error:
-            data?.error ||
-            data?.message ||
+            data?.responseDetails ||
             'Não foi possível traduzir este texto agora.',
         },
         { status: response.status }
       )
     }
 
+    if (data?.responseStatus && data.responseStatus >= 400) {
+      return NextResponse.json(
+        {
+          error:
+            data.responseDetails ||
+            'O serviço gratuito de tradução não conseguiu traduzir agora.',
+        },
+        { status: 502 }
+      )
+    }
+
     const translatedText =
-      data?.translatedText ||
-      data?.translation ||
-      data?.translated_text ||
+      data?.responseData?.translatedText ||
+      data?.matches?.find((match) => match.translation)?.translation ||
       ''
 
     if (!translatedText) {
@@ -74,6 +153,7 @@ export async function POST(request: Request) {
       translatedText,
       targetLanguage,
       sourceLanguage,
+      provider: 'mymemory',
     })
   } catch (error) {
     console.error('Erro na rota de tradução:', error)
