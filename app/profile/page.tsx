@@ -7,9 +7,10 @@ import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
-import { ShieldAlert } from 'lucide-react'
+import { Camera, Maximize2, ShieldAlert, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import PostCard from '../components/PostCard'
+import UserBadges from '../components/UserBadges'
 
 type VisibilityType = 'public' | 'followers' | 'private'
 
@@ -128,6 +129,7 @@ export default function ProfilePage() {
   const [copiedPostId, setCopiedPostId] = useState<string | null>(null)
   const [reportingPostId, setReportingPostId] = useState<string | null>(null)
   const [reportedPostIds, setReportedPostIds] = useState<string[]>([])
+  const [showAvatarModal, setShowAvatarModal] = useState(false)
 
   useEffect(() => {
     setMounted(true)
@@ -975,25 +977,45 @@ export default function ProfilePage() {
           <div className="flex flex-col gap-6">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
               <div className="flex flex-col items-center gap-3 sm:items-start">
-                {avatarPreview ? (
-                  <img
-                    src={avatarPreview}
-                    alt={profileName}
-                    className="h-24 w-24 rounded-full border border-zinc-300 object-cover dark:border-zinc-700"
-                  />
-                ) : (
-                  <div className="flex h-24 w-24 items-center justify-center rounded-full border border-zinc-300 bg-zinc-100 text-3xl font-bold text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
-                    {profileName.charAt(0).toUpperCase()}
-                  </div>
-                )}
+                <button
+                  type="button"
+                  onClick={() => avatarPreview && setShowAvatarModal(true)}
+                  disabled={!avatarPreview}
+                  className="group relative h-32 w-32 overflow-hidden rounded-full border border-zinc-300 bg-zinc-100 text-zinc-700 shadow-sm transition hover:opacity-90 disabled:cursor-default dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 sm:h-36 sm:w-36"
+                  title={avatarPreview ? 'Ver foto de perfil' : 'Foto de perfil'}
+                  aria-label={avatarPreview ? 'Ver foto de perfil' : 'Foto de perfil'}
+                >
+                  {avatarPreview ? (
+                    <img
+                      src={avatarPreview}
+                      alt={profileName}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <span className="flex h-full w-full items-center justify-center text-4xl font-bold">
+                      {profileName.charAt(0).toUpperCase()}
+                    </span>
+                  )}
 
-                <label className="w-full sm:w-auto">
-                  <span className="sr-only">Escolher avatar</span>
+                  {avatarPreview && (
+                    <span className="absolute inset-0 hidden items-center justify-center bg-black/45 text-white transition group-hover:flex">
+                      <Maximize2 className="h-6 w-6" />
+                    </span>
+                  )}
+                </button>
+
+                <label
+                  className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-full border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-900 transition hover:bg-zinc-100 dark:border-zinc-700 dark:bg-black dark:text-white dark:hover:bg-zinc-900"
+                  title="Alterar foto de perfil"
+                >
+                  <Camera className="h-4 w-4" />
+                  <span>Alterar foto</span>
+
                   <input
                     type="file"
                     accept="image/png,image/jpeg,image/webp"
                     onChange={(e) => handleAvatarSelect(e.target.files?.[0] || null)}
-                    className="block w-full rounded-xl border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800"
+                    className="sr-only"
                   />
                 </label>
 
@@ -1005,8 +1027,12 @@ export default function ProfilePage() {
               </div>
 
               <div className="min-w-0 flex-1">
-                <h2 className="break-words text-2xl font-bold text-black dark:text-white">
-                  {profileName}
+                <h2 className="inline-flex max-w-full items-center gap-2 break-words text-2xl font-bold text-black dark:text-white">
+                  <UserBadges userId={userId} size="md" max={1} />
+
+                  <span className="min-w-0 break-words">
+                    {profileName}
+                  </span>
                 </h2>
 
                 <p className="mt-1 break-all text-zinc-500 dark:text-zinc-400">
@@ -1259,6 +1285,39 @@ export default function ProfilePage() {
           </div>
         </section>
       </section>
+
+      {showAvatarModal && avatarPreview && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+          <button
+            type="button"
+            onClick={() => setShowAvatarModal(false)}
+            className="absolute inset-0 cursor-default"
+            aria-label="Fechar foto de perfil"
+          />
+
+          <div className="relative z-[91] w-full max-w-md rounded-3xl border border-white/10 bg-zinc-950 p-4 shadow-2xl">
+            <button
+              type="button"
+              onClick={() => setShowAvatarModal(false)}
+              className="absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-full bg-black/70 text-white transition hover:bg-black"
+              aria-label="Fechar"
+              title="Fechar"
+            >
+              <X className="h-5 w-5" />
+            </button>
+
+            <img
+              src={avatarPreview}
+              alt={profileName}
+              className="mx-auto aspect-square w-full max-w-sm rounded-3xl object-cover"
+            />
+
+            <p className="mt-3 text-center text-sm font-semibold text-white">
+              {profileName}
+            </p>
+          </div>
+        </div>
+      )}
     </main>
   )
 }
