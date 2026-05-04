@@ -10,7 +10,7 @@ import MobileNavigation from "../../components/MobileNavigation";
 import BrandHeader from "../../components/BrandHeader";
 import PostCard from "../../components/PostCard";
 import UserBadges from "../../components/UserBadges";
-import { Maximize2, X } from "lucide-react";
+import { Flag, Maximize2, UserCheck, UserPlus, UserX, X } from "lucide-react";
 
 type VisibilityType = "public" | "followers" | "private";
 
@@ -1326,7 +1326,7 @@ export default function PublicProfilePage() {
           onPostClick={handlePostClick}
         />
 
-        <section className="w-full max-w-3xl overflow-x-hidden px-4 py-20 pb-24 sm:px-6 lg:ml-[calc(270px+((100vw-270px-48rem)/2))] lg:py-8">
+        <section className="w-full max-w-4xl overflow-x-hidden px-4 py-20 pb-24 sm:px-6 lg:ml-[calc(270px+((100vw-270px-56rem)/2))] lg:py-8">
           <BrandHeader
             subtitle="Perfil público"
             description="Veja informações públicas, publicações e atividades de usuários do EntreUS."
@@ -1379,7 +1379,7 @@ export default function PublicProfilePage() {
         onPostClick={handlePostClick}
       />
 
-      <section className="w-full max-w-3xl overflow-x-hidden px-4 py-20 pb-24 sm:px-6 lg:ml-[calc(270px+((100vw-270px-48rem)/2))] lg:py-8">
+      <section className="w-full max-w-4xl overflow-x-hidden px-4 py-20 pb-24 sm:px-6 lg:ml-[calc(270px+((100vw-270px-56rem)/2))] lg:py-8">
         <BrandHeader
           subtitle="Perfil público"
           description={`Acompanhe publicações, reposts e informações públicas de ${displayName}.`}
@@ -1406,8 +1406,8 @@ export default function PublicProfilePage() {
         />
 
         <div className="mb-6 rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="flex flex-col items-start justify-between gap-4 sm:flex-row">
-            <div className="flex items-start gap-4">
+          <div className="flex flex-col items-start justify-between gap-5 xl:flex-row">
+            <div className="flex min-w-0 flex-1 items-start gap-4">
               {profile.avatar_url ? (
                 <button
                   type="button"
@@ -1432,10 +1432,12 @@ export default function PublicProfilePage() {
                 </div>
               )}
 
-              <div className="min-w-0 pt-1">
-                <h2 className="inline-flex max-w-full items-center gap-2 text-2xl font-bold text-black dark:text-white sm:text-3xl">
+              <div className="min-w-0 flex-1 pt-1">
+                <h2 className="flex max-w-full items-center gap-2 text-2xl font-bold leading-tight text-black dark:text-white sm:text-3xl">
                   <UserBadges userId={profile.id} size="md" max={1} />
-                  <span className="min-w-0 break-words">{displayName}</span>
+                  <span className="min-w-0 truncate" title={displayName}>
+                    {displayName}
+                  </span>
                 </h2>
 
                 <p className="mt-1 break-all text-zinc-500 dark:text-zinc-400">
@@ -1445,56 +1447,90 @@ export default function PublicProfilePage() {
             </div>
 
             {!isOwnProfile && !hasBlockedMe && (
-              <div className="flex flex-wrap gap-3">
+              <div className="flex shrink-0 flex-wrap gap-2 xl:justify-end">
                 <button
                   type="button"
                   onClick={handleToggleFollow}
                   disabled={followLoading || isBlockedByMe}
-                  className={`rounded-xl px-4 py-2 font-medium transition ${
+                  title={
+                    followLoading
+                      ? "Carregando..."
+                      : isFollowing
+                        ? "Seguindo"
+                        : "Seguir"
+                  }
+                  aria-label={
+                    followLoading
+                      ? "Carregando..."
+                      : isFollowing
+                        ? "Seguindo"
+                        : "Seguir"
+                  }
+                  className={`flex h-11 w-11 items-center justify-center rounded-full border font-medium transition ${
                     isFollowing
-                      ? "border border-zinc-300 text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
-                      : "bg-black text-white hover:opacity-90 dark:bg-white dark:text-black"
+                      ? "border-green-300 bg-green-50 text-green-600 hover:bg-green-100 dark:border-green-800 dark:bg-green-950/30 dark:text-green-400 dark:hover:bg-green-950"
+                      : "border-zinc-900 bg-zinc-900 text-white hover:opacity-90 dark:border-white dark:bg-white dark:text-black"
                   } ${followLoading || isBlockedByMe ? "cursor-not-allowed opacity-60" : ""}`}
                 >
-                  {followLoading
-                    ? "Carregando..."
-                    : isFollowing
-                      ? "Seguindo"
-                      : "Seguir"}
+                  {isFollowing ? (
+                    <UserCheck className="h-5 w-5" />
+                  ) : (
+                    <UserPlus className="h-5 w-5" />
+                  )}
                 </button>
 
                 <button
                   type="button"
                   onClick={handleToggleBlock}
                   disabled={blockLoading}
-                  className={`rounded-xl px-4 py-2 font-medium transition ${
+                  title={
+                    blockLoading
+                      ? "Carregando..."
+                      : isBlockedByMe
+                        ? "Desbloquear usuário"
+                        : "Bloquear usuário"
+                  }
+                  aria-label={
+                    blockLoading
+                      ? "Carregando..."
+                      : isBlockedByMe
+                        ? "Desbloquear usuário"
+                        : "Bloquear usuário"
+                  }
+                  className={`flex h-11 w-11 items-center justify-center rounded-full border font-medium transition ${
                     isBlockedByMe
-                      ? "border border-zinc-300 text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
-                      : "border border-red-300 text-red-600 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-950"
+                      ? "border-zinc-300 text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                      : "border-red-300 text-red-600 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-950"
                   } ${blockLoading ? "cursor-not-allowed opacity-60" : ""}`}
                 >
-                  {blockLoading
-                    ? "Carregando..."
-                    : isBlockedByMe
-                      ? "Desbloquear"
-                      : "Bloquear"}
+                  <UserX className="h-5 w-5" />
                 </button>
 
                 <button
                   type="button"
                   onClick={handleReportUser}
                   disabled={reportingUser || reportedUser}
-                  className={`rounded-xl px-4 py-2 font-medium transition ${
+                  title={
+                    reportingUser
+                      ? "Enviando..."
+                      : reportedUser
+                        ? "Usuário denunciado"
+                        : "Denunciar usuário"
+                  }
+                  aria-label={
+                    reportingUser
+                      ? "Enviando..."
+                      : reportedUser
+                        ? "Usuário denunciado"
+                        : "Denunciar usuário"
+                  }
+                  className={`flex h-11 w-11 items-center justify-center rounded-full border font-medium transition ${
                     reportedUser
-                      ? "border border-green-300 bg-green-50 text-green-600 dark:border-green-700 dark:bg-green-950 dark:text-green-400"
-                      : "border border-orange-300 text-orange-600 hover:bg-orange-50 dark:border-orange-700 dark:text-orange-400 dark:hover:bg-orange-950"
+                      ? "border-green-300 bg-green-50 text-green-600 dark:border-green-700 dark:bg-green-950 dark:text-green-400"
+                      : "border-orange-300 text-orange-600 hover:bg-orange-50 dark:border-orange-700 dark:text-orange-400 dark:hover:bg-orange-950"
                   } ${reportingUser ? "cursor-not-allowed opacity-60" : ""}`}
                 >
-                  {reportingUser
-                    ? "Enviando..."
-                    : reportedUser
-                      ? "Usuário denunciado"
-                      : "Denunciar usuário"}
+                  <Flag className="h-5 w-5" />
                 </button>
               </div>
             )}
