@@ -74,7 +74,7 @@ export default function UserBadges({
 
   if (badges.length === 0) return null
 
-  const imageSize = size === 'md' ? 'h-5 w-5' : 'h-4 w-4'
+  const imageSize = size === 'md' ? 'h-7 w-7' : 'h-6 w-6'
 
   return (
     <span className="inline-flex shrink-0 items-center gap-1 align-middle">
