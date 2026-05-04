@@ -8,6 +8,7 @@ import LinkPreview from './LinkPreview'
 import SensitiveContent from './SensitiveContent'
 import PostMoreMenu from './PostMoreMenu'
 import UserBadges from './UserBadges'
+import TranslatePostButton from './TranslatePostButton'
 
 export type VisibilityType = 'public' | 'followers' | 'private'
 
@@ -207,7 +208,15 @@ export default function PostCard({
 
           <Repeat2 className="h-4 w-4" />
 
-          <span>{isOwnRepost ? 'Você repostou' : `${reposterName} repostou`}</span>
+          <span className="inline-flex min-w-0 items-center gap-1">
+            {repostInfo.user_id && (
+              <UserBadges userId={repostInfo.user_id} size="sm" max={1} />
+            )}
+
+            <span className="truncate">
+              {isOwnRepost ? 'Você repostou' : `${reposterName} repostou`}
+            </span>
+          </span>
         </Link>
       )}
 
@@ -319,6 +328,8 @@ export default function PostCard({
             </p>
           )}
 
+          <TranslatePostButton content={post.content} />
+
           <LinkPreview content={post.content} />
 
           <PostMediaGallery media={postMedia} />
@@ -330,6 +341,8 @@ export default function PostCard({
               {post.content}
             </p>
           )}
+
+          <TranslatePostButton content={post.content} />
 
           <LinkPreview content={post.content} />
 
