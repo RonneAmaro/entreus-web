@@ -60,7 +60,7 @@ function getNotificationIcon(type: string) {
   if (type === 'like') return <Heart className="h-5 w-5 text-red-500" />
   if (type === 'comment') return <MessageCircle className="h-5 w-5 text-blue-500" />
   if (type === 'repost') return <Repeat2 className="h-5 w-5 text-green-500" />
-  if (type === 'follow') return <UserPlus className="h-5 w-5 text-blue-500" />
+  if (type === 'follow') return <UserPlus className="h-5 w-5 text-green-500" />
 
   return <Bell className="h-5 w-5 text-zinc-500" />
 }
