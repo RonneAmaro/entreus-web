@@ -8,6 +8,7 @@ import PostMediaGallery from '../components/PostMediaGallery'
 import PostActions from '../components/PostActions'
 import LinkPreview from '../components/LinkPreview'
 import SensitiveContent from '../components/SensitiveContent'
+import UserBadges from '../components/UserBadges'
 import Link from 'next/link'
 import { Edit3, MoreHorizontal, Repeat2, Trash2 } from 'lucide-react'
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
@@ -1585,8 +1586,12 @@ function FeedContent() {
 
                     <Repeat2 className="h-4 w-4" />
 
-                    <span>
-                      {item.repost.user_id === userId ? 'Você repostou' : `${reposterName} repostou`}
+                    <span className="inline-flex min-w-0 items-center gap-1">
+                      <UserBadges userId={item.repost.user_id} size="sm" max={1} />
+
+                      <span className="truncate">
+                        {item.repost.user_id === userId ? 'Você repostou' : `${reposterName} repostou`}
+                      </span>
                     </span>
                   </Link>
                 )}
@@ -1609,8 +1614,12 @@ function FeedContent() {
                     )}
 
                     <div className="min-w-0">
-                      <p className="font-semibold text-black dark:text-white break-words">
-                        {authorName}
+                      <p className="inline-flex max-w-full items-center gap-1 font-semibold text-black dark:text-white">
+                        <UserBadges userId={post.user_id} size="sm" max={1} />
+
+                        <span className="min-w-0 break-words">
+                          {authorName}
+                        </span>
                       </p>
 
                       <p className="text-sm text-zinc-500 break-all">
@@ -1831,8 +1840,12 @@ function FeedContent() {
                                   href={`/u/${commentAuthorUsername}`}
                                   className="block min-w-0 hover:opacity-80 transition"
                                 >
-                                  <p className="font-semibold text-black dark:text-white break-words">
-                                    {commentAuthorName}
+                                  <p className="inline-flex max-w-full items-center gap-1 font-semibold text-black dark:text-white">
+                                    <UserBadges userId={comment.user_id} size="sm" max={1} />
+
+                                    <span className="min-w-0 break-words">
+                                      {commentAuthorName}
+                                    </span>
                                   </p>
 
                                   <p className="text-xs text-zinc-500 break-all">
