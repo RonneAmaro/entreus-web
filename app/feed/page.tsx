@@ -9,6 +9,7 @@ import PostActions from '../components/PostActions'
 import LinkPreview from '../components/LinkPreview'
 import SensitiveContent from '../components/SensitiveContent'
 import UserBadges from '../components/UserBadges'
+import TranslatePostButton from '../components/TranslatePostButton'
 import Link from 'next/link'
 import { Edit3, MoreHorizontal, Repeat2, Trash2 } from 'lucide-react'
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
@@ -1730,10 +1731,12 @@ function FeedContent() {
                     {shouldShowSensitiveWarning ? (
                       <SensitiveContent>
                         {post.content && (
-                          <p className="text-zinc-800 dark:text-zinc-200 whitespace-pre-wrap mb-4 break-words text-sm sm:text-base">
+                          <p className="text-zinc-800 dark:text-zinc-200 whitespace-pre-wrap mb-3 break-words text-sm sm:text-base">
                             {post.content}
                           </p>
                         )}
+
+                        <TranslatePostButton content={post.content} />
 
                         <LinkPreview content={post.content} />
 
@@ -1742,10 +1745,12 @@ function FeedContent() {
                     ) : (
                       <>
                         {post.content && (
-                          <p className="text-zinc-800 dark:text-zinc-200 whitespace-pre-wrap mb-4 break-words text-sm sm:text-base">
+                          <p className="text-zinc-800 dark:text-zinc-200 whitespace-pre-wrap mb-3 break-words text-sm sm:text-base">
                             {post.content}
                           </p>
                         )}
+
+                        <TranslatePostButton content={post.content} />
 
                         <LinkPreview content={post.content} />
 
