@@ -3,6 +3,7 @@
 import AppSidebar from '../components/AppSidebar'
 import MobileNavigation from '../components/MobileNavigation'
 import BrandHeader from '../components/BrandHeader'
+import UserBadges from '../components/UserBadges'
 import Link from 'next/link'
 import { Bell, CheckCheck, Heart, MessageCircle, Repeat2, UserPlus } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
@@ -65,29 +66,13 @@ function getNotificationIcon(type: string) {
   return <Bell className="h-5 w-5 text-zinc-500" />
 }
 
-function getNotificationTitle(notification: NotificationView) {
-  const actorName =
-    notification.actor?.display_name ||
-    notification.actor?.username ||
-    'Alguém'
+function getNotificationActionText(type: string) {
+  if (type === 'like') return 'curtiu sua publicação.'
+  if (type === 'comment') return 'comentou na sua publicação.'
+  if (type === 'repost') return 'repostou sua publicação.'
+  if (type === 'follow') return 'começou a seguir você.'
 
-  if (notification.type === 'like') {
-    return `${actorName} curtiu sua publicação.`
-  }
-
-  if (notification.type === 'comment') {
-    return `${actorName} comentou na sua publicação.`
-  }
-
-  if (notification.type === 'repost') {
-    return `${actorName} repostou sua publicação.`
-  }
-
-  if (notification.type === 'follow') {
-    return `${actorName} começou a seguir você.`
-  }
-
-  return `${actorName} interagiu com você.`
+  return 'interagiu com você.'
 }
 
 function getPostPreview(content: string | null) {
@@ -488,8 +473,14 @@ export default function NotificationsPage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
                       <div>
-                        <p className="break-words font-semibold text-zinc-950 dark:text-white">
-                          {getNotificationTitle(notification)}
+                        <p className="inline-flex max-w-full items-center gap-1 break-words font-semibold text-zinc-950 dark:text-white">
+                          {notification.actor_id && (
+                            <UserBadges userId={notification.actor_id} size="sm" max={1} />
+                          )}
+
+                          <span className="min-w-0 break-words">
+                            {actorName} {getNotificationActionText(notification.type)}
+                          </span>
                         </p>
 
                         {notification.actor?.username && (
