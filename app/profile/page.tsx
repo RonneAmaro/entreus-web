@@ -1032,15 +1032,15 @@ export default function ProfilePage() {
 
         <form
           onSubmit={handleSaveProfile}
-          className="mt-5 rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900 sm:p-6"
+          className="mt-5 overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
         >
-          <div className="flex flex-col gap-6">
-            <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950">
+          <div className="flex flex-col">
+            <div className="relative">
               <button
                 type="button"
                 onClick={() => bannerPreview && setShowBannerModal(true)}
                 disabled={!bannerPreview}
-                className="group relative flex h-40 w-full items-center justify-center overflow-hidden bg-zinc-100 text-zinc-500 transition hover:opacity-95 disabled:cursor-default dark:bg-zinc-800 dark:text-zinc-400 sm:h-52"
+                className="group relative flex h-44 w-full items-center justify-center overflow-hidden bg-gradient-to-br from-zinc-100 via-zinc-200 to-zinc-300 text-zinc-500 transition hover:opacity-95 disabled:cursor-default dark:from-zinc-900 dark:via-zinc-800 dark:to-black dark:text-zinc-400 sm:h-64"
                 title={bannerPreview ? 'Ver capa do perfil' : 'Capa do perfil'}
                 aria-label={bannerPreview ? 'Ver capa do perfil' : 'Capa do perfil'}
               >
@@ -1051,138 +1051,176 @@ export default function ProfilePage() {
                     className="h-full w-full object-cover"
                   />
                 ) : (
-                  <div className="flex flex-col items-center gap-2 text-center">
-                    <ImageIcon className="h-9 w-9" />
-                    <span className="text-sm font-medium">Adicione uma capa ao seu perfil</span>
-                    <span className="text-xs text-zinc-400">Recomendado: imagem horizontal em JPG, PNG ou WEBP</span>
+                  <div className="flex flex-col items-center gap-2 px-4 text-center">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/80 text-zinc-600 shadow-sm dark:bg-black/40 dark:text-zinc-300">
+                      <ImageIcon className="h-7 w-7" />
+                    </div>
+                    <span className="text-sm font-semibold text-zinc-700 dark:text-zinc-200">
+                      Adicione uma capa ao seu perfil
+                    </span>
+                    <span className="max-w-md text-xs text-zinc-500 dark:text-zinc-400">
+                      Use uma imagem horizontal para deixar seu perfil mais profissional.
+                    </span>
                   </div>
                 )}
 
+                <span className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/10 to-transparent" />
+
                 {bannerPreview && (
-                  <span className="absolute inset-0 hidden items-center justify-center bg-black/45 text-white transition group-hover:flex">
+                  <span className="absolute inset-0 hidden items-center justify-center bg-black/35 text-white transition group-hover:flex">
                     <Maximize2 className="h-6 w-6" />
                   </span>
                 )}
               </button>
 
-              <div className="flex flex-col gap-3 border-t border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-sm font-semibold text-zinc-900 dark:text-white">
-                    Capa do perfil
-                  </p>
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                    Essa imagem aparece no topo do seu perfil público.
-                  </p>
+              <label
+                className="absolute bottom-4 right-4 z-10 inline-flex cursor-pointer items-center justify-center gap-2 rounded-full border border-white/30 bg-black/65 px-4 py-2 text-sm font-semibold text-white shadow-lg backdrop-blur transition hover:bg-black/80"
+                title="Alterar capa do perfil"
+              >
+                <ImageIcon className="h-4 w-4" />
+                <span>{bannerPreview ? 'Alterar capa' : 'Adicionar capa'}</span>
+
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  onChange={(e) => handleBannerSelect(e.target.files?.[0] || null)}
+                  className="sr-only"
+                />
+              </label>
+            </div>
+
+            <div className="px-4 pb-6 sm:px-6">
+              <div className="relative z-10 -mt-16 flex flex-col gap-5 sm:-mt-20 sm:flex-row sm:items-end sm:justify-between">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
+                  <div className="flex flex-col items-center gap-3 sm:items-start">
+                    <button
+                      type="button"
+                      onClick={() => avatarPreview && setShowAvatarModal(true)}
+                      disabled={!avatarPreview}
+                      className="group relative h-32 w-32 overflow-hidden rounded-full border-4 border-white bg-zinc-100 text-zinc-700 shadow-xl transition hover:opacity-95 disabled:cursor-default dark:border-zinc-900 dark:bg-zinc-800 dark:text-zinc-300 sm:h-40 sm:w-40"
+                      title={avatarPreview ? 'Ver foto de perfil' : 'Foto de perfil'}
+                      aria-label={avatarPreview ? 'Ver foto de perfil' : 'Foto de perfil'}
+                    >
+                      {avatarPreview ? (
+                        <img
+                          src={avatarPreview}
+                          alt={profileName}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <span className="flex h-full w-full items-center justify-center text-5xl font-bold">
+                          {profileName.charAt(0).toUpperCase()}
+                        </span>
+                      )}
+
+                      {avatarPreview && (
+                        <span className="absolute inset-0 hidden items-center justify-center bg-black/45 text-white transition group-hover:flex">
+                          <Maximize2 className="h-6 w-6" />
+                        </span>
+                      )}
+                    </button>
+
+                    <label
+                      className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-full border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-900 shadow-sm transition hover:bg-zinc-100 dark:border-zinc-700 dark:bg-black dark:text-white dark:hover:bg-zinc-900"
+                      title="Alterar foto de perfil"
+                    >
+                      <Camera className="h-4 w-4" />
+                      <span>Alterar foto</span>
+
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        onChange={(e) => handleAvatarSelect(e.target.files?.[0] || null)}
+                        className="sr-only"
+                      />
+                    </label>
+                  </div>
+
+                  <div className="min-w-0 pb-1 text-center sm:text-left">
+                    <h2 className="inline-flex max-w-full items-center justify-center gap-2 break-words text-2xl font-black tracking-tight text-black dark:text-white sm:justify-start sm:text-4xl">
+                      <UserBadges userId={userId} size="md" max={1} />
+
+                      <span className="min-w-0 break-words">
+                        {profileName}
+                      </span>
+                    </h2>
+
+                    <p className="mt-1 break-all text-sm font-medium text-zinc-500 dark:text-zinc-400 sm:text-base">
+                      @{username || 'seu_username'}
+                    </p>
+
+                    {bio && (
+                      <p className="mt-3 max-w-2xl whitespace-pre-wrap break-words text-sm leading-6 text-zinc-700 dark:text-zinc-300 sm:text-base">
+                        {bio}
+                      </p>
+                    )}
+                  </div>
                 </div>
 
-                <label
-                  className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-full border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-900 transition hover:bg-zinc-100 dark:border-zinc-700 dark:bg-black dark:text-white dark:hover:bg-zinc-900"
-                  title="Alterar capa do perfil"
-                >
-                  <ImageIcon className="h-4 w-4" />
-                  <span>{bannerPreview ? 'Alterar capa' : 'Adicionar capa'}</span>
+                <div className="flex flex-wrap justify-center gap-2 sm:justify-end">
+                  <Link
+                    href={publicProfileUrl}
+                    className={`rounded-full border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-900 shadow-sm transition hover:bg-zinc-100 dark:border-zinc-700 dark:bg-black dark:text-white dark:hover:bg-zinc-900 ${!username ? 'pointer-events-none opacity-50' : ''}`}
+                  >
+                    Ver público
+                  </Link>
 
-                  <input
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp"
-                    onChange={(e) => handleBannerSelect(e.target.files?.[0] || null)}
-                    className="sr-only"
-                  />
-                </label>
+                  <Link
+                    href="/feed"
+                    className="rounded-full bg-black px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:opacity-90 dark:bg-white dark:text-black"
+                  >
+                    Ir ao feed
+                  </Link>
+                </div>
               </div>
 
-              {uploadingBanner && (
-                <p className="border-t border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
-                  Enviando capa...
-                </p>
+              {(uploadingAvatar || uploadingBanner) && (
+                <div className="mt-4 rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400">
+                  {uploadingAvatar && <p>Enviando avatar...</p>}
+                  {uploadingBanner && <p>Enviando capa...</p>}
+                </div>
               )}
-            </div>
 
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-              <div className="flex flex-col items-center gap-3 sm:items-start">
-                <button
-                  type="button"
-                  onClick={() => avatarPreview && setShowAvatarModal(true)}
-                  disabled={!avatarPreview}
-                  className="group relative h-32 w-32 overflow-hidden rounded-full border border-zinc-300 bg-zinc-100 text-zinc-700 shadow-sm transition hover:opacity-90 disabled:cursor-default dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 sm:h-36 sm:w-36"
-                  title={avatarPreview ? 'Ver foto de perfil' : 'Foto de perfil'}
-                  aria-label={avatarPreview ? 'Ver foto de perfil' : 'Foto de perfil'}
-                >
-                  {avatarPreview ? (
-                    <img
-                      src={avatarPreview}
-                      alt={profileName}
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <span className="flex h-full w-full items-center justify-center text-4xl font-bold">
-                      {profileName.charAt(0).toUpperCase()}
-                    </span>
-                  )}
-
-                  {avatarPreview && (
-                    <span className="absolute inset-0 hidden items-center justify-center bg-black/45 text-white transition group-hover:flex">
-                      <Maximize2 className="h-6 w-6" />
-                    </span>
-                  )}
-                </button>
-
-                <label
-                  className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-full border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-900 transition hover:bg-zinc-100 dark:border-zinc-700 dark:bg-black dark:text-white dark:hover:bg-zinc-900"
-                  title="Alterar foto de perfil"
-                >
-                  <Camera className="h-4 w-4" />
-                  <span>Alterar foto</span>
-
-                  <input
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp"
-                    onChange={(e) => handleAvatarSelect(e.target.files?.[0] || null)}
-                    className="sr-only"
-                  />
-                </label>
-
-                {uploadingAvatar && (
-                  <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                    Enviando avatar...
+              <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4 text-center dark:border-zinc-800 dark:bg-zinc-950">
+                  <p className="text-2xl font-black text-zinc-950 dark:text-white">
+                    {posts.filter((post) => post.user_id === userId).length}
                   </p>
-                )}
-              </div>
-
-              <div className="min-w-0 flex-1">
-                <h2 className="inline-flex max-w-full items-center gap-2 break-words text-2xl font-bold text-black dark:text-white">
-                  <UserBadges userId={userId} size="md" max={1} />
-
-                  <span className="min-w-0 break-words">
-                    {profileName}
-                  </span>
-                </h2>
-
-                <p className="mt-1 break-all text-zinc-500 dark:text-zinc-400">
-                  @{username || 'seu_username'}
-                </p>
-
-                {bio && (
-                  <p className="mt-3 whitespace-pre-wrap break-words text-sm text-zinc-700 dark:text-zinc-300 sm:text-base">
-                    {bio}
+                  <p className="mt-1 text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                    Publicações
                   </p>
-                )}
+                </div>
 
-                <div className="mt-4 flex flex-wrap gap-2 text-xs text-zinc-500 dark:text-zinc-400">
-                  <span className="rounded-full border border-zinc-200 px-3 py-1 dark:border-zinc-700">
-                    {feedItems.length} atividades
-                  </span>
+                <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4 text-center dark:border-zinc-800 dark:bg-zinc-950">
+                  <p className="text-2xl font-black text-zinc-950 dark:text-white">
+                    {reposts.filter((repost) => repost.user_id === userId).length}
+                  </p>
+                  <p className="mt-1 text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                    Reposts
+                  </p>
+                </div>
 
-                  <span className="rounded-full border border-zinc-200 px-3 py-1 dark:border-zinc-700">
-                    {posts.filter((post) => post.user_id === userId).length} publicações
-                  </span>
-
-                  <span className="rounded-full border border-zinc-200 px-3 py-1 dark:border-zinc-700">
-                    {reposts.filter((repost) => repost.user_id === userId).length} reposts
-                  </span>
+                <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4 text-center dark:border-zinc-800 dark:bg-zinc-950">
+                  <p className="text-2xl font-black text-zinc-950 dark:text-white">
+                    {feedItems.length}
+                  </p>
+                  <p className="mt-1 text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                    Atividades
+                  </p>
                 </div>
               </div>
-            </div>
+
+              <div className="mt-6 rounded-2xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-950 sm:p-5">
+                <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                  <div>
+                    <h3 className="text-lg font-bold text-zinc-950 dark:text-white">
+                      Editar informações
+                    </h3>
+                    <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                      Essas informações aparecem no seu perfil público.
+                    </p>
+                  </div>
+                </div>
 
             <div className="grid grid-cols-1 gap-4">
               <div>
@@ -1317,6 +1355,8 @@ export default function ProfilePage() {
               )}
             </div>
           </div>
+        </div>
+      </div>
         </form>
 
         {userId && (
