@@ -21,6 +21,7 @@ type Profile = {
   display_name: string | null;
   bio: string | null;
   avatar_url: string | null;
+  banner_url: string | null;
   show_sensitive_content?: boolean | null;
 };
 
@@ -173,7 +174,7 @@ export default function PublicProfilePage() {
       const { data: loggedProfileData } = await supabase
         .from("profiles")
         .select(
-          "id, username, display_name, bio, avatar_url, show_sensitive_content",
+          "id, username, display_name, bio, avatar_url, banner_url, show_sensitive_content",
         )
         .eq("id", user.id)
         .maybeSingle();
@@ -189,7 +190,7 @@ export default function PublicProfilePage() {
       const { data: profileData, error: profileError } = await supabase
         .from("profiles")
         .select(
-          "id, username, display_name, bio, avatar_url, show_sensitive_content",
+          "id, username, display_name, bio, avatar_url, banner_url, show_sensitive_content",
         )
         .eq("username", username)
         .maybeSingle();
@@ -1406,8 +1407,37 @@ export default function PublicProfilePage() {
           }
         />
 
-        <div className="mb-6 rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="flex flex-col items-start justify-between gap-5 xl:flex-row">
+        <div className="mb-6 overflow-hidden rounded-2xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+          <button
+            type="button"
+            onClick={() => profile.banner_url && setSelectedAvatarUrl(profile.banner_url)}
+            disabled={!profile.banner_url}
+            className="group relative flex h-40 w-full items-center justify-center overflow-hidden bg-zinc-100 text-zinc-500 transition hover:opacity-95 disabled:cursor-default dark:bg-zinc-800 dark:text-zinc-400 sm:h-56"
+            title={profile.banner_url ? "Abrir capa do perfil" : "Capa do perfil"}
+            aria-label={profile.banner_url ? "Abrir capa do perfil" : "Capa do perfil"}
+          >
+            {profile.banner_url ? (
+              <img
+                src={profile.banner_url}
+                alt={`Capa de ${displayName}`}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <div className="px-4 text-center">
+                <p className="text-sm font-medium">Este perfil ainda não adicionou uma capa.</p>
+                <p className="mt-1 text-xs text-zinc-400">A capa aparecerá aqui quando for adicionada.</p>
+              </div>
+            )}
+
+            {profile.banner_url && (
+              <span className="absolute inset-0 hidden items-center justify-center bg-black/45 text-white transition group-hover:flex">
+                <Maximize2 className="h-6 w-6" />
+              </span>
+            )}
+          </button>
+
+          <div className="p-6">
+            <div className="flex flex-col items-start justify-between gap-5 xl:flex-row">
             <div className="flex min-w-0 flex-1 items-start gap-4">
               {profile.avatar_url ? (
                 <button
@@ -1599,8 +1629,9 @@ export default function PublicProfilePage() {
               {message}
             </p>
           )}
+          </div>
         </div>
-        
+
         {!hasBlockedMe && !isBlockedByMe && (
           <div className="mb-6">
             <UserBadgesPanel

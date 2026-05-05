@@ -7,7 +7,7 @@ import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
-import { Camera, Maximize2, ShieldAlert, X } from 'lucide-react'
+import { Camera, ImageIcon, Maximize2, ShieldAlert, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import PostCard from '../components/PostCard'
 import UserBadges from '../components/UserBadges'
@@ -21,6 +21,7 @@ type Profile = {
   display_name: string | null
   bio: string | null
   avatar_url: string | null
+  banner_url: string | null
   country: string | null
   birth_date: string | null
   show_sensitive_content: boolean
@@ -106,6 +107,7 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
+  const [uploadingBanner, setUploadingBanner] = useState(false)
   const [message, setMessage] = useState('')
 
   const [userId, setUserId] = useState('')
@@ -120,6 +122,8 @@ export default function ProfilePage() {
   const [birthDate, setBirthDate] = useState('')
   const [avatarUrl, setAvatarUrl] = useState('')
   const [avatarPreview, setAvatarPreview] = useState('')
+  const [bannerUrl, setBannerUrl] = useState('')
+  const [bannerPreview, setBannerPreview] = useState('')
   const [showSensitiveContent, setShowSensitiveContent] = useState(false)
 
   const [posts, setPosts] = useState<Post[]>([])
@@ -131,6 +135,7 @@ export default function ProfilePage() {
   const [reportingPostId, setReportingPostId] = useState<string | null>(null)
   const [reportedPostIds, setReportedPostIds] = useState<string[]>([])
   const [showAvatarModal, setShowAvatarModal] = useState(false)
+  const [showBannerModal, setShowBannerModal] = useState(false)
 
   useEffect(() => {
     setMounted(true)
@@ -153,7 +158,7 @@ export default function ProfilePage() {
       const { data, error } = await supabase
         .from('profiles')
         .select(
-          'id, username, display_name, bio, avatar_url, country, birth_date, show_sensitive_content'
+          'id, username, display_name, bio, avatar_url, banner_url, country, birth_date, show_sensitive_content'
         )
         .eq('id', user.id)
         .maybeSingle()
@@ -170,6 +175,7 @@ export default function ProfilePage() {
         display_name: '',
         bio: '',
         avatar_url: '',
+        banner_url: '',
         country: '',
         birth_date: '',
         show_sensitive_content: false,
@@ -183,6 +189,8 @@ export default function ProfilePage() {
       setBirthDate(loadedProfile.birth_date || '')
       setAvatarUrl(loadedProfile.avatar_url || '')
       setAvatarPreview(loadedProfile.avatar_url || '')
+      setBannerUrl(loadedProfile.banner_url || '')
+      setBannerPreview(loadedProfile.banner_url || '')
       setShowSensitiveContent(loadedProfile.show_sensitive_content || false)
 
       await Promise.all([
@@ -518,6 +526,55 @@ export default function ProfilePage() {
     setMessage('Avatar atualizado. Agora salve o perfil.')
   }
 
+  async function handleBannerSelect(file: File | null) {
+    if (!file || !userId) return
+
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp']
+
+    if (!allowedTypes.includes(file.type)) {
+      setMessage('Envie uma capa em JPG, PNG ou WEBP.')
+      return
+    }
+
+    const maxSizeInBytes = 10 * 1024 * 1024
+
+    if (file.size > maxSizeInBytes) {
+      setMessage('A capa deve ter no máximo 10MB.')
+      return
+    }
+
+    setUploadingBanner(true)
+    setMessage('')
+
+    const previewUrl = URL.createObjectURL(file)
+    setBannerPreview(previewUrl)
+
+    const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg'
+    const filePath = `${userId}/banner-${Date.now()}.${fileExt}`
+
+    const { error: uploadError } = await supabase.storage
+      .from('profile-banners')
+      .upload(filePath, file, {
+        cacheControl: '3600',
+        upsert: true,
+      })
+
+    if (uploadError) {
+      setMessage('Erro ao enviar capa: ' + uploadError.message)
+      setUploadingBanner(false)
+      return
+    }
+
+    const { data: publicUrlData } = supabase.storage
+      .from('profile-banners')
+      .getPublicUrl(filePath)
+
+    setBannerUrl(publicUrlData.publicUrl)
+    setBannerPreview(publicUrlData.publicUrl)
+    setUploadingBanner(false)
+    setMessage('Capa atualizada. Agora salve o perfil.')
+  }
+
   async function handleSaveProfile(e: React.FormEvent) {
     e.preventDefault()
 
@@ -558,6 +615,7 @@ export default function ProfilePage() {
       display_name: displayName.trim() || null,
       bio: bio.trim() || null,
       avatar_url: avatarUrl || null,
+      banner_url: bannerUrl || null,
       country: country.trim() || null,
       birth_date: birthDate || null,
       show_sensitive_content: showSensitiveContent,
@@ -578,6 +636,7 @@ export default function ProfilePage() {
       display_name: displayName.trim() || null,
       bio: bio.trim() || null,
       avatar_url: avatarUrl || null,
+      banner_url: bannerUrl || null,
       country: country.trim() || null,
       birth_date: birthDate || null,
       show_sensitive_content: showSensitiveContent,
@@ -976,6 +1035,69 @@ export default function ProfilePage() {
           className="mt-5 rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900 sm:p-6"
         >
           <div className="flex flex-col gap-6">
+            <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950">
+              <button
+                type="button"
+                onClick={() => bannerPreview && setShowBannerModal(true)}
+                disabled={!bannerPreview}
+                className="group relative flex h-40 w-full items-center justify-center overflow-hidden bg-zinc-100 text-zinc-500 transition hover:opacity-95 disabled:cursor-default dark:bg-zinc-800 dark:text-zinc-400 sm:h-52"
+                title={bannerPreview ? 'Ver capa do perfil' : 'Capa do perfil'}
+                aria-label={bannerPreview ? 'Ver capa do perfil' : 'Capa do perfil'}
+              >
+                {bannerPreview ? (
+                  <img
+                    src={bannerPreview}
+                    alt={`Capa de ${profileName}`}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <div className="flex flex-col items-center gap-2 text-center">
+                    <ImageIcon className="h-9 w-9" />
+                    <span className="text-sm font-medium">Adicione uma capa ao seu perfil</span>
+                    <span className="text-xs text-zinc-400">Recomendado: imagem horizontal em JPG, PNG ou WEBP</span>
+                  </div>
+                )}
+
+                {bannerPreview && (
+                  <span className="absolute inset-0 hidden items-center justify-center bg-black/45 text-white transition group-hover:flex">
+                    <Maximize2 className="h-6 w-6" />
+                  </span>
+                )}
+              </button>
+
+              <div className="flex flex-col gap-3 border-t border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-zinc-900 dark:text-white">
+                    Capa do perfil
+                  </p>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                    Essa imagem aparece no topo do seu perfil público.
+                  </p>
+                </div>
+
+                <label
+                  className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-full border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-900 transition hover:bg-zinc-100 dark:border-zinc-700 dark:bg-black dark:text-white dark:hover:bg-zinc-900"
+                  title="Alterar capa do perfil"
+                >
+                  <ImageIcon className="h-4 w-4" />
+                  <span>{bannerPreview ? 'Alterar capa' : 'Adicionar capa'}</span>
+
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    onChange={(e) => handleBannerSelect(e.target.files?.[0] || null)}
+                    className="sr-only"
+                  />
+                </label>
+              </div>
+
+              {uploadingBanner && (
+                <p className="border-t border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
+                  Enviando capa...
+                </p>
+              )}
+            </div>
+
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
               <div className="flex flex-col items-center gap-3 sm:items-start">
                 <button
@@ -1176,8 +1298,8 @@ export default function ProfilePage() {
             <div className="flex flex-col gap-3 sm:flex-row">
               <button
                 type="submit"
-                disabled={saving || uploadingAvatar}
-                className={`w-full rounded-xl px-6 py-3 font-medium sm:w-auto ${saving || uploadingAvatar
+                disabled={saving || uploadingAvatar || uploadingBanner}
+                className={`w-full rounded-xl px-6 py-3 font-medium sm:w-auto ${saving || uploadingAvatar || uploadingBanner
                   ? 'cursor-not-allowed bg-zinc-300 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300'
                   : 'bg-black text-white hover:opacity-90 dark:bg-white dark:text-black'
                   }`}
@@ -1295,6 +1417,39 @@ export default function ProfilePage() {
           </div>
         </section>
       </section>
+
+      {showBannerModal && bannerPreview && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+          <button
+            type="button"
+            onClick={() => setShowBannerModal(false)}
+            className="absolute inset-0 cursor-default"
+            aria-label="Fechar capa do perfil"
+          />
+
+          <div className="relative z-[91] w-full max-w-5xl rounded-3xl border border-white/10 bg-zinc-950 p-4 shadow-2xl">
+            <button
+              type="button"
+              onClick={() => setShowBannerModal(false)}
+              className="absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-full bg-black/70 text-white transition hover:bg-black"
+              aria-label="Fechar"
+              title="Fechar"
+            >
+              <X className="h-5 w-5" />
+            </button>
+
+            <img
+              src={bannerPreview}
+              alt={`Capa de ${profileName}`}
+              className="mx-auto max-h-[78vh] w-full rounded-3xl object-contain"
+            />
+
+            <p className="mt-3 text-center text-sm font-semibold text-white">
+              Capa de {profileName}
+            </p>
+          </div>
+        </div>
+      )}
 
       {showAvatarModal && avatarPreview && (
         <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
