@@ -1,4 +1,4 @@
-'use client''use client'
+'use client'
 
 import AppSidebar from '../components/AppSidebar'
 import MobileNavigation from '../components/MobileNavigation'
