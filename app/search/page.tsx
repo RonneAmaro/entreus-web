@@ -1,8 +1,9 @@
-'use client'
+'use client''use client'
 
 import AppSidebar from '../components/AppSidebar'
 import MobileNavigation from '../components/MobileNavigation'
 import BrandHeader from '../components/BrandHeader'
+import UserBadges from '../components/UserBadges'
 import Link from 'next/link'
 import { Search, UserRound } from 'lucide-react'
 import { useEffect, useState } from 'react'
@@ -331,9 +332,13 @@ export default function SearchPage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <p className="truncate font-semibold text-black dark:text-white">
-                          {displayName}
-                        </p>
+                        <div className="flex min-w-0 items-center gap-1.5">
+                          <UserBadges userId={profile.id} size="sm" max={1} />
+
+                          <p className="truncate font-semibold text-black dark:text-white">
+                            {displayName}
+                          </p>
+                        </div>
 
                         <p className="truncate text-sm text-zinc-500">
                           @{profile.username}
