@@ -11,6 +11,7 @@ import { Camera, Maximize2, ShieldAlert, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import PostCard from '../components/PostCard'
 import UserBadges from '../components/UserBadges'
+import UserBadgesPanel from '../components/UserBadgesPanel'
 
 type VisibilityType = 'public' | 'followers' | 'private'
 
@@ -84,18 +85,18 @@ type Repost = {
 
 type FeedItem =
   | {
-      type: 'post'
-      id: string
-      created_at: string
-      post: Post
-    }
+    type: 'post'
+    id: string
+    created_at: string
+    post: Post
+  }
   | {
-      type: 'repost'
-      id: string
-      created_at: string
-      post: Post
-      repost: Repost
-    }
+    type: 'repost'
+    id: string
+    created_at: string
+    post: Post
+    repost: Repost
+  }
 
 export default function ProfilePage() {
   const router = useRouter()
@@ -316,10 +317,10 @@ export default function ProfilePage() {
           profilesById[repost.user_id] ||
           (isCurrentUser && currentProfileData
             ? {
-                username: currentProfileData.username || 'usuario',
-                display_name: currentProfileData.display_name,
-                avatar_url: currentProfileData.avatar_url,
-              }
+              username: currentProfileData.username || 'usuario',
+              display_name: currentProfileData.display_name,
+              avatar_url: currentProfileData.avatar_url,
+            }
             : null),
       }
     })
@@ -718,9 +719,9 @@ export default function ProfilePage() {
         current.map((repost) =>
           repost.id === optimisticRepost.id
             ? {
-                ...data,
-                profiles: optimisticRepost.profiles,
-              }
+              ...data,
+              profiles: optimisticRepost.profiles,
+            }
             : repost
         )
       )
@@ -1176,11 +1177,10 @@ export default function ProfilePage() {
               <button
                 type="submit"
                 disabled={saving || uploadingAvatar}
-                className={`w-full rounded-xl px-6 py-3 font-medium sm:w-auto ${
-                  saving || uploadingAvatar
-                    ? 'cursor-not-allowed bg-zinc-300 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300'
-                    : 'bg-black text-white hover:opacity-90 dark:bg-white dark:text-black'
-                }`}
+                className={`w-full rounded-xl px-6 py-3 font-medium sm:w-auto ${saving || uploadingAvatar
+                  ? 'cursor-not-allowed bg-zinc-300 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300'
+                  : 'bg-black text-white hover:opacity-90 dark:bg-white dark:text-black'
+                  }`}
               >
                 {saving ? 'Salvando...' : 'Salvar perfil'}
               </button>
@@ -1196,6 +1196,16 @@ export default function ProfilePage() {
             </div>
           </div>
         </form>
+
+        {userId && (
+          <div className="mt-8">
+            <UserBadgesPanel
+              userId={userId}
+              title="Meus selos conquistados"
+              emptyMessage="Você ainda não possui selos conquistados na EntreUS."
+            />
+          </div>
+        )}
 
         <section className="mt-8">
           <div className="mb-4 flex items-center justify-between gap-3">

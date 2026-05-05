@@ -10,6 +10,7 @@ import MobileNavigation from "../../components/MobileNavigation";
 import BrandHeader from "../../components/BrandHeader";
 import PostCard from "../../components/PostCard";
 import UserBadges from "../../components/UserBadges";
+import UserBadgesPanel from "../../components/UserBadgesPanel";
 import { Flag, Maximize2, UserCheck, UserPlus, UserX, X } from "lucide-react";
 
 type VisibilityType = "public" | "followers" | "private";
@@ -1599,6 +1600,16 @@ export default function PublicProfilePage() {
             </p>
           )}
         </div>
+        
+        {!hasBlockedMe && !isBlockedByMe && (
+          <div className="mb-6">
+            <UserBadgesPanel
+              userId={profile.id}
+              title="Selos conquistados"
+              emptyMessage="Este usuário ainda não possui selos conquistados."
+            />
+          </div>
+        )}
 
         {!hasBlockedMe && !isBlockedByMe && (
           <>
