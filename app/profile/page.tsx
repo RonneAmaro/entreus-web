@@ -1090,8 +1090,8 @@ export default function ProfilePage() {
             </div>
 
             <div className="px-4 pb-6 sm:px-6">
-              <div className="relative z-10 -mt-16 flex flex-col gap-5 sm:-mt-20 sm:flex-row sm:items-end sm:justify-between">
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
+              <div className="relative z-10 -mt-16 flex flex-col gap-5 sm:-mt-20 sm:flex-row sm:justify-between">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
                   <div className="flex flex-col items-center gap-3 sm:items-start">
                     <button
                       type="button"
@@ -1136,7 +1136,7 @@ export default function ProfilePage() {
                     </label>
                   </div>
 
-                  <div className="min-w-0 pb-1 text-center sm:text-left">
+                  <div className="min-w-0 pt-3 text-center sm:pt-16 sm:text-left">
                     <h2 className="inline-flex max-w-full items-center justify-center gap-2 break-words text-2xl font-black tracking-tight text-black dark:text-white sm:justify-start sm:text-4xl">
                       <UserBadges userId={userId} size="md" max={1} />
 
@@ -1157,7 +1157,7 @@ export default function ProfilePage() {
                   </div>
                 </div>
 
-                <div className="flex flex-wrap justify-center gap-2 sm:justify-end">
+                <div className="flex flex-wrap justify-center gap-2 sm:justify-end sm:pt-16">
                   <Link
                     href={publicProfileUrl}
                     className={`rounded-full border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-900 shadow-sm transition hover:bg-zinc-100 dark:border-zinc-700 dark:bg-black dark:text-white dark:hover:bg-zinc-900 ${!username ? 'pointer-events-none opacity-50' : ''}`}
@@ -1222,141 +1222,141 @@ export default function ProfilePage() {
                   </div>
                 </div>
 
-            <div className="grid grid-cols-1 gap-4">
-              <div>
-                <label className="mb-2 block text-sm text-zinc-700 dark:text-zinc-300">
-                  Nome de exibição
-                </label>
+                <div className="grid grid-cols-1 gap-4">
+                  <div>
+                    <label className="mb-2 block text-sm text-zinc-700 dark:text-zinc-300">
+                      Nome de exibição
+                    </label>
 
-                <input
-                  type="text"
-                  value={displayName}
-                  onChange={(e) => setDisplayName(e.target.value)}
-                  placeholder="Seu nome visível"
-                  className="w-full rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none transition focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 sm:text-base"
-                />
-              </div>
+                    <input
+                      type="text"
+                      value={displayName}
+                      onChange={(e) => setDisplayName(e.target.value)}
+                      placeholder="Seu nome visível"
+                      className="w-full rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none transition focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 sm:text-base"
+                    />
+                  </div>
 
-              <div>
-                <label className="mb-2 block text-sm text-zinc-700 dark:text-zinc-300">
-                  Username
-                </label>
+                  <div>
+                    <label className="mb-2 block text-sm text-zinc-700 dark:text-zinc-300">
+                      Username
+                    </label>
 
-                <input
-                  type="text"
-                  value={username}
-                  onChange={(e) => setUsername(sanitizeUsername(e.target.value))}
-                  placeholder="seu_username"
-                  className="w-full rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none transition focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 sm:text-base"
-                />
+                    <input
+                      type="text"
+                      value={username}
+                      onChange={(e) => setUsername(sanitizeUsername(e.target.value))}
+                      placeholder="seu_username"
+                      className="w-full rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none transition focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 sm:text-base"
+                    />
 
-                <p className="mt-2 text-xs text-zinc-500">
-                  Use letras minúsculas, números e underline.
-                </p>
-              </div>
+                    <p className="mt-2 text-xs text-zinc-500">
+                      Use letras minúsculas, números e underline.
+                    </p>
+                  </div>
 
-              <div>
-                <label className="mb-2 block text-sm text-zinc-700 dark:text-zinc-300">
-                  Bio
-                </label>
+                  <div>
+                    <label className="mb-2 block text-sm text-zinc-700 dark:text-zinc-300">
+                      Bio
+                    </label>
 
-                <textarea
-                  value={bio}
-                  onChange={(e) => setBio(e.target.value)}
-                  placeholder="Fale um pouco sobre você..."
-                  className="min-h-28 w-full resize-none rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none transition focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 sm:text-base"
-                />
-              </div>
+                    <textarea
+                      value={bio}
+                      onChange={(e) => setBio(e.target.value)}
+                      placeholder="Fale um pouco sobre você..."
+                      className="min-h-28 w-full resize-none rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none transition focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 sm:text-base"
+                    />
+                  </div>
 
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div>
-                  <label className="mb-2 block text-sm text-zinc-700 dark:text-zinc-300">
-                    País
-                  </label>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div>
+                      <label className="mb-2 block text-sm text-zinc-700 dark:text-zinc-300">
+                        País
+                      </label>
 
-                  <input
-                    type="text"
-                    value={country}
-                    onChange={(e) => setCountry(e.target.value)}
-                    placeholder="Brasil"
-                    className="w-full rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none transition focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 sm:text-base"
-                  />
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-sm text-zinc-700 dark:text-zinc-300">
-                    Data de nascimento
-                  </label>
-
-                  <input
-                    type="date"
-                    value={birthDate}
-                    onChange={(e) => setBirthDate(e.target.value)}
-                    className="w-full rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none transition focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 sm:text-base"
-                  />
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-yellow-200 bg-yellow-50 p-4 dark:border-yellow-900/60 dark:bg-yellow-950/20">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="flex gap-3">
-                    <div className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-yellow-100 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-300">
-                      <ShieldAlert className="h-5 w-5" />
+                      <input
+                        type="text"
+                        value={country}
+                        onChange={(e) => setCountry(e.target.value)}
+                        placeholder="Brasil"
+                        className="w-full rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none transition focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 sm:text-base"
+                      />
                     </div>
 
                     <div>
-                      <h3 className="font-semibold text-zinc-900 dark:text-white">
-                        Preferência de conteúdo 18+
-                      </h3>
+                      <label className="mb-2 block text-sm text-zinc-700 dark:text-zinc-300">
+                        Data de nascimento
+                      </label>
 
-                      <p className="mt-1 text-sm text-zinc-700 dark:text-zinc-300">
-                        Quando ativado, publicações adultas ou sensíveis poderão aparecer no seu feed.
-                      </p>
-
-                      <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-500">
-                        Quando desativado, o feed poderá ocultar esse tipo de conteúdo.
-                      </p>
+                      <input
+                        type="date"
+                        value={birthDate}
+                        onChange={(e) => setBirthDate(e.target.value)}
+                        className="w-full rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none transition focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 sm:text-base"
+                      />
                     </div>
                   </div>
 
-                  <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-yellow-300 bg-white px-4 py-3 text-sm font-medium text-zinc-900 dark:border-yellow-800 dark:bg-zinc-950 dark:text-white">
-                    <input
-                      type="checkbox"
-                      checked={showSensitiveContent}
-                      onChange={(e) => setShowSensitiveContent(e.target.checked)}
-                      className="h-5 w-5 accent-yellow-600"
-                    />
+                  <div className="rounded-2xl border border-yellow-200 bg-yellow-50 p-4 dark:border-yellow-900/60 dark:bg-yellow-950/20">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="flex gap-3">
+                        <div className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-yellow-100 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-300">
+                          <ShieldAlert className="h-5 w-5" />
+                        </div>
 
-                    Permitir 18+
-                  </label>
+                        <div>
+                          <h3 className="font-semibold text-zinc-900 dark:text-white">
+                            Preferência de conteúdo 18+
+                          </h3>
+
+                          <p className="mt-1 text-sm text-zinc-700 dark:text-zinc-300">
+                            Quando ativado, publicações adultas ou sensíveis poderão aparecer no seu feed.
+                          </p>
+
+                          <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-500">
+                            Quando desativado, o feed poderá ocultar esse tipo de conteúdo.
+                          </p>
+                        </div>
+                      </div>
+
+                      <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-yellow-300 bg-white px-4 py-3 text-sm font-medium text-zinc-900 dark:border-yellow-800 dark:bg-zinc-950 dark:text-white">
+                        <input
+                          type="checkbox"
+                          checked={showSensitiveContent}
+                          onChange={(e) => setShowSensitiveContent(e.target.checked)}
+                          className="h-5 w-5 accent-yellow-600"
+                        />
+
+                        Permitir 18+
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <button
+                    type="submit"
+                    disabled={saving || uploadingAvatar || uploadingBanner}
+                    className={`w-full rounded-xl px-6 py-3 font-medium sm:w-auto ${saving || uploadingAvatar || uploadingBanner
+                      ? 'cursor-not-allowed bg-zinc-300 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300'
+                      : 'bg-black text-white hover:opacity-90 dark:bg-white dark:text-black'
+                      }`}
+                  >
+                    {saving ? 'Salvando...' : 'Salvar perfil'}
+                  </button>
+
+                  {username && (
+                    <Link
+                      href={publicProfileUrl}
+                      className="w-full rounded-xl border border-zinc-300 px-6 py-3 text-center hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900 sm:w-auto"
+                    >
+                      Abrir perfil público
+                    </Link>
+                  )}
                 </div>
               </div>
             </div>
-
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <button
-                type="submit"
-                disabled={saving || uploadingAvatar || uploadingBanner}
-                className={`w-full rounded-xl px-6 py-3 font-medium sm:w-auto ${saving || uploadingAvatar || uploadingBanner
-                  ? 'cursor-not-allowed bg-zinc-300 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300'
-                  : 'bg-black text-white hover:opacity-90 dark:bg-white dark:text-black'
-                  }`}
-              >
-                {saving ? 'Salvando...' : 'Salvar perfil'}
-              </button>
-
-              {username && (
-                <Link
-                  href={publicProfileUrl}
-                  className="w-full rounded-xl border border-zinc-300 px-6 py-3 text-center hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900 sm:w-auto"
-                >
-                  Abrir perfil público
-                </Link>
-              )}
-            </div>
           </div>
-        </div>
-      </div>
         </form>
 
         {userId && (
