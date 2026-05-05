@@ -11,7 +11,7 @@ import BrandHeader from "../../components/BrandHeader";
 import PostCard from "../../components/PostCard";
 import UserBadges from "../../components/UserBadges";
 import UserBadgesPanel from "../../components/UserBadgesPanel";
-import { Flag, Maximize2, UserCheck, UserPlus, UserX, X } from "lucide-react";
+import { Flag, Maximize2, MessageCircle, UserCheck, UserPlus, UserX, X } from "lucide-react";
 
 type VisibilityType = "public" | "followers" | "private";
 
@@ -1407,12 +1407,12 @@ export default function PublicProfilePage() {
           }
         />
 
-        <div className="mb-6 overflow-hidden rounded-2xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="mb-6 overflow-hidden rounded-[2rem] border border-zinc-200 bg-white shadow-sm ring-1 ring-black/5 dark:border-zinc-800 dark:bg-zinc-950 dark:ring-white/5">
           <button
             type="button"
             onClick={() => profile.banner_url && setSelectedAvatarUrl(profile.banner_url)}
             disabled={!profile.banner_url}
-            className="group relative flex h-40 w-full items-center justify-center overflow-hidden bg-zinc-100 text-zinc-500 transition hover:opacity-95 disabled:cursor-default dark:bg-zinc-800 dark:text-zinc-400 sm:h-56"
+            className="group relative flex h-44 w-full items-center justify-center overflow-hidden bg-gradient-to-br from-zinc-100 via-zinc-200 to-zinc-100 text-zinc-500 transition hover:opacity-95 disabled:cursor-default dark:from-zinc-900 dark:via-zinc-800 dark:to-black dark:text-zinc-400 sm:h-60"
             title={profile.banner_url ? "Abrir capa do perfil" : "Capa do perfil"}
             aria-label={profile.banner_url ? "Abrir capa do perfil" : "Capa do perfil"}
           >
@@ -1424,211 +1424,265 @@ export default function PublicProfilePage() {
               />
             ) : (
               <div className="px-4 text-center">
-                <p className="text-sm font-medium">Este perfil ainda não adicionou uma capa.</p>
-                <p className="mt-1 text-xs text-zinc-400">A capa aparecerá aqui quando for adicionada.</p>
+                <p className="text-sm font-semibold text-zinc-600 dark:text-zinc-300">
+                  Este perfil ainda não adicionou uma capa.
+                </p>
+                <p className="mt-1 text-xs text-zinc-400">
+                  A capa aparecerá aqui quando for adicionada.
+                </p>
               </div>
             )}
 
+            <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/10 to-transparent" />
+
             {profile.banner_url && (
-              <span className="absolute inset-0 hidden items-center justify-center bg-black/45 text-white transition group-hover:flex">
+              <span className="absolute inset-0 hidden items-center justify-center bg-black/35 text-white transition group-hover:flex">
                 <Maximize2 className="h-6 w-6" />
               </span>
             )}
           </button>
 
-          <div className="p-6">
-            <div className="flex flex-col items-start justify-between gap-5 xl:flex-row">
-            <div className="flex min-w-0 flex-1 items-start gap-4">
-              {profile.avatar_url ? (
-                <button
-                  type="button"
-                  onClick={() => setSelectedAvatarUrl(profile.avatar_url)}
-                  className="group relative h-28 w-28 shrink-0 overflow-hidden rounded-full border border-zinc-300 bg-zinc-100 dark:border-zinc-700"
-                  title="Abrir foto de perfil"
-                  aria-label="Abrir foto de perfil"
-                >
-                  <img
-                    src={profile.avatar_url}
-                    alt={displayName}
-                    className="h-full w-full object-cover"
-                  />
+          <div className="relative px-5 pb-6 sm:px-6">
+            <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+              <div className="flex min-w-0 flex-1 flex-col gap-4 sm:flex-row sm:items-end">
+                <div className="-mt-14 shrink-0 sm:-mt-16">
+                  {profile.avatar_url ? (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedAvatarUrl(profile.avatar_url)}
+                      className="group relative h-28 w-28 overflow-hidden rounded-full border-4 border-white bg-zinc-100 shadow-xl ring-1 ring-black/10 transition hover:scale-[1.02] dark:border-zinc-950 dark:bg-zinc-800 dark:ring-white/10 sm:h-36 sm:w-36"
+                      title="Abrir foto de perfil"
+                      aria-label="Abrir foto de perfil"
+                    >
+                      <img
+                        src={profile.avatar_url}
+                        alt={displayName}
+                        className="h-full w-full object-cover"
+                      />
 
-                  <span className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition group-hover:bg-black/40 group-hover:opacity-100">
-                    <Maximize2 className="h-6 w-6 text-white" />
-                  </span>
-                </button>
-              ) : (
-                <div className="flex h-28 w-28 shrink-0 items-center justify-center rounded-full border border-zinc-300 bg-zinc-100 text-4xl font-bold text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
-                  {displayName.charAt(0).toUpperCase()}
+                      <span className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition group-hover:bg-black/40 group-hover:opacity-100">
+                        <Maximize2 className="h-6 w-6 text-white" />
+                      </span>
+                    </button>
+                  ) : (
+                    <div className="flex h-28 w-28 items-center justify-center rounded-full border-4 border-white bg-zinc-100 text-4xl font-black text-zinc-700 shadow-xl ring-1 ring-black/10 dark:border-zinc-950 dark:bg-zinc-800 dark:text-zinc-300 dark:ring-white/10 sm:h-36 sm:w-36">
+                      {displayName.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                </div>
+
+                <div className="min-w-0 flex-1 pb-1">
+                  <h2 className="flex max-w-full items-center gap-2 text-2xl font-black leading-tight tracking-tight text-black dark:text-white sm:text-4xl">
+                    <UserBadges userId={profile.id} size="md" max={1} />
+                    <span className="min-w-0 truncate" title={displayName}>
+                      {displayName}
+                    </span>
+                  </h2>
+
+                  <p className="mt-1 break-all text-sm font-medium text-zinc-500 dark:text-zinc-400 sm:text-base">
+                    @{profile.username}
+                  </p>
+
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {isOwnProfile && (
+                      <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-300">
+                        Este é o seu perfil
+                      </span>
+                    )}
+
+                    {isFollowing && !isOwnProfile && (
+                      <span className="rounded-full border border-green-200 bg-green-50 px-3 py-1 text-xs font-semibold text-green-700 dark:border-green-900/60 dark:bg-green-950/30 dark:text-green-300">
+                        Você segue este perfil
+                      </span>
+                    )}
+
+                    {isBlockedByMe && (
+                      <span className="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300">
+                        Perfil bloqueado por você
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {!isOwnProfile && !hasBlockedMe && (
+                <div className="flex shrink-0 flex-wrap gap-2 md:justify-end">
+                  <button
+                    type="button"
+                    onClick={handleToggleFollow}
+                    disabled={followLoading || isBlockedByMe}
+                    title={
+                      followLoading
+                        ? "Carregando..."
+                        : isFollowing
+                          ? "Seguindo"
+                          : "Seguir"
+                    }
+                    aria-label={
+                      followLoading
+                        ? "Carregando..."
+                        : isFollowing
+                          ? "Seguindo"
+                          : "Seguir"
+                    }
+                    className={`inline-flex h-11 items-center justify-center gap-2 rounded-full border px-4 text-sm font-bold transition ${
+                      isFollowing
+                        ? "border-green-300 bg-green-50 text-green-700 hover:bg-green-100 dark:border-green-800 dark:bg-green-950/30 dark:text-green-300 dark:hover:bg-green-950"
+                        : "border-zinc-900 bg-zinc-900 text-white hover:opacity-90 dark:border-white dark:bg-white dark:text-black"
+                    } ${followLoading || isBlockedByMe ? "cursor-not-allowed opacity-60" : ""}`}
+                  >
+                    {isFollowing ? (
+                      <UserCheck className="h-5 w-5" />
+                    ) : (
+                      <UserPlus className="h-5 w-5" />
+                    )}
+                    <span className="hidden sm:inline">
+                      {isFollowing ? "Seguindo" : "Seguir"}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled
+                    title="Mensagens privadas serão adicionadas em breve"
+                    aria-label="Mensagens privadas serão adicionadas em breve"
+                    className="inline-flex h-11 cursor-not-allowed items-center justify-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-4 text-sm font-bold text-blue-700 opacity-70 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-300"
+                  >
+                    <MessageCircle className="h-5 w-5" />
+                    <span className="hidden sm:inline">Mensagem</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleToggleBlock}
+                    disabled={blockLoading}
+                    title={
+                      blockLoading
+                        ? "Carregando..."
+                        : isBlockedByMe
+                          ? "Desbloquear usuário"
+                          : "Bloquear usuário"
+                    }
+                    aria-label={
+                      blockLoading
+                        ? "Carregando..."
+                        : isBlockedByMe
+                          ? "Desbloquear usuário"
+                          : "Bloquear usuário"
+                    }
+                    className={`flex h-11 w-11 items-center justify-center rounded-full border font-medium transition ${
+                      isBlockedByMe
+                        ? "border-zinc-300 text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                        : "border-red-300 text-red-600 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-950"
+                    } ${blockLoading ? "cursor-not-allowed opacity-60" : ""}`}
+                  >
+                    <UserX className="h-5 w-5" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleReportUser}
+                    disabled={reportingUser || reportedUser}
+                    title={
+                      reportingUser
+                        ? "Enviando..."
+                        : reportedUser
+                          ? "Usuário denunciado"
+                          : "Denunciar usuário"
+                    }
+                    aria-label={
+                      reportingUser
+                        ? "Enviando..."
+                        : reportedUser
+                          ? "Usuário denunciado"
+                          : "Denunciar usuário"
+                    }
+                    className={`flex h-11 w-11 items-center justify-center rounded-full border font-medium transition ${
+                      reportedUser
+                        ? "border-green-300 bg-green-50 text-green-600 dark:border-green-700 dark:bg-green-950 dark:text-green-400"
+                        : "border-orange-300 text-orange-600 hover:bg-orange-50 dark:border-orange-700 dark:text-orange-400 dark:hover:bg-orange-950"
+                    } ${reportingUser ? "cursor-not-allowed opacity-60" : ""}`}
+                  >
+                    <Flag className="h-5 w-5" />
+                  </button>
                 </div>
               )}
+            </div>
 
-              <div className="min-w-0 flex-1 pt-1">
-                <h2 className="flex max-w-full items-center gap-2 text-2xl font-bold leading-tight text-black dark:text-white sm:text-3xl">
-                  <UserBadges userId={profile.id} size="md" max={1} />
-                  <span className="min-w-0 truncate" title={displayName}>
-                    {displayName}
-                  </span>
-                </h2>
+            <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <button
+                type="button"
+                onClick={handleOpenFollowers}
+                className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4 text-left transition hover:-translate-y-[1px] hover:bg-white hover:shadow-sm dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900"
+              >
+                <span className="block text-2xl font-black text-black dark:text-white">
+                  {followersCount}
+                </span>
+                <span className="mt-1 block text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                  Seguidores
+                </span>
+              </button>
 
-                <p className="mt-1 break-all text-zinc-500 dark:text-zinc-400">
-                  @{profile.username}
-                </p>
+              <button
+                type="button"
+                onClick={handleOpenFollowing}
+                className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4 text-left transition hover:-translate-y-[1px] hover:bg-white hover:shadow-sm dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900"
+              >
+                <span className="block text-2xl font-black text-black dark:text-white">
+                  {followingCount}
+                </span>
+                <span className="mt-1 block text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                  Seguindo
+                </span>
+              </button>
+
+              <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-black">
+                <span className="block text-2xl font-black text-black dark:text-white">
+                  {feedItems.length}
+                </span>
+                <span className="mt-1 block text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                  Atividades
+                </span>
+              </div>
+
+              <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-black">
+                <span className="block text-2xl font-black text-black dark:text-white">
+                  {feedItems.filter((item) => item.type === "repost").length}
+                </span>
+                <span className="mt-1 block text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                  Reposts
+                </span>
               </div>
             </div>
 
-            {!isOwnProfile && !hasBlockedMe && (
-              <div className="flex shrink-0 flex-wrap gap-2 xl:justify-end">
-                <button
-                  type="button"
-                  onClick={handleToggleFollow}
-                  disabled={followLoading || isBlockedByMe}
-                  title={
-                    followLoading
-                      ? "Carregando..."
-                      : isFollowing
-                        ? "Seguindo"
-                        : "Seguir"
-                  }
-                  aria-label={
-                    followLoading
-                      ? "Carregando..."
-                      : isFollowing
-                        ? "Seguindo"
-                        : "Seguir"
-                  }
-                  className={`flex h-11 w-11 items-center justify-center rounded-full border font-medium transition ${
-                    isFollowing
-                      ? "border-green-300 bg-green-50 text-green-600 hover:bg-green-100 dark:border-green-800 dark:bg-green-950/30 dark:text-green-400 dark:hover:bg-green-950"
-                      : "border-zinc-900 bg-zinc-900 text-white hover:opacity-90 dark:border-white dark:bg-white dark:text-black"
-                  } ${followLoading || isBlockedByMe ? "cursor-not-allowed opacity-60" : ""}`}
-                >
-                  {isFollowing ? (
-                    <UserCheck className="h-5 w-5" />
-                  ) : (
-                    <UserPlus className="h-5 w-5" />
-                  )}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleToggleBlock}
-                  disabled={blockLoading}
-                  title={
-                    blockLoading
-                      ? "Carregando..."
-                      : isBlockedByMe
-                        ? "Desbloquear usuário"
-                        : "Bloquear usuário"
-                  }
-                  aria-label={
-                    blockLoading
-                      ? "Carregando..."
-                      : isBlockedByMe
-                        ? "Desbloquear usuário"
-                        : "Bloquear usuário"
-                  }
-                  className={`flex h-11 w-11 items-center justify-center rounded-full border font-medium transition ${
-                    isBlockedByMe
-                      ? "border-zinc-300 text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
-                      : "border-red-300 text-red-600 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-950"
-                  } ${blockLoading ? "cursor-not-allowed opacity-60" : ""}`}
-                >
-                  <UserX className="h-5 w-5" />
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleReportUser}
-                  disabled={reportingUser || reportedUser}
-                  title={
-                    reportingUser
-                      ? "Enviando..."
-                      : reportedUser
-                        ? "Usuário denunciado"
-                        : "Denunciar usuário"
-                  }
-                  aria-label={
-                    reportingUser
-                      ? "Enviando..."
-                      : reportedUser
-                        ? "Usuário denunciado"
-                        : "Denunciar usuário"
-                  }
-                  className={`flex h-11 w-11 items-center justify-center rounded-full border font-medium transition ${
-                    reportedUser
-                      ? "border-green-300 bg-green-50 text-green-600 dark:border-green-700 dark:bg-green-950 dark:text-green-400"
-                      : "border-orange-300 text-orange-600 hover:bg-orange-50 dark:border-orange-700 dark:text-orange-400 dark:hover:bg-orange-950"
-                  } ${reportingUser ? "cursor-not-allowed opacity-60" : ""}`}
-                >
-                  <Flag className="h-5 w-5" />
-                </button>
-              </div>
-            )}
-          </div>
-
-          <div className="mt-4 flex flex-wrap gap-6 text-sm text-zinc-700 dark:text-zinc-300">
-            <button
-              type="button"
-              onClick={handleOpenFollowers}
-              className="text-left transition hover:opacity-80"
-            >
-              <span className="font-semibold text-black dark:text-white">
-                {followersCount}
-              </span>{" "}
-              seguidores
-            </button>
-
-            <button
-              type="button"
-              onClick={handleOpenFollowing}
-              className="text-left transition hover:opacity-80"
-            >
-              <span className="font-semibold text-black dark:text-white">
-                {followingCount}
-              </span>{" "}
-              seguindo
-            </button>
-
-            <p>
-              <span className="font-semibold text-black dark:text-white">
-                {feedItems.length}
-              </span>{" "}
-              atividades
-            </p>
-
-            <p>
-              <span className="font-semibold text-black dark:text-white">
-                {feedItems.filter((item) => item.type === "repost").length}
-              </span>{" "}
-              reposts
-            </p>
-          </div>
-
-          <div className="mt-4">
-            {hasBlockedMe ? (
-              <p className="text-zinc-700 dark:text-zinc-300">
-                Você não pode visualizar este perfil porque este usuário te
-                bloqueou.
+            <div className="mt-6 rounded-2xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-black">
+              <p className="mb-2 text-xs font-bold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                Sobre
               </p>
-            ) : isBlockedByMe ? (
-              <p className="text-zinc-700 dark:text-zinc-300">
-                Você bloqueou este usuário. Desbloqueie para voltar a ver o
-                conteúdo dele.
-              </p>
-            ) : (
-              <p className="whitespace-pre-wrap text-zinc-800 dark:text-zinc-200">
-                {profile.bio?.trim() ||
-                  "Este usuário ainda não adicionou uma bio."}
+
+              {hasBlockedMe ? (
+                <p className="text-zinc-700 dark:text-zinc-300">
+                  Você não pode visualizar este perfil porque este usuário te
+                  bloqueou.
+                </p>
+              ) : isBlockedByMe ? (
+                <p className="text-zinc-700 dark:text-zinc-300">
+                  Você bloqueou este usuário. Desbloqueie para voltar a ver o
+                  conteúdo dele.
+                </p>
+              ) : (
+                <p className="whitespace-pre-wrap text-zinc-800 dark:text-zinc-200">
+                  {profile.bio?.trim() ||
+                    "Este usuário ainda não adicionou uma bio."}
+                </p>
+              )}
+            </div>
+
+            {message && (
+              <p className="mt-4 rounded-2xl border border-zinc-200 bg-zinc-50 p-4 text-sm text-zinc-600 dark:border-zinc-800 dark:bg-black dark:text-zinc-400">
+                {message}
               </p>
             )}
-          </div>
-
-          {message && (
-            <p className="mt-4 text-sm text-zinc-600 dark:text-zinc-400">
-              {message}
-            </p>
-          )}
           </div>
         </div>
 
