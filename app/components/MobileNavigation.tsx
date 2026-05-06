@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -12,6 +12,7 @@ import {
   ImagePlus,
   LogOut,
   Menu,
+  MessageCircle,
   Moon,
   PenLine,
   Plus,
@@ -23,17 +24,32 @@ import {
   Video,
   X,
 } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
 
 type MobileNavigationProps = {
   email: string
   displayName?: string
   avatarUrl?: string | null
   unreadNotificationsCount?: number
+  unreadMessagesCount?: number
   mounted: boolean
   theme?: string
   onToggleTheme: () => void
   onLogout: () => void
   onPostClick: () => void
+}
+
+type MyConversationParticipant = {
+  conversation_id: string
+  last_read_at: string | null
+}
+
+type LastMessage = {
+  id: string
+  conversation_id: string
+  sender_id: string
+  created_at: string
+  deleted_at: string | null
 }
 
 function getInitial(text: string) {
@@ -46,6 +62,7 @@ export default function MobileNavigation({
   displayName = 'Minha conta',
   avatarUrl,
   unreadNotificationsCount = 0,
+  unreadMessagesCount,
   mounted,
   theme,
   onToggleTheme,
@@ -55,6 +72,96 @@ export default function MobileNavigation({
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
   const [openPostMenu, setOpenPostMenu] = useState(false)
+  const [internalUnreadMessagesCount, setInternalUnreadMessagesCount] = useState(0)
+
+  const visibleUnreadMessagesCount =
+    unreadMessagesCount ?? internalUnreadMessagesCount
+
+  useEffect(() => {
+    if (typeof unreadMessagesCount === 'number') return
+
+    loadUnreadMessagesCount()
+
+    const interval = window.setInterval(() => {
+      loadUnreadMessagesCount()
+    }, 30000)
+
+    return () => {
+      window.clearInterval(interval)
+    }
+  }, [pathname, unreadMessagesCount])
+
+  async function loadUnreadMessagesCount() {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      setInternalUnreadMessagesCount(0)
+      return
+    }
+
+    const { data: participantsData, error: participantsError } = await supabase
+      .from('conversation_participants')
+      .select('conversation_id, last_read_at')
+      .eq('user_id', user.id)
+
+    if (participantsError) {
+      console.error('Erro ao carregar contador de mensagens:', participantsError.message)
+      setInternalUnreadMessagesCount(0)
+      return
+    }
+
+    const participants = (participantsData || []) as MyConversationParticipant[]
+    const conversationIds = participants.map((item) => item.conversation_id)
+
+    if (conversationIds.length === 0) {
+      setInternalUnreadMessagesCount(0)
+      return
+    }
+
+    const { data: messagesData, error: messagesError } = await supabase
+      .from('messages')
+      .select('id, conversation_id, sender_id, created_at, deleted_at')
+      .in('conversation_id', conversationIds)
+      .order('created_at', { ascending: false })
+      .limit(300)
+
+    if (messagesError) {
+      console.error('Erro ao carregar últimas mensagens:', messagesError.message)
+      setInternalUnreadMessagesCount(0)
+      return
+    }
+
+    const lastMessageByConversation: Record<string, LastMessage> = {}
+
+    for (const message of (messagesData || []) as LastMessage[]) {
+      if (!lastMessageByConversation[message.conversation_id]) {
+        lastMessageByConversation[message.conversation_id] = message
+      }
+    }
+
+    let count = 0
+
+    for (const participant of participants) {
+      const lastMessage = lastMessageByConversation[participant.conversation_id]
+
+      if (!lastMessage) continue
+      if (lastMessage.deleted_at) continue
+      if (lastMessage.sender_id === user.id) continue
+
+      const lastMessageTime = new Date(lastMessage.created_at).getTime()
+      const lastReadTime = participant.last_read_at
+        ? new Date(participant.last_read_at).getTime()
+        : 0
+
+      if (lastMessageTime > lastReadTime) {
+        count += 1
+      }
+    }
+
+    setInternalUnreadMessagesCount(count)
+  }
 
   function closeMenu() {
     setOpen(false)
@@ -114,6 +221,10 @@ export default function MobileNavigation({
     return `h-6 w-6 ${isActive(path) ? 'stroke-[2.6]' : ''}`
   }
 
+  function formatBadge(value: number) {
+    return value > 99 ? '99+' : value
+  }
+
   return (
     <>
       <header className="fixed left-0 top-0 z-50 flex h-14 w-full items-center justify-between border-b border-zinc-200 bg-white px-4 dark:border-zinc-800 dark:bg-black lg:hidden">
@@ -162,7 +273,7 @@ export default function MobileNavigation({
 
           {unreadNotificationsCount > 0 && (
             <span className="absolute right-1 top-1 flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white">
-              {unreadNotificationsCount > 99 ? '99+' : unreadNotificationsCount}
+              {formatBadge(unreadNotificationsCount)}
             </span>
           )}
         </Link>
@@ -249,11 +360,28 @@ export default function MobileNavigation({
 
                   {unreadNotificationsCount > 0 && (
                     <span className="absolute -right-2 -top-2 flex min-h-[16px] min-w-[16px] items-center justify-center rounded-full bg-red-600 px-1 text-[9px] font-bold text-white">
-                      {unreadNotificationsCount > 99 ? '99+' : unreadNotificationsCount}
+                      {formatBadge(unreadNotificationsCount)}
                     </span>
                   )}
                 </div>
                 Notificações
+              </Link>
+
+              <Link
+                href="/messages"
+                onClick={closeMenu}
+                className={drawerLinkClass('/messages')}
+              >
+                <div className="relative">
+                  <MessageCircle className={drawerIconClass('/messages')} />
+
+                  {visibleUnreadMessagesCount > 0 && (
+                    <span className="absolute -right-2 -top-2 flex min-h-[16px] min-w-[16px] items-center justify-center rounded-full bg-red-600 px-1 text-[9px] font-bold text-white">
+                      {formatBadge(visibleUnreadMessagesCount)}
+                    </span>
+                  )}
+                </div>
+                Mensagens
               </Link>
 
               <Link
@@ -416,12 +544,18 @@ export default function MobileNavigation({
         </Link>
 
         <Link
-          href="/saved"
-          className={bottomLinkClass('/saved')}
-          aria-label="Salvos"
+          href="/messages"
+          className={bottomLinkClass('/messages')}
+          aria-label="Mensagens"
         >
-          <span className={bottomIconWrapperClass('/saved')}>
-            <Bookmark className={bottomIconClass('/saved')} />
+          <span className={`${bottomIconWrapperClass('/messages')} relative`}>
+            <MessageCircle className={bottomIconClass('/messages')} />
+
+            {visibleUnreadMessagesCount > 0 && (
+              <span className="absolute left-1/2 top-1 ml-2 flex min-h-[17px] min-w-[17px] items-center justify-center rounded-full bg-red-600 px-1 text-[9px] font-bold text-white">
+                {formatBadge(visibleUnreadMessagesCount)}
+              </span>
+            )}
           </span>
         </Link>
 
@@ -435,7 +569,7 @@ export default function MobileNavigation({
 
             {unreadNotificationsCount > 0 && (
               <span className="absolute left-1/2 top-1 ml-2 flex min-h-[17px] min-w-[17px] items-center justify-center rounded-full bg-red-600 px-1 text-[9px] font-bold text-white">
-                {unreadNotificationsCount > 99 ? '99+' : unreadNotificationsCount}
+                {formatBadge(unreadNotificationsCount)}
               </span>
             )}
           </span>

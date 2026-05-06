@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -9,22 +9,39 @@ import {
   Bookmark,
   Compass,
   Home,
+  MessageCircle,
   MoreHorizontal,
   PenLine,
   User,
 } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
 import MoreMenu from './MoreMenu'
 
 type AppSidebarProps = {
   unreadNotificationsCount?: number
+  unreadMessagesCount?: number
   mounted: boolean
   theme?: string
   onToggleTheme: () => void
   onLogout: () => void
 }
 
+type MyConversationParticipant = {
+  conversation_id: string
+  last_read_at: string | null
+}
+
+type LastMessage = {
+  id: string
+  conversation_id: string
+  sender_id: string
+  created_at: string
+  deleted_at: string | null
+}
+
 export default function AppSidebar({
   unreadNotificationsCount = 0,
+  unreadMessagesCount,
   mounted,
   theme,
   onToggleTheme,
@@ -32,6 +49,96 @@ export default function AppSidebar({
 }: AppSidebarProps) {
   const pathname = usePathname()
   const [openMoreMenu, setOpenMoreMenu] = useState(false)
+  const [internalUnreadMessagesCount, setInternalUnreadMessagesCount] = useState(0)
+
+  const visibleUnreadMessagesCount =
+    unreadMessagesCount ?? internalUnreadMessagesCount
+
+  useEffect(() => {
+    if (typeof unreadMessagesCount === 'number') return
+
+    loadUnreadMessagesCount()
+
+    const interval = window.setInterval(() => {
+      loadUnreadMessagesCount()
+    }, 30000)
+
+    return () => {
+      window.clearInterval(interval)
+    }
+  }, [pathname, unreadMessagesCount])
+
+  async function loadUnreadMessagesCount() {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      setInternalUnreadMessagesCount(0)
+      return
+    }
+
+    const { data: participantsData, error: participantsError } = await supabase
+      .from('conversation_participants')
+      .select('conversation_id, last_read_at')
+      .eq('user_id', user.id)
+
+    if (participantsError) {
+      console.error('Erro ao carregar contador de mensagens:', participantsError.message)
+      setInternalUnreadMessagesCount(0)
+      return
+    }
+
+    const participants = (participantsData || []) as MyConversationParticipant[]
+    const conversationIds = participants.map((item) => item.conversation_id)
+
+    if (conversationIds.length === 0) {
+      setInternalUnreadMessagesCount(0)
+      return
+    }
+
+    const { data: messagesData, error: messagesError } = await supabase
+      .from('messages')
+      .select('id, conversation_id, sender_id, created_at, deleted_at')
+      .in('conversation_id', conversationIds)
+      .order('created_at', { ascending: false })
+      .limit(300)
+
+    if (messagesError) {
+      console.error('Erro ao carregar últimas mensagens:', messagesError.message)
+      setInternalUnreadMessagesCount(0)
+      return
+    }
+
+    const lastMessageByConversation: Record<string, LastMessage> = {}
+
+    for (const message of (messagesData || []) as LastMessage[]) {
+      if (!lastMessageByConversation[message.conversation_id]) {
+        lastMessageByConversation[message.conversation_id] = message
+      }
+    }
+
+    let count = 0
+
+    for (const participant of participants) {
+      const lastMessage = lastMessageByConversation[participant.conversation_id]
+
+      if (!lastMessage) continue
+      if (lastMessage.deleted_at) continue
+      if (lastMessage.sender_id === user.id) continue
+
+      const lastMessageTime = new Date(lastMessage.created_at).getTime()
+      const lastReadTime = participant.last_read_at
+        ? new Date(participant.last_read_at).getTime()
+        : 0
+
+      if (lastMessageTime > lastReadTime) {
+        count += 1
+      }
+    }
+
+    setInternalUnreadMessagesCount(count)
+  }
 
   function handlePostClick() {
     const composer = document.getElementById('post-composer')
@@ -68,6 +175,10 @@ export default function AppSidebar({
 
   function navIconClass(path: string) {
     return `h-6 w-6 shrink-0 ${isActive(path) ? 'stroke-[2.5]' : ''}`
+  }
+
+  function formatBadge(value: number) {
+    return value > 99 ? '99+' : value
   }
 
   const isMoreActive =
@@ -112,12 +223,26 @@ export default function AppSidebar({
 
               {unreadNotificationsCount > 0 && (
                 <span className="absolute -right-2 -top-2 flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white">
-                  {unreadNotificationsCount > 99 ? '99+' : unreadNotificationsCount}
+                  {formatBadge(unreadNotificationsCount)}
                 </span>
               )}
             </div>
 
             <span>Notificações</span>
+          </Link>
+
+          <Link href="/messages" className={`relative ${navLinkClass('/messages')}`}>
+            <div className="relative shrink-0">
+              <MessageCircle className={navIconClass('/messages')} />
+
+              {visibleUnreadMessagesCount > 0 && (
+                <span className="absolute -right-2 -top-2 flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white">
+                  {formatBadge(visibleUnreadMessagesCount)}
+                </span>
+              )}
+            </div>
+
+            <span>Mensagens</span>
           </Link>
 
           <Link href="/saved" className={navLinkClass('/saved')}>
