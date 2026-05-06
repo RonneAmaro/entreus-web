@@ -9,6 +9,21 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import { supabase } from '@/lib/supabase'
+import { useLanguage } from '../components/LanguageProvider'
+
+
+function getDateLocale(language: string) {
+  const locales: Record<string, string> = {
+    pt: 'pt-BR',
+    en: 'en-US',
+    fr: 'fr-FR',
+    id: 'id-ID',
+    ja: 'ja-JP',
+    zh: 'zh-CN',
+  }
+
+  return locales[language] || 'pt-BR'
+}
 
 type VisibilityType = 'public' | 'followers' | 'private'
 
@@ -86,6 +101,7 @@ type Repost = {
 export default function SavedPage() {
   const router = useRouter()
   const { theme, setTheme } = useTheme()
+  const { t, language } = useLanguage()
 
   const [mounted, setMounted] = useState(false)
   const [userId, setUserId] = useState('')
@@ -181,7 +197,7 @@ export default function SavedPage() {
       .eq('read', false)
 
     if (error) {
-      setMessage('Erro ao carregar notificações: ' + error.message)
+      setMessage(t('saved.messages.loadNotificationsError') + error.message)
       return
     }
 
@@ -195,7 +211,7 @@ export default function SavedPage() {
       .eq('blocker_id', currentUserId)
 
     if (blockedByMeError) {
-      setMessage('Erro ao carregar bloqueios: ' + blockedByMeError.message)
+      setMessage(t('saved.messages.loadBlocksError') + blockedByMeError.message)
       return []
     }
 
@@ -205,7 +221,7 @@ export default function SavedPage() {
       .eq('blocked_id', currentUserId)
 
     if (blockedMeError) {
-      setMessage('Erro ao carregar bloqueios: ' + blockedMeError.message)
+      setMessage(t('saved.messages.loadBlocksError') + blockedMeError.message)
       return []
     }
 
@@ -228,7 +244,7 @@ export default function SavedPage() {
       .select('id, follower_id, following_id')
 
     if (error) {
-      setMessage('Erro ao carregar seguimentos: ' + error.message)
+      setMessage(t('saved.messages.loadFollowsError') + error.message)
       return []
     }
 
@@ -243,7 +259,7 @@ export default function SavedPage() {
       .order('created_at', { ascending: false })
 
     if (error) {
-      setMessage('Erro ao carregar posts salvos: ' + error.message)
+      setMessage(t('saved.messages.loadBookmarksError') + error.message)
       return []
     }
 
@@ -256,7 +272,7 @@ export default function SavedPage() {
       .select('id, post_id, user_id')
 
     if (error) {
-      setMessage('Erro ao carregar curtidas: ' + error.message)
+      setMessage(t('saved.messages.loadLikesError') + error.message)
       return
     }
 
@@ -270,7 +286,7 @@ export default function SavedPage() {
       .order('created_at', { ascending: false })
 
     if (error) {
-      setMessage('Erro ao carregar reposts: ' + error.message)
+      setMessage(t('saved.messages.loadRepostsError') + error.message)
       return
     }
 
@@ -284,7 +300,7 @@ export default function SavedPage() {
       .order('created_at', { ascending: true })
 
     if (error) {
-      setMessage('Erro ao carregar comentários: ' + error.message)
+      setMessage(t('saved.messages.loadCommentsError') + error.message)
       return
     }
 
@@ -355,7 +371,7 @@ export default function SavedPage() {
       .in('id', postIds)
 
     if (error) {
-      setMessage('Erro ao carregar posts salvos: ' + error.message)
+      setMessage(t('saved.messages.loadBookmarksError') + error.message)
       return
     }
 
@@ -378,7 +394,7 @@ export default function SavedPage() {
         .order('position', { ascending: true })
 
       if (mediaError) {
-        console.error('Erro ao carregar mídias dos posts salvos:', mediaError.message)
+        console.error(t('saved.messages.loadSavedMediaError'), mediaError.message)
       }
 
       mediaByPost = ((mediaData || []) as PostMedia[]).reduce(
@@ -456,7 +472,7 @@ export default function SavedPage() {
       .eq('user_id', userId)
 
     if (error) {
-      setMessage('Erro ao remover post dos salvos: ' + error.message)
+      setMessage(t('saved.messages.removeSavedError') + error.message)
       await refreshSavedPosts()
     }
   }
@@ -469,7 +485,7 @@ export default function SavedPage() {
     const repostedPost = posts.find((post) => post.id === postId)
 
     if (repostedPost?.user_id === userId) {
-      setMessage('Você não precisa repostar sua própria publicação.')
+      setMessage(t('saved.messages.ownRepost'))
       return
     }
 
@@ -489,7 +505,7 @@ export default function SavedPage() {
         .eq('user_id', userId)
 
       if (error) {
-        setMessage('Erro ao remover repost: ' + error.message)
+        setMessage(t('saved.messages.removeRepostError') + error.message)
         await loadReposts()
       }
 
@@ -515,7 +531,7 @@ export default function SavedPage() {
       .single()
 
     if (error) {
-      setMessage('Erro ao repostar: ' + error.message)
+      setMessage(t('saved.messages.repostError') + error.message)
       await loadReposts()
       return
     }
@@ -560,7 +576,7 @@ export default function SavedPage() {
         .eq('id', existingLike.id)
 
       if (error) {
-        setMessage('Erro ao remover curtida: ' + error.message)
+        setMessage(t('saved.messages.removeLikeError') + error.message)
         await loadLikes()
       }
 
@@ -585,7 +601,7 @@ export default function SavedPage() {
       .single()
 
     if (error) {
-      setMessage('Erro ao curtir: ' + error.message)
+      setMessage(t('saved.messages.likeError') + error.message)
       await loadLikes()
       return
     }
@@ -619,7 +635,7 @@ export default function SavedPage() {
         setCopiedPostId((current) => (current === postId ? null : current))
       }, 2000)
     } catch {
-      setMessage('Não foi possível copiar o link do post.')
+      setMessage(t('saved.messages.copyPostError'))
     }
   }
 
@@ -627,13 +643,11 @@ export default function SavedPage() {
     if (!userId) return
 
     if (postOwnerId === userId) {
-      setMessage('Você não pode denunciar sua própria publicação.')
+      setMessage(t('saved.messages.ownReport'))
       return
     }
 
-    const reason = window.prompt(
-      'Informe o motivo da denúncia.\nEx.: spam, nudez indevida, assédio, conteúdo ofensivo'
-    )
+    const reason = window.prompt(t('saved.messages.reportPrompt'))
 
     if (!reason || !reason.trim()) return
 
@@ -648,13 +662,13 @@ export default function SavedPage() {
     })
 
     if (error) {
-      setMessage('Erro ao denunciar publicação: ' + error.message)
+      setMessage(t('saved.messages.reportError') + error.message)
       setReportingPostId(null)
       return
     }
 
     setReportedPostIds((prev) => [...prev, postId])
-    setMessage('Publicação denunciada com sucesso.')
+    setMessage(t('saved.messages.reportSuccess'))
     setReportingPostId(null)
   }
 
@@ -678,7 +692,7 @@ export default function SavedPage() {
   if (loading) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-white px-4 text-black dark:bg-black dark:text-white">
-        <p>Carregando salvos...</p>
+        <p>{t('saved.loading')}</p>
       </main>
     )
   }
@@ -695,7 +709,7 @@ export default function SavedPage() {
 
       <MobileNavigation
         email={email}
-        displayName={currentProfile?.display_name || currentProfile?.username || 'Minha conta'}
+        displayName={currentProfile?.display_name || currentProfile?.username || t('nav.myProfile')}
         avatarUrl={currentProfile?.avatar_url || null}
         unreadNotificationsCount={unreadNotificationsCount}
         mounted={mounted}
@@ -714,11 +728,11 @@ export default function SavedPage() {
 
             <div>
               <h1 className="text-2xl font-bold text-zinc-950 dark:text-white">
-                Posts salvos
+                {t('saved.title')}
               </h1>
 
               <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                Tudo que você salvou fica guardado aqui, visível apenas para você.
+                {t('saved.description')}
               </p>
             </div>
           </div>
@@ -736,18 +750,18 @@ export default function SavedPage() {
               <Bookmark className="mx-auto mb-3 h-10 w-10 text-zinc-400" />
 
               <p className="font-medium text-zinc-800 dark:text-zinc-200">
-                Nenhum post salvo ainda.
+                {t('saved.emptyTitle')}
               </p>
 
               <p className="mt-1 text-sm">
-                Quando você tocar em “Salvar” em algum post, ele vai aparecer aqui.
+                {t('saved.emptyDescription')}
               </p>
 
               <Link
                 href="/feed"
                 className="mt-5 inline-flex rounded-full bg-black px-5 py-2 text-sm font-semibold text-white transition hover:opacity-90 dark:bg-white dark:text-black"
               >
-                Voltar para o feed
+                {t('saved.backToFeed')}
               </Link>
             </div>
           )}
@@ -782,7 +796,7 @@ export default function SavedPage() {
                 reported={reportedPostIds.includes(post.id)}
                 reporting={reportingPostId === post.id}
                 showSensitiveContent={currentProfile?.show_sensitive_content || false}
-                footerLabel={`Publicado em ${new Date(post.created_at).toLocaleString('pt-BR')}`}
+                footerLabel={`${t('saved.publishedAt')} ${new Date(post.created_at).toLocaleString(getDateLocale(language))}`}
                 onLike={() => handleToggleLike(post.id)}
                 onCommentClick={() => router.push(`/post/${post.id}`)}
                 onRepost={() => handleToggleRepost(post.id)}

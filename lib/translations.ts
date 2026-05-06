@@ -353,6 +353,113 @@ const profileZh = {
   activity: { title: '我的活动', description: '您的帖子和转发会显示在这里。', emptyTitle: '暂无活动。', emptyDescription: '当您发布或转发内容时，它会显示在这里。', footerPublishedAt: '发布于' },
 }
 
+
+const savedPt = {
+  loading: 'Carregando salvos...',
+  title: 'Posts salvos',
+  description: 'Tudo que você salvou fica guardado aqui, visível apenas para você.',
+  emptyTitle: 'Nenhum post salvo ainda.',
+  emptyDescription: 'Quando você tocar em “Salvar” em algum post, ele vai aparecer aqui.',
+  backToFeed: 'Voltar para o feed',
+  publishedAt: 'Publicado em',
+  messages: {
+    loadNotificationsError: 'Erro ao carregar notificações: ',
+    loadBlocksError: 'Erro ao carregar bloqueios: ',
+    loadFollowsError: 'Erro ao carregar seguimentos: ',
+    loadBookmarksError: 'Erro ao carregar posts salvos: ',
+    loadLikesError: 'Erro ao carregar curtidas: ',
+    loadRepostsError: 'Erro ao carregar reposts: ',
+    loadCommentsError: 'Erro ao carregar comentários: ',
+    loadSavedMediaError: 'Erro ao carregar mídias dos posts salvos:',
+    removeSavedError: 'Erro ao remover post dos salvos: ',
+    ownRepost: 'Você não precisa repostar sua própria publicação.',
+    removeRepostError: 'Erro ao remover repost: ',
+    repostError: 'Erro ao repostar: ',
+    removeLikeError: 'Erro ao remover curtida: ',
+    likeError: 'Erro ao curtir: ',
+    copyPostError: 'Não foi possível copiar o link do post.',
+    ownReport: 'Você não pode denunciar sua própria publicação.',
+    reportPrompt: 'Informe o motivo da denúncia.\nEx.: spam, nudez indevida, assédio, conteúdo ofensivo',
+    reportError: 'Erro ao denunciar publicação: ',
+    reportSuccess: 'Publicação denunciada com sucesso.',
+  },
+}
+
+const savedEn = {
+  loading: 'Loading saved posts...',
+  title: 'Saved posts',
+  description: 'Everything you save stays here, visible only to you.',
+  emptyTitle: 'No saved posts yet.',
+  emptyDescription: 'When you tap “Save” on a post, it will appear here.',
+  backToFeed: 'Back to feed',
+  publishedAt: 'Published on',
+  messages: {
+    loadNotificationsError: 'Error loading notifications: ',
+    loadBlocksError: 'Error loading blocks: ',
+    loadFollowsError: 'Error loading follows: ',
+    loadBookmarksError: 'Error loading saved posts: ',
+    loadLikesError: 'Error loading likes: ',
+    loadRepostsError: 'Error loading reposts: ',
+    loadCommentsError: 'Error loading comments: ',
+    loadSavedMediaError: 'Error loading saved post media:',
+    removeSavedError: 'Error removing post from saved: ',
+    ownRepost: 'You do not need to repost your own post.',
+    removeRepostError: 'Error removing repost: ',
+    repostError: 'Error reposting: ',
+    removeLikeError: 'Error removing like: ',
+    likeError: 'Error liking: ',
+    copyPostError: 'Could not copy the post link.',
+    ownReport: 'You cannot report your own post.',
+    reportPrompt: 'Tell us the reason for the report.\nEx.: spam, inappropriate nudity, harassment, offensive content',
+    reportError: 'Error reporting post: ',
+    reportSuccess: 'Post reported successfully.',
+  },
+}
+
+const savedFr = {
+  ...savedEn,
+  loading: 'Chargement des publications enregistrées...',
+  title: 'Publications enregistrées',
+  description: 'Tout ce que vous enregistrez reste ici, visible uniquement par vous.',
+  emptyTitle: 'Aucune publication enregistrée.',
+  emptyDescription: 'Lorsque vous touchez “Enregistrer” sur une publication, elle apparaîtra ici.',
+  backToFeed: 'Retour au fil',
+  publishedAt: 'Publié le',
+}
+
+const savedId = {
+  ...savedEn,
+  loading: 'Memuat posting tersimpan...',
+  title: 'Posting tersimpan',
+  description: 'Semua yang Anda simpan akan berada di sini, hanya terlihat oleh Anda.',
+  emptyTitle: 'Belum ada posting tersimpan.',
+  emptyDescription: 'Saat Anda mengetuk “Simpan” pada posting, posting itu akan muncul di sini.',
+  backToFeed: 'Kembali ke feed',
+  publishedAt: 'Diterbitkan pada',
+}
+
+const savedJa = {
+  ...savedEn,
+  loading: '保存済み投稿を読み込み中...',
+  title: '保存済み投稿',
+  description: '保存したものはここに表示され、あなただけが見ることができます。',
+  emptyTitle: '保存済み投稿はまだありません。',
+  emptyDescription: '投稿で「保存」をタップすると、ここに表示されます。',
+  backToFeed: 'フィードに戻る',
+  publishedAt: '公開日時',
+}
+
+const savedZh = {
+  ...savedEn,
+  loading: '正在加载已保存帖子...',
+  title: '已保存帖子',
+  description: '您保存的所有内容都会保存在这里，仅您可见。',
+  emptyTitle: '暂无已保存帖子。',
+  emptyDescription: '当您在帖子上点击“保存”时，它会显示在这里。',
+  backToFeed: '返回动态',
+  publishedAt: '发布于',
+}
+
 export const translations = {
   pt: {
     brand: { tagline: 'Só Entre Nós' },
@@ -559,6 +666,38 @@ export const translations = {
             }
         },
         "feed": {
+            categories: {
+                daily: 'Cotidiano',
+                travel: 'Viagens',
+                places: 'Lugares',
+                food: 'Comida',
+                thoughts: 'Pensamentos',
+                lifestyle: 'Lifestyle',
+                sensual: 'Sensual',
+                adult: 'Adulto',
+            },
+            visibility: {
+                public: 'Público',
+                followers: 'Só seguidores',
+                private: 'Privado',
+            },
+            post: {
+                user: 'Usuário',
+                username: 'usuario',
+                noCategory: 'Sem categoria',
+                youReposted: 'Você repostou',
+                reposted: 'repostou',
+                repostedBadge: 'Repostado',
+                savedBadge: 'Salvo',
+                highlightedBadge: 'Destaque',
+                publishedAt: 'Publicado em',
+                repostedAt: 'Repostado em',
+            },
+            actions: {
+                loading: 'Carregando...',
+                follow: 'Seguir',
+                following: 'Seguindo',
+            },
             "loading": "Carregando feed...",
             "loggedAs": "Logado como:",
             "sensitiveHiddenPrefix": "Conteúdos 18+ estão ocultos no seu feed. Você pode alterar isso em",
@@ -628,6 +767,7 @@ export const translations = {
                 "commentDeleted": "Comentário excluído com sucesso."
             }
         },
+    saved: savedPt,
     profile: profilePt,
   },
   en: {
@@ -904,6 +1044,7 @@ export const translations = {
                 "commentDeleted": "Comment deleted successfully."
             }
         },
+    saved: savedEn,
     profile: profileEn,
   },
   fr: {
@@ -1180,6 +1321,7 @@ export const translations = {
                 "commentDeleted": "Comment deleted successfully."
             }
         },
+    saved: savedFr,
     profile: profileFr,
   },
   id: {
@@ -1456,6 +1598,7 @@ export const translations = {
                 "commentDeleted": "Comment deleted successfully."
             }
         },
+    saved: savedId,
     profile: profileId,
   },
   ja: {
@@ -1732,6 +1875,7 @@ export const translations = {
                 "commentDeleted": "Comment deleted successfully."
             }
         },
+    saved: savedJa,
     profile: profileJa,
   },
   zh: {
@@ -2008,6 +2152,7 @@ export const translations = {
                 "commentDeleted": "Comment deleted successfully."
             }
         },
+    saved: savedZh,
     profile: profileZh,
   },
 } as const
