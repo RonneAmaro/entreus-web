@@ -11,6 +11,7 @@ import BrandHeader from "../../components/BrandHeader";
 import PostCard from "../../components/PostCard";
 import UserBadges from "../../components/UserBadges";
 import UserBadgesPanel from "../../components/UserBadgesPanel";
+import StartConversationButton from "../../components/StartConversationButton";
 import { Flag, Maximize2, MessageCircle, UserCheck, UserPlus, UserX, X } from "lucide-react";
 
 type VisibilityType = "public" | "followers" | "private";
@@ -91,18 +92,18 @@ type Repost = {
 
 type FeedItem =
   | {
-      type: "post";
-      id: string;
-      created_at: string;
-      post: Post;
-    }
+    type: "post";
+    id: string;
+    created_at: string;
+    post: Post;
+  }
   | {
-      type: "repost";
-      id: string;
-      created_at: string;
-      post: Post;
-      repost: Repost;
-    };
+    type: "repost";
+    id: string;
+    created_at: string;
+    post: Post;
+    repost: Repost;
+  };
 
 export default function PublicProfilePage() {
   const params = useParams();
@@ -433,10 +434,10 @@ export default function PublicProfilePage() {
         profilesById[repost.user_id] ||
         (profileData && repost.user_id === profileData.id
           ? {
-              username: profileData.username,
-              display_name: profileData.display_name,
-              avatar_url: profileData.avatar_url,
-            }
+            username: profileData.username,
+            display_name: profileData.display_name,
+            avatar_url: profileData.avatar_url,
+          }
           : null),
     }));
 
@@ -974,9 +975,9 @@ export default function PublicProfilePage() {
         current.map((repost) =>
           repost.id === optimisticRepost.id
             ? {
-                ...data,
-                profiles: optimisticRepost.profiles,
-              }
+              ...data,
+              profiles: optimisticRepost.profiles,
+            }
             : repost,
         ),
       );
@@ -1525,11 +1526,10 @@ export default function PublicProfilePage() {
                           ? "Seguindo"
                           : "Seguir"
                     }
-                    className={`inline-flex h-11 items-center justify-center gap-2 rounded-full border px-4 text-sm font-bold transition ${
-                      isFollowing
+                    className={`inline-flex h-11 items-center justify-center gap-2 rounded-full border px-4 text-sm font-bold transition ${isFollowing
                         ? "border-green-300 bg-green-50 text-green-700 hover:bg-green-100 dark:border-green-800 dark:bg-green-950/30 dark:text-green-300 dark:hover:bg-green-950"
                         : "border-zinc-900 bg-zinc-900 text-white hover:opacity-90 dark:border-white dark:bg-white dark:text-black"
-                    } ${followLoading || isBlockedByMe ? "cursor-not-allowed opacity-60" : ""}`}
+                      } ${followLoading || isBlockedByMe ? "cursor-not-allowed opacity-60" : ""}`}
                   >
                     {isFollowing ? (
                       <UserCheck className="h-5 w-5" />
@@ -1541,16 +1541,15 @@ export default function PublicProfilePage() {
                     </span>
                   </button>
 
-                  <button
-                    type="button"
-                    disabled
-                    title="Mensagens privadas serão adicionadas em breve"
-                    aria-label="Mensagens privadas serão adicionadas em breve"
-                    className="inline-flex h-11 cursor-not-allowed items-center justify-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-4 text-sm font-bold text-blue-700 opacity-70 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-300"
-                  >
-                    <MessageCircle className="h-5 w-5" />
-                    <span className="hidden sm:inline">Mensagem</span>
-                  </button>
+                  <StartConversationButton
+                    targetUserId={profile.id}
+                    disabled={isOwnProfile || hasBlockedMe || isBlockedByMe}
+                    iconOnly
+                    className={`flex h-11 w-11 items-center justify-center rounded-full border font-medium transition ${isOwnProfile || hasBlockedMe || isBlockedByMe
+                        ? "cursor-not-allowed border-zinc-300 bg-zinc-100 text-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-600"
+                        : "border-blue-300 text-blue-600 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-950"
+                      }`}
+                  />
 
                   <button
                     type="button"
@@ -1570,11 +1569,10 @@ export default function PublicProfilePage() {
                           ? "Desbloquear usuário"
                           : "Bloquear usuário"
                     }
-                    className={`flex h-11 w-11 items-center justify-center rounded-full border font-medium transition ${
-                      isBlockedByMe
+                    className={`flex h-11 w-11 items-center justify-center rounded-full border font-medium transition ${isBlockedByMe
                         ? "border-zinc-300 text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
                         : "border-red-300 text-red-600 hover:bg-red-50 dark:border-red-700 dark:text-red-400 dark:hover:bg-red-950"
-                    } ${blockLoading ? "cursor-not-allowed opacity-60" : ""}`}
+                      } ${blockLoading ? "cursor-not-allowed opacity-60" : ""}`}
                   >
                     <UserX className="h-5 w-5" />
                   </button>
@@ -1597,11 +1595,10 @@ export default function PublicProfilePage() {
                           ? "Usuário denunciado"
                           : "Denunciar usuário"
                     }
-                    className={`flex h-11 w-11 items-center justify-center rounded-full border font-medium transition ${
-                      reportedUser
+                    className={`flex h-11 w-11 items-center justify-center rounded-full border font-medium transition ${reportedUser
                         ? "border-green-300 bg-green-50 text-green-600 dark:border-green-700 dark:bg-green-950 dark:text-green-400"
                         : "border-orange-300 text-orange-600 hover:bg-orange-50 dark:border-orange-700 dark:text-orange-400 dark:hover:bg-orange-950"
-                    } ${reportingUser ? "cursor-not-allowed opacity-60" : ""}`}
+                      } ${reportingUser ? "cursor-not-allowed opacity-60" : ""}`}
                   >
                     <Flag className="h-5 w-5" />
                   </button>
