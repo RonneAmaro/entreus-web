@@ -972,9 +972,9 @@ export default function ConversationPage() {
         onPostClick={handlePostClick}
       />
 
-      <section className="flex min-h-screen w-full max-w-4xl flex-col overflow-x-hidden px-4 py-20 pb-24 sm:px-6 lg:ml-[calc(270px+((100vw-270px-56rem)/2))] lg:py-8">
-        <div className="mb-5 overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="flex items-center gap-3 border-b border-zinc-200 px-4 py-4 dark:border-zinc-800 sm:px-5">
+      <section className="fixed bottom-16 left-0 right-0 top-14 z-10 flex flex-col overflow-hidden px-3 py-2 sm:px-6 lg:static lg:ml-[calc(270px+((100vw-270px-56rem)/2))] lg:h-screen lg:w-full lg:max-w-4xl lg:px-6 lg:py-8">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+          <div className="flex shrink-0 items-center gap-3 border-b border-zinc-200 px-4 py-4 dark:border-zinc-800 sm:px-5">
             <Link
               href="/messages"
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-300 bg-white text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-700 dark:bg-black dark:text-zinc-200 dark:hover:bg-zinc-900"
@@ -1023,12 +1023,12 @@ export default function ConversationPage() {
           </div>
 
           {message && (
-            <div className="border-b border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-700 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300">
+            <div className="shrink-0 border-b border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-700 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300">
               {message}
             </div>
           )}
 
-          <div className="flex min-h-[55vh] flex-col gap-3 bg-zinc-50 p-4 dark:bg-zinc-950 sm:p-5">
+          <div className="min-h-0 flex-1 overflow-y-auto bg-zinc-50 p-3 dark:bg-zinc-950 sm:p-5">
             {messages.length === 0 ? (
               <div className="flex flex-1 items-center justify-center text-center">
                 <div>
@@ -1208,7 +1208,7 @@ export default function ConversationPage() {
           </div>
 
           {selectedMedia.length > 0 && (
-            <div className="border-t border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900">
+            <div className="shrink-0 border-t border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900">
               <div className="flex gap-3 overflow-x-auto pb-1">
                 {selectedMedia.map((item, index) => (
                   <div
@@ -1272,14 +1272,14 @@ export default function ConversationPage() {
           )}
 
           {recordingAudio && (
-            <div className="border-t border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300">
+            <div className="shrink-0 border-t border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300">
               Gravando áudio... {formatRecordingTime(recordingSeconds)}
             </div>
           )}
 
           <form
             onSubmit={handleSendMessage}
-            className="flex gap-2 border-t border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900 sm:gap-3 sm:p-4"
+            className="flex shrink-0 gap-2 border-t border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900 sm:gap-3 sm:p-4"
           >
             <input
               ref={fileInputRef}
