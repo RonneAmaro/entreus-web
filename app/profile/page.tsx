@@ -1004,11 +1004,11 @@ export default function ProfilePage() {
           description="Edite suas informações, personalize sua presença e acompanhe suas publicações e reposts."
           compact
           rightContent={
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-start gap-2">
               {username && (
                 <Link
                   href={publicProfileUrl}
-                  className="rounded-full border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-900 transition hover:bg-zinc-100 dark:border-zinc-700 dark:bg-black dark:text-white dark:hover:bg-zinc-900"
+                  className="inline-flex h-10 shrink-0 items-center justify-center whitespace-nowrap rounded-full border border-zinc-300 bg-white px-4 text-sm font-semibold leading-none text-zinc-900 transition hover:bg-zinc-100 dark:border-zinc-700 dark:bg-black dark:text-white dark:hover:bg-zinc-900"
                 >
                   Ver perfil público
                 </Link>
@@ -1016,7 +1016,7 @@ export default function ProfilePage() {
 
               <Link
                 href="/feed"
-                className="rounded-full border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-900 transition hover:bg-zinc-100 dark:border-zinc-700 dark:bg-black dark:text-white dark:hover:bg-zinc-900"
+                className="inline-flex h-10 shrink-0 items-center justify-center whitespace-nowrap rounded-full border border-zinc-300 bg-white px-4 text-sm font-semibold leading-none text-zinc-900 transition hover:bg-zinc-100 dark:border-zinc-700 dark:bg-black dark:text-white dark:hover:bg-zinc-900"
               >
                 Voltar ao feed
               </Link>
@@ -1157,17 +1157,17 @@ export default function ProfilePage() {
                   </div>
                 </div>
 
-                <div className="flex flex-wrap justify-center gap-2 sm:justify-end sm:pt-16">
+                <div className="flex shrink-0 flex-wrap items-start justify-center gap-2 sm:justify-end sm:pt-16">
                   <Link
                     href={publicProfileUrl}
-                    className={`rounded-full border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-900 shadow-sm transition hover:bg-zinc-100 dark:border-zinc-700 dark:bg-black dark:text-white dark:hover:bg-zinc-900 ${!username ? 'pointer-events-none opacity-50' : ''}`}
+                    className={`inline-flex h-10 shrink-0 items-center justify-center whitespace-nowrap rounded-full border border-zinc-300 bg-white px-4 text-sm font-semibold leading-none text-zinc-900 shadow-sm transition hover:bg-zinc-100 dark:border-zinc-700 dark:bg-black dark:text-white dark:hover:bg-zinc-900 ${!username ? 'pointer-events-none opacity-50' : ''}`}
                   >
                     Ver público
                   </Link>
 
                   <Link
                     href="/feed"
-                    className="rounded-full bg-black px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:opacity-90 dark:bg-white dark:text-black"
+                    className="inline-flex h-10 shrink-0 items-center justify-center whitespace-nowrap rounded-full bg-black px-4 text-sm font-semibold leading-none text-white shadow-sm transition hover:opacity-90 dark:bg-white dark:text-black"
                   >
                     Ir ao feed
                   </Link>
