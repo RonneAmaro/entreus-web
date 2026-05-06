@@ -8,6 +8,22 @@ export default function LabPage() {
   return (
     <main className="min-h-screen bg-zinc-50 px-4 py-10 text-zinc-950 dark:bg-black dark:text-white sm:px-6">
       <section className="mx-auto max-w-6xl">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+          <Link
+            href="/feed"
+            className="inline-flex items-center justify-center rounded-full border border-zinc-200 bg-white px-4 py-2 text-sm font-bold text-zinc-800 shadow-sm transition hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100 dark:hover:bg-zinc-900"
+          >
+            Voltar para o feed
+          </Link>
+
+          <Link
+            href="/lab/poster"
+            className="inline-flex items-center justify-center rounded-full bg-black px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:opacity-90 dark:bg-white dark:text-black"
+          >
+            Abrir gerador de pôster
+          </Link>
+        </div>
+
         <div className="overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
           <div className="relative p-6 sm:p-8">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(37,99,235,0.18),transparent_35%),radial-gradient(circle_at_bottom_left,rgba(59,130,246,0.12),transparent_30%)]" />

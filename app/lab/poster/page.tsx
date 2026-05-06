@@ -407,14 +407,23 @@ export default function PosterLabPage() {
   return (
     <main className="min-h-screen bg-zinc-50 px-4 py-8 text-zinc-950 dark:bg-black dark:text-white sm:px-6">
       <section className="mx-auto max-w-7xl">
-        <div className="mb-5 flex items-center justify-between gap-3">
-          <Link
-            href="/lab"
-            className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold transition hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:bg-zinc-900"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Voltar ao Lab
-          </Link>
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href="/lab"
+              className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold transition hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:bg-zinc-900"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Voltar ao Lab
+            </Link>
+
+            <Link
+              href="/feed"
+              className="inline-flex items-center rounded-full border border-zinc-200 bg-white px-4 py-2 text-sm font-bold text-zinc-800 transition hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100 dark:hover:bg-zinc-900"
+            >
+              Voltar para o feed
+            </Link>
+          </div>
 
           <a
             href="#doacao"

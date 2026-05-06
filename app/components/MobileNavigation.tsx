@@ -276,11 +276,11 @@ export default function MobileNavigation({
         <button
           type="button"
           onClick={() => setOpenMoreOptions((current) => !current)}
-          className="flex h-10 w-10 items-center justify-center rounded-full text-zinc-800 hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-900"
+          className="flex h-10 w-10 items-center justify-center rounded-full border border-zinc-200 bg-zinc-100 text-zinc-800 shadow-sm transition hover:bg-zinc-200 active:scale-95 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
           aria-label="Abrir mais opções"
           title="Mais opções"
         >
-          <MoreHorizontal className="h-7 w-7" />
+          <MoreHorizontal className="h-6 w-6" />
         </button>
       </header>
 
