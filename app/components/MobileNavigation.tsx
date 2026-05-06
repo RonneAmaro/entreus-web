@@ -14,6 +14,7 @@ import {
   LogOut,
   Menu,
   MessageCircle,
+  MoreHorizontal,
   Moon,
   PenLine,
   Plus,
@@ -72,6 +73,7 @@ export default function MobileNavigation({
 }: MobileNavigationProps) {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
+  const [openMoreOptions, setOpenMoreOptions] = useState(false)
   const [openPostMenu, setOpenPostMenu] = useState(false)
   const [internalUnreadMessagesCount, setInternalUnreadMessagesCount] = useState(0)
 
@@ -168,6 +170,10 @@ export default function MobileNavigation({
 
   function closeMenu() {
     setOpen(false)
+  }
+
+  function closeMoreOptions() {
+    setOpenMoreOptions(false)
   }
 
   function handlePostAction() {
@@ -267,20 +273,115 @@ export default function MobileNavigation({
           />
         </Link>
 
-        <Link
-          href="/notifications"
-          className="relative flex h-10 w-10 items-center justify-center rounded-full text-zinc-800 hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-900"
-          aria-label="Notificações"
+        <button
+          type="button"
+          onClick={() => setOpenMoreOptions((current) => !current)}
+          className="flex h-10 w-10 items-center justify-center rounded-full text-zinc-800 hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-900"
+          aria-label="Abrir mais opções"
+          title="Mais opções"
         >
-          <Bell className="h-6 w-6" />
-
-          {unreadNotificationsCount > 0 && (
-            <span className="absolute right-1 top-1 flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white">
-              {formatBadge(unreadNotificationsCount)}
-            </span>
-          )}
-        </Link>
+          <MoreHorizontal className="h-7 w-7" />
+        </button>
       </header>
+
+      {openMoreOptions && (
+        <div className="fixed inset-0 z-[58] lg:hidden">
+          <button
+            type="button"
+            onClick={closeMoreOptions}
+            className="absolute inset-0 bg-black/20"
+            aria-label="Fechar mais opções"
+          />
+
+          <div className="absolute right-4 top-16 w-[min(320px,calc(100vw-2rem))] overflow-hidden rounded-3xl border border-zinc-200 bg-white p-2 shadow-2xl dark:border-zinc-800 dark:bg-black">
+            <div className="px-3 py-3">
+              <p className="text-xs font-bold uppercase tracking-[0.25em] text-zinc-400">
+                Mais opções
+              </p>
+            </div>
+
+            <div className="space-y-1">
+              <Link
+                href="/lab"
+                onClick={closeMoreOptions}
+                className={drawerLinkClass('/lab')}
+              >
+                <FlaskConical className={drawerIconClass('/lab')} />
+                EntreUS Lab
+              </Link>
+
+              <Link
+                href="/saved"
+                onClick={closeMoreOptions}
+                className={drawerLinkClass('/saved')}
+              >
+                <Bookmark className={drawerIconClass('/saved')} />
+                Salvos
+              </Link>
+
+              <Link
+                href="/privacy"
+                onClick={closeMoreOptions}
+                className={drawerLinkClass('/privacy')}
+              >
+                <Shield className={drawerIconClass('/privacy')} />
+                Privacidade
+              </Link>
+
+              <Link
+                href="/blocked"
+                onClick={closeMoreOptions}
+                className={drawerLinkClass('/blocked')}
+              >
+                <UserX className={drawerIconClass('/blocked')} />
+                Bloqueados
+              </Link>
+
+              <Link
+                href="/settings"
+                onClick={closeMoreOptions}
+                className={drawerLinkClass('/settings')}
+              >
+                <Settings className={drawerIconClass('/settings')} />
+                Configurações
+              </Link>
+
+              {mounted && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onToggleTheme()
+                    closeMoreOptions()
+                  }}
+                  className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-base font-medium hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                >
+                  {theme === 'dark' ? (
+                    <Sun className="h-5 w-5" />
+                  ) : (
+                    <Moon className="h-5 w-5" />
+                  )}
+
+                  {theme === 'dark' ? 'Tema claro' : 'Tema escuro'}
+                </button>
+              )}
+
+              <div className="my-2 border-t border-zinc-200 dark:border-zinc-800" />
+
+              <button
+                type="button"
+                onClick={() => {
+                  closeMoreOptions()
+                  onLogout()
+                }}
+                className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-base font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30"
+              >
+                <LogOut className="h-5 w-5" />
+                Sair
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {open && (
         <div className="fixed inset-0 z-[60] lg:hidden">
