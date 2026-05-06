@@ -27,6 +27,8 @@ import {
   X,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { useLanguage } from './LanguageProvider'
+import type { LanguageCode } from '@/lib/translations'
 
 type MobileNavigationProps = {
   email: string
@@ -72,6 +74,7 @@ export default function MobileNavigation({
   onPostClick,
 }: MobileNavigationProps) {
   const pathname = usePathname()
+  const { language, languages, setLanguage, t } = useLanguage()
   const [open, setOpen] = useState(false)
   const [openMoreOptions, setOpenMoreOptions] = useState(false)
   const [openPostMenu, setOpenPostMenu] = useState(false)
@@ -241,7 +244,7 @@ export default function MobileNavigation({
           type="button"
           onClick={() => setOpen(true)}
           className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border border-zinc-200 bg-zinc-100 text-zinc-800 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100"
-          aria-label="Abrir menu do perfil"
+          aria-label={t('mobile.openProfileMenu')}
         >
           {avatarUrl ? (
             <img
@@ -261,7 +264,7 @@ export default function MobileNavigation({
         <Link
           href="/feed"
           className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center"
-          aria-label="Ir para a página inicial"
+          aria-label={t('mobile.goHome')}
         >
           <Image
             src="/logo.png"
@@ -277,8 +280,8 @@ export default function MobileNavigation({
           type="button"
           onClick={() => setOpenMoreOptions((current) => !current)}
           className="flex h-10 w-10 items-center justify-center rounded-full border border-zinc-200 bg-zinc-100 text-zinc-800 shadow-sm transition hover:bg-zinc-200 active:scale-95 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
-          aria-label="Abrir mais opções"
-          title="Mais opções"
+          aria-label={t('more.open')}
+          title={t('more.title')}
         >
           <MoreHorizontal className="h-6 w-6" />
         </button>
@@ -290,13 +293,13 @@ export default function MobileNavigation({
             type="button"
             onClick={closeMoreOptions}
             className="absolute inset-0 bg-black/20"
-            aria-label="Fechar mais opções"
+            aria-label={t('more.close')}
           />
 
           <div className="absolute right-4 top-16 w-[min(320px,calc(100vw-2rem))] overflow-hidden rounded-3xl border border-zinc-200 bg-white p-2 shadow-2xl dark:border-zinc-800 dark:bg-black">
             <div className="px-3 py-3">
               <p className="text-xs font-bold uppercase tracking-[0.25em] text-zinc-400">
-                Mais opções
+                {t('more.title')}
               </p>
             </div>
 
@@ -307,7 +310,7 @@ export default function MobileNavigation({
                 className={drawerLinkClass('/lab')}
               >
                 <FlaskConical className={drawerIconClass('/lab')} />
-                EntreUS Lab
+                {t('lab.name')}
               </Link>
 
               <Link
@@ -316,7 +319,7 @@ export default function MobileNavigation({
                 className={drawerLinkClass('/saved')}
               >
                 <Bookmark className={drawerIconClass('/saved')} />
-                Salvos
+                {t('nav.saved')}
               </Link>
 
               <Link
@@ -325,7 +328,7 @@ export default function MobileNavigation({
                 className={drawerLinkClass('/privacy')}
               >
                 <Shield className={drawerIconClass('/privacy')} />
-                Privacidade
+                {t('settings.privacy')}
               </Link>
 
               <Link
@@ -334,7 +337,7 @@ export default function MobileNavigation({
                 className={drawerLinkClass('/blocked')}
               >
                 <UserX className={drawerIconClass('/blocked')} />
-                Bloqueados
+                {t('settings.blocked')}
               </Link>
 
               <Link
@@ -343,8 +346,30 @@ export default function MobileNavigation({
                 className={drawerLinkClass('/settings')}
               >
                 <Settings className={drawerIconClass('/settings')} />
-                Configurações
+                {t('settings.settings')}
               </Link>
+
+              <div className="rounded-2xl px-3 py-3">
+                <label className="mb-2 block text-sm font-semibold text-zinc-800 dark:text-zinc-100">
+                  {t('language.label')}
+                </label>
+
+                <select
+                  value={language}
+                  onChange={(event) => setLanguage(event.target.value as LanguageCode)}
+                  className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-blue-400 dark:border-zinc-800 dark:bg-zinc-950"
+                >
+                  {languages.map((item) => (
+                    <option key={item.code} value={item.code}>
+                      {item.nativeName}
+                    </option>
+                  ))}
+                </select>
+
+                <p className="mt-2 text-xs text-zinc-500">
+                  {t('language.helper')}
+                </p>
+              </div>
 
               {mounted && (
                 <button
@@ -361,7 +386,7 @@ export default function MobileNavigation({
                     <Moon className="h-5 w-5" />
                   )}
 
-                  {theme === 'dark' ? 'Tema claro' : 'Tema escuro'}
+                  {theme === 'dark' ? t('theme.light') : t('theme.dark')}
                 </button>
               )}
 
@@ -376,7 +401,7 @@ export default function MobileNavigation({
                 className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-base font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30"
               >
                 <LogOut className="h-5 w-5" />
-                Sair
+                {t('auth.logout')}
               </button>
             </div>
           </div>
@@ -389,7 +414,7 @@ export default function MobileNavigation({
             type="button"
             onClick={closeMenu}
             className="absolute inset-0 bg-black/50"
-            aria-label="Fechar menu"
+            aria-label={t('more.closeMenu')}
           />
 
           <aside className="relative h-full w-[82%] max-w-[340px] overflow-y-auto border-r border-zinc-200 bg-white px-5 py-5 shadow-2xl dark:border-zinc-800 dark:bg-black">
@@ -420,7 +445,7 @@ export default function MobileNavigation({
                 type="button"
                 onClick={closeMenu}
                 className="flex h-10 w-10 items-center justify-center rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-900"
-                aria-label="Fechar menu"
+                aria-label={t('more.closeMenu')}
               >
                 <X className="h-6 w-6" />
               </button>
@@ -433,7 +458,7 @@ export default function MobileNavigation({
                 className={drawerLinkClass('/profile')}
               >
                 <User className={drawerIconClass('/profile')} />
-                Meu perfil
+                {t('nav.myProfile')}
               </Link>
 
               <Link
@@ -442,7 +467,7 @@ export default function MobileNavigation({
                 className={drawerLinkClass('/feed')}
               >
                 <Home className={drawerIconClass('/feed')} />
-                Página inicial
+                {t('nav.home')}
               </Link>
 
               <Link
@@ -451,7 +476,7 @@ export default function MobileNavigation({
                 className={drawerLinkClass('/search')}
               >
                 <Compass className={drawerIconClass('/search')} />
-                Explorar
+                {t('nav.explore')}
               </Link>
 
               <Link
@@ -468,7 +493,7 @@ export default function MobileNavigation({
                     </span>
                   )}
                 </div>
-                Notificações
+                {t('nav.notifications')}
               </Link>
 
               <Link
@@ -485,7 +510,7 @@ export default function MobileNavigation({
                     </span>
                   )}
                 </div>
-                Mensagens
+                {t('nav.messages')}
               </Link>
 
               <Link
@@ -494,7 +519,7 @@ export default function MobileNavigation({
                 className={drawerLinkClass('/saved')}
               >
                 <Bookmark className={drawerIconClass('/saved')} />
-                Salvos
+                {t('nav.saved')}
               </Link>
 
               <Link
@@ -503,7 +528,7 @@ export default function MobileNavigation({
                 className={drawerLinkClass('/lab')}
               >
                 <FlaskConical className={drawerIconClass('/lab')} />
-                EntreUS Lab
+                {t('lab.name')}
               </Link>
 
               <div className="my-4 border-t border-zinc-200 dark:border-zinc-800" />
@@ -514,7 +539,7 @@ export default function MobileNavigation({
                 className={drawerLinkClass('/privacy')}
               >
                 <Shield className={drawerIconClass('/privacy')} />
-                Privacidade
+                {t('settings.privacy')}
               </Link>
 
               <Link
@@ -523,7 +548,7 @@ export default function MobileNavigation({
                 className={drawerLinkClass('/blocked')}
               >
                 <UserX className={drawerIconClass('/blocked')} />
-                Bloqueados
+                {t('settings.blocked')}
               </Link>
 
               <Link
@@ -532,7 +557,7 @@ export default function MobileNavigation({
                 className={drawerLinkClass('/settings')}
               >
                 <Settings className={drawerIconClass('/settings')} />
-                Configurações
+                {t('settings.settings')}
               </Link>
 
               {mounted && (
@@ -550,7 +575,7 @@ export default function MobileNavigation({
                     <Moon className="h-5 w-5" />
                   )}
 
-                  {theme === 'dark' ? 'Tema claro' : 'Tema escuro'}
+                  {theme === 'dark' ? t('theme.light') : t('theme.dark')}
                 </button>
               )}
 
@@ -560,7 +585,7 @@ export default function MobileNavigation({
                 className="flex w-full items-center gap-3 rounded-2xl px-3 py-3 text-left text-base font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30"
               >
                 <LogOut className="h-5 w-5" />
-                Sair
+                {t('auth.logout')}
               </button>
             </nav>
           </aside>
@@ -573,7 +598,7 @@ export default function MobileNavigation({
             type="button"
             onClick={() => setOpenPostMenu(false)}
             className="absolute inset-0"
-            aria-label="Fechar opções de publicação"
+            aria-label={t('mobile.closePostOptions')}
           />
 
           <div className="absolute bottom-36 right-5 z-[80] flex flex-col items-end gap-6">
@@ -583,7 +608,7 @@ export default function MobileNavigation({
               className="flex items-center gap-4 text-white"
             >
               <span className="min-w-[120px] text-right text-2xl font-semibold drop-shadow">
-                Publicar
+                {t('mobile.publish')}
               </span>
 
               <span className="flex h-14 w-14 items-center justify-center rounded-full bg-white text-black shadow-xl">
@@ -597,7 +622,7 @@ export default function MobileNavigation({
               className="flex items-center gap-4 text-white"
             >
               <span className="min-w-[120px] text-right text-2xl font-semibold drop-shadow">
-                Fotos
+                {t('mobile.photos')}
               </span>
 
               <span className="flex h-14 w-14 items-center justify-center rounded-full bg-white text-black shadow-xl">
@@ -611,7 +636,7 @@ export default function MobileNavigation({
               className="flex items-center gap-4 text-white"
             >
               <span className="min-w-[120px] text-right text-2xl font-semibold drop-shadow">
-                Vídeos
+                {t('mobile.videos')}
               </span>
 
               <span className="flex h-14 w-14 items-center justify-center rounded-full bg-white text-black shadow-xl">
@@ -627,7 +652,7 @@ export default function MobileNavigation({
           type="button"
           onClick={() => setOpenPostMenu((current) => !current)}
           className="fixed bottom-20 right-5 z-[75] flex h-16 w-16 items-center justify-center rounded-full bg-blue-500 text-white shadow-2xl transition hover:bg-blue-400 active:scale-95 dark:bg-blue-500 lg:hidden"
-          aria-label="Abrir opções de publicação"
+          aria-label={t('mobile.openPostOptions')}
         >
           {openPostMenu ? (
             <X className="h-8 w-8" />
@@ -641,7 +666,7 @@ export default function MobileNavigation({
         <Link
           href="/feed"
           className={bottomLinkClass('/feed')}
-          aria-label="Página inicial"
+          aria-label={t('nav.home')}
         >
           <span className={bottomIconWrapperClass('/feed')}>
             <Home className={bottomIconClass('/feed')} />
@@ -651,7 +676,7 @@ export default function MobileNavigation({
         <Link
           href="/search"
           className={bottomLinkClass('/search')}
-          aria-label="Explorar"
+          aria-label={t('nav.explore')}
         >
           <span className={bottomIconWrapperClass('/search')}>
             <Compass className={bottomIconClass('/search')} />
@@ -661,7 +686,7 @@ export default function MobileNavigation({
         <Link
           href="/messages"
           className={bottomLinkClass('/messages')}
-          aria-label="Mensagens"
+          aria-label={t('nav.messages')}
         >
           <span className={`${bottomIconWrapperClass('/messages')} relative`}>
             <MessageCircle className={bottomIconClass('/messages')} />
@@ -677,7 +702,7 @@ export default function MobileNavigation({
         <Link
           href="/notifications"
           className={bottomLinkClass('/notifications')}
-          aria-label="Notificações"
+          aria-label={t('nav.notifications')}
         >
           <span className={`${bottomIconWrapperClass('/notifications')} relative`}>
             <Bell className={bottomIconClass('/notifications')} />
@@ -693,7 +718,7 @@ export default function MobileNavigation({
         <Link
           href="/profile"
           className={bottomLinkClass('/profile')}
-          aria-label="Perfil"
+          aria-label={t('nav.profile')}
         >
           <span className={bottomIconWrapperClass('/profile')}>
             <User className={bottomIconClass('/profile')} />

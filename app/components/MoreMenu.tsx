@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   FlaskConical,
+  Languages,
   LogOut,
   Moon,
   Settings,
@@ -11,6 +12,8 @@ import {
   Sun,
   UserX,
 } from 'lucide-react'
+import { useLanguage } from './LanguageProvider'
+import type { LanguageCode } from '@/lib/translations'
 
 type MoreMenuProps = {
   mounted: boolean
@@ -28,6 +31,7 @@ export default function MoreMenu({
   onClose,
 }: MoreMenuProps) {
   const pathname = usePathname()
+  const { language, languages, setLanguage, t } = useLanguage()
 
   function isActive(path: string) {
     return pathname === path || pathname.startsWith(`${path}/`)
@@ -53,7 +57,7 @@ export default function MoreMenu({
     <div className="absolute bottom-full left-0 z-[999] mb-3 w-72 rounded-3xl border border-zinc-200 bg-white p-2 shadow-2xl dark:border-zinc-800 dark:bg-black">
       <div className="px-3 py-3">
         <p className="text-xs font-bold uppercase tracking-[0.25em] text-zinc-400">
-          Mais opções
+          {t('more.title')}
         </p>
       </div>
 
@@ -65,38 +69,49 @@ export default function MoreMenu({
         >
           <FlaskConical className={iconClass('/lab')} />
           <div className="min-w-0">
-            <p>EntreUS Lab</p>
+            <p>{t('lab.name')}</p>
             <p className="mt-0.5 truncate text-xs font-medium opacity-70">
-              Ferramentas criativas
+              {t('lab.subtitle')}
             </p>
           </div>
         </Link>
 
-        <Link
-          href="/privacy"
-          onClick={onClose}
-          className={itemClass('/privacy')}
-        >
+        <div className="rounded-2xl px-4 py-3 text-sm text-zinc-800 dark:text-zinc-100">
+          <div className="mb-2 flex items-center gap-3 font-semibold">
+            <Languages className="h-5 w-5 shrink-0" />
+            <span>{t('language.label')}</span>
+          </div>
+
+          <select
+            value={language}
+            onChange={(event) => setLanguage(event.target.value as LanguageCode)}
+            className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-blue-400 dark:border-zinc-800 dark:bg-zinc-950"
+          >
+            {languages.map((item) => (
+              <option key={item.code} value={item.code}>
+                {item.nativeName}
+              </option>
+            ))}
+          </select>
+
+          <p className="mt-2 text-xs text-zinc-500">
+            {t('language.helper')}
+          </p>
+        </div>
+
+        <Link href="/privacy" onClick={onClose} className={itemClass('/privacy')}>
           <Shield className={iconClass('/privacy')} />
-          <span>Privacidade</span>
+          <span>{t('settings.privacy')}</span>
         </Link>
 
-        <Link
-          href="/blocked"
-          onClick={onClose}
-          className={itemClass('/blocked')}
-        >
+        <Link href="/blocked" onClick={onClose} className={itemClass('/blocked')}>
           <UserX className={iconClass('/blocked')} />
-          <span>Bloqueados</span>
+          <span>{t('settings.blocked')}</span>
         </Link>
 
-        <Link
-          href="/settings"
-          onClick={onClose}
-          className={itemClass('/settings')}
-        >
+        <Link href="/settings" onClick={onClose} className={itemClass('/settings')}>
           <Settings className={iconClass('/settings')} />
-          <span>Configurações</span>
+          <span>{t('settings.settings')}</span>
         </Link>
 
         {mounted && (
@@ -114,7 +129,7 @@ export default function MoreMenu({
               <Moon className="h-5 w-5 shrink-0" />
             )}
 
-            <span>{theme === 'dark' ? 'Tema claro' : 'Tema escuro'}</span>
+            <span>{theme === 'dark' ? t('theme.light') : t('theme.dark')}</span>
           </button>
         )}
 
@@ -129,7 +144,7 @@ export default function MoreMenu({
           className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold text-red-600 transition hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30"
         >
           <LogOut className="h-5 w-5 shrink-0" />
-          <span>Sair</span>
+          <span>{t('auth.logout')}</span>
         </button>
       </div>
     </div>

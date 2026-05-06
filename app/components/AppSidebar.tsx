@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import MoreMenu from './MoreMenu'
+import { useLanguage } from './LanguageProvider'
 
 type AppSidebarProps = {
   unreadNotificationsCount?: number
@@ -48,6 +49,7 @@ export default function AppSidebar({
   onLogout,
 }: AppSidebarProps) {
   const pathname = usePathname()
+  const { t } = useLanguage()
   const [openMoreMenu, setOpenMoreMenu] = useState(false)
   const [internalUnreadMessagesCount, setInternalUnreadMessagesCount] = useState(0)
 
@@ -194,7 +196,7 @@ export default function AppSidebar({
         <Link
           href="/feed"
           className="mb-8 flex w-full shrink-0 items-center justify-center"
-          aria-label="Ir para a página inicial da EntreUS"
+          aria-label={t('mobile.goHome')}
         >
           <div className="flex w-full justify-center">
             <Image
@@ -211,12 +213,12 @@ export default function AppSidebar({
         <nav className="flex flex-col gap-2 pb-4">
           <Link href="/feed" className={navLinkClass('/feed')}>
             <Home className={navIconClass('/feed')} />
-            <span>Página inicial</span>
+            <span>{t('nav.home')}</span>
           </Link>
 
           <Link href="/search" className={navLinkClass('/search')}>
             <Compass className={navIconClass('/search')} />
-            <span>Explorar</span>
+            <span>{t('nav.explore')}</span>
           </Link>
 
           <Link href="/notifications" className={`relative ${navLinkClass('/notifications')}`}>
@@ -230,7 +232,7 @@ export default function AppSidebar({
               )}
             </div>
 
-            <span>Notificações</span>
+            <span>{t('nav.notifications')}</span>
           </Link>
 
           <Link href="/messages" className={`relative ${navLinkClass('/messages')}`}>
@@ -244,17 +246,17 @@ export default function AppSidebar({
               )}
             </div>
 
-            <span>Mensagens</span>
+            <span>{t('nav.messages')}</span>
           </Link>
 
           <Link href="/saved" className={navLinkClass('/saved')}>
             <Bookmark className={navIconClass('/saved')} />
-            <span>Salvos</span>
+            <span>{t('nav.saved')}</span>
           </Link>
 
           <Link href="/profile" className={navLinkClass('/profile')}>
             <User className={navIconClass('/profile')} />
-            <span>Perfil</span>
+            <span>{t('nav.profile')}</span>
           </Link>
 
           <div className="relative">
@@ -269,7 +271,7 @@ export default function AppSidebar({
               ].join(' ')}
             >
               <MoreHorizontal className={`h-6 w-6 shrink-0 ${isMoreActive ? 'stroke-[2.5]' : ''}`} />
-              <span>Mais</span>
+              <span>{t('nav.more')}</span>
             </button>
 
             {openMoreMenu && (
@@ -298,7 +300,7 @@ export default function AppSidebar({
             className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-zinc-900 px-6 py-3 text-base font-semibold text-white transition hover:opacity-90 dark:bg-white dark:text-black"
           >
             <PenLine className="h-5 w-5 shrink-0" />
-            <span>Postar</span>
+            <span>{t('nav.post')}</span>
           </button>
         </nav>
 
@@ -307,7 +309,7 @@ export default function AppSidebar({
             Entre<span className="text-blue-500">US</span>
           </p>
 
-          <p>Só Entre Nós</p>
+          <p>{t('brand.tagline')}</p>
         </div>
       </div>
     </aside>
