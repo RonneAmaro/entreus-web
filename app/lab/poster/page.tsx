@@ -12,6 +12,7 @@ const DONATION_URL = 'https://link.mercadopago.com.br/entreuslab'
 type PaperKey = 'a4' | 'a3' | 'letter'
 type Orientation = 'portrait' | 'landscape'
 type FitMode = 'contain' | 'cover'
+type UnitKey = 'mm' | 'cm' | 'm'
 
 type SourceInfo = {
   fileName: string
@@ -44,6 +45,43 @@ const DPI_OPTIONS = [
   { labelKey: 'labPoster.config.good', value: 130 },
   { labelKey: 'labPoster.config.high', value: 160 },
 ]
+
+
+function unitToMm(value: number, unit: UnitKey) {
+  if (unit === 'cm') return value * 10
+  if (unit === 'm') return value * 1000
+  return value
+}
+
+function mmToUnit(valueMm: number, unit: UnitKey) {
+  if (unit === 'cm') return valueMm / 10
+  if (unit === 'm') return valueMm / 1000
+  return valueMm
+}
+
+function getUnitInputStep(unit: UnitKey) {
+  if (unit === 'm') return 0.01
+  if (unit === 'cm') return 0.1
+  return 1
+}
+
+function formatUnitNumber(valueMm: number, unit: UnitKey) {
+  const value = mmToUnit(valueMm, unit)
+
+  if (unit === 'm') {
+    return value.toFixed(3).replace(/0+$/, '').replace(/\.$/, '')
+  }
+
+  if (unit === 'cm') {
+    return value.toFixed(1).replace(/\.0$/, '')
+  }
+
+  return value.toFixed(1).replace(/\.0$/, '')
+}
+
+function formatDimension(widthMm: number, heightMm: number, unit: UnitKey) {
+  return `${formatUnitNumber(widthMm, unit)} x ${formatUnitNumber(heightMm, unit)} ${unit}`
+}
 
 function getPaperSize(paper: PaperKey, orientation: Orientation) {
   const base = PAPER_SIZES_MM[paper]
@@ -132,6 +170,7 @@ export default function PosterLabPage() {
   const [marginMm, setMarginMm] = useState(8)
   const [overlapMm, setOverlapMm] = useState(0)
   const [fitMode, setFitMode] = useState<FitMode>('contain')
+  const [measurementUnit, setMeasurementUnit] = useState<UnitKey>('cm')
   const [pdfPageNumber, setPdfPageNumber] = useState(1)
   const [dpi, setDpi] = useState(130)
 
@@ -141,6 +180,11 @@ export default function PosterLabPage() {
   const posterWidth = printableWidth * columns
   const posterHeight = printableHeight * rows
   const totalPages = columns * rows
+  const marginValue = mmToUnit(marginMm, measurementUnit)
+  const overlapValue = mmToUnit(overlapMm, measurementUnit)
+  const maxMarginValue = mmToUnit(30, measurementUnit)
+  const maxOverlapValue = mmToUnit(20, measurementUnit)
+  const unitStep = getUnitInputStep(measurementUnit)
 
   async function handleFile(fileToLoad: File | null) {
     if (!fileToLoad) return
@@ -611,30 +655,74 @@ export default function PosterLabPage() {
 
                 <div>
                   <label className="mb-1 block text-sm font-medium text-zinc-600 dark:text-zinc-400">
-                    {t('labPoster.config.margin')}
+                    {t('labPoster.config.unit')}
                   </label>
-                  <input
-                    type="number"
-                    min={0}
-                    max={30}
-                    value={marginMm}
-                    onChange={(event) => setMarginMm(Number(event.target.value))}
+                  <select
+                    value={measurementUnit}
+                    onChange={(event) => setMeasurementUnit(event.target.value as UnitKey)}
                     className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 outline-none dark:border-zinc-700 dark:bg-black"
-                  />
+                  >
+                    <option value="mm">{t('labPoster.config.unitMm')}</option>
+                    <option value="cm">{t('labPoster.config.unitCm')}</option>
+                    <option value="m">{t('labPoster.config.unitM')}</option>
+                  </select>
+                  <p className="mt-1 text-xs text-zinc-500">
+                    {t('labPoster.config.unitHelp')}
+                  </p>
                 </div>
 
                 <div>
                   <label className="mb-1 block text-sm font-medium text-zinc-600 dark:text-zinc-400">
-                    {t('labPoster.config.overlap')}
+                    {t('labPoster.config.margin')} ({measurementUnit})
                   </label>
                   <input
                     type="number"
                     min={0}
-                    max={20}
-                    value={overlapMm}
-                    onChange={(event) => setOverlapMm(Number(event.target.value))}
+                    max={maxMarginValue}
+                    step={unitStep}
+                    value={marginValue}
+                    onChange={(event) =>
+                      setMarginMm(
+                        Math.max(
+                          0,
+                          Math.min(30, unitToMm(Number(event.target.value), measurementUnit))
+                        )
+                      )
+                    }
                     className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 outline-none dark:border-zinc-700 dark:bg-black"
                   />
+                  {measurementUnit !== 'mm' && (
+                    <p className="mt-1 text-xs text-zinc-500">
+                      {marginMm.toFixed(1).replace(/\.0$/, '')} mm
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-zinc-600 dark:text-zinc-400">
+                    {t('labPoster.config.overlap')} ({measurementUnit})
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={maxOverlapValue}
+                    step={unitStep}
+                    value={overlapValue}
+                    onChange={(event) =>
+                      setOverlapMm(
+                        Math.max(
+                          0,
+                          Math.min(20, unitToMm(Number(event.target.value), measurementUnit))
+                        )
+                      )
+                    }
+                    className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 outline-none dark:border-zinc-700 dark:bg-black"
+                  />
+                  {measurementUnit !== 'mm' && (
+                    <p className="mt-1 text-xs text-zinc-500">
+                      {overlapMm.toFixed(1).replace(/\.0$/, '')} mm
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -674,11 +762,23 @@ export default function PosterLabPage() {
                   {t('labPoster.config.pages')} <strong>{totalPages}</strong>
                 </p>
                 <p>
-                  {t('labPoster.config.posterApprox')} <strong>{posterWidth.toFixed(1)} x {posterHeight.toFixed(1)} mm</strong>
+                  {t('labPoster.config.posterApprox')}{' '}
+                  <strong>{formatDimension(posterWidth, posterHeight, measurementUnit)}</strong>
                 </p>
-                <p>
-                  {t('labPoster.config.printableArea')} <strong>{printableWidth.toFixed(1)} x {printableHeight.toFixed(1)} mm</strong>
+                {measurementUnit !== 'mm' && (
+                  <p className="text-xs opacity-75">
+                    {posterWidth.toFixed(1)} x {posterHeight.toFixed(1)} mm
+                  </p>
+                )}
+                <p className="mt-1">
+                  {t('labPoster.config.printableArea')}{' '}
+                  <strong>{formatDimension(printableWidth, printableHeight, measurementUnit)}</strong>
                 </p>
+                {measurementUnit !== 'mm' && (
+                  <p className="text-xs opacity-75">
+                    {printableWidth.toFixed(1)} x {printableHeight.toFixed(1)} mm
+                  </p>
+                )}
               </div>
 
               <button
