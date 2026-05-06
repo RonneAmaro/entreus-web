@@ -12,6 +12,7 @@ import { supabase } from '@/lib/supabase'
 import PostCard from '../components/PostCard'
 import UserBadges from '../components/UserBadges'
 import UserBadgesPanel from '../components/UserBadgesPanel'
+import { useLanguage } from '../components/LanguageProvider'
 
 type VisibilityType = 'public' | 'followers' | 'private'
 
@@ -84,6 +85,20 @@ type Repost = {
   profiles: ProfileSummary | null
 }
 
+
+function getDateLocale(language: string) {
+  const locales: Record<string, string> = {
+    pt: 'pt-BR',
+    en: 'en-US',
+    fr: 'fr-FR',
+    id: 'id-ID',
+    ja: 'ja-JP',
+    zh: 'zh-CN',
+  }
+
+  return locales[language] || 'pt-BR'
+}
+
 type FeedItem =
   | {
     type: 'post'
@@ -102,6 +117,7 @@ type FeedItem =
 export default function ProfilePage() {
   const router = useRouter()
   const { theme, setTheme } = useTheme()
+  const { t, language } = useLanguage()
 
   const [mounted, setMounted] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -164,7 +180,7 @@ export default function ProfilePage() {
         .maybeSingle()
 
       if (error) {
-        setMessage('Erro ao carregar perfil: ' + error.message)
+        setMessage(t('profile.messages.loadProfileError') + error.message)
         setLoading(false)
         return
       }
@@ -216,7 +232,7 @@ export default function ProfilePage() {
       .eq('read', false)
 
     if (error) {
-      setMessage('Erro ao carregar notificações: ' + error.message)
+      setMessage(t('profile.messages.loadNotificationsError') + error.message)
       return
     }
 
@@ -237,7 +253,7 @@ export default function ProfilePage() {
       .select('id, post_id, user_id')
 
     if (error) {
-      setMessage('Erro ao carregar curtidas: ' + error.message)
+      setMessage(t('profile.messages.loadLikesError') + error.message)
       return
     }
 
@@ -250,7 +266,7 @@ export default function ProfilePage() {
       .select('id, post_id, user_id')
 
     if (error) {
-      setMessage('Erro ao carregar comentários: ' + error.message)
+      setMessage(t('profile.messages.loadCommentsError') + error.message)
       return
     }
 
@@ -266,7 +282,7 @@ export default function ProfilePage() {
       .eq('user_id', currentUserId)
 
     if (error) {
-      setMessage('Erro ao carregar salvos: ' + error.message)
+      setMessage(t('profile.messages.loadSavedError') + error.message)
       return
     }
 
@@ -280,7 +296,7 @@ export default function ProfilePage() {
       .order('created_at', { ascending: false })
 
     if (error) {
-      setMessage('Erro ao carregar reposts: ' + error.message)
+      setMessage(t('profile.messages.loadRepostsError') + error.message)
       return
     }
 
@@ -344,7 +360,7 @@ export default function ProfilePage() {
       .order('created_at', { ascending: false })
 
     if (myRepostsError) {
-      setMessage('Erro ao carregar seus reposts: ' + myRepostsError.message)
+      setMessage(t('profile.messages.loadYourRepostsError') + myRepostsError.message)
       return
     }
 
@@ -372,7 +388,7 @@ export default function ProfilePage() {
       .order('created_at', { ascending: false })
 
     if (ownPostsError) {
-      setMessage('Erro ao carregar suas publicações: ' + ownPostsError.message)
+      setMessage(t('profile.messages.loadYourPostsError') + ownPostsError.message)
       return
     }
 
@@ -409,7 +425,7 @@ export default function ProfilePage() {
         .in('id', repostPostIds)
 
       if (repostedPostsError) {
-        setMessage('Erro ao carregar posts repostados: ' + repostedPostsError.message)
+        setMessage(t('profile.messages.loadRepostedPostsError') + repostedPostsError.message)
         return
       }
 
@@ -483,14 +499,14 @@ export default function ProfilePage() {
     const allowedTypes = ['image/jpeg', 'image/png', 'image/webp']
 
     if (!allowedTypes.includes(file.type)) {
-      setMessage('Envie uma imagem JPG, PNG ou WEBP.')
+      setMessage(t('profile.messages.invalidAvatarType'))
       return
     }
 
     const maxSizeInBytes = 5 * 1024 * 1024
 
     if (file.size > maxSizeInBytes) {
-      setMessage('O avatar deve ter no máximo 5MB.')
+      setMessage(t('profile.messages.avatarTooLarge'))
       return
     }
 
@@ -511,7 +527,7 @@ export default function ProfilePage() {
       })
 
     if (uploadError) {
-      setMessage('Erro ao enviar avatar: ' + uploadError.message)
+      setMessage(t('profile.messages.uploadAvatarError') + uploadError.message)
       setUploadingAvatar(false)
       return
     }
@@ -523,7 +539,7 @@ export default function ProfilePage() {
     setAvatarUrl(publicUrlData.publicUrl)
     setAvatarPreview(publicUrlData.publicUrl)
     setUploadingAvatar(false)
-    setMessage('Avatar atualizado. Agora salve o perfil.')
+    setMessage(t('profile.messages.avatarUpdated'))
   }
 
   async function handleBannerSelect(file: File | null) {
@@ -532,14 +548,14 @@ export default function ProfilePage() {
     const allowedTypes = ['image/jpeg', 'image/png', 'image/webp']
 
     if (!allowedTypes.includes(file.type)) {
-      setMessage('Envie uma capa em JPG, PNG ou WEBP.')
+      setMessage(t('profile.messages.invalidBannerType'))
       return
     }
 
     const maxSizeInBytes = 10 * 1024 * 1024
 
     if (file.size > maxSizeInBytes) {
-      setMessage('A capa deve ter no máximo 10MB.')
+      setMessage(t('profile.messages.bannerTooLarge'))
       return
     }
 
@@ -560,7 +576,7 @@ export default function ProfilePage() {
       })
 
     if (uploadError) {
-      setMessage('Erro ao enviar capa: ' + uploadError.message)
+      setMessage(t('profile.messages.uploadBannerError') + uploadError.message)
       setUploadingBanner(false)
       return
     }
@@ -572,7 +588,7 @@ export default function ProfilePage() {
     setBannerUrl(publicUrlData.publicUrl)
     setBannerPreview(publicUrlData.publicUrl)
     setUploadingBanner(false)
-    setMessage('Capa atualizada. Agora salve o perfil.')
+    setMessage(t('profile.messages.bannerUpdated'))
   }
 
   async function handleSaveProfile(e: React.FormEvent) {
@@ -583,7 +599,7 @@ export default function ProfilePage() {
     const normalizedUsername = sanitizeUsername(username)
 
     if (!normalizedUsername) {
-      setMessage('Escolha um username válido.')
+      setMessage(t('profile.messages.invalidUsername'))
       return
     }
 
@@ -598,13 +614,13 @@ export default function ProfilePage() {
       .maybeSingle()
 
     if (usernameCheckError) {
-      setMessage('Erro ao verificar username: ' + usernameCheckError.message)
+      setMessage(t('profile.messages.usernameCheckError') + usernameCheckError.message)
       setSaving(false)
       return
     }
 
     if (existingUsername) {
-      setMessage('Esse username já está em uso.')
+      setMessage(t('profile.messages.usernameInUse'))
       setSaving(false)
       return
     }
@@ -625,7 +641,7 @@ export default function ProfilePage() {
     const { error } = await supabase.from('profiles').upsert(payload)
 
     if (error) {
-      setMessage('Erro ao salvar perfil: ' + error.message)
+      setMessage(t('profile.messages.saveProfileError') + error.message)
       setSaving(false)
       return
     }
@@ -645,7 +661,7 @@ export default function ProfilePage() {
     setUsername(normalizedUsername)
     setProfile(updatedProfile)
 
-    setMessage('Perfil salvo com sucesso.')
+    setMessage(t('profile.messages.profileSaved'))
     setSaving(false)
 
     await loadProfileActivity(userId, updatedProfile)
@@ -671,7 +687,7 @@ export default function ProfilePage() {
         .eq('user_id', userId)
 
       if (error) {
-        setMessage('Erro ao remover dos salvos: ' + error.message)
+        setMessage(t('profile.messages.removeSavedError') + error.message)
         await loadBookmarks(userId)
       }
 
@@ -697,7 +713,7 @@ export default function ProfilePage() {
       .single()
 
     if (error) {
-      setMessage('Erro ao salvar post: ' + error.message)
+      setMessage(t('profile.messages.savePostError') + error.message)
       await loadBookmarks(userId)
       return
     }
@@ -717,7 +733,7 @@ export default function ProfilePage() {
     const repostedPost = posts.find((post) => post.id === postId)
 
     if (repostedPost?.user_id === userId) {
-      setMessage('Você não precisa repostar sua própria publicação.')
+      setMessage(t('profile.messages.ownRepost'))
       return
     }
 
@@ -737,7 +753,7 @@ export default function ProfilePage() {
         .eq('user_id', userId)
 
       if (error) {
-        setMessage('Erro ao remover repost: ' + error.message)
+        setMessage(t('profile.messages.removeRepostError') + error.message)
         await loadReposts(profile)
       }
 
@@ -768,7 +784,7 @@ export default function ProfilePage() {
       .single()
 
     if (error) {
-      setMessage('Erro ao repostar: ' + error.message)
+      setMessage(t('profile.messages.repostError') + error.message)
       await loadReposts(profile)
       return
     }
@@ -803,7 +819,7 @@ export default function ProfilePage() {
         .eq('id', existingLike.id)
 
       if (error) {
-        setMessage('Erro ao remover curtida: ' + error.message)
+        setMessage(t('profile.messages.removeLikeError') + error.message)
         await loadLikes()
       }
 
@@ -828,7 +844,7 @@ export default function ProfilePage() {
       .single()
 
     if (error) {
-      setMessage('Erro ao curtir: ' + error.message)
+      setMessage(t('profile.messages.likeError') + error.message)
       await loadLikes()
       return
     }
@@ -851,12 +867,12 @@ export default function ProfilePage() {
         setCopiedPostId((current) => (current === postId ? null : current))
       }, 2000)
     } catch {
-      setMessage('Não foi possível copiar o link do post.')
+      setMessage(t('profile.messages.copyPostError'))
     }
   }
 
   async function handleDeletePost(postId: string) {
-    const confirmDelete = window.confirm('Tem certeza que deseja excluir esta publicação?')
+    const confirmDelete = window.confirm(t('profile.messages.confirmDeletePost'))
 
     if (!confirmDelete) return
 
@@ -867,11 +883,11 @@ export default function ProfilePage() {
       .eq('user_id', userId)
 
     if (error) {
-      setMessage('Erro ao excluir: ' + error.message)
+      setMessage(t('profile.messages.deletePostError') + error.message)
       return
     }
 
-    setMessage('Post excluído com sucesso.')
+    setMessage(t('profile.messages.postDeleted'))
 
     if (profile) {
       await loadProfileActivity(userId, profile)
@@ -883,13 +899,11 @@ export default function ProfilePage() {
     if (!userId) return
 
     if (postOwnerId === userId) {
-      setMessage('Você não pode denunciar sua própria publicação.')
+      setMessage(t('profile.messages.ownReport'))
       return
     }
 
-    const reason = window.prompt(
-      'Informe o motivo da denúncia.\nEx.: spam, nudez indevida, assédio, conteúdo ofensivo'
-    )
+    const reason = window.prompt(t('profile.messages.reportPrompt'))
 
     if (!reason || !reason.trim()) return
 
@@ -904,13 +918,13 @@ export default function ProfilePage() {
     })
 
     if (error) {
-      setMessage('Erro ao denunciar publicação: ' + error.message)
+      setMessage(t('profile.messages.reportPostError') + error.message)
       setReportingPostId(null)
       return
     }
 
     setReportedPostIds((prev) => [...prev, postId])
-    setMessage('Publicação denunciada com sucesso.')
+    setMessage(t('profile.messages.reportSuccess'))
     setReportingPostId(null)
   }
 
@@ -968,7 +982,7 @@ export default function ProfilePage() {
   if (loading) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-zinc-50 px-4 text-black dark:bg-black dark:text-white">
-        <p>Carregando perfil...</p>
+        <p>{t('profile.loading')}</p>
       </main>
     )
   }
@@ -988,7 +1002,7 @@ export default function ProfilePage() {
 
       <MobileNavigation
         email={email}
-        displayName={displayName || username || 'Minha conta'}
+        displayName={displayName || username || t('nav.myProfile')}
         avatarUrl={avatarPreview || avatarUrl || null}
         unreadNotificationsCount={unreadNotificationsCount}
         mounted={mounted}
@@ -1000,8 +1014,8 @@ export default function ProfilePage() {
 
       <section className="w-full max-w-4xl overflow-x-hidden px-4 py-20 pb-24 sm:px-6 lg:ml-[calc(270px+((100vw-270px-56rem)/2))] lg:py-8">
         <BrandHeader
-          subtitle="Meu perfil"
-          description="Edite suas informações, personalize sua presença e acompanhe suas publicações e reposts."
+          subtitle={t('profile.myProfile')}
+          description={t('profile.description')}
           compact
           rightContent={
             <div className="flex flex-wrap items-start gap-2">
@@ -1041,13 +1055,13 @@ export default function ProfilePage() {
                 onClick={() => bannerPreview && setShowBannerModal(true)}
                 disabled={!bannerPreview}
                 className="group relative flex h-44 w-full items-center justify-center overflow-hidden bg-gradient-to-br from-zinc-100 via-zinc-200 to-zinc-300 text-zinc-500 transition hover:opacity-95 disabled:cursor-default dark:from-zinc-900 dark:via-zinc-800 dark:to-black dark:text-zinc-400 sm:h-64"
-                title={bannerPreview ? 'Ver capa do perfil' : 'Capa do perfil'}
-                aria-label={bannerPreview ? 'Ver capa do perfil' : 'Capa do perfil'}
+                title={bannerPreview ? t('profile.banner.viewTitle') : t('profile.banner.fallbackTitle')}
+                aria-label={bannerPreview ? t('profile.banner.viewTitle') : t('profile.banner.fallbackTitle')}
               >
                 {bannerPreview ? (
                   <img
                     src={bannerPreview}
-                    alt={`Capa de ${profileName}`}
+                    alt={`${t('profile.modal.bannerOf')} ${profileName}`}
                     className="h-full w-full object-cover"
                   />
                 ) : (
@@ -1075,10 +1089,10 @@ export default function ProfilePage() {
 
               <label
                 className="absolute bottom-4 right-4 z-10 inline-flex cursor-pointer items-center justify-center gap-2 rounded-full border border-white/30 bg-black/65 px-4 py-2 text-sm font-semibold text-white shadow-lg backdrop-blur transition hover:bg-black/80"
-                title="Alterar capa do perfil"
+                title={t('profile.banner.changeTitle')}
               >
                 <ImageIcon className="h-4 w-4" />
-                <span>{bannerPreview ? 'Alterar capa' : 'Adicionar capa'}</span>
+                <span>{bannerPreview ? t('profile.banner.change') : t('profile.banner.add')}</span>
 
                 <input
                   type="file"
@@ -1098,8 +1112,8 @@ export default function ProfilePage() {
                       onClick={() => avatarPreview && setShowAvatarModal(true)}
                       disabled={!avatarPreview}
                       className="group relative h-32 w-32 overflow-hidden rounded-full border-4 border-white bg-zinc-100 text-zinc-700 shadow-xl transition hover:opacity-95 disabled:cursor-default dark:border-zinc-900 dark:bg-zinc-800 dark:text-zinc-300 sm:h-40 sm:w-40"
-                      title={avatarPreview ? 'Ver foto de perfil' : 'Foto de perfil'}
-                      aria-label={avatarPreview ? 'Ver foto de perfil' : 'Foto de perfil'}
+                      title={avatarPreview ? t('profile.avatar.viewTitle') : t('profile.avatar.fallbackTitle')}
+                      aria-label={avatarPreview ? t('profile.avatar.viewTitle') : t('profile.avatar.fallbackTitle')}
                     >
                       {avatarPreview ? (
                         <img
@@ -1122,10 +1136,10 @@ export default function ProfilePage() {
 
                     <label
                       className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-full border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-900 shadow-sm transition hover:bg-zinc-100 dark:border-zinc-700 dark:bg-black dark:text-white dark:hover:bg-zinc-900"
-                      title="Alterar foto de perfil"
+                      title={t('profile.avatar.changeTitle')}
                     >
                       <Camera className="h-4 w-4" />
-                      <span>Alterar foto</span>
+                      <span>{t('profile.avatar.change')}</span>
 
                       <input
                         type="file"
@@ -1146,7 +1160,7 @@ export default function ProfilePage() {
                     </h2>
 
                     <p className="mt-1 break-all text-sm font-medium text-zinc-500 dark:text-zinc-400 sm:text-base">
-                      @{username || 'seu_username'}
+                      @{username || t('profile.edit.usernamePlaceholder')}
                     </p>
 
                     {bio && (
@@ -1176,8 +1190,8 @@ export default function ProfilePage() {
 
               {(uploadingAvatar || uploadingBanner) && (
                 <div className="mt-4 rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400">
-                  {uploadingAvatar && <p>Enviando avatar...</p>}
-                  {uploadingBanner && <p>Enviando capa...</p>}
+                  {uploadingAvatar && <p>{t('profile.actions.uploadingAvatar')}</p>}
+                  {uploadingBanner && <p>{t('profile.actions.uploadingBanner')}</p>}
                 </div>
               )}
 
@@ -1232,7 +1246,7 @@ export default function ProfilePage() {
                       type="text"
                       value={displayName}
                       onChange={(e) => setDisplayName(e.target.value)}
-                      placeholder="Seu nome visível"
+                      placeholder={t('profile.edit.displayNamePlaceholder')}
                       className="w-full rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none transition focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 sm:text-base"
                     />
                   </div>
@@ -1246,7 +1260,7 @@ export default function ProfilePage() {
                       type="text"
                       value={username}
                       onChange={(e) => setUsername(sanitizeUsername(e.target.value))}
-                      placeholder="seu_username"
+                      placeholder={t('profile.edit.usernamePlaceholder')}
                       className="w-full rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none transition focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 sm:text-base"
                     />
 
@@ -1263,7 +1277,7 @@ export default function ProfilePage() {
                     <textarea
                       value={bio}
                       onChange={(e) => setBio(e.target.value)}
-                      placeholder="Fale um pouco sobre você..."
+                      placeholder={t('profile.edit.bioPlaceholder')}
                       className="min-h-28 w-full resize-none rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none transition focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 sm:text-base"
                     />
                   </div>
@@ -1278,7 +1292,7 @@ export default function ProfilePage() {
                         type="text"
                         value={country}
                         onChange={(e) => setCountry(e.target.value)}
-                        placeholder="Brasil"
+                        placeholder={t('profile.edit.countryPlaceholder')}
                         className="w-full rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none transition focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 sm:text-base"
                       />
                     </div>
@@ -1342,7 +1356,7 @@ export default function ProfilePage() {
                       : 'bg-black text-white hover:opacity-90 dark:bg-white dark:text-black'
                       }`}
                   >
-                    {saving ? 'Salvando...' : 'Salvar perfil'}
+                    {saving ? t('profile.actions.saving') : t('profile.actions.save')}
                   </button>
 
                   {username && (
@@ -1363,8 +1377,8 @@ export default function ProfilePage() {
           <div className="mt-8">
             <UserBadgesPanel
               userId={userId}
-              title="Meus selos conquistados"
-              emptyMessage="Você ainda não possui selos conquistados na EntreUS."
+              title={t('profile.badges.title')}
+              emptyMessage={t('profile.badges.empty')}
             />
           </div>
         )}
@@ -1439,7 +1453,7 @@ export default function ProfilePage() {
                   repostInfo={item.type === 'repost' ? item.repost : null}
                   footerLabel={
                     item.type === 'post'
-                      ? `Publicado em ${new Date(post.created_at).toLocaleString('pt-BR')}`
+                      ? `${t('profile.activity.footerPublishedAt')} ${new Date(post.created_at).toLocaleString(getDateLocale(language))}`
                       : undefined
                   }
                   onLike={() => handleToggleLike(post.id)}
@@ -1464,7 +1478,7 @@ export default function ProfilePage() {
             type="button"
             onClick={() => setShowBannerModal(false)}
             className="absolute inset-0 cursor-default"
-            aria-label="Fechar capa do perfil"
+            aria-label={t('profile.modal.closeBanner')}
           />
 
           <div className="relative z-[91] w-full max-w-5xl rounded-3xl border border-white/10 bg-zinc-950 p-4 shadow-2xl">
@@ -1472,20 +1486,20 @@ export default function ProfilePage() {
               type="button"
               onClick={() => setShowBannerModal(false)}
               className="absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-full bg-black/70 text-white transition hover:bg-black"
-              aria-label="Fechar"
-              title="Fechar"
+              aria-label={t('profile.modal.close')}
+              title={t('profile.modal.close')}
             >
               <X className="h-5 w-5" />
             </button>
 
             <img
               src={bannerPreview}
-              alt={`Capa de ${profileName}`}
+              alt={`${t('profile.modal.bannerOf')} ${profileName}`}
               className="mx-auto max-h-[78vh] w-full rounded-3xl object-contain"
             />
 
             <p className="mt-3 text-center text-sm font-semibold text-white">
-              Capa de {profileName}
+              {t('profile.modal.bannerOf')} {profileName}
             </p>
           </div>
         </div>
@@ -1497,7 +1511,7 @@ export default function ProfilePage() {
             type="button"
             onClick={() => setShowAvatarModal(false)}
             className="absolute inset-0 cursor-default"
-            aria-label="Fechar foto de perfil"
+            aria-label={t('profile.modal.closeAvatar')}
           />
 
           <div className="relative z-[91] w-full max-w-md rounded-3xl border border-white/10 bg-zinc-950 p-4 shadow-2xl">
@@ -1505,8 +1519,8 @@ export default function ProfilePage() {
               type="button"
               onClick={() => setShowAvatarModal(false)}
               className="absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-full bg-black/70 text-white transition hover:bg-black"
-              aria-label="Fechar"
-              title="Fechar"
+              aria-label={t('profile.modal.close')}
+              title={t('profile.modal.close')}
             >
               <X className="h-5 w-5" />
             </button>
