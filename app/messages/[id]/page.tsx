@@ -3,11 +3,20 @@
 import AppSidebar from '../../components/AppSidebar'
 import MobileNavigation from '../../components/MobileNavigation'
 import UserBadges from '../../components/UserBadges'
+import LinkPreview from '../../components/LinkPreview'
 import Link from 'next/link'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
-import { ArrowLeft, Loader2, Send } from 'lucide-react'
+import {
+  ArrowLeft,
+  ImageIcon,
+  Loader2,
+  Paperclip,
+  Send,
+  Video,
+  X,
+} from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
 type CurrentProfile = {
@@ -31,14 +40,36 @@ type ParticipantRow = {
   last_read_at: string | null
 }
 
+type MessageAttachment = {
+  id: string
+  message_id: string
+  conversation_id: string
+  sender_id: string
+  storage_path: string
+  media_type: 'image' | 'video'
+  file_name: string | null
+  file_size: number | null
+  mime_type: string | null
+  position: number
+  created_at: string
+  signed_url?: string
+}
+
 type MessageRow = {
   id: string
   conversation_id: string
   sender_id: string
-  content: string
+  content: string | null
   created_at: string
   updated_at: string
   deleted_at: string | null
+  attachments?: MessageAttachment[]
+}
+
+type SelectedMedia = {
+  file: File
+  previewUrl: string
+  mediaType: 'image' | 'video'
 }
 
 function getDisplayName(profile: ProfileSummary | CurrentProfile | null) {
@@ -64,17 +95,41 @@ function formatMessageTime(value: string) {
   })
 }
 
+function isImage(file: File) {
+  return ['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type)
+}
+
+function isVideo(file: File) {
+  return ['video/mp4', 'video/webm', 'video/ogg'].includes(file.type)
+}
+
+function detectMediaType(file: File): 'image' | 'video' | null {
+  if (isImage(file)) return 'image'
+  if (isVideo(file)) return 'video'
+  return null
+}
+
+function makeFileNameSafe(name: string) {
+  return name
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9._-]/g, '-')
+}
+
 export default function ConversationPage() {
   const params = useParams()
   const router = useRouter()
   const { theme, setTheme } = useTheme()
   const bottomRef = useRef<HTMLDivElement | null>(null)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   const conversationId = typeof params.id === 'string' ? params.id : ''
 
   const [mounted, setMounted] = useState(false)
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
+  const [uploadingMedia, setUploadingMedia] = useState(false)
   const [message, setMessage] = useState('')
 
   const [userId, setUserId] = useState('')
@@ -84,6 +139,7 @@ export default function ConversationPage() {
   const [participants, setParticipants] = useState<ParticipantRow[]>([])
   const [messages, setMessages] = useState<MessageRow[]>([])
   const [newMessage, setNewMessage] = useState('')
+  const [selectedMedia, setSelectedMedia] = useState<SelectedMedia[]>([])
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0)
 
   const otherUserId = useMemo(() => {
@@ -140,7 +196,7 @@ export default function ConversationPage() {
   useEffect(() => {
     if (!conversationId || !userId) return
 
-    const channel = supabase
+    const messagesChannel = supabase
       .channel(`messages-${conversationId}`)
       .on(
         'postgres_changes',
@@ -157,7 +213,7 @@ export default function ConversationPage() {
             const exists = current.some((item) => item.id === receivedMessage.id)
             if (exists) return current
 
-            return [...current, receivedMessage]
+            return [...current, { ...receivedMessage, attachments: [] }]
           })
 
           markConversationAsRead(userId)
@@ -165,8 +221,46 @@ export default function ConversationPage() {
       )
       .subscribe()
 
+    const attachmentsChannel = supabase
+      .channel(`message-attachments-${conversationId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'message_attachments',
+          filter: `conversation_id=eq.${conversationId}`,
+        },
+        async (payload) => {
+          const attachment = payload.new as MessageAttachment
+          const attachmentWithUrl = await attachSignedUrl(attachment)
+
+          setMessages((current) =>
+            current.map((item) => {
+              if (item.id !== attachmentWithUrl.message_id) return item
+
+              const currentAttachments = item.attachments || []
+              const exists = currentAttachments.some(
+                (media) => media.id === attachmentWithUrl.id
+              )
+
+              if (exists) return item
+
+              return {
+                ...item,
+                attachments: [...currentAttachments, attachmentWithUrl].sort(
+                  (a, b) => a.position - b.position
+                ),
+              }
+            })
+          )
+        }
+      )
+      .subscribe()
+
     return () => {
-      supabase.removeChannel(channel)
+      supabase.removeChannel(messagesChannel)
+      supabase.removeChannel(attachmentsChannel)
     }
   }, [conversationId, userId])
 
@@ -240,11 +334,59 @@ export default function ConversationPage() {
       setOtherProfile(other)
     }
 
-    await loadMessages()
+    await loadMessagesWithAttachments()
     await markConversationAsRead(currentUserId)
   }
 
-  async function loadMessages() {
+  async function attachSignedUrl(attachment: MessageAttachment) {
+    const { data, error } = await supabase.storage
+      .from('message-media')
+      .createSignedUrl(attachment.storage_path, 60 * 60)
+
+    if (error) {
+      console.error('Erro ao gerar URL privada da mídia:', error.message)
+      return attachment
+    }
+
+    return {
+      ...attachment,
+      signed_url: data.signedUrl,
+    }
+  }
+
+  async function loadAttachmentsForMessages(messageIds: string[]) {
+    if (messageIds.length === 0) return {}
+
+    const { data, error } = await supabase
+      .from('message_attachments')
+      .select(
+        'id, message_id, conversation_id, sender_id, storage_path, media_type, file_name, file_size, mime_type, position, created_at'
+      )
+      .in('message_id', messageIds)
+      .order('position', { ascending: true })
+
+    if (error) {
+      setMessage('Erro ao carregar mídias da conversa: ' + error.message)
+      return {}
+    }
+
+    const attachmentsWithUrls = await Promise.all(
+      ((data || []) as MessageAttachment[]).map((attachment) =>
+        attachSignedUrl(attachment)
+      )
+    )
+
+    return attachmentsWithUrls.reduce(
+      (acc, attachment) => {
+        if (!acc[attachment.message_id]) acc[attachment.message_id] = []
+        acc[attachment.message_id].push(attachment)
+        return acc
+      },
+      {} as Record<string, MessageAttachment[]>
+    )
+  }
+
+  async function loadMessagesWithAttachments() {
     const { data, error } = await supabase
       .from('messages')
       .select('id, conversation_id, sender_id, content, created_at, updated_at, deleted_at')
@@ -256,7 +398,17 @@ export default function ConversationPage() {
       return
     }
 
-    setMessages((data || []) as MessageRow[])
+    const loadedMessages = (data || []) as MessageRow[]
+    const attachmentMap = await loadAttachmentsForMessages(
+      loadedMessages.map((item) => item.id)
+    )
+
+    setMessages(
+      loadedMessages.map((item) => ({
+        ...item,
+        attachments: attachmentMap[item.id] || [],
+      }))
+    )
   }
 
   async function markConversationAsRead(currentUserId: string) {
@@ -289,12 +441,128 @@ export default function ConversationPage() {
     return !!blockedByMe || !!blockedMe
   }
 
+  function handleSelectMedia(files: FileList | null) {
+    if (!files) return
+
+    const selectedFiles = Array.from(files)
+    const maxFiles = 3
+    const currentCount = selectedMedia.length
+
+    if (currentCount + selectedFiles.length > maxFiles) {
+      setMessage(`Você pode enviar no máximo ${maxFiles} mídias por mensagem.`)
+      return
+    }
+
+    const validFiles: SelectedMedia[] = []
+
+    for (const file of selectedFiles) {
+      const mediaType = detectMediaType(file)
+
+      if (!mediaType) {
+        setMessage('Envie apenas imagens JPG, PNG, WEBP, GIF ou vídeos MP4, WEBM, OGG.')
+        return
+      }
+
+      const maxSize = 50 * 1024 * 1024
+
+      if (file.size > maxSize) {
+        setMessage('Cada mídia deve ter no máximo 50MB.')
+        return
+      }
+
+      validFiles.push({
+        file,
+        mediaType,
+        previewUrl: URL.createObjectURL(file),
+      })
+    }
+
+    setMessage('')
+    setSelectedMedia((current) => [...current, ...validFiles])
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
+  function removeSelectedMedia(indexToRemove: number) {
+    setSelectedMedia((current) => {
+      const item = current[indexToRemove]
+      if (item) URL.revokeObjectURL(item.previewUrl)
+
+      return current.filter((_, index) => index !== indexToRemove)
+    })
+  }
+
+  async function uploadMessageMedia(messageId: string, files: SelectedMedia[]) {
+    const attachmentsToInsert: Omit<MessageAttachment, 'id' | 'created_at'>[] = []
+
+    for (let index = 0; index < files.length; index++) {
+      const item = files[index]
+      const fileExt = item.file.name.split('.').pop()?.toLowerCase() || 'file'
+      const safeName = makeFileNameSafe(item.file.name)
+      const storagePath = `${conversationId}/${userId}/message-${messageId}-${index}-${Date.now()}.${fileExt}`
+
+      setUploadingMedia(true)
+
+      const { error: uploadError } = await supabase.storage
+        .from('message-media')
+        .upload(storagePath, item.file, {
+          cacheControl: '3600',
+          upsert: false,
+          contentType: item.file.type,
+        })
+
+      if (uploadError) {
+        setUploadingMedia(false)
+        throw new Error('Erro ao enviar mídia: ' + uploadError.message)
+      }
+
+      attachmentsToInsert.push({
+        message_id: messageId,
+        conversation_id: conversationId,
+        sender_id: userId,
+        storage_path: storagePath,
+        media_type: item.mediaType,
+        file_name: safeName,
+        file_size: item.file.size,
+        mime_type: item.file.type,
+        position: index,
+      })
+    }
+
+    if (attachmentsToInsert.length === 0) {
+      setUploadingMedia(false)
+      return []
+    }
+
+    const { data, error } = await supabase
+      .from('message_attachments')
+      .insert(attachmentsToInsert)
+      .select(
+        'id, message_id, conversation_id, sender_id, storage_path, media_type, file_name, file_size, mime_type, position, created_at'
+      )
+
+    setUploadingMedia(false)
+
+    if (error) {
+      throw new Error('Erro ao salvar anexos da mensagem: ' + error.message)
+    }
+
+    return Promise.all(
+      ((data || []) as MessageAttachment[]).map((attachment) =>
+        attachSignedUrl(attachment)
+      )
+    )
+  }
+
   async function handleSendMessage(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
 
     const content = newMessage.trim()
+    const hasMedia = selectedMedia.length > 0
 
-    if (!content || !userId || !conversationId) return
+    if ((!content && !hasMedia) || !userId || !conversationId) return
 
     const blocked = await hasBlockBetweenUsers(userId, otherUserId)
 
@@ -311,25 +579,49 @@ export default function ConversationPage() {
       .insert({
         conversation_id: conversationId,
         sender_id: userId,
-        content,
+        content: content || null,
       })
       .select('id, conversation_id, sender_id, content, created_at, updated_at, deleted_at')
       .single()
 
-    if (error) {
-      setMessage('Erro ao enviar mensagem: ' + error.message)
+    if (error || !data) {
+      setMessage('Erro ao enviar mensagem: ' + (error?.message || 'tente novamente.'))
       setSending(false)
       return
     }
 
-    if (data) {
-      setMessages((current) => {
-        const exists = current.some((item) => item.id === data.id)
-        if (exists) return current
+    let uploadedAttachments: MessageAttachment[] = []
 
-        return [...current, data as MessageRow]
-      })
+    try {
+      uploadedAttachments = await uploadMessageMedia(data.id, selectedMedia)
+    } catch (uploadError) {
+      setMessage(uploadError instanceof Error ? uploadError.message : 'Erro ao enviar mídia.')
+      setSending(false)
+      return
     }
+
+    setMessages((current) => {
+      const exists = current.some((item) => item.id === data.id)
+
+      if (exists) {
+        return current.map((item) =>
+          item.id === data.id
+            ? {
+                ...item,
+                attachments: uploadedAttachments,
+              }
+            : item
+        )
+      }
+
+      return [
+        ...current,
+        {
+          ...(data as MessageRow),
+          attachments: uploadedAttachments,
+        },
+      ]
+    })
 
     await supabase
       .from('conversations')
@@ -340,7 +632,12 @@ export default function ConversationPage() {
 
     await markConversationAsRead(userId)
 
+    for (const item of selectedMedia) {
+      URL.revokeObjectURL(item.previewUrl)
+    }
+
     setNewMessage('')
+    setSelectedMedia([])
     setSending(false)
   }
 
@@ -468,6 +765,7 @@ export default function ConversationPage() {
             ) : (
               messages.map((item) => {
                 const isMine = item.sender_id === userId
+                const attachments = item.attachments || []
 
                 return (
                   <div
@@ -475,15 +773,75 @@ export default function ConversationPage() {
                     className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}
                   >
                     <div
-                      className={`max-w-[82%] rounded-3xl px-4 py-3 text-sm shadow-sm sm:max-w-[70%] ${
+                      className={`max-w-[86%] rounded-3xl px-4 py-3 text-sm shadow-sm sm:max-w-[74%] ${
                         isMine
                           ? 'rounded-br-md bg-black text-white dark:bg-white dark:text-black'
                           : 'rounded-bl-md border border-zinc-200 bg-white text-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100'
                       }`}
                     >
-                      <p className="whitespace-pre-wrap break-words">
-                        {item.deleted_at ? 'Mensagem apagada.' : item.content}
-                      </p>
+                      {attachments.length > 0 && (
+                        <div className="mb-3 grid grid-cols-1 gap-2">
+                          {attachments.map((attachment) => {
+                            if (!attachment.signed_url) {
+                              return (
+                                <div
+                                  key={attachment.id}
+                                  className="rounded-2xl border border-zinc-300/30 p-3 text-xs opacity-70"
+                                >
+                                  Carregando mídia...
+                                </div>
+                              )
+                            }
+
+                            if (attachment.media_type === 'image') {
+                              return (
+                                <a
+                                  key={attachment.id}
+                                  href={attachment.signed_url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="block overflow-hidden rounded-2xl"
+                                >
+                                  <img
+                                    src={attachment.signed_url}
+                                    alt={attachment.file_name || 'Imagem enviada'}
+                                    className="max-h-[360px] w-full object-cover"
+                                  />
+                                </a>
+                              )
+                            }
+
+                            return (
+                              <video
+                                key={attachment.id}
+                                src={attachment.signed_url}
+                                controls
+                                className="max-h-[360px] w-full rounded-2xl bg-black"
+                              />
+                            )
+                          })}
+                        </div>
+                      )}
+
+                      {item.deleted_at ? (
+                        <p className="whitespace-pre-wrap break-words opacity-70">
+                          Mensagem apagada.
+                        </p>
+                      ) : item.content ? (
+                        <>
+                          <p className="whitespace-pre-wrap break-words">
+                            {item.content}
+                          </p>
+
+                          <div
+                            className={`mt-3 overflow-hidden rounded-2xl ${
+                              isMine ? 'bg-white/10 dark:bg-black/10' : ''
+                            }`}
+                          >
+                            <LinkPreview content={item.content} />
+                          </div>
+                        </>
+                      ) : null}
 
                       <p
                         className={`mt-2 text-[11px] ${
@@ -503,10 +861,72 @@ export default function ConversationPage() {
             <div ref={bottomRef} />
           </div>
 
+          {selectedMedia.length > 0 && (
+            <div className="border-t border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900">
+              <div className="flex gap-3 overflow-x-auto pb-1">
+                {selectedMedia.map((item, index) => (
+                  <div
+                    key={`${item.previewUrl}-${index}`}
+                    className="relative h-24 w-24 shrink-0 overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800"
+                  >
+                    {item.mediaType === 'image' ? (
+                      <img
+                        src={item.previewUrl}
+                        alt={item.file.name}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="relative h-full w-full">
+                        <video
+                          src={item.previewUrl}
+                          className="h-full w-full object-cover"
+                          muted
+                        />
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/30 text-white">
+                          <Video className="h-6 w-6" />
+                        </div>
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => removeSelectedMedia(index)}
+                      className="absolute right-1 top-1 flex h-7 w-7 items-center justify-center rounded-full bg-black/70 text-white"
+                      aria-label="Remover mídia"
+                      title="Remover"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <form
             onSubmit={handleSendMessage}
             className="flex gap-3 border-t border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900"
           >
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm,video/ogg"
+              onChange={(event) => handleSelectMedia(event.target.files)}
+              className="hidden"
+            />
+
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={sending || uploadingMedia}
+              className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-zinc-300 bg-zinc-50 text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-200 dark:hover:bg-zinc-800"
+              aria-label="Anexar mídia"
+              title="Anexar foto ou vídeo"
+            >
+              <Paperclip className="h-5 w-5" />
+            </button>
+
             <input
               type="text"
               value={newMessage}
@@ -517,17 +937,19 @@ export default function ConversationPage() {
 
             <button
               type="submit"
-              disabled={sending || !newMessage.trim()}
+              disabled={sending || uploadingMedia || (!newMessage.trim() && selectedMedia.length === 0)}
               className={`inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl font-semibold transition ${
-                sending || !newMessage.trim()
+                sending || uploadingMedia || (!newMessage.trim() && selectedMedia.length === 0)
                   ? 'cursor-not-allowed bg-zinc-200 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-600'
                   : 'bg-black text-white hover:opacity-90 dark:bg-white dark:text-black'
               }`}
               aria-label="Enviar mensagem"
               title="Enviar"
             >
-              {sending ? (
+              {sending || uploadingMedia ? (
                 <Loader2 className="h-5 w-5 animate-spin" />
+              ) : selectedMedia.length > 0 ? (
+                <ImageIcon className="h-5 w-5" />
               ) : (
                 <Send className="h-5 w-5" />
               )}
