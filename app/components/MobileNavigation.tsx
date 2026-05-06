@@ -74,6 +74,8 @@ export default function MobileNavigation({
   const [openPostMenu, setOpenPostMenu] = useState(false)
   const [internalUnreadMessagesCount, setInternalUnreadMessagesCount] = useState(0)
 
+  const isMessagesPage = pathname === '/messages' || pathname.startsWith('/messages/')
+
   const visibleUnreadMessagesCount =
     unreadMessagesCount ?? internalUnreadMessagesCount
 
@@ -454,7 +456,7 @@ export default function MobileNavigation({
         </div>
       )}
 
-      {openPostMenu && (
+      {!isMessagesPage && openPostMenu && (
         <div className="fixed inset-0 z-[70] bg-black/70 backdrop-blur-[1px] lg:hidden">
           <button
             type="button"
@@ -509,18 +511,20 @@ export default function MobileNavigation({
         </div>
       )}
 
-      <button
-        type="button"
-        onClick={() => setOpenPostMenu((current) => !current)}
-        className="fixed bottom-20 right-5 z-[75] flex h-16 w-16 items-center justify-center rounded-full bg-blue-500 text-white shadow-2xl transition hover:bg-blue-400 active:scale-95 dark:bg-blue-500 lg:hidden"
-        aria-label="Abrir opções de publicação"
-      >
-        {openPostMenu ? (
-          <X className="h-8 w-8" />
-        ) : (
-          <Plus className="h-9 w-9" />
-        )}
-      </button>
+      {!isMessagesPage && (
+        <button
+          type="button"
+          onClick={() => setOpenPostMenu((current) => !current)}
+          className="fixed bottom-20 right-5 z-[75] flex h-16 w-16 items-center justify-center rounded-full bg-blue-500 text-white shadow-2xl transition hover:bg-blue-400 active:scale-95 dark:bg-blue-500 lg:hidden"
+          aria-label="Abrir opções de publicação"
+        >
+          {openPostMenu ? (
+            <X className="h-8 w-8" />
+          ) : (
+            <Plus className="h-9 w-9" />
+          )}
+        </button>
+      )}
 
       <nav className="fixed bottom-0 left-0 z-50 grid h-16 w-full grid-cols-5 border-t border-zinc-200 bg-white dark:border-zinc-800 dark:bg-black lg:hidden">
         <Link
