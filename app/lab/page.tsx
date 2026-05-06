@@ -2,6 +2,8 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { ImageIcon, QrCode, Scissors, Wand2 } from 'lucide-react'
 
+const DONATION_URL = 'https://link.mercadopago.com.br/entreuslab'
+
 export default function LabPage() {
   return (
     <main className="min-h-screen bg-zinc-50 px-4 py-10 text-zinc-950 dark:bg-black dark:text-white sm:px-6">
@@ -42,12 +44,23 @@ export default function LabPage() {
                 </p>
               </div>
 
-              <Link
-                href="/lab/poster"
-                className="inline-flex shrink-0 items-center justify-center rounded-full bg-black px-6 py-3 text-sm font-bold text-white shadow-lg transition hover:opacity-90 dark:bg-white dark:text-black"
-              >
-                Abrir gerador de pôster
-              </Link>
+              <div className="flex shrink-0 flex-col gap-3 sm:flex-row lg:flex-col xl:flex-row">
+                <Link
+                  href="/lab/poster"
+                  className="inline-flex items-center justify-center rounded-full bg-black px-6 py-3 text-sm font-bold text-white shadow-lg transition hover:opacity-90 dark:bg-white dark:text-black"
+                >
+                  Abrir gerador de pôster
+                </Link>
+
+                <a
+                  href={DONATION_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center justify-center rounded-full border border-blue-200 bg-blue-50 px-6 py-3 text-sm font-bold text-blue-700 shadow-sm transition hover:bg-blue-100 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-200 dark:hover:bg-blue-950/60"
+                >
+                  Apoiar o EntreUS Lab
+                </a>
+              </div>
             </div>
           </div>
         </div>
@@ -114,6 +127,31 @@ export default function LabPage() {
             <p className="mt-2 text-sm leading-6 text-zinc-500">
               Em breve: modelos prontos para avisos, eventos e projetos.
             </p>
+          </div>
+        </div>
+
+        <div className="mt-6 rounded-3xl border border-blue-200 bg-blue-50 p-6 shadow-sm dark:border-blue-900/60 dark:bg-blue-950/20 sm:p-7">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h2 className="text-2xl font-black text-zinc-950 dark:text-white">
+                Apoie o EntreUS Lab
+              </h2>
+
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-700 dark:text-zinc-300">
+                O EntreUS Lab nasceu para ajudar professores, escolas e criadores a transformar
+                imagens e PDFs em materiais prontos para impressão. Sua contribuição ajuda a manter
+                e melhorar essa ferramenta.
+              </p>
+            </div>
+
+            <a
+              href={DONATION_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex shrink-0 items-center justify-center rounded-full bg-blue-600 px-6 py-3 text-sm font-bold text-white shadow-lg transition hover:bg-blue-500"
+            >
+              Contribuir pelo Mercado Pago
+            </a>
           </div>
         </div>
       </section>

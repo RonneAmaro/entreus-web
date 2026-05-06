@@ -6,6 +6,8 @@ import { useMemo, useRef, useState } from 'react'
 import { ArrowLeft, Download, FileText, ImageIcon, Loader2, Upload } from 'lucide-react'
 import { jsPDF } from 'jspdf'
 
+const DONATION_URL = 'https://link.mercadopago.com.br/entreuslab'
+
 type PaperKey = 'a4' | 'a3' | 'letter'
 type Orientation = 'portrait' | 'landscape'
 type FitMode = 'contain' | 'cover'
@@ -741,17 +743,18 @@ export default function PosterLabPage() {
               </h3>
 
               <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-300">
-                Esta ferramenta pode ajudar escolas, professores e criadores. Futuramente
-                podemos adicionar botão de doação via Pix, Mercado Pago ou Stripe.
+                Esta ferramenta pode ajudar escolas, professores e criadores. Sua contribuição
+                ajuda a manter o EntreUS Lab ativo e evoluindo com novas ferramentas.
               </p>
 
-              <button
-                type="button"
-                className="mt-4 rounded-full bg-blue-600 px-5 py-2 text-sm font-bold text-white opacity-70"
-                title="Em breve"
+              <a
+                href={DONATION_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-4 inline-flex rounded-full bg-blue-600 px-5 py-2 text-sm font-bold text-white transition hover:bg-blue-500"
               >
-                Doação em breve
-              </button>
+                Contribuir pelo Mercado Pago
+              </a>
             </div>
           </div>
         </div>
