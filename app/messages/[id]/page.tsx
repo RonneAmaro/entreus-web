@@ -13,7 +13,9 @@ import {
   Loader2,
   Mic,
   Paperclip,
+  Plus,
   Send,
+  SmilePlus,
   Square,
   Video,
   X,
@@ -56,6 +58,16 @@ type MessageAttachment = {
   signed_url?: string
 }
 
+type MessageReaction = {
+  id: string
+  message_id: string
+  conversation_id: string
+  user_id: string
+  emoji: string
+  created_at: string
+  updated_at: string
+}
+
 type MessageRow = {
   id: string
   conversation_id: string
@@ -65,6 +77,7 @@ type MessageRow = {
   updated_at: string
   deleted_at: string | null
   attachments?: MessageAttachment[]
+  reactions?: MessageReaction[]
 }
 
 type SelectedMedia = {
@@ -169,6 +182,30 @@ function getAudioFileExtension(mimeType: string) {
   return 'webm'
 }
 
+const QUICK_REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏']
+
+function groupMessageReactions(reactions: MessageReaction[], currentUserId: string) {
+  const grouped: Record<string, { emoji: string; count: number; reactedByMe: boolean }> = {}
+
+  for (const reaction of reactions) {
+    if (!grouped[reaction.emoji]) {
+      grouped[reaction.emoji] = {
+        emoji: reaction.emoji,
+        count: 0,
+        reactedByMe: false,
+      }
+    }
+
+    grouped[reaction.emoji].count += 1
+
+    if (reaction.user_id === currentUserId) {
+      grouped[reaction.emoji].reactedByMe = true
+    }
+  }
+
+  return Object.values(grouped)
+}
+
 export default function ConversationPage() {
   const params = useParams()
   const router = useRouter()
@@ -198,6 +235,7 @@ export default function ConversationPage() {
   const [messages, setMessages] = useState<MessageRow[]>([])
   const [newMessage, setNewMessage] = useState('')
   const [selectedMedia, setSelectedMedia] = useState<SelectedMedia[]>([])
+  const [openReactionMessageId, setOpenReactionMessageId] = useState<string | null>(null)
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0)
 
   const otherUserId = useMemo(() => {
@@ -357,9 +395,83 @@ export default function ConversationPage() {
       )
       .subscribe()
 
+    const reactionsChannel = supabase
+      .channel(`message-reactions-${conversationId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'message_reactions',
+          filter: `conversation_id=eq.${conversationId}`,
+        },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            const reaction = payload.new as MessageReaction
+
+            setMessages((current) =>
+              current.map((item) => {
+                if (item.id !== reaction.message_id) return item
+
+                const currentReactions = item.reactions || []
+                const exists = currentReactions.some(
+                  (currentReaction) => currentReaction.id === reaction.id
+                )
+
+                if (exists) return item
+
+                return {
+                  ...item,
+                  reactions: [...currentReactions, reaction],
+                }
+              })
+            )
+          }
+
+          if (payload.eventType === 'UPDATE') {
+            const updatedReaction = payload.new as MessageReaction
+
+            setMessages((current) =>
+              current.map((item) => {
+                if (item.id !== updatedReaction.message_id) return item
+
+                const currentReactions = item.reactions || []
+                const exists = currentReactions.some(
+                  (reaction) => reaction.id === updatedReaction.id
+                )
+
+                return {
+                  ...item,
+                  reactions: exists
+                    ? currentReactions.map((reaction) =>
+                        reaction.id === updatedReaction.id ? updatedReaction : reaction
+                      )
+                    : [...currentReactions, updatedReaction],
+                }
+              })
+            )
+          }
+
+          if (payload.eventType === 'DELETE') {
+            const deletedReaction = payload.old as MessageReaction
+
+            setMessages((current) =>
+              current.map((item) => ({
+                ...item,
+                reactions: (item.reactions || []).filter(
+                  (reaction) => reaction.id !== deletedReaction.id
+                ),
+              }))
+            )
+          }
+        }
+      )
+      .subscribe()
+
     return () => {
       supabase.removeChannel(messagesChannel)
       supabase.removeChannel(attachmentsChannel)
+      supabase.removeChannel(reactionsChannel)
     }
   }, [conversationId, userId])
 
@@ -485,6 +597,30 @@ export default function ConversationPage() {
     )
   }
 
+  async function loadReactionsForMessages(messageIds: string[]) {
+    if (messageIds.length === 0) return {}
+
+    const { data, error } = await supabase
+      .from('message_reactions')
+      .select('id, message_id, conversation_id, user_id, emoji, created_at, updated_at')
+      .in('message_id', messageIds)
+      .order('created_at', { ascending: true })
+
+    if (error) {
+      setMessage('Erro ao carregar reações da conversa: ' + error.message)
+      return {}
+    }
+
+    return ((data || []) as MessageReaction[]).reduce(
+      (acc, reaction) => {
+        if (!acc[reaction.message_id]) acc[reaction.message_id] = []
+        acc[reaction.message_id].push(reaction)
+        return acc
+      },
+      {} as Record<string, MessageReaction[]>
+    )
+  }
+
   async function loadMessagesWithAttachments() {
     const { data, error } = await supabase
       .from('messages')
@@ -498,14 +634,18 @@ export default function ConversationPage() {
     }
 
     const loadedMessages = (data || []) as MessageRow[]
-    const attachmentMap = await loadAttachmentsForMessages(
-      loadedMessages.map((item) => item.id)
-    )
+    const messageIds = loadedMessages.map((item) => item.id)
+
+    const [attachmentMap, reactionMap] = await Promise.all([
+      loadAttachmentsForMessages(messageIds),
+      loadReactionsForMessages(messageIds),
+    ])
 
     setMessages(
       loadedMessages.map((item) => ({
         ...item,
         attachments: attachmentMap[item.id] || [],
+        reactions: reactionMap[item.id] || [],
       }))
     )
   }
@@ -697,6 +837,86 @@ export default function ConversationPage() {
       window.clearInterval(recordingTimerRef.current)
       recordingTimerRef.current = null
     }
+  }
+
+  async function handleToggleReaction(messageId: string, emoji: string) {
+    if (!userId || !conversationId) return
+
+    const targetMessage = messages.find((item) => item.id === messageId)
+
+    if (!targetMessage || targetMessage.deleted_at) return
+
+    const currentReactions = targetMessage.reactions || []
+    const myReaction = currentReactions.find((reaction) => reaction.user_id === userId)
+
+    setOpenReactionMessageId(null)
+    setMessage('')
+
+    if (myReaction?.emoji === emoji) {
+      const { error } = await supabase
+        .from('message_reactions')
+        .delete()
+        .eq('message_id', messageId)
+        .eq('user_id', userId)
+
+      if (error) {
+        setMessage('Erro ao remover reação: ' + error.message)
+        return
+      }
+
+      setMessages((current) =>
+        current.map((item) =>
+          item.id === messageId
+            ? {
+                ...item,
+                reactions: (item.reactions || []).filter(
+                  (reaction) => reaction.user_id !== userId
+                ),
+              }
+            : item
+        )
+      )
+
+      return
+    }
+
+    const { data, error } = await supabase
+      .from('message_reactions')
+      .upsert(
+        {
+          message_id: messageId,
+          conversation_id: conversationId,
+          user_id: userId,
+          emoji,
+        },
+        {
+          onConflict: 'message_id,user_id',
+        }
+      )
+      .select('id, message_id, conversation_id, user_id, emoji, created_at, updated_at')
+      .single()
+
+    if (error || !data) {
+      setMessage('Erro ao reagir à mensagem: ' + (error?.message || 'tente novamente.'))
+      return
+    }
+
+    const savedReaction = data as MessageReaction
+
+    setMessages((current) =>
+      current.map((item) => {
+        if (item.id !== messageId) return item
+
+        const otherReactions = (item.reactions || []).filter(
+          (reaction) => reaction.user_id !== userId
+        )
+
+        return {
+          ...item,
+          reactions: [...otherReactions, savedReaction],
+        }
+      })
+    )
   }
 
   async function handleDeleteAttachment(
@@ -1028,7 +1248,7 @@ export default function ConversationPage() {
             </div>
           )}
 
-          <div className="min-h-0 flex-1 overflow-y-auto bg-zinc-50 p-3 dark:bg-zinc-950 sm:p-5">
+          <div className="min-h-0 flex flex-1 flex-col gap-3 overflow-y-auto bg-zinc-50 p-3 dark:bg-zinc-950 sm:p-5">
             {messages.length === 0 ? (
               <div className="flex flex-1 items-center justify-center text-center">
                 <div>
@@ -1049,6 +1269,8 @@ export default function ConversationPage() {
               messages.map((item) => {
                 const isMine = item.sender_id === userId
                 const attachments = item.attachments || []
+                const reactions = item.reactions || []
+                const reactionGroups = groupMessageReactions(reactions, userId)
 
                 return (
                   <div
@@ -1189,15 +1411,113 @@ export default function ConversationPage() {
                         </>
                       ) : null}
 
-                      <p
-                        className={`mt-2 text-[11px] ${
-                          isMine
-                            ? 'text-white/70 dark:text-black/60'
-                            : 'text-zinc-500'
+                      <div
+                        className={`relative mt-2 flex items-center gap-2 ${
+                          isMine ? 'justify-end' : 'justify-start'
                         }`}
                       >
-                        {formatMessageTime(item.created_at)}
-                      </p>
+                        <p
+                          className={`text-[11px] ${
+                            isMine
+                              ? 'text-white/70 dark:text-black/60'
+                              : 'text-zinc-500'
+                          }`}
+                        >
+                          {formatMessageTime(item.created_at)}
+                        </p>
+
+                        {!item.deleted_at && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setOpenReactionMessageId((current) =>
+                                current === item.id ? null : item.id
+                              )
+                            }
+                            className={`flex h-6 w-6 items-center justify-center rounded-full transition ${
+                              isMine
+                                ? 'text-white/70 hover:bg-white/10 hover:text-white dark:text-black/60 dark:hover:bg-black/10 dark:hover:text-black'
+                                : 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-white'
+                            }`}
+                            aria-label="Reagir à mensagem"
+                            title="Reagir"
+                          >
+                            <SmilePlus className="h-4 w-4" />
+                          </button>
+                        )}
+
+                        {openReactionMessageId === item.id && !item.deleted_at && (
+                          <div
+                            className={`absolute bottom-8 z-30 flex items-center gap-1 rounded-full border border-zinc-200 bg-white px-2 py-1.5 text-lg shadow-xl dark:border-zinc-700 dark:bg-zinc-900 ${
+                              isMine ? 'right-0' : 'left-0'
+                            }`}
+                          >
+                            {QUICK_REACTION_EMOJIS.map((emoji) => {
+                              const reactedByMe = reactions.some(
+                                (reaction) => reaction.user_id === userId && reaction.emoji === emoji
+                              )
+
+                              return (
+                                <button
+                                  key={emoji}
+                                  type="button"
+                                  onClick={() => handleToggleReaction(item.id, emoji)}
+                                  className={`flex h-8 w-8 items-center justify-center rounded-full transition hover:bg-zinc-100 dark:hover:bg-zinc-800 ${
+                                    reactedByMe
+                                      ? 'bg-blue-50 ring-1 ring-blue-300 dark:bg-blue-950/50 dark:ring-blue-700'
+                                      : ''
+                                  }`}
+                                  aria-label={`Reagir com ${emoji}`}
+                                  title={`Reagir com ${emoji}`}
+                                >
+                                  {emoji}
+                                </button>
+                              )
+                            })}
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setMessage('Galeria completa de emojis em breve.')
+                                setOpenReactionMessageId(null)
+                              }}
+                              className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-100 text-zinc-700 transition hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
+                              aria-label="Mais emojis"
+                              title="Mais emojis em breve"
+                            >
+                              <Plus className="h-4 w-4" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      {reactionGroups.length > 0 && (
+                        <div
+                          className={`mt-2 flex flex-wrap gap-1 ${
+                            isMine ? 'justify-end' : 'justify-start'
+                          }`}
+                        >
+                          {reactionGroups.map((reaction) => (
+                            <button
+                              key={reaction.emoji}
+                              type="button"
+                              onClick={() => handleToggleReaction(item.id, reaction.emoji)}
+                              className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs shadow-sm transition ${
+                                reaction.reactedByMe
+                                  ? 'border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-700 dark:bg-blue-950/50 dark:text-blue-200'
+                                  : isMine
+                                    ? 'border-white/15 bg-white/10 text-white dark:border-black/10 dark:bg-black/10 dark:text-black'
+                                    : 'border-zinc-200 bg-white text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200'
+                              }`}
+                              aria-label={`Reação ${reaction.emoji}`}
+                              title="Clique para trocar ou remover sua reação"
+                            >
+                              <span>{reaction.emoji}</span>
+                              {reaction.count > 1 && <span>{reaction.count}</span>}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                 )
