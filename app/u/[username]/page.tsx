@@ -12,7 +12,7 @@ import PostCard from "../../components/PostCard";
 import UserBadges from "../../components/UserBadges";
 import UserBadgesPanel from "../../components/UserBadgesPanel";
 import StartConversationButton from "../../components/StartConversationButton";
-import { Flag, Maximize2, MessageCircle, UserCheck, UserPlus, UserX, X } from "lucide-react";
+import { Flag, Maximize2, UserCheck, UserPlus, UserX, X } from "lucide-react";
 
 type VisibilityType = "public" | "followers" | "private";
 
