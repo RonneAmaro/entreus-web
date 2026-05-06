@@ -10,10 +10,13 @@ import { useParams, useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import {
   ArrowLeft,
+  Inbox,
   Loader2,
+  MessageSquarePlus,
   Mic,
   Paperclip,
   Plus,
+  Search,
   Send,
   SmilePlus,
   Square,
@@ -41,6 +44,38 @@ type ParticipantRow = {
   conversation_id: string
   user_id: string
   last_read_at: string | null
+}
+
+type ConversationRow = {
+  id: string
+  type: string
+  direct_key: string | null
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+
+type ConversationParticipantRow = {
+  conversation_id: string
+  user_id: string
+  last_read_at: string | null
+}
+
+type ConversationPreviewMessage = {
+  id: string
+  conversation_id: string
+  sender_id: string
+  content: string | null
+  created_at: string
+  deleted_at: string | null
+}
+
+type ConversationItem = {
+  id: string
+  updated_at: string
+  otherUser: ProfileSummary | null
+  lastMessage: ConversationPreviewMessage | null
+  isUnread: boolean
 }
 
 type MessageAttachment = {
@@ -107,6 +142,35 @@ function formatMessageTime(value: string) {
     hour: '2-digit',
     minute: '2-digit',
   })
+}
+
+function formatConversationDate(value: string) {
+  const date = new Date(value)
+  const now = new Date()
+  const diffInMs = now.getTime() - date.getTime()
+  const diffInHours = diffInMs / (1000 * 60 * 60)
+
+  if (diffInHours < 24) {
+    return date.toLocaleTimeString('pt-BR', {
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  }
+
+  return date.toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+  })
+}
+
+function getMessagePreview(message: ConversationPreviewMessage | null, currentUserId: string) {
+  if (!message) return 'Conversa iniciada.'
+  if (message.deleted_at) return 'Mensagem apagada'
+
+  const prefix = message.sender_id === currentUserId ? 'Você: ' : ''
+  const content = message.content?.trim()
+
+  return `${prefix}${content || 'Mídia enviada'}`
 }
 
 function formatRecordingTime(seconds: number) {
@@ -236,11 +300,33 @@ export default function ConversationPage() {
   const [newMessage, setNewMessage] = useState('')
   const [selectedMedia, setSelectedMedia] = useState<SelectedMedia[]>([])
   const [openReactionMessageId, setOpenReactionMessageId] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [conversations, setConversations] = useState<ConversationItem[]>([])
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0)
 
   const otherUserId = useMemo(() => {
     return participants.find((participant) => participant.user_id !== userId)?.user_id || ''
   }, [participants, userId])
+
+  const sortedConversations = useMemo(() => {
+    return [...conversations].sort((a, b) => {
+      return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+    })
+  }, [conversations])
+
+  const filteredConversations = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase()
+
+    if (!query) return sortedConversations
+
+    return sortedConversations.filter((conversation) => {
+      const name = getDisplayName(conversation.otherUser).toLowerCase()
+      const username = getUsername(conversation.otherUser).toLowerCase()
+      const preview = getMessagePreview(conversation.lastMessage, userId).toLowerCase()
+
+      return name.includes(query) || username.includes(query) || preview.includes(query)
+    })
+  }, [searchQuery, sortedConversations, userId])
 
   useEffect(() => {
     setMounted(true)
@@ -288,6 +374,7 @@ export default function ConversationPage() {
 
       await Promise.all([
         loadUnreadNotificationsCount(user.id),
+        loadConversationList(user.id),
         loadConversation(user.id),
       ])
 
@@ -322,6 +409,7 @@ export default function ConversationPage() {
             })
 
             markConversationAsRead(userId)
+            loadConversationList(userId)
           }
 
           if (payload.eventType === 'UPDATE') {
@@ -492,6 +580,142 @@ export default function ConversationPage() {
     }
 
     setUnreadNotificationsCount(count || 0)
+  }
+
+  async function loadConversationList(currentUserId: string) {
+    const { data: myParticipants, error: myParticipantsError } = await supabase
+      .from('conversation_participants')
+      .select('conversation_id, user_id, last_read_at')
+      .eq('user_id', currentUserId)
+
+    if (myParticipantsError) {
+      setMessage('Erro ao carregar conversas: ' + myParticipantsError.message)
+      return
+    }
+
+    const myParticipantRows = (myParticipants || []) as ConversationParticipantRow[]
+    const conversationIds = myParticipantRows.map((item) => item.conversation_id)
+
+    if (conversationIds.length === 0) {
+      setConversations([])
+      return
+    }
+
+    const myParticipantByConversation = myParticipantRows.reduce(
+      (acc, participant) => {
+        acc[participant.conversation_id] = participant
+        return acc
+      },
+      {} as Record<string, ConversationParticipantRow>
+    )
+
+    const { data: conversationsData, error: conversationsError } = await supabase
+      .from('conversations')
+      .select('id, type, direct_key, created_by, created_at, updated_at')
+      .in('id', conversationIds)
+      .order('updated_at', { ascending: false })
+
+    if (conversationsError) {
+      setMessage('Erro ao carregar conversas: ' + conversationsError.message)
+      return
+    }
+
+    const { data: participantsData, error: participantsError } = await supabase
+      .from('conversation_participants')
+      .select('conversation_id, user_id, last_read_at')
+      .in('conversation_id', conversationIds)
+
+    if (participantsError) {
+      setMessage('Erro ao carregar participantes: ' + participantsError.message)
+      return
+    }
+
+    const participantRows = (participantsData || []) as ConversationParticipantRow[]
+
+    const otherUserIds = Array.from(
+      new Set(
+        participantRows
+          .map((item) => item.user_id)
+          .filter((participantUserId) => participantUserId !== currentUserId)
+      )
+    )
+
+    let profilesById: Record<string, ProfileSummary> = {}
+
+    if (otherUserIds.length > 0) {
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, username, display_name, avatar_url')
+        .in('id', otherUserIds)
+
+      if (profilesError) {
+        setMessage('Erro ao carregar perfis: ' + profilesError.message)
+        return
+      }
+
+      profilesById = ((profilesData || []) as ProfileSummary[]).reduce(
+        (acc, profile) => {
+          acc[profile.id] = profile
+          return acc
+        },
+        {} as Record<string, ProfileSummary>
+      )
+    }
+
+    const { data: messagesData, error: messagesError } = await supabase
+      .from('messages')
+      .select('id, conversation_id, sender_id, content, created_at, deleted_at')
+      .in('conversation_id', conversationIds)
+      .order('created_at', { ascending: false })
+      .limit(300)
+
+    if (messagesError) {
+      setMessage('Erro ao carregar últimas mensagens: ' + messagesError.message)
+      return
+    }
+
+    const lastMessageByConversation: Record<string, ConversationPreviewMessage> = {}
+
+    for (const item of (messagesData || []) as ConversationPreviewMessage[]) {
+      if (!lastMessageByConversation[item.conversation_id]) {
+        lastMessageByConversation[item.conversation_id] = item
+      }
+    }
+
+    const items: ConversationItem[] = ((conversationsData || []) as ConversationRow[]).map(
+      (conversation) => {
+        const conversationParticipants = participantRows.filter(
+          (participant) => participant.conversation_id === conversation.id
+        )
+
+        const otherParticipant = conversationParticipants.find(
+          (participant) => participant.user_id !== currentUserId
+        )
+
+        const lastMessage = lastMessageByConversation[conversation.id] || null
+        const myParticipant = myParticipantByConversation[conversation.id]
+        const lastReadAt = myParticipant?.last_read_at
+          ? new Date(myParticipant.last_read_at).getTime()
+          : 0
+
+        const isUnread = !!(
+          lastMessage &&
+          !lastMessage.deleted_at &&
+          lastMessage.sender_id !== currentUserId &&
+          new Date(lastMessage.created_at).getTime() > lastReadAt
+        )
+
+        return {
+          id: conversation.id,
+          updated_at: conversation.updated_at,
+          otherUser: otherParticipant ? profilesById[otherParticipant.user_id] || null : null,
+          lastMessage,
+          isUnread,
+        }
+      }
+    )
+
+    setConversations(items)
   }
 
   async function loadConversation(currentUserId: string) {
@@ -1134,6 +1358,7 @@ export default function ConversationPage() {
       .eq('id', conversationId)
 
     await markConversationAsRead(userId)
+    await loadConversationList(userId)
 
     for (const item of selectedMedia) {
       URL.revokeObjectURL(item.previewUrl)
@@ -1192,9 +1417,128 @@ export default function ConversationPage() {
         onPostClick={handlePostClick}
       />
 
-      <section className="fixed bottom-16 left-0 right-0 top-14 z-10 flex flex-col overflow-hidden px-3 py-2 sm:px-6 lg:static lg:ml-[calc(270px+((100vw-270px-56rem)/2))] lg:h-screen lg:w-full lg:max-w-4xl lg:px-6 lg:py-8">
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="flex shrink-0 items-center gap-3 border-b border-zinc-200 px-4 py-4 dark:border-zinc-800 sm:px-5">
+      <section className="fixed bottom-16 left-0 right-0 top-14 z-10 flex flex-col overflow-hidden px-3 py-2 sm:px-6 lg:static lg:ml-[270px] lg:h-screen lg:w-[calc(100vw-270px)] lg:max-w-none lg:flex-row lg:px-0 lg:py-0">
+
+        <aside className="hidden min-h-0 w-[390px] shrink-0 flex-col overflow-hidden border-r border-zinc-200 bg-white dark:border-zinc-800 dark:bg-black lg:flex">
+          <div className="shrink-0 border-b border-zinc-200 px-5 py-5 dark:border-zinc-800">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h1 className="text-2xl font-black tracking-tight text-zinc-950 dark:text-white">
+                  Bate-papo
+                </h1>
+                <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+                  Suas conversas privadas
+                </p>
+              </div>
+
+              <Link
+                href="/search"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-zinc-50 text-zinc-900 transition hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white dark:hover:bg-zinc-900"
+                aria-label="Nova conversa"
+                title="Nova conversa"
+              >
+                <MessageSquarePlus className="h-5 w-5" />
+              </Link>
+            </div>
+
+            <div className="mt-5 flex items-center gap-2 rounded-full border border-zinc-200 bg-zinc-100 px-4 py-3 text-zinc-500 dark:border-zinc-800 dark:bg-zinc-950">
+              <Search className="h-5 w-5 shrink-0" />
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Buscar conversas"
+                className="min-w-0 flex-1 bg-transparent text-sm text-zinc-900 outline-none placeholder:text-zinc-500 dark:text-white"
+              />
+            </div>
+          </div>
+
+          {filteredConversations.length === 0 ? (
+            <div className="flex flex-1 items-center justify-center p-8 text-center">
+              <div>
+                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-zinc-100 text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
+                  <Inbox className="h-7 w-7" />
+                </div>
+
+                <h3 className="text-lg font-bold text-zinc-950 dark:text-white">
+                  Nenhuma conversa
+                </h3>
+
+                <p className="mx-auto mt-2 max-w-xs text-sm text-zinc-500 dark:text-zinc-400">
+                  Use o botão de nova conversa para buscar pessoas.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              {filteredConversations.map((conversation) => {
+                const otherUser = conversation.otherUser
+                const name = getDisplayName(otherUser)
+                const preview = getMessagePreview(conversation.lastMessage, userId)
+                const active = conversation.id === conversationId
+
+                return (
+                  <Link
+                    key={conversation.id}
+                    href={`/messages/${conversation.id}`}
+                    className={`flex items-center gap-3 border-b border-zinc-100 px-4 py-4 transition dark:border-zinc-900 ${
+                      active
+                        ? 'bg-zinc-100 dark:bg-zinc-900'
+                        : 'hover:bg-zinc-50 dark:hover:bg-zinc-950'
+                    }`}
+                  >
+                    <div className="relative shrink-0">
+                      {otherUser?.avatar_url ? (
+                        <img
+                          src={otherUser.avatar_url}
+                          alt={name}
+                          className="h-14 w-14 rounded-full border border-zinc-300 object-cover dark:border-zinc-700"
+                        />
+                      ) : (
+                        <div className="flex h-14 w-14 items-center justify-center rounded-full border border-zinc-300 bg-zinc-100 text-lg font-bold text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                          {getInitial(name)}
+                        </div>
+                      )}
+
+                      {conversation.isUnread && (
+                        <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full border-2 border-white bg-blue-500 dark:border-black" />
+                      )}
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        {otherUser?.id && (
+                          <UserBadges userId={otherUser.id} size="sm" max={1} />
+                        )}
+
+                        <p className={`truncate font-bold ${
+                          conversation.isUnread
+                            ? 'text-zinc-950 dark:text-white'
+                            : 'text-zinc-800 dark:text-zinc-100'
+                        }`}>
+                          {name}
+                        </p>
+                      </div>
+
+                      <p className="mt-1 truncate text-sm text-zinc-500">
+                        {preview}
+                      </p>
+                    </div>
+
+                    <div className="shrink-0 text-right text-xs text-zinc-500">
+                      {formatConversationDate(
+                        conversation.lastMessage?.created_at || conversation.updated_at
+                      )}
+                    </div>
+                  </Link>
+                )
+              })}
+            </div>
+          )}
+        </aside>
+
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900 lg:rounded-none lg:border-0 lg:shadow-none">
+          <div className="flex shrink-0 items-center gap-3 border-b border-zinc-200 px-4 py-4 dark:border-zinc-800 sm:px-5 lg:px-6">
             <Link
               href="/messages"
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-300 bg-white text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-700 dark:bg-black dark:text-zinc-200 dark:hover:bg-zinc-900"
