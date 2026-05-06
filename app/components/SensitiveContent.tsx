@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Eye, ShieldAlert } from 'lucide-react'
+import { useLanguage } from './LanguageProvider'
 
 type SensitiveContentProps = {
   children: React.ReactNode
@@ -10,9 +11,11 @@ type SensitiveContentProps = {
 
 export default function SensitiveContent({
   children,
-  label = 'Conteúdo 18+',
+  label,
 }: SensitiveContentProps) {
+  const { t } = useLanguage()
   const [revealed, setRevealed] = useState(false)
+  const displayLabel = label || t('sensitiveContent.label')
 
   if (revealed) {
     return <>{children}</>
@@ -29,10 +32,10 @@ export default function SensitiveContent({
           <ShieldAlert className="h-7 w-7 text-yellow-300" />
         </div>
 
-        <h3 className="text-lg font-bold">{label}</h3>
+        <h3 className="text-lg font-bold">{displayLabel}</h3>
 
         <p className="mt-2 max-w-sm text-sm text-zinc-300">
-          Esta publicação pode conter conteúdo sensível ou adulto. Toque para visualizar apenas se desejar continuar.
+          {t('sensitiveContent.description')}
         </p>
 
         <button
@@ -41,7 +44,7 @@ export default function SensitiveContent({
           className="mt-4 inline-flex items-center gap-2 rounded-full bg-white px-5 py-2 text-sm font-semibold text-black transition hover:opacity-90"
         >
           <Eye className="h-4 w-4" />
-          Mostrar conteúdo
+          {t('sensitiveContent.show')}
         </button>
       </div>
     </div>

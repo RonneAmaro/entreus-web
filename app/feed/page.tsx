@@ -16,6 +16,7 @@ import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import { supabase } from '@/lib/supabase'
+import { useLanguage } from '../components/LanguageProvider'
 
 type VisibilityType = 'public' | 'followers' | 'private'
 
@@ -107,6 +108,24 @@ type Repost = {
   profiles: ProfileSummary | null
 }
 
+function getDateLocale(language: string) {
+  const locales: Record<string, string> = {
+    pt: 'pt-BR',
+    en: 'en-US',
+    fr: 'fr-FR',
+    id: 'id-ID',
+    ja: 'ja-JP',
+    zh: 'zh-CN',
+  }
+
+  return locales[language] || 'pt-BR'
+}
+
+function getCategoryKey(value: string | null) {
+  if (!value) return 'categories.uncategorized'
+  return `categories.${value}`
+}
+
 type FeedItem =
   | {
     type: 'post'
@@ -127,6 +146,7 @@ function FeedContent() {
   const searchParams = useSearchParams()
   const highlightedPostId = searchParams.get('post') || ''
   const { theme, setTheme } = useTheme()
+  const { t, language } = useLanguage()
 
   const [mounted, setMounted] = useState(false)
   const [userId, setUserId] = useState('')
@@ -254,7 +274,7 @@ function FeedContent() {
       .eq('read', false)
 
     if (error) {
-      setMessage('Erro ao carregar notificações: ' + error.message)
+      setMessage(t('feed.messages.loadNotificationsError') + error.message)
       return
     }
 
@@ -268,7 +288,7 @@ function FeedContent() {
       .eq('blocker_id', currentUserId)
 
     if (blockedByMeError) {
-      setMessage('Erro ao carregar bloqueios: ' + blockedByMeError.message)
+      setMessage(t('feed.messages.loadBlocksError') + blockedByMeError.message)
       return []
     }
 
@@ -278,7 +298,7 @@ function FeedContent() {
       .eq('blocked_id', currentUserId)
 
     if (blockedMeError) {
-      setMessage('Erro ao carregar bloqueios: ' + blockedMeError.message)
+      setMessage(t('feed.messages.loadBlocksError') + blockedMeError.message)
       return []
     }
 
@@ -301,7 +321,7 @@ function FeedContent() {
       .select('id, follower_id, following_id')
 
     if (error) {
-      setMessage('Erro ao carregar seguimentos: ' + error.message)
+      setMessage(t('feed.messages.loadFollowsError') + error.message)
       return []
     }
 
@@ -317,7 +337,7 @@ function FeedContent() {
       .eq('user_id', currentUserId)
 
     if (error) {
-      setMessage('Erro ao carregar posts salvos: ' + error.message)
+      setMessage(t('feed.messages.loadSavedPostsError') + error.message)
       return
     }
 
@@ -331,7 +351,7 @@ function FeedContent() {
       .order('created_at', { ascending: false })
 
     if (error) {
-      setMessage('Erro ao carregar reposts: ' + error.message)
+      setMessage(t('feed.messages.loadRepostsError') + error.message)
       return
     }
 
@@ -429,7 +449,7 @@ function FeedContent() {
       .order('created_at', { ascending: false })
 
     if (error) {
-      setMessage('Erro ao carregar posts: ' + error.message)
+      setMessage(t('feed.messages.loadPostsError') + error.message)
       return
     }
 
@@ -502,7 +522,7 @@ function FeedContent() {
       .order('created_at', { ascending: true })
 
     if (error) {
-      setMessage('Erro ao carregar comentários: ' + error.message)
+      setMessage(t('feed.messages.loadCommentsError') + error.message)
       return
     }
 
@@ -522,7 +542,7 @@ function FeedContent() {
     const { data, error } = await supabase.from('likes').select('*')
 
     if (error) {
-      setMessage('Erro ao carregar curtidas: ' + error.message)
+      setMessage(t('feed.messages.loadLikesError') + error.message)
       return
     }
 
@@ -535,7 +555,7 @@ function FeedContent() {
       .select('id, comment_id, user_id')
 
     if (error) {
-      setMessage('Erro ao carregar curtidas dos comentários: ' + error.message)
+      setMessage(t('feed.messages.loadCommentLikesError') + error.message)
       return
     }
 
@@ -558,7 +578,7 @@ function FeedContent() {
     if (!userId || !targetUserId || userId === targetUserId) return
 
     if (blockedUserIds.includes(targetUserId)) {
-      setMessage('Não é possível seguir um usuário bloqueado ou que te bloqueou.')
+      setMessage(t('feed.messages.blockedFollow'))
       return
     }
 
@@ -573,7 +593,7 @@ function FeedContent() {
       .maybeSingle()
 
     if (checkError) {
-      setMessage('Erro ao verificar seguimento: ' + checkError.message)
+      setMessage(t('feed.messages.checkFollowError') + checkError.message)
       setFollowLoadingUserId(null)
       return
     }
@@ -585,7 +605,7 @@ function FeedContent() {
         .eq('id', existingFollow.id)
 
       if (error) {
-        setMessage('Erro ao deixar de seguir: ' + error.message)
+        setMessage(t('feed.messages.unfollowError') + error.message)
         setFollowLoadingUserId(null)
         return
       }
@@ -596,7 +616,7 @@ function FeedContent() {
       })
 
       if (error) {
-        setMessage('Erro ao seguir: ' + error.message)
+        setMessage(t('feed.messages.followError') + error.message)
         setFollowLoadingUserId(null)
         return
       }
@@ -616,13 +636,11 @@ function FeedContent() {
     if (!userId) return
 
     if (postOwnerId === userId) {
-      setMessage('Você não pode denunciar sua própria publicação.')
+      setMessage(t('feed.messages.ownReport'))
       return
     }
 
-    const reason = window.prompt(
-      'Informe o motivo da denúncia.\nEx.: spam, nudez indevida, assédio, conteúdo ofensivo'
-    )
+    const reason = window.prompt(t('feed.messages.reportPrompt'))
 
     if (!reason || !reason.trim()) return
 
@@ -637,13 +655,13 @@ function FeedContent() {
     })
 
     if (error) {
-      setMessage('Erro ao denunciar publicação: ' + error.message)
+      setMessage(t('feed.messages.reportError') + error.message)
       setReportingPostId(null)
       return
     }
 
     setReportedPostIds((prev) => [...prev, postId])
-    setMessage('Publicação denunciada com sucesso.')
+    setMessage(t('feed.messages.reportSuccess'))
     setReportingPostId(null)
   }
 
@@ -658,7 +676,7 @@ function FeedContent() {
         setCopiedPostId((current) => (current === postId ? null : current))
       }, 2000)
     } catch {
-      setMessage('Não foi possível copiar o link do post.')
+      setMessage(t('feed.messages.copyPostError'))
     }
   }
 
@@ -683,7 +701,7 @@ function FeedContent() {
         .eq('user_id', userId)
 
       if (error) {
-        setMessage('Erro ao remover dos salvos: ' + error.message)
+        setMessage(t('feed.messages.removeSavedError') + error.message)
         await loadBookmarks(userId)
       }
 
@@ -709,7 +727,7 @@ function FeedContent() {
       .single()
 
     if (error) {
-      setMessage('Erro ao salvar post: ' + error.message)
+      setMessage(t('feed.messages.savePostError') + error.message)
       await loadBookmarks(userId)
       return
     }
@@ -731,7 +749,7 @@ function FeedContent() {
     const repostedPost = posts.find((post) => post.id === postId)
 
     if (repostedPost?.user_id === userId) {
-      setMessage('Você não precisa repostar sua própria publicação.')
+      setMessage(t('feed.messages.ownRepost'))
       return
     }
 
@@ -751,7 +769,7 @@ function FeedContent() {
         .eq('user_id', userId)
 
       if (error) {
-        setMessage('Erro ao remover repost: ' + error.message)
+        setMessage(t('feed.messages.removeRepostError') + error.message)
         await loadReposts(blockedUserIds)
       }
 
@@ -765,7 +783,7 @@ function FeedContent() {
       created_at: new Date().toISOString(),
       profiles: currentProfile
         ? {
-          username: currentProfile.username || 'usuario',
+          username: currentProfile.username || t('common.username'),
           display_name: currentProfile.display_name,
           avatar_url: currentProfile.avatar_url,
         }
@@ -784,7 +802,7 @@ function FeedContent() {
       .single()
 
     if (error) {
-      setMessage('Erro ao repostar: ' + error.message)
+      setMessage(t('feed.messages.repostError') + error.message)
       await loadReposts(blockedUserIds)
       return
     }
@@ -827,7 +845,7 @@ function FeedContent() {
       const maxSizeInBytes = 5 * 1024 * 1024
 
       if (file.size > maxSizeInBytes) {
-        setMessage('Cada imagem deve ter no máximo 5MB.')
+        setMessage(t('feed.messages.imageTooLarge'))
         return null
       }
 
@@ -848,7 +866,7 @@ function FeedContent() {
       setUploadingPostImage(false)
 
       if (uploadError) {
-        setMessage('Erro ao enviar imagem do post: ' + uploadError.message)
+        setMessage(t('feed.messages.uploadImageError') + uploadError.message)
         return null
       }
 
@@ -866,7 +884,7 @@ function FeedContent() {
       const maxSizeInBytes = 30 * 1024 * 1024
 
       if (file.size > maxSizeInBytes) {
-        setMessage('Cada vídeo deve ter no máximo 30MB.')
+        setMessage(t('feed.messages.videoTooLarge'))
         return null
       }
 
@@ -887,7 +905,7 @@ function FeedContent() {
       setUploadingPostVideo(false)
 
       if (uploadError) {
-        setMessage('Erro ao enviar vídeo do post: ' + uploadError.message)
+        setMessage(t('feed.messages.uploadVideoError') + uploadError.message)
         return null
       }
 
@@ -901,7 +919,7 @@ function FeedContent() {
       }
     }
 
-    setMessage('Envie apenas imagens JPG, PNG, WEBP ou vídeos MP4, WEBM, OGG.')
+    setMessage(t('feed.messages.unsupportedMedia'))
     return null
   }
 
@@ -919,12 +937,12 @@ function FeedContent() {
         : ([imageFile, videoFile].filter(Boolean) as File[])
 
     if (!content.trim() && finalMediaFiles.length === 0) {
-      setMessage('Escreva algo ou escolha uma mídia antes de publicar.')
+      setMessage(t('feed.messages.emptyPost'))
       return
     }
 
     if (finalMediaFiles.length > 5) {
-      setMessage('Você pode publicar no máximo 5 mídias por publicação.')
+      setMessage(t('feed.messages.maxMediaPost'))
       return
     }
 
@@ -963,7 +981,7 @@ function FeedContent() {
       .single()
 
     if (error) {
-      setMessage('Erro ao publicar: ' + error.message)
+      setMessage(t('feed.messages.publishError') + error.message)
       return
     }
 
@@ -981,7 +999,7 @@ function FeedContent() {
         .insert(mediaRows)
 
       if (mediaError) {
-        setMessage('Post criado, mas houve erro ao salvar mídias: ' + mediaError.message)
+        setMessage(t('feed.messages.mediaSavePartial') + mediaError.message)
 
         await loadPosts(
           userId,
@@ -999,7 +1017,7 @@ function FeedContent() {
       }
     }
 
-    setMessage('Publicado com sucesso!')
+    setMessage(t('feed.messages.publishedSuccess'))
 
     await loadPosts(
       userId,
@@ -1015,7 +1033,7 @@ function FeedContent() {
   }
 
   async function handleDeletePost(postId: string) {
-    const confirmDelete = window.confirm('Tem certeza que deseja excluir esta publicação?')
+    const confirmDelete = window.confirm(t('feed.messages.confirmDeletePost'))
 
     if (!confirmDelete) return
 
@@ -1026,11 +1044,11 @@ function FeedContent() {
       .eq('user_id', userId)
 
     if (error) {
-      setMessage('Erro ao excluir: ' + error.message)
+      setMessage(t('feed.messages.deletePostError') + error.message)
       return
     }
 
-    setMessage('Post excluído com sucesso!')
+    setMessage(t('feed.messages.postDeleted'))
 
     await loadPosts(
       userId,
@@ -1057,7 +1075,7 @@ function FeedContent() {
 
   async function handleSaveEdit(postId: string) {
     if (!editContent.trim()) {
-      setMessage('O post não pode ficar vazio.')
+      setMessage(t('feed.messages.emptyPostEdit'))
       return
     }
 
@@ -1073,12 +1091,12 @@ function FeedContent() {
       .eq('user_id', userId)
 
     if (error) {
-      setMessage('Erro ao editar: ' + error.message)
+      setMessage(t('feed.messages.editPostError') + error.message)
       setSavingEdit(false)
       return
     }
 
-    setMessage('Post editado com sucesso!')
+    setMessage(t('feed.messages.postEdited'))
     setEditingPostId(null)
     setEditContent('')
     setSavingEdit(false)
@@ -1095,7 +1113,7 @@ function FeedContent() {
     const text = commentInputs[postId]?.trim()
 
     if (!text) {
-      setMessage('Escreva um comentário antes de enviar.')
+      setMessage(t('feed.messages.emptyComment'))
       return
     }
 
@@ -1110,7 +1128,7 @@ function FeedContent() {
       .single()
 
     if (error) {
-      setMessage('Erro ao comentar: ' + error.message)
+      setMessage(t('feed.messages.commentError') + error.message)
       return
     }
 
@@ -1131,7 +1149,7 @@ function FeedContent() {
       [postId]: '',
     }))
 
-    setMessage('Comentário publicado com sucesso!')
+    setMessage(t('feed.messages.commentSuccess'))
 
     await loadComments()
     await loadCommentLikes()
@@ -1164,7 +1182,7 @@ function FeedContent() {
         .eq('id', existingLike.id)
 
       if (error) {
-        setMessage('Erro ao remover curtida: ' + error.message)
+        setMessage(t('feed.messages.removeLikeError') + error.message)
         await loadLikes()
       }
 
@@ -1190,7 +1208,7 @@ function FeedContent() {
       .single()
 
     if (error) {
-      setMessage('Erro ao curtir: ' + error.message)
+      setMessage(t('feed.messages.likeError') + error.message)
       await loadLikes()
       likeActionInProgressRef.current.delete(postId)
       return
@@ -1232,7 +1250,7 @@ function FeedContent() {
         .eq('id', existingLike.id)
 
       if (error) {
-        setMessage('Erro ao remover curtida do comentário: ' + error.message)
+        setMessage(t('feed.messages.removeCommentLikeError') + error.message)
         return
       }
     } else {
@@ -1242,7 +1260,7 @@ function FeedContent() {
       })
 
       if (error) {
-        setMessage('Erro ao curtir comentário: ' + error.message)
+        setMessage(t('feed.messages.commentLikeError') + error.message)
         return
       }
     }
@@ -1264,7 +1282,7 @@ function FeedContent() {
 
   async function handleSaveCommentEdit(commentId: string) {
     if (!editCommentContent.trim()) {
-      setMessage('O comentário não pode ficar vazio.')
+      setMessage(t('feed.messages.emptyCommentEdit'))
       return
     }
 
@@ -1280,12 +1298,12 @@ function FeedContent() {
       .eq('user_id', userId)
 
     if (error) {
-      setMessage('Erro ao editar comentário: ' + error.message)
+      setMessage(t('feed.messages.editCommentError') + error.message)
       setSavingCommentId(null)
       return
     }
 
-    setMessage('Comentário editado com sucesso.')
+    setMessage(t('feed.messages.commentEdited'))
     setEditingCommentId(null)
     setEditCommentContent('')
     setSavingCommentId(null)
@@ -1294,7 +1312,7 @@ function FeedContent() {
   }
 
   async function handleDeleteComment(commentId: string) {
-    const confirmDelete = window.confirm('Tem certeza que deseja excluir este comentário?')
+    const confirmDelete = window.confirm(t('feed.messages.confirmDeleteComment'))
 
     if (!confirmDelete) return
 
@@ -1305,11 +1323,11 @@ function FeedContent() {
       .eq('user_id', userId)
 
     if (error) {
-      setMessage('Erro ao excluir comentário: ' + error.message)
+      setMessage(t('feed.messages.deleteCommentError') + error.message)
       return
     }
 
-    setMessage('Comentário excluído com sucesso.')
+    setMessage(t('feed.messages.commentDeleted'))
     setOpenCommentMenuId(null)
 
     await loadComments()
@@ -1352,10 +1370,10 @@ function FeedContent() {
   }
 
   function getVisibilityLabel(value: Post['visibility']) {
-    if (value === 'public') return 'Público'
-    if (value === 'followers') return 'Só seguidores'
+    if (value === 'public') return t('visibility.public')
+    if (value === 'followers') return t('visibility.followers')
 
-    return 'Privado'
+    return t('visibility.private')
   }
 
   function getPostMedia(post: Post): PostMedia[] {
@@ -1440,7 +1458,7 @@ function FeedContent() {
   if (loading) {
     return (
       <main className="min-h-screen bg-white text-black dark:bg-black dark:text-white flex items-center justify-center px-4">
-        <p>Carregando feed...</p>
+        <p>{t('feed.loading')}</p>
       </main>
     )
   }
@@ -1457,7 +1475,7 @@ function FeedContent() {
 
       <MobileNavigation
         email={email}
-        displayName={currentProfile?.display_name || currentProfile?.username || 'Minha conta'}
+        displayName={currentProfile?.display_name || currentProfile?.username || t('nav.myProfile')}
         avatarUrl={currentProfile?.avatar_url || null}
         unreadNotificationsCount={unreadNotificationsCount}
         mounted={mounted}
@@ -1469,7 +1487,7 @@ function FeedContent() {
 
       <section className="w-full max-w-2xl overflow-x-hidden px-4 py-20 pb-24 sm:px-6 lg:ml-[calc(270px+((100vw-270px-42rem)/2))] lg:py-8">
         <div className="mb-4 sm:mb-6 text-sm text-zinc-500 dark:text-zinc-400 break-all">
-          Logado como:{' '}
+          {t('feed.loggedAs')}{' '}
           <span className="text-black dark:text-white">
             {email}
           </span>
@@ -1477,9 +1495,9 @@ function FeedContent() {
 
         {currentProfile && !currentProfile.show_sensitive_content && (
           <div className="mb-4 rounded-2xl border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-800 dark:border-yellow-900/60 dark:bg-yellow-950/20 dark:text-yellow-300">
-            Conteúdos 18+ estão ocultos no seu feed. Você pode alterar isso em{' '}
+            {t('feed.sensitiveHiddenPrefix')}{' '}
             <Link href="/profile" className="font-semibold underline">
-              Meu perfil
+              {t('nav.myProfile')}
             </Link>
             .
           </div>
@@ -1487,7 +1505,7 @@ function FeedContent() {
 
         <div id="post-composer" className="mb-6 scroll-mt-24">
           <PostComposer
-            userName={currentProfile?.display_name || currentProfile?.username || email || 'Usuário'}
+            userName={currentProfile?.display_name || currentProfile?.username || email || t('common.user')}
             userAvatarUrl={currentProfile?.avatar_url || null}
             submitting={uploadingPostImage || uploadingPostVideo}
             onSubmit={handleCreatePost}
@@ -1503,7 +1521,7 @@ function FeedContent() {
         <div className="space-y-4 sm:space-y-5">
           {feedItems.length === 0 && (
             <div className="bg-white dark:bg-zinc-900 rounded-2xl p-4 sm:p-6 border border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400">
-              Nenhuma publicação ainda.
+              {t('feed.noPosts')}
             </div>
           )}
 
@@ -1529,9 +1547,9 @@ function FeedContent() {
             const isEditing = editingPostId === post.id
 
             const authorName =
-              post.profiles?.display_name || post.profiles?.username || 'Usuário'
+              post.profiles?.display_name || post.profiles?.username || t('common.user')
 
-            const authorUsername = post.profiles?.username || 'usuario'
+            const authorUsername = post.profiles?.username || t('common.username')
             const authorAvatar = post.profiles?.avatar_url || ''
             const isOwnPost = post.user_id === userId
             const isBlockedRelation = blockedUserIds.includes(post.user_id)
@@ -1548,13 +1566,13 @@ function FeedContent() {
               item.type === 'repost'
                 ? item.repost.profiles?.display_name ||
                 item.repost.profiles?.username ||
-                'Usuário'
+                t('common.user')
                 : ''
 
             const reposterUsername =
               item.type === 'repost'
-                ? item.repost.profiles?.username || 'usuario'
-                : 'usuario'
+                ? item.repost.profiles?.username || t('common.username')
+                : t('common.username')
 
             const reposterAvatar =
               item.type === 'repost' ? item.repost.profiles?.avatar_url || '' : ''
@@ -1591,7 +1609,7 @@ function FeedContent() {
                       <UserBadges userId={item.repost.user_id} size="sm" max={1} />
 
                       <span className="truncate">
-                        {item.repost.user_id === userId ? 'Você repostou' : `${reposterName} repostou`}
+                        {item.repost.user_id === userId ? t('postCard.youReposted') : t('postCard.repostedBy').replace('{name}', reposterName)}
                       </span>
                     </span>
                   </Link>
@@ -1656,17 +1674,17 @@ function FeedContent() {
                         }`}
                     >
                       {followLoadingUserId === post.user_id
-                        ? 'Carregando...'
+                        ? t('common.loading')
                         : isFollowingAuthor
-                          ? 'Seguindo'
-                          : 'Seguir'}
+                          ? t('postCard.following')
+                          : t('postCard.follow')}
                     </button>
                   </div>
                 )}
 
                 <div className="flex items-center gap-2 mb-3 flex-wrap">
                   <p className="text-sm text-zinc-500">
-                    {post.category}
+                    {t(getCategoryKey(post.category))}
                   </p>
 
                   <span className="text-xs px-2 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
@@ -1681,19 +1699,19 @@ function FeedContent() {
 
                   {postReposted && (
                     <span className="text-xs px-2 py-1 rounded-full bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800">
-                      Repostado
+                      {t('postStatus.reposted')}
                     </span>
                   )}
 
                   {postSaved && (
                     <span className="text-xs px-2 py-1 rounded-full bg-yellow-50 dark:bg-yellow-950 text-yellow-700 dark:text-yellow-300 border border-yellow-200 dark:border-yellow-800">
-                      Salvo
+                      {t('postStatus.saved')}
                     </span>
                   )}
 
                   {isHighlighted && (
                     <span className="text-xs px-2 py-1 rounded-full bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-                      Destaque da notificação
+                      {t('postStatus.highlighted')}
                     </span>
                   )}
                 </div>
@@ -1715,14 +1733,14 @@ function FeedContent() {
                             : 'bg-black text-white dark:bg-white dark:text-black hover:opacity-90'
                           }`}
                       >
-                        {savingEdit ? 'Salvando...' : 'Salvar'}
+                        {savingEdit ? t('common.saving') : t('common.save')}
                       </button>
 
                       <button
                         onClick={handleCancelEdit}
                         className="w-full sm:w-auto border border-zinc-300 dark:border-zinc-700 px-4 py-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800"
                       >
-                        Cancelar
+                        {t('common.cancel')}
                       </button>
                     </div>
                   </div>
@@ -1777,19 +1795,19 @@ function FeedContent() {
 
                 <p className="text-xs text-zinc-500 dark:text-zinc-600 mt-3 mb-4">
                   {item.type === 'repost'
-                    ? `Repostado em ${new Date(item.repost.created_at).toLocaleString('pt-BR')}`
-                    : new Date(post.created_at).toLocaleString('pt-BR')}
+                    ? `${t('feed.repostedAt')} ${new Date(item.repost.created_at).toLocaleString(getDateLocale(language))}`
+                    : new Date(post.created_at).toLocaleString(getDateLocale(language))}
                 </p>
 
                 <div className="border-t border-zinc-200 dark:border-zinc-800 pt-4">
                   <h3 className="text-sm font-semibold mb-3 text-zinc-700 dark:text-zinc-300">
-                    Comentários
+                    {t('feed.comments')}
                   </h3>
 
                   <div className="space-y-3 mb-4">
                     {postComments.length === 0 && (
                       <p className="text-sm text-zinc-500">
-                        Nenhum comentário ainda.
+                        {t('feed.noComments')}
                       </p>
                     )}
 
@@ -1797,10 +1815,10 @@ function FeedContent() {
                       const commentAuthorName =
                         comment.profiles?.display_name ||
                         comment.profiles?.username ||
-                        'Usuário'
+                        t('common.user')
 
                       const commentAuthorUsername =
-                        comment.profiles?.username || 'usuario'
+                        comment.profiles?.username || t('common.username')
 
                       const commentAuthorAvatar =
                         comment.profiles?.avatar_url || ''
@@ -1868,7 +1886,7 @@ function FeedContent() {
                                         )
                                       }
                                       className="flex h-8 w-8 items-center justify-center rounded-full text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-700"
-                                      aria-label="Opções do comentário"
+                                      aria-label={t('feed.commentOptions')}
                                     >
                                       <MoreHorizontal className="h-4 w-4" />
                                     </button>
@@ -1879,7 +1897,7 @@ function FeedContent() {
                                           type="button"
                                           onClick={() => setOpenCommentMenuId(null)}
                                           className="fixed inset-0 z-40 cursor-default"
-                                          aria-label="Fechar menu"
+                                          aria-label={t('common.closeMenu')}
                                         />
 
                                         <div className="absolute right-0 top-9 z-50 w-52 overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-xl dark:border-zinc-700 dark:bg-zinc-950">
@@ -1889,7 +1907,7 @@ function FeedContent() {
                                             className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-zinc-800 hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-900"
                                           >
                                             <Edit3 className="h-4 w-4" />
-                                            Editar comentário
+                                            {t('feed.editComment')}
                                           </button>
 
                                           <button
@@ -1898,7 +1916,7 @@ function FeedContent() {
                                             className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30"
                                           >
                                             <Trash2 className="h-4 w-4" />
-                                            Excluir comentário
+                                            {t('feed.deleteComment')}
                                           </button>
                                         </div>
                                       </>
@@ -1923,8 +1941,8 @@ function FeedContent() {
                                       className="rounded-xl bg-black px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-60 dark:bg-white dark:text-black"
                                     >
                                       {savingCommentId === comment.id
-                                        ? 'Salvando...'
-                                        : 'Salvar'}
+                                        ? t('common.saving')
+                                        : t('common.save')}
                                     </button>
 
                                     <button
@@ -1932,7 +1950,7 @@ function FeedContent() {
                                       onClick={handleCancelEditComment}
                                       className="rounded-xl border border-zinc-300 px-4 py-2 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900"
                                     >
-                                      Cancelar
+                                      {t('common.cancel')}
                                     </button>
                                   </div>
                                 </div>
@@ -1956,7 +1974,7 @@ function FeedContent() {
                                 </button>
 
                                 <p className="text-xs text-zinc-500">
-                                  {new Date(comment.created_at).toLocaleString('pt-BR')}
+                                  {new Date(comment.created_at).toLocaleString(getDateLocale(language))}
                                 </p>
                               </div>
                             </div>
@@ -1977,7 +1995,7 @@ function FeedContent() {
                           [post.id]: e.target.value,
                         }))
                       }
-                      placeholder="Escreva um comentário..."
+                      placeholder={t('feed.commentPlaceholder')}
                       className="flex-1 rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 px-4 py-3 outline-none focus:border-zinc-500 text-sm sm:text-base"
                     />
 
@@ -1985,7 +2003,7 @@ function FeedContent() {
                       onClick={() => handleCreateComment(post.id)}
                       className="w-full sm:w-auto bg-black text-white dark:bg-zinc-100 dark:text-black px-5 py-3 rounded-xl font-medium hover:opacity-90"
                     >
-                      Comentar
+                      {t('feed.comment')}
                     </button>
                   </div>
                 </div>
@@ -1999,11 +2017,13 @@ function FeedContent() {
 }
 
 export default function FeedPage() {
+  const { t } = useLanguage()
+
   return (
     <Suspense
       fallback={
         <main className="min-h-screen bg-white text-black dark:bg-black dark:text-white flex items-center justify-center px-4">
-          <p>Carregando feed...</p>
+          <p>{t('feed.loading')}</p>
         </main>
       }
     >

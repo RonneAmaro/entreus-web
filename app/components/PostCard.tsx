@@ -9,6 +9,7 @@ import SensitiveContent from './SensitiveContent'
 import PostMoreMenu from './PostMoreMenu'
 import UserBadges from './UserBadges'
 import TranslatePostButton from './TranslatePostButton'
+import { useLanguage } from './LanguageProvider'
 
 export type VisibilityType = 'public' | 'followers' | 'private'
 
@@ -80,10 +81,42 @@ type PostCardProps = {
   onReport?: () => void
 }
 
-function getVisibilityLabel(value: VisibilityType) {
-  if (value === 'followers') return 'Só seguidores'
-  if (value === 'private') return 'Privado'
-  return 'Público'
+function getVisibilityLabel(value: VisibilityType, t: (key: string) => string) {
+  if (value === 'followers') return t('feed.visibility.followers')
+  if (value === 'private') return t('feed.visibility.private')
+  return t('feed.visibility.public')
+}
+
+function getCategoryLabel(value: string | null, t: (key: string) => string) {
+  if (!value) return t('feed.post.noCategory')
+
+  const key = value.toLowerCase()
+
+  const labels: Record<string, string> = {
+    cotidiano: t('feed.categories.daily'),
+    viagens: t('feed.categories.travel'),
+    lugares: t('feed.categories.places'),
+    comida: t('feed.categories.food'),
+    pensamentos: t('feed.categories.thoughts'),
+    lifestyle: t('feed.categories.lifestyle'),
+    sensual: t('feed.categories.sensual'),
+    adulto: t('feed.categories.adult'),
+  }
+
+  return labels[key] || value
+}
+
+function getDateLocale(language: string) {
+  const locales: Record<string, string> = {
+    pt: 'pt-BR',
+    en: 'en-US',
+    fr: 'fr-FR',
+    id: 'id-ID',
+    ja: 'ja-JP',
+    zh: 'zh-CN',
+  }
+
+  return locales[language] || 'pt-BR'
 }
 
 function getPostMedia(post: PostCardPost): PostCardMedia[] {
@@ -162,10 +195,12 @@ export default function PostCard({
   onDelete,
   onReport,
 }: PostCardProps) {
-  const authorName =
-    post.profiles?.display_name || post.profiles?.username || 'Usuário'
+  const { t, language } = useLanguage()
 
-  const authorUsername = post.profiles?.username || 'usuario'
+  const authorName =
+    post.profiles?.display_name || post.profiles?.username || t('feed.post.user')
+
+  const authorUsername = post.profiles?.username || t('feed.post.username')
   const authorAvatar = post.profiles?.avatar_url || ''
   const isOwnPost = post.user_id === currentUserId
   const postMedia = getPostMedia(post)
@@ -175,9 +210,9 @@ export default function PostCard({
   const reposterName =
     repostInfo?.profiles?.display_name ||
     repostInfo?.profiles?.username ||
-    'Usuário'
+    t('feed.post.user')
 
-  const reposterUsername = repostInfo?.profiles?.username || 'usuario'
+  const reposterUsername = repostInfo?.profiles?.username || t('feed.post.username')
   const reposterAvatar = repostInfo?.profiles?.avatar_url || ''
   const isOwnRepost = repostInfo?.user_id === currentUserId
 
@@ -214,7 +249,7 @@ export default function PostCard({
             )}
 
             <span className="truncate">
-              {isOwnRepost ? 'Você repostou' : `${reposterName} repostou`}
+              {isOwnRepost ? t('feed.post.youReposted') : `${reposterName} ${t('feed.post.reposted')}`}
             </span>
           </span>
         </Link>
@@ -278,21 +313,21 @@ export default function PostCard({
               } ${followLoading ? 'cursor-not-allowed opacity-60' : ''}`}
           >
             {followLoading
-              ? 'Carregando...'
+              ? t('feed.actions.loading')
               : isFollowingAuthor
-                ? 'Seguindo'
-                : 'Seguir'}
+                ? t('feed.actions.following')
+                : t('feed.actions.follow')}
           </button>
         </div>
       )}
 
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <p className="text-sm text-zinc-500">
-          {post.category || 'Sem categoria'}
+          {getCategoryLabel(post.category, t)}
         </p>
 
         <span className="rounded-full border border-zinc-200 bg-zinc-100 px-2 py-1 text-xs text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
-          {getVisibilityLabel(post.visibility)}
+          {getVisibilityLabel(post.visibility, t)}
         </span>
 
         {sensitive && (
@@ -371,13 +406,13 @@ export default function PostCard({
         </p>
       ) : (
         <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-600">
-          Publicado em {new Date(post.created_at).toLocaleString('pt-BR')}
+          {t('feed.post.publishedAt')} {new Date(post.created_at).toLocaleString(getDateLocale(language))}
         </p>
       )}
 
       {repostInfo && (
         <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-600">
-          Repostado em {new Date(repostInfo.created_at).toLocaleString('pt-BR')}
+          {t('feed.post.repostedAt')} {new Date(repostInfo.created_at).toLocaleString(getDateLocale(language))}
         </p>
       )}
     </article>

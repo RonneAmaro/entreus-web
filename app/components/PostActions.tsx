@@ -1,6 +1,7 @@
 'use client'
 
 import { Bookmark, Heart, MessageCircle, Repeat2, Share2 } from 'lucide-react'
+import { useLanguage } from './LanguageProvider'
 
 type PostActionsProps = {
   commentsCount: number
@@ -31,6 +32,8 @@ export default function PostActions({
   onSave,
   onShare,
 }: PostActionsProps) {
+  const { t } = useLanguage()
+
   return (
     <div className="mt-4 border-t border-zinc-100 pt-3 text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
       <div className="grid grid-cols-5 items-center gap-1 sm:flex sm:justify-between sm:gap-2">
@@ -42,8 +45,8 @@ export default function PostActions({
               ? 'text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30'
               : 'hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/30'
           }`}
-          title={liked ? 'Remover curtida' : 'Curtir'}
-          aria-label={liked ? 'Remover curtida' : 'Curtir'}
+          title={liked ? t('postActions.unlike') : t('postActions.like')}
+          aria-label={liked ? t('postActions.unlike') : t('postActions.like')}
         >
           <Heart className={`h-5 w-5 shrink-0 ${liked ? 'fill-current' : ''}`} />
           <span className="min-w-[14px] text-center text-xs font-medium sm:min-w-[16px] sm:text-left sm:text-sm">
@@ -55,8 +58,8 @@ export default function PostActions({
           type="button"
           onClick={onCommentClick}
           className="group flex min-w-0 items-center justify-center gap-1.5 rounded-full px-2 py-2 text-sm transition hover:bg-blue-50 hover:text-blue-500 dark:hover:bg-blue-950/30 sm:justify-start sm:gap-2 sm:px-3"
-          title="Comentar"
-          aria-label="Comentar"
+          title={t('postActions.comment')}
+          aria-label={t('postActions.comment')}
         >
           <MessageCircle className="h-5 w-5 shrink-0" />
           <span className="min-w-[14px] text-center text-xs font-medium sm:min-w-[16px] sm:text-left sm:text-sm">
@@ -72,8 +75,8 @@ export default function PostActions({
               ? 'text-green-500 hover:bg-green-50 dark:hover:bg-green-950/30'
               : 'hover:bg-green-50 hover:text-green-500 dark:hover:bg-green-950/30'
           }`}
-          title={reposted ? 'Remover repost' : 'Repostar'}
-          aria-label={reposted ? 'Remover repost' : 'Repostar'}
+          title={reposted ? t('postActions.removeRepost') : t('postActions.repost')}
+          aria-label={reposted ? t('postActions.removeRepost') : t('postActions.repost')}
         >
           <Repeat2 className="h-5 w-5 shrink-0" />
           <span className="min-w-[14px] text-center text-xs font-medium sm:min-w-[16px] sm:text-left sm:text-sm">
@@ -89,12 +92,12 @@ export default function PostActions({
               ? 'text-yellow-500 hover:bg-yellow-50 dark:hover:bg-yellow-950/30'
               : 'hover:bg-yellow-50 hover:text-yellow-500 dark:hover:bg-yellow-950/30'
           }`}
-          title={saved ? 'Remover dos salvos' : 'Salvar post'}
-          aria-label={saved ? 'Remover dos salvos' : 'Salvar post'}
+          title={saved ? t('postActions.removeSaved') : t('postActions.savePost')}
+          aria-label={saved ? t('postActions.removeSaved') : t('postActions.savePost')}
         >
           <Bookmark className={`h-5 w-5 shrink-0 ${saved ? 'fill-current' : ''}`} />
           <span className="hidden font-medium sm:inline">
-            {saved ? 'Salvo' : 'Salvar'}
+            {saved ? t('postActions.saved') : t('postActions.save')}
           </span>
         </button>
 
@@ -106,12 +109,12 @@ export default function PostActions({
               ? 'text-green-500 hover:bg-green-50 dark:hover:bg-green-950/30'
               : 'hover:bg-green-50 hover:text-green-500 dark:hover:bg-green-950/30'
           }`}
-          title={copied ? 'Link copiado' : 'Compartilhar'}
-          aria-label={copied ? 'Link copiado' : 'Compartilhar'}
+          title={copied ? t('postActions.linkCopied') : t('postActions.share')}
+          aria-label={copied ? t('postActions.linkCopied') : t('postActions.share')}
         >
           <Share2 className="h-5 w-5 shrink-0" />
           <span className="hidden font-medium sm:inline">
-            {copied ? 'Copiado' : 'Compartilhar'}
+            {copied ? t('postActions.copied') : t('postActions.share')}
           </span>
         </button>
       </div>

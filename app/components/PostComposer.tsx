@@ -12,6 +12,7 @@ import {
   Users,
   Video,
 } from 'lucide-react'
+import { useLanguage } from './LanguageProvider'
 
 type VisibilityType = 'public' | 'followers' | 'private'
 
@@ -37,34 +38,34 @@ type PostComposerProps = {
 }
 
 const CATEGORY_OPTIONS = [
-  { value: 'cotidiano', label: 'Cotidiano' },
-  { value: 'viagens', label: 'Viagens' },
-  { value: 'lugares', label: 'Lugares' },
-  { value: 'comida', label: 'Comida' },
-  { value: 'pensamentos', label: 'Pensamentos' },
-  { value: 'lifestyle', label: 'Lifestyle' },
-  { value: 'sensual', label: 'Sensual' },
-  { value: 'adulto', label: 'Adulto' },
+  { value: 'cotidiano', labelKey: 'categories.cotidiano' },
+  { value: 'viagens', labelKey: 'categories.viagens' },
+  { value: 'lugares', labelKey: 'categories.lugares' },
+  { value: 'comida', labelKey: 'categories.comida' },
+  { value: 'pensamentos', labelKey: 'categories.pensamentos' },
+  { value: 'lifestyle', labelKey: 'categories.lifestyle' },
+  { value: 'sensual', labelKey: 'categories.sensual' },
+  { value: 'adulto', labelKey: 'categories.adulto' },
 ]
 
 const VISIBILITY_OPTIONS: {
   value: VisibilityType
-  label: string
+  labelKey: string
   icon: React.ReactNode
 }[] = [
   {
     value: 'public',
-    label: 'Público',
+    labelKey: 'visibility.public',
     icon: <Globe2 className="h-4 w-4" />,
   },
   {
     value: 'followers',
-    label: 'Só seguidores',
+    labelKey: 'visibility.followers',
     icon: <Users className="h-4 w-4" />,
   },
   {
     value: 'private',
-    label: 'Privado',
+    labelKey: 'visibility.private',
     icon: <Lock className="h-4 w-4" />,
   },
 ]
@@ -92,6 +93,7 @@ export default function PostComposer({
   submitting = false,
   onSubmit,
 }: PostComposerProps) {
+  const { t } = useLanguage()
   const imageInputRef = useRef<HTMLInputElement | null>(null)
   const videoInputRef = useRef<HTMLInputElement | null>(null)
 
@@ -124,7 +126,7 @@ export default function PostComposer({
     const availableSlots = MAX_MEDIA_FILES - currentMedia.length
 
     if (availableSlots <= 0) {
-      setError(`Você pode adicionar no máximo ${MAX_MEDIA_FILES} mídias por publicação.`)
+      setError(t('postComposer.errors.maxMedia').replace('{max}', String(MAX_MEDIA_FILES)))
       return
     }
 
@@ -133,17 +135,17 @@ export default function PostComposer({
 
     for (const file of selectedFiles) {
       if (!isImage(file) && !isVideo(file)) {
-        setError('Envie apenas imagens JPG, PNG, WEBP ou vídeos MP4, WEBM, OGG.')
+        setError(t('postComposer.errors.unsupported'))
         continue
       }
 
       if (isImage(file) && file.size > MAX_IMAGE_SIZE) {
-        setError('Cada imagem deve ter no máximo 5MB.')
+        setError(t('postComposer.errors.imageTooLarge'))
         continue
       }
 
       if (isVideo(file) && file.size > MAX_VIDEO_SIZE) {
-        setError('Cada vídeo deve ter no máximo 30MB.')
+        setError(t('postComposer.errors.videoTooLarge'))
         continue
       }
 
@@ -156,7 +158,7 @@ export default function PostComposer({
     }
 
     if (Array.from(files).length > availableSlots) {
-      setError(`Foram adicionadas apenas ${availableSlots} mídia(s). O limite é ${MAX_MEDIA_FILES}.`)
+      setError(t('postComposer.errors.partialAdded').replace('{count}', String(availableSlots)).replace('{max}', String(MAX_MEDIA_FILES)))
     }
 
     setMedia([...currentMedia, ...newMedia])
@@ -181,7 +183,7 @@ export default function PostComposer({
     const trimmedContent = content.trim()
 
     if (!trimmedContent && media.length === 0) {
-      setError('Escreva algo ou adicione uma foto/vídeo antes de publicar.')
+      setError(t('postComposer.errors.empty'))
       return
     }
 
@@ -230,7 +232,7 @@ export default function PostComposer({
           <textarea
             value={content}
             onChange={(event) => setContent(event.target.value)}
-            placeholder={`O que está acontecendo, ${userName}?`}
+            placeholder={t('postComposer.placeholder').replace('{name}', userName)}
             className="min-h-[76px] w-full resize-none border-0 bg-transparent px-0 py-2 text-lg text-zinc-900 outline-none placeholder:text-zinc-500 dark:text-zinc-100 dark:placeholder:text-zinc-500 sm:min-h-[92px] sm:text-xl"
           />
 
@@ -249,7 +251,7 @@ export default function PostComposer({
                   {item.type === 'image' ? (
                     <img
                       src={item.url}
-                      alt="Prévia da imagem"
+                      alt={t('postComposer.previewImage')}
                       className="h-40 w-full object-cover sm:h-56"
                     />
                   ) : (
@@ -273,13 +275,13 @@ export default function PostComposer({
                     type="button"
                     onClick={() => removeMedia(item.id)}
                     className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/70 text-white transition hover:bg-black"
-                    title="Remover mídia"
+                    title={t('postComposer.removeMedia')}
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
 
                   <div className="absolute bottom-2 left-2 rounded-full bg-black/70 px-2 py-1 text-[11px] font-medium text-white">
-                    {item.type === 'image' ? 'Imagem' : 'Vídeo'}
+                    {item.type === 'image' ? t('postComposer.image') : t('postComposer.video')}
                   </div>
                 </div>
               ))}
@@ -318,7 +320,7 @@ export default function PostComposer({
                     type="button"
                     onClick={() => imageInputRef.current?.click()}
                     className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-blue-500 transition hover:bg-blue-50 dark:hover:bg-blue-950/30"
-                    title="Adicionar imagens"
+                    title={t('postComposer.addImages')}
                   >
                     <ImagePlus className="h-5 w-5" />
                   </button>
@@ -327,7 +329,7 @@ export default function PostComposer({
                     type="button"
                     onClick={() => videoInputRef.current?.click()}
                     className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-blue-500 transition hover:bg-blue-50 dark:hover:bg-blue-950/30"
-                    title="Adicionar vídeos"
+                    title={t('postComposer.addVideos')}
                   >
                     <Video className="h-5 w-5" />
                   </button>
@@ -337,11 +339,11 @@ export default function PostComposer({
                       value={category}
                       onChange={(event) => setCategory(event.target.value)}
                       className="h-10 w-full appearance-none rounded-full border border-zinc-200 bg-transparent pl-9 pr-4 text-sm font-semibold text-zinc-700 outline-none transition hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-900 sm:w-[150px]"
-                      title="Categoria"
+                      title={t('postComposer.category')}
                     >
                       {CATEGORY_OPTIONS.map((item) => (
                         <option key={item.value} value={item.value}>
-                          {item.label}
+                          {t(item.labelKey)}
                         </option>
                       ))}
                     </select>
@@ -354,11 +356,11 @@ export default function PostComposer({
                       value={visibility}
                       onChange={(event) => setVisibility(event.target.value as VisibilityType)}
                       className="h-10 w-full appearance-none rounded-full border border-zinc-200 bg-transparent pl-9 pr-4 text-sm font-semibold text-zinc-700 outline-none transition hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-900 sm:w-[150px]"
-                      title="Privacidade"
+                      title={t('postComposer.privacy')}
                     >
                       {VISIBILITY_OPTIONS.map((item) => (
                         <option key={item.value} value={item.value}>
-                          {item.label}
+                          {t(item.labelKey)}
                         </option>
                       ))}
                     </select>
@@ -376,16 +378,16 @@ export default function PostComposer({
                   className="flex h-10 w-full items-center justify-center gap-2 rounded-full bg-zinc-900 px-6 text-sm font-bold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-black sm:w-auto sm:min-w-[110px]"
                 >
                   <Send className="h-4 w-4" />
-                  {submitting ? 'Publicando...' : 'Postar'}
+                  {submitting ? t('postComposer.posting') : t('postComposer.post')}
                 </button>
               </div>
 
               <div className="flex flex-wrap items-center gap-2 pl-1 text-xs text-zinc-500 dark:text-zinc-500">
-                <span>{selectedCategory?.label}</span>
+                <span>{selectedCategory ? t(selectedCategory.labelKey) : ''}</span>
                 <span>•</span>
-                <span>{selectedVisibility?.label}</span>
+                <span>{selectedVisibility ? t(selectedVisibility.labelKey) : ''}</span>
                 <span>•</span>
-                <span>{media.length}/{MAX_MEDIA_FILES} mídias</span>
+                <span>{t('postComposer.mediaCounter').replace('{current}', String(media.length)).replace('{max}', String(MAX_MEDIA_FILES))}</span>
               </div>
             </div>
           </div>

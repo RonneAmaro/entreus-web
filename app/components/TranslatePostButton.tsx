@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { ChevronDown, ChevronUp, Languages, Loader2 } from 'lucide-react'
+import { useLanguage } from './LanguageProvider'
 
 type TranslatePostButtonProps = {
   content: string | null
@@ -10,17 +11,17 @@ type TranslatePostButtonProps = {
 
 type LanguageOption = {
   code: string
-  label: string
+  labelKey: string
   flag: string
 }
 
 const LANGUAGE_OPTIONS: LanguageOption[] = [
-  { code: 'pt', label: 'Português', flag: '🇧🇷' },
-  { code: 'en', label: 'Inglês', flag: '🇺🇸' },
-  { code: 'es', label: 'Espanhol', flag: '🇪🇸' },
-  { code: 'id', label: 'Indonésio', flag: '🇮🇩' },
-  { code: 'ko', label: 'Coreano', flag: '🇰🇷' },
-  { code: 'fr', label: 'Francês', flag: '🇫🇷' },
+  { code: 'pt', labelKey: 'translatePost.languages.pt', flag: '🇧🇷' },
+  { code: 'en', labelKey: 'translatePost.languages.en', flag: '🇺🇸' },
+  { code: 'es', labelKey: 'translatePost.languages.es', flag: '🇪🇸' },
+  { code: 'id', labelKey: 'translatePost.languages.id', flag: '🇮🇩' },
+  { code: 'ko', labelKey: 'translatePost.languages.ko', flag: '🇰🇷' },
+  { code: 'fr', labelKey: 'translatePost.languages.fr', flag: '🇫🇷' },
 ]
 
 function getBrowserLanguage() {
@@ -39,17 +40,18 @@ function getDefaultLanguage(targetLanguage?: string) {
     : 'pt'
 }
 
-function getLanguageLabel(code: string) {
+function getLanguageLabel(code: string, translate: (key: string) => string) {
   const language = LANGUAGE_OPTIONS.find((item) => item.code === code)
-  return language ? `${language.flag} ${language.label}` : code.toUpperCase()
+  return language ? `${language.flag} ${translate(language.labelKey)}` : code.toUpperCase()
 }
 
 export default function TranslatePostButton({
   content,
   targetLanguage,
 }: TranslatePostButtonProps) {
+  const { t, language } = useLanguage()
   const [selectedLanguage, setSelectedLanguage] = useState(() =>
-    getDefaultLanguage(targetLanguage)
+    getDefaultLanguage(targetLanguage || language)
   )
   const [translatedText, setTranslatedText] = useState('')
   const [translatedLanguage, setTranslatedLanguage] = useState('')
@@ -92,7 +94,7 @@ export default function TranslatePostButton({
       const data = await response.json()
 
       if (!response.ok) {
-        setError(data?.error || 'Não foi possível traduzir agora.')
+        setError(data?.error || t('translatePost.errors.unavailable'))
         return
       }
 
@@ -100,7 +102,7 @@ export default function TranslatePostButton({
       setTranslatedLanguage(languageCode)
       setShowTranslation(true)
     } catch {
-      setError('Erro de conexão ao tentar traduzir.')
+      setError(t('translatePost.errors.connection'))
     } finally {
       setLoading(false)
     }
@@ -130,13 +132,13 @@ export default function TranslatePostButton({
           className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-600 transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-blue-900/70 dark:bg-blue-950/30 dark:text-blue-300 dark:hover:bg-blue-950/60"
           title={
             translatedText && showTranslation
-              ? 'Ocultar tradução'
-              : 'Escolher idioma da tradução'
+              ? t('translatePost.hide')
+              : t('translatePost.choose')
           }
           aria-label={
             translatedText && showTranslation
-              ? 'Ocultar tradução'
-              : 'Escolher idioma da tradução'
+              ? t('translatePost.hide')
+              : t('translatePost.choose')
           }
         >
           {loading ? (
@@ -149,12 +151,12 @@ export default function TranslatePostButton({
 
           <span>
             {loading
-              ? 'Traduzindo...'
+              ? t('translatePost.translating')
               : translatedText && showTranslation
-                ? 'Ocultar tradução'
+                ? t('translatePost.hide')
                 : translatedText
-                  ? 'Mostrar tradução'
-                  : 'Traduzir'}
+                  ? t('translatePost.show')
+                  : t('translatePost.translate')}
           </span>
         </button>
 
@@ -163,10 +165,10 @@ export default function TranslatePostButton({
           onClick={() => setOpenLanguageMenu((current) => !current)}
           disabled={loading}
           className="inline-flex items-center gap-1 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
-          title="Escolher idioma"
-          aria-label="Escolher idioma"
+          title={t('translatePost.chooseShort')}
+          aria-label={t('translatePost.chooseShort')}
         >
-          <span>{getLanguageLabel(selectedLanguage)}</span>
+          <span>{getLanguageLabel(selectedLanguage, t)}</span>
           <ChevronDown className="h-3.5 w-3.5" />
         </button>
       </div>
@@ -174,7 +176,7 @@ export default function TranslatePostButton({
       {openLanguageMenu && (
         <div className="absolute left-0 top-10 z-30 w-56 overflow-hidden rounded-2xl border border-zinc-200 bg-white p-2 shadow-xl dark:border-zinc-800 dark:bg-zinc-950">
           <p className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
-            Traduzir para
+            {t('translatePost.translateTo')}
           </p>
 
           <div className="space-y-1">
@@ -190,11 +192,11 @@ export default function TranslatePostButton({
                 }`}
               >
                 <span>
-                  {language.flag} {language.label}
+                  {language.flag} {t(language.labelKey)}
                 </span>
 
                 {selectedLanguage === language.code && (
-                  <span className="text-xs font-bold">Atual</span>
+                  <span className="text-xs font-bold">{t('common.current')}</span>
                 )}
               </button>
             ))}
@@ -212,7 +214,7 @@ export default function TranslatePostButton({
         <div className="mt-3 rounded-2xl border border-blue-100 bg-blue-50/70 px-4 py-3 text-sm text-zinc-800 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-zinc-200">
           <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-blue-600 dark:text-blue-300">
             <Languages className="h-3.5 w-3.5" />
-            Tradução para {getLanguageLabel(translatedLanguage || selectedLanguage)}
+            {t('translatePost.translationTo')} {getLanguageLabel(translatedLanguage || selectedLanguage, t)}
           </div>
 
           <p className="whitespace-pre-wrap break-words">{translatedText}</p>
