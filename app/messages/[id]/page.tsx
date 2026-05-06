@@ -959,16 +959,6 @@ export default function ConversationPage() {
                                                                 )}
                                                             </div>
                                                         )
-                                                    }
-
-                                                        return (
-                                                    <video
-                                                        key={attachment.id}
-                                                        src={attachment.signed_url}
-                                                        controls
-                                                        className="max-h-[360px] w-full rounded-2xl bg-black"
-                                                    />
-                                                    )
                                                     })}
                                                 </div>
                                             )}
