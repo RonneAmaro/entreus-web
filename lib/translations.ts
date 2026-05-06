@@ -468,6 +468,8 @@ export const translations = {
     lab: { name: 'EntreUS Lab', subtitle: 'Ferramentas criativas' },
     labPage: {
       heroKicker: 'EntreUS Lab',
+      logoAria: 'Ir para a EntreUS',
+      logoAlt: 'Logo EntreUS',
       title: 'Ferramentas criativas para escola, imagem e PDF',
       description: 'Um laboratório dentro do ecossistema EntreUS para criar materiais, ampliar imagens, dividir arquivos em folhas e facilitar o trabalho de professores, escolas e criadores.',
       backToFeed: 'Voltar para o feed',
@@ -499,11 +501,14 @@ export const translations = {
       backToLab: 'Voltar ao Lab',
       backToFeed: 'Voltar para o feed',
       supportTool: 'Apoiar ferramenta',
+      logoAria: 'Voltar ao EntreUS Lab',
+      logoAlt: 'Logo EntreUS',
       kicker: 'EntreUS Lab Poster',
       title: 'Gerador de pôster em folhas',
       description: 'Envie uma imagem ou PDF, escolha quantas folhas quer na horizontal e vertical, configure papel, orientação, margem e gere um PDF pronto para impressão. O processamento acontece no navegador, sem salvar o arquivo no servidor.',
       messages: {
         imageLoadError: 'Não foi possível carregar a imagem.',
+        imagePrepareError: 'Não foi possível preparar a imagem.',
         pdfPrepareError: 'Não foi possível preparar a visualização do PDF.',
         unsupportedFile: 'Envie uma imagem JPG, PNG, WEBP ou um arquivo PDF.',
         fileTooLarge: 'Arquivo muito grande. Para começar, use arquivos de até 35MB.',
@@ -526,6 +531,7 @@ export const translations = {
       config: {
         title: '2. Configuração',
         paper: 'Papel',
+        letter: 'Carta',
         orientation: 'Orientação',
         portrait: 'Em pé',
         landscape: 'Deitada',
@@ -548,6 +554,7 @@ export const translations = {
       },
       preview: {
         title: 'Prévia',
+        alt: 'Prévia do arquivo',
         empty: 'Envie uma imagem ou PDF para ver a prévia.',
       },
       donation: {
@@ -777,6 +784,8 @@ export const translations = {
     lab: { name: 'EntreUS Lab', subtitle: 'Creative tools' },
     labPage: {
       heroKicker: 'EntreUS Lab',
+      logoAria: 'Go to EntreUS',
+      logoAlt: 'EntreUS logo',
       title: 'Creative tools for school, images, and PDFs',
       description: 'A lab inside the EntreUS ecosystem for creating materials, enlarging images, splitting files into printable sheets, and helping teachers, schools, and creators.',
       backToFeed: 'Back to feed',
@@ -808,11 +817,14 @@ export const translations = {
       backToLab: 'Back to Lab',
       backToFeed: 'Back to feed',
       supportTool: 'Support tool',
+      logoAria: 'Back to EntreUS Lab',
+      logoAlt: 'EntreUS logo',
       kicker: 'EntreUS Lab Poster',
       title: 'Poster generator in sheets',
       description: 'Upload an image or PDF, choose how many sheets you want horizontally and vertically, configure paper, orientation, margin, and generate a print-ready PDF. Processing happens in the browser, without saving the file on the server.',
       messages: {
         imageLoadError: 'Could not load the image.',
+        imagePrepareError: 'Could not prepare the image.',
         pdfPrepareError: 'Could not prepare the PDF preview.',
         unsupportedFile: 'Send a JPG, PNG, WEBP image or a PDF file.',
         fileTooLarge: 'File too large. To start, use files up to 35MB.',
@@ -835,6 +847,7 @@ export const translations = {
       config: {
         title: '2. Settings',
         paper: 'Paper',
+        letter: 'Letter',
         orientation: 'Orientation',
         portrait: 'Portrait',
         landscape: 'Landscape',
@@ -857,6 +870,7 @@ export const translations = {
       },
       preview: {
         title: 'Preview',
+        alt: 'File preview',
         empty: 'Upload an image or PDF to see the preview.',
       },
       donation: {
@@ -1054,6 +1068,8 @@ export const translations = {
     lab: { name: 'EntreUS Lab', subtitle: 'Outils créatifs' },
     labPage: {
       heroKicker: 'EntreUS Lab',
+      logoAria: 'Aller à EntreUS',
+      logoAlt: 'Logo EntreUS',
       title: 'Outils créatifs pour l’école, les images et les PDF',
       description: 'Un laboratoire dans l’écosystème EntreUS pour créer des supports, agrandir des images, diviser des fichiers en feuilles imprimables et aider les enseignants, les écoles et les créateurs.',
       backToFeed: 'Retour au fil',
@@ -1085,11 +1101,14 @@ export const translations = {
       backToLab: 'Retour au Lab',
       backToFeed: 'Retour au fil',
       supportTool: 'Soutenir l’outil',
+      logoAria: 'Retour à EntreUS Lab',
+      logoAlt: 'Logo EntreUS',
       kicker: 'EntreUS Lab Poster',
       title: 'Générateur de poster en feuilles',
       description: 'Envoyez une image ou un PDF, choisissez le nombre de feuilles en horizontal et vertical, configurez le papier, l’orientation, la marge et générez un PDF prêt à imprimer.',
       messages: {
         imageLoadError: 'Impossible de charger l’image.',
+        imagePrepareError: 'Impossible de préparer l’image.',
         pdfPrepareError: 'Impossible de préparer l’aperçu du PDF.',
         unsupportedFile: 'Envoyez une image JPG, PNG, WEBP ou un fichier PDF.',
         fileTooLarge: 'Fichier trop volumineux. Utilisez des fichiers jusqu’à 35 Mo.',
@@ -1112,6 +1131,7 @@ export const translations = {
       config: {
         title: '2. Configuration',
         paper: 'Papier',
+        letter: 'Lettre',
         orientation: 'Orientation',
         portrait: 'Portrait',
         landscape: 'Paysage',
@@ -1134,6 +1154,7 @@ export const translations = {
       },
       preview: {
         title: 'Aperçu',
+        alt: 'Aperçu du fichier',
         empty: 'Envoyez une image ou un PDF pour voir l’aperçu.',
       },
       donation: {
@@ -1331,6 +1352,8 @@ export const translations = {
     lab: { name: 'EntreUS Lab', subtitle: 'Alat kreatif' },
     labPage: {
       heroKicker: 'EntreUS Lab',
+      logoAria: 'Pergi ke EntreUS',
+      logoAlt: 'Logo EntreUS',
       title: 'Alat kreatif untuk sekolah, gambar, dan PDF',
       description: 'Lab di dalam ekosistem EntreUS untuk membuat materi, memperbesar gambar, membagi file menjadi lembar cetak, dan membantu guru, sekolah, serta kreator.',
       backToFeed: 'Kembali ke feed',
@@ -1362,11 +1385,14 @@ export const translations = {
       backToLab: 'Kembali ke Lab',
       backToFeed: 'Kembali ke feed',
       supportTool: 'Dukung alat',
+      logoAria: 'Kembali ke EntreUS Lab',
+      logoAlt: 'Logo EntreUS',
       kicker: 'EntreUS Lab Poster',
       title: 'Pembuat poster dalam lembar',
       description: 'Unggah gambar atau PDF, pilih jumlah lembar horizontal dan vertikal, atur kertas, orientasi, margin, lalu buat PDF siap cetak.',
       messages: {
         imageLoadError: 'Tidak dapat memuat gambar.',
+        imagePrepareError: 'Tidak dapat menyiapkan gambar.',
         pdfPrepareError: 'Tidak dapat menyiapkan pratinjau PDF.',
         unsupportedFile: 'Kirim gambar JPG, PNG, WEBP atau file PDF.',
         fileTooLarge: 'File terlalu besar. Gunakan file hingga 35MB.',
@@ -1389,6 +1415,7 @@ export const translations = {
       config: {
         title: '2. Pengaturan',
         paper: 'Kertas',
+        letter: 'Letter',
         orientation: 'Orientasi',
         portrait: 'Tegak',
         landscape: 'Mendatar',
@@ -1411,6 +1438,7 @@ export const translations = {
       },
       preview: {
         title: 'Pratinjau',
+        alt: 'Pratinjau file',
         empty: 'Unggah gambar atau PDF untuk melihat pratinjau.',
       },
       donation: {
@@ -1608,6 +1636,8 @@ export const translations = {
     lab: { name: 'EntreUS Lab', subtitle: 'クリエイティブツール' },
     labPage: {
       heroKicker: 'EntreUS Lab',
+      logoAria: 'EntreUSへ移動',
+      logoAlt: 'EntreUSロゴ',
       title: '学校・画像・PDF向けのクリエイティブツール',
       description: '教材作成、画像拡大、印刷用シート分割を行い、先生・学校・クリエイターを支援するEntreUS内のラボです。',
       backToFeed: 'フィードに戻る',
@@ -1639,11 +1669,14 @@ export const translations = {
       backToLab: 'Labへ戻る',
       backToFeed: 'フィードに戻る',
       supportTool: 'ツールを支援',
+      logoAria: 'EntreUS Labに戻る',
+      logoAlt: 'EntreUSロゴ',
       kicker: 'EntreUS Lab Poster',
       title: 'シート分割ポスター生成',
       description: '画像またはPDFをアップロードし、横・縦の枚数、用紙、向き、余白を設定して、印刷用PDFを生成します。',
       messages: {
         imageLoadError: '画像を読み込めませんでした。',
+        imagePrepareError: '画像を準備できませんでした。',
         pdfPrepareError: 'PDFプレビューを準備できませんでした。',
         unsupportedFile: 'JPG、PNG、WEBP画像またはPDFファイルを送信してください。',
         fileTooLarge: 'ファイルが大きすぎます。35MB以下のファイルを使用してください。',
@@ -1666,6 +1699,7 @@ export const translations = {
       config: {
         title: '2. 設定',
         paper: '用紙',
+        letter: 'レター',
         orientation: '向き',
         portrait: '縦',
         landscape: '横',
@@ -1688,6 +1722,7 @@ export const translations = {
       },
       preview: {
         title: 'プレビュー',
+        alt: 'ファイルのプレビュー',
         empty: 'プレビューを見るには画像またはPDFをアップロードしてください。',
       },
       donation: {
@@ -1885,6 +1920,8 @@ export const translations = {
     lab: { name: 'EntreUS Lab', subtitle: '创意工具' },
     labPage: {
       heroKicker: 'EntreUS Lab',
+      logoAria: '前往 EntreUS',
+      logoAlt: 'EntreUS 标志',
       title: '面向学校、图片和PDF的创意工具',
       description: 'EntreUS生态系统中的实验室，用于创建材料、放大图片、将文件拆分为可打印页面，帮助教师、学校和创作者。',
       backToFeed: '返回动态',
@@ -1916,11 +1953,14 @@ export const translations = {
       backToLab: '返回 Lab',
       backToFeed: '返回动态',
       supportTool: '支持工具',
+      logoAria: '返回 EntreUS Lab',
+      logoAlt: 'EntreUS 标志',
       kicker: 'EntreUS Lab Poster',
       title: '分页海报生成器',
       description: '上传图片或PDF，选择横向和纵向页数，设置纸张、方向和边距，然后生成可打印PDF。',
       messages: {
         imageLoadError: '无法加载图片。',
+        imagePrepareError: '无法准备图片。',
         pdfPrepareError: '无法准备PDF预览。',
         unsupportedFile: '请发送JPG、PNG、WEBP图片或PDF文件。',
         fileTooLarge: '文件太大。请使用不超过35MB的文件。',
@@ -1943,6 +1983,7 @@ export const translations = {
       config: {
         title: '2. 设置',
         paper: '纸张',
+        letter: 'Letter',
         orientation: '方向',
         portrait: '竖向',
         landscape: '横向',
@@ -1965,6 +2006,7 @@ export const translations = {
       },
       preview: {
         title: '预览',
+        alt: '文件预览',
         empty: '上传图片或PDF以查看预览。',
       },
       donation: {

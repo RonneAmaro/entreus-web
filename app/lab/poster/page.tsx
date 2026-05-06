@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useMemo, useRef, useState } from 'react'
 import { ArrowLeft, Download, FileText, ImageIcon, Loader2, Upload } from 'lucide-react'
 import { jsPDF } from 'jspdf'
+import { useLanguage } from '../../components/LanguageProvider'
 
 const DONATION_URL = 'https://link.mercadopago.com.br/entreuslab'
 
@@ -32,16 +33,16 @@ const PAPER_SIZES_MM: Record<PaperKey, { label: string; width: number; height: n
     height: 420,
   },
   letter: {
-    label: 'Carta',
+    label: 'Letter',
     width: 215.9,
     height: 279.4,
   },
 }
 
 const DPI_OPTIONS = [
-  { label: 'Rápida', value: 100 },
-  { label: 'Boa', value: 130 },
-  { label: 'Alta', value: 160 },
+  { labelKey: 'labPoster.config.fast', value: 100 },
+  { labelKey: 'labPoster.config.good', value: 130 },
+  { labelKey: 'labPoster.config.high', value: 160 },
 ]
 
 function getPaperSize(paper: PaperKey, orientation: Orientation) {
@@ -60,7 +61,7 @@ function getPaperSize(paper: PaperKey, orientation: Orientation) {
   }
 }
 
-function fileToImage(file: File) {
+function fileToImage(file: File, errorMessage: string) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
     const url = URL.createObjectURL(file)
     const image = new Image()
@@ -72,14 +73,14 @@ function fileToImage(file: File) {
 
     image.onerror = () => {
       URL.revokeObjectURL(url)
-      reject(new Error('Não foi possível carregar a imagem.'))
+      reject(new Error(errorMessage))
     }
 
     image.src = url
   })
 }
 
-async function renderPdfPageToCanvas(file: File, pageNumber: number, scale = 2) {
+async function renderPdfPageToCanvas(file: File, pageNumber: number, errorMessage: string, scale = 2) {
   const pdfjsLib = await import('pdfjs-dist')
 
   pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`
@@ -94,7 +95,7 @@ async function renderPdfPageToCanvas(file: File, pageNumber: number, scale = 2) 
   const context = canvas.getContext('2d')
 
   if (!context) {
-    throw new Error('Não foi possível preparar a visualização do PDF.')
+    throw new Error(errorMessage)
   }
 
   canvas.width = Math.floor(viewport.width)
@@ -113,6 +114,7 @@ async function renderPdfPageToCanvas(file: File, pageNumber: number, scale = 2) 
 }
 
 export default function PosterLabPage() {
+  const { t } = useLanguage()
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   const [file, setFile] = useState<File | null>(null)
@@ -159,19 +161,19 @@ export default function PosterLabPage() {
       const isPdf = fileToLoad.type === 'application/pdf' || fileToLoad.name.toLowerCase().endsWith('.pdf')
 
       if (!isImage && !isPdf) {
-        throw new Error('Envie uma imagem JPG, PNG, WEBP ou um arquivo PDF.')
+        throw new Error(t('labPoster.messages.unsupportedFile'))
       }
 
       if (fileToLoad.size > 35 * 1024 * 1024) {
-        throw new Error('Arquivo muito grande. Para começar, use arquivos de até 35MB.')
+        throw new Error(t('labPoster.messages.fileTooLarge'))
       }
 
       if (isImage) {
-        const image = await fileToImage(fileToLoad)
+        const image = await fileToImage(fileToLoad, t('labPoster.messages.imageLoadError'))
         const canvas = document.createElement('canvas')
         const context = canvas.getContext('2d')
 
-        if (!context) throw new Error('Não foi possível preparar a imagem.')
+        if (!context) throw new Error(t('labPoster.messages.imagePrepareError'))
 
         canvas.width = image.naturalWidth
         canvas.height = image.naturalHeight
@@ -188,7 +190,7 @@ export default function PosterLabPage() {
       }
 
       if (isPdf) {
-        const { canvas, pageCount } = await renderPdfPageToCanvas(fileToLoad, pdfPageNumber, 2)
+        const { canvas, pageCount } = await renderPdfPageToCanvas(fileToLoad, pdfPageNumber, t('labPoster.messages.pdfPrepareError'), 2)
         setSourceCanvas(canvas)
         setSourceInfo({
           fileName: fileToLoad.name,
@@ -200,7 +202,7 @@ export default function PosterLabPage() {
         setPreviewUrl(canvas.toDataURL('image/jpeg', 0.9))
       }
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Erro ao carregar arquivo.')
+      setMessage(error instanceof Error ? error.message : t('labPoster.messages.loadFileError'))
     } finally {
       setLoadingFile(false)
     }
@@ -216,7 +218,7 @@ export default function PosterLabPage() {
     setMessage('')
 
     try {
-      const { canvas, pageCount } = await renderPdfPageToCanvas(file, nextPageNumber, 2)
+      const { canvas, pageCount } = await renderPdfPageToCanvas(file, nextPageNumber, t('labPoster.messages.pdfPrepareError'), 2)
 
       setSourceCanvas(canvas)
       setSourceInfo({
@@ -233,7 +235,7 @@ export default function PosterLabPage() {
 
       setPreviewUrl(canvas.toDataURL('image/jpeg', 0.9))
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Erro ao trocar página do PDF.')
+      setMessage(error instanceof Error ? error.message : t('labPoster.messages.reloadPdfError'))
     } finally {
       setLoadingFile(false)
     }
@@ -241,7 +243,7 @@ export default function PosterLabPage() {
 
   async function generatePosterPdf() {
     if (!sourceCanvas || !sourceInfo) {
-      setMessage('Envie uma imagem ou PDF primeiro.')
+      setMessage(t('labPoster.messages.sendFileFirst'))
       return
     }
 
@@ -254,7 +256,7 @@ export default function PosterLabPage() {
       const posterContext = posterCanvas.getContext('2d')
 
       if (!posterContext) {
-        throw new Error('Não foi possível preparar o pôster.')
+        throw new Error(t('labPoster.messages.posterPrepareError'))
       }
 
       const posterPixelWidth = Math.round(posterWidth * pxPerMm)
@@ -263,7 +265,7 @@ export default function PosterLabPage() {
       const maxDimension = 9000
 
       if (posterPixelWidth > maxDimension || posterPixelHeight > maxDimension) {
-        throw new Error('Esse tamanho ficou pesado para o navegador. Reduza linhas/colunas ou escolha qualidade menor.')
+        throw new Error(t('labPoster.messages.browserTooHeavy'))
       }
 
       posterCanvas.width = posterPixelWidth
@@ -348,7 +350,7 @@ export default function PosterLabPage() {
           const pageContext = pageCanvas.getContext('2d')
 
           if (!pageContext) {
-            throw new Error('Não foi possível gerar uma das páginas.')
+            throw new Error(t('labPoster.messages.pageGenerateError'))
           }
 
           pageCanvas.width = sourceW
@@ -384,7 +386,7 @@ export default function PosterLabPage() {
           pdf.setFontSize(7)
           pdf.setTextColor(120)
           pdf.text(
-            `EntreUS Lab • página ${row + 1}-${column + 1}`,
+            `${t('lab.name')} • ${t('labPoster.config.pages')} ${row + 1}-${column + 1}`,
             marginMm,
             paperSize.height - Math.max(3, marginMm / 2)
           )
@@ -398,7 +400,7 @@ export default function PosterLabPage() {
 
       pdf.save(`entreus-lab-poster-${safeName || 'arquivo'}.pdf`)
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Erro ao gerar PDF.')
+      setMessage(error instanceof Error ? error.message : t('labPoster.messages.pdfGenerateError'))
     } finally {
       setGenerating(false)
     }
@@ -414,14 +416,14 @@ export default function PosterLabPage() {
               className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold transition hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:bg-zinc-900"
             >
               <ArrowLeft className="h-4 w-4" />
-              Voltar ao Lab
+              {t('labPoster.backToLab')}
             </Link>
 
             <Link
               href="/feed"
               className="inline-flex items-center rounded-full border border-zinc-200 bg-white px-4 py-2 text-sm font-bold text-zinc-800 transition hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100 dark:hover:bg-zinc-900"
             >
-              Voltar para o feed
+              {t('labPoster.backToFeed')}
             </Link>
           </div>
 
@@ -429,7 +431,7 @@ export default function PosterLabPage() {
             href="#doacao"
             className="rounded-full bg-black px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 dark:bg-white dark:text-black"
           >
-            Apoiar ferramenta
+            {t('labPoster.supportTool')}
           </a>
         </div>
 
@@ -438,10 +440,10 @@ export default function PosterLabPage() {
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(37,99,235,0.18),transparent_35%),radial-gradient(circle_at_bottom_left,rgba(59,130,246,0.12),transparent_30%)]" />
 
             <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center">
-              <Link href="/lab" className="inline-flex shrink-0" aria-label="Voltar ao EntreUS Lab">
+              <Link href="/lab" className="inline-flex shrink-0" aria-label={t('labPoster.logoAria')}>
                 <NextImage
                   src="/logo.png"
-                  alt="Logo EntreUS"
+                  alt={t('labPoster.logoAlt')}
                   width={170}
                   height={100}
                   className="h-auto w-36 object-contain drop-shadow-[0_8px_18px_rgba(0,0,0,0.35)] sm:w-40"
@@ -451,17 +453,15 @@ export default function PosterLabPage() {
 
               <div>
                 <p className="text-sm font-semibold uppercase tracking-[0.25em] text-blue-600 dark:text-blue-400">
-                  EntreUS Lab Poster
+                  {t('labPoster.kicker')}
                 </p>
 
                 <h1 className="mt-3 text-3xl font-black tracking-tight sm:text-5xl">
-                  Gerador de pôster em folhas
+                  {t('labPoster.title')}
                 </h1>
 
                 <p className="mt-4 max-w-4xl text-base leading-7 text-zinc-600 dark:text-zinc-400">
-                  Envie uma imagem ou PDF, escolha quantas folhas quer na horizontal e vertical,
-                  configure papel, orientação, margem e gere um PDF pronto para impressão.
-                  O processamento acontece no navegador, sem salvar o arquivo no servidor.
+                  {t('labPoster.description')}
                 </p>
               </div>
             </div>
@@ -478,7 +478,7 @@ export default function PosterLabPage() {
           <div className="space-y-5">
             <div className="rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
               <h2 className="text-lg font-black">
-                1. Arquivo
+                {t('labPoster.file.title')}
               </h2>
 
               <input
@@ -496,14 +496,14 @@ export default function PosterLabPage() {
               >
                 <Upload className="h-6 w-6" />
                 <span className="font-semibold">
-                  Enviar imagem ou PDF
+                  {t('labPoster.file.upload')}
                 </span>
               </button>
 
               {loadingFile && (
                 <div className="mt-4 flex items-center gap-2 text-sm text-zinc-500">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Carregando arquivo...
+                  {t('labPoster.file.loading')}
                 </div>
               )}
 
@@ -519,13 +519,13 @@ export default function PosterLabPage() {
                   </div>
 
                   <p className="mt-2">
-                    Tamanho renderizado: {sourceInfo.width} x {sourceInfo.height}px
+                    {t('labPoster.file.renderedSize')} {sourceInfo.width} x {sourceInfo.height}px
                   </p>
 
                   {sourceInfo.fileType === 'pdf' && (
                     <div className="mt-3">
                       <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                        Página do PDF
+                        {t('labPoster.file.pdfPage')}
                       </label>
 
                       <input
@@ -538,7 +538,7 @@ export default function PosterLabPage() {
                       />
 
                       <p className="mt-1 text-xs text-zinc-500">
-                        Total de páginas: {sourceInfo.pageCount || 1}
+                        {t('labPoster.file.totalPages')} {sourceInfo.pageCount || 1}
                       </p>
                     </div>
                   )}
@@ -548,13 +548,13 @@ export default function PosterLabPage() {
 
             <div className="rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
               <h2 className="text-lg font-black">
-                2. Configuração
+                {t('labPoster.config.title')}
               </h2>
 
               <div className="mt-4 grid grid-cols-2 gap-3">
                 <div>
                   <label className="mb-1 block text-sm font-medium text-zinc-600 dark:text-zinc-400">
-                    Papel
+                    {t('labPoster.config.paper')}
                   </label>
                   <select
                     value={paper}
@@ -563,27 +563,27 @@ export default function PosterLabPage() {
                   >
                     <option value="a4">A4</option>
                     <option value="a3">A3</option>
-                    <option value="letter">Carta</option>
+                    <option value="letter">{t('labPoster.config.letter')}</option>
                   </select>
                 </div>
 
                 <div>
                   <label className="mb-1 block text-sm font-medium text-zinc-600 dark:text-zinc-400">
-                    Orientação
+                    {t('labPoster.config.orientation')}
                   </label>
                   <select
                     value={orientation}
                     onChange={(event) => setOrientation(event.target.value as Orientation)}
                     className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 outline-none dark:border-zinc-700 dark:bg-black"
                   >
-                    <option value="portrait">Em pé</option>
-                    <option value="landscape">Deitada</option>
+                    <option value="portrait">{t('labPoster.config.portrait')}</option>
+                    <option value="landscape">{t('labPoster.config.landscape')}</option>
                   </select>
                 </div>
 
                 <div>
                   <label className="mb-1 block text-sm font-medium text-zinc-600 dark:text-zinc-400">
-                    Colunas
+                    {t('labPoster.config.columns')}
                   </label>
                   <input
                     type="number"
@@ -597,7 +597,7 @@ export default function PosterLabPage() {
 
                 <div>
                   <label className="mb-1 block text-sm font-medium text-zinc-600 dark:text-zinc-400">
-                    Linhas
+                    {t('labPoster.config.rows')}
                   </label>
                   <input
                     type="number"
@@ -611,7 +611,7 @@ export default function PosterLabPage() {
 
                 <div>
                   <label className="mb-1 block text-sm font-medium text-zinc-600 dark:text-zinc-400">
-                    Margem mm
+                    {t('labPoster.config.margin')}
                   </label>
                   <input
                     type="number"
@@ -625,7 +625,7 @@ export default function PosterLabPage() {
 
                 <div>
                   <label className="mb-1 block text-sm font-medium text-zinc-600 dark:text-zinc-400">
-                    Sobreposição mm
+                    {t('labPoster.config.overlap')}
                   </label>
                   <input
                     type="number"
@@ -639,21 +639,21 @@ export default function PosterLabPage() {
 
                 <div>
                   <label className="mb-1 block text-sm font-medium text-zinc-600 dark:text-zinc-400">
-                    Ajuste
+                    {t('labPoster.config.fit')}
                   </label>
                   <select
                     value={fitMode}
                     onChange={(event) => setFitMode(event.target.value as FitMode)}
                     className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 outline-none dark:border-zinc-700 dark:bg-black"
                   >
-                    <option value="contain">Mostrar tudo</option>
-                    <option value="cover">Preencher</option>
+                    <option value="contain">{t('labPoster.config.contain')}</option>
+                    <option value="cover">{t('labPoster.config.cover')}</option>
                   </select>
                 </div>
 
                 <div>
                   <label className="mb-1 block text-sm font-medium text-zinc-600 dark:text-zinc-400">
-                    Qualidade
+                    {t('labPoster.config.quality')}
                   </label>
                   <select
                     value={dpi}
@@ -662,7 +662,7 @@ export default function PosterLabPage() {
                   >
                     {DPI_OPTIONS.map((option) => (
                       <option key={option.value} value={option.value}>
-                        {option.label}
+                        {t(option.labelKey)}
                       </option>
                     ))}
                   </select>
@@ -671,13 +671,13 @@ export default function PosterLabPage() {
 
               <div className="mt-4 rounded-2xl bg-zinc-50 p-4 text-sm text-zinc-600 dark:bg-zinc-900 dark:text-zinc-300">
                 <p>
-                  Páginas: <strong>{totalPages}</strong>
+                  {t('labPoster.config.pages')} <strong>{totalPages}</strong>
                 </p>
                 <p>
-                  Pôster aproximado: <strong>{posterWidth.toFixed(1)} x {posterHeight.toFixed(1)} mm</strong>
+                  {t('labPoster.config.posterApprox')} <strong>{posterWidth.toFixed(1)} x {posterHeight.toFixed(1)} mm</strong>
                 </p>
                 <p>
-                  Área imprimível por folha: <strong>{printableWidth.toFixed(1)} x {printableHeight.toFixed(1)} mm</strong>
+                  {t('labPoster.config.printableArea')} <strong>{printableWidth.toFixed(1)} x {printableHeight.toFixed(1)} mm</strong>
                 </p>
               </div>
 
@@ -694,12 +694,12 @@ export default function PosterLabPage() {
                 {generating ? (
                   <>
                     <Loader2 className="h-5 w-5 animate-spin" />
-                    Gerando PDF...
+                    {t('labPoster.config.generating')}
                   </>
                 ) : (
                   <>
                     <Download className="h-5 w-5" />
-                    Gerar PDF para imprimir
+                    {t('labPoster.config.generate')}
                   </>
                 )}
               </button>
@@ -708,7 +708,7 @@ export default function PosterLabPage() {
 
           <div className="rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
             <h2 className="text-lg font-black">
-              Prévia
+              {t('labPoster.preview.title')}
             </h2>
 
             <div className="mt-4 flex min-h-[520px] items-center justify-center rounded-3xl bg-zinc-100 p-4 dark:bg-black">
@@ -716,7 +716,7 @@ export default function PosterLabPage() {
                 <div className="w-full max-w-3xl">
                   <img
                     src={previewUrl}
-                    alt="Prévia do arquivo"
+                    alt={t('labPoster.preview.alt')}
                     className="mx-auto max-h-[620px] rounded-2xl object-contain shadow-lg"
                   />
 
@@ -740,7 +740,7 @@ export default function PosterLabPage() {
                 <div className="text-center text-zinc-500">
                   <Upload className="mx-auto h-10 w-10" />
                   <p className="mt-3 text-sm">
-                    Envie uma imagem ou PDF para ver a prévia.
+                    {t('labPoster.preview.empty')}
                   </p>
                 </div>
               )}
@@ -748,12 +748,11 @@ export default function PosterLabPage() {
 
             <div id="doacao" className="mt-5 rounded-3xl border border-blue-200 bg-blue-50 p-5 dark:border-blue-900/60 dark:bg-blue-950/20">
               <h3 className="font-black text-zinc-950 dark:text-white">
-                Apoie o EntreUS Lab
+                {t('labPoster.donation.title')}
               </h3>
 
               <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-300">
-                Esta ferramenta pode ajudar escolas, professores e criadores. Sua contribuição
-                ajuda a manter o EntreUS Lab ativo e evoluindo com novas ferramentas.
+                {t('labPoster.donation.description')}
               </p>
 
               <a
@@ -762,7 +761,7 @@ export default function PosterLabPage() {
                 rel="noreferrer"
                 className="mt-4 inline-flex rounded-full bg-blue-600 px-5 py-2 text-sm font-bold text-white transition hover:bg-blue-500"
               >
-                Contribuir pelo Mercado Pago
+                {t('labPoster.donation.action')}
               </a>
             </div>
           </div>
