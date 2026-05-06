@@ -1,5 +1,6 @@
 'use client'
 
+import NextImage from 'next/image'
 import Link from 'next/link'
 import { useMemo, useRef, useState } from 'react'
 import { ArrowLeft, Download, FileText, ImageIcon, Loader2, Upload } from 'lucide-react'
@@ -55,15 +56,6 @@ function getPaperSize(paper: PaperKey, orientation: Orientation) {
     width: base.width,
     height: base.height,
   }
-}
-
-function canvasToImageElement(canvas: HTMLCanvasElement) {
-  return new Promise<HTMLImageElement>((resolve, reject) => {
-    const image = new Image()
-    image.onload = () => resolve(image)
-    image.onerror = reject
-    image.src = canvas.toDataURL('image/png')
-  })
 }
 
 function fileToImage(file: File) {
@@ -430,20 +422,39 @@ export default function PosterLabPage() {
           </a>
         </div>
 
-        <div className="rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 sm:p-7">
-          <p className="text-sm font-semibold uppercase tracking-[0.25em] text-blue-600 dark:text-blue-400">
-            EntreUS Lab Poster
-          </p>
+        <div className="overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+          <div className="relative p-5 sm:p-7">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(37,99,235,0.18),transparent_35%),radial-gradient(circle_at_bottom_left,rgba(59,130,246,0.12),transparent_30%)]" />
 
-          <h1 className="mt-3 text-3xl font-black tracking-tight sm:text-5xl">
-            Gerador de pôster em folhas
-          </h1>
+            <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center">
+              <Link href="/lab" className="inline-flex shrink-0" aria-label="Voltar ao EntreUS Lab">
+                <NextImage
+                  src="/logo.png"
+                  alt="Logo EntreUS"
+                  width={170}
+                  height={100}
+                  className="h-auto w-36 object-contain drop-shadow-[0_8px_18px_rgba(0,0,0,0.35)] sm:w-40"
+                  priority
+                />
+              </Link>
 
-          <p className="mt-4 max-w-4xl text-base leading-7 text-zinc-600 dark:text-zinc-400">
-            Envie uma imagem ou PDF, escolha quantas folhas quer na horizontal e vertical,
-            configure papel, orientação, margem e gere um PDF pronto para impressão.
-            O processamento acontece no navegador, sem salvar o arquivo no servidor.
-          </p>
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-[0.25em] text-blue-600 dark:text-blue-400">
+                  EntreUS Lab Poster
+                </p>
+
+                <h1 className="mt-3 text-3xl font-black tracking-tight sm:text-5xl">
+                  Gerador de pôster em folhas
+                </h1>
+
+                <p className="mt-4 max-w-4xl text-base leading-7 text-zinc-600 dark:text-zinc-400">
+                  Envie uma imagem ou PDF, escolha quantas folhas quer na horizontal e vertical,
+                  configure papel, orientação, margem e gere um PDF pronto para impressão.
+                  O processamento acontece no navegador, sem salvar o arquivo no servidor.
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
 
         {message && (

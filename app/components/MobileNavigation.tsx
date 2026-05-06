@@ -9,6 +9,7 @@ import {
   Bookmark,
   Compass,
   Home,
+  FlaskConical,
   ImagePlus,
   LogOut,
   Menu,
@@ -393,6 +394,15 @@ export default function MobileNavigation({
               >
                 <Bookmark className={drawerIconClass('/saved')} />
                 Salvos
+              </Link>
+
+              <Link
+                href="/lab"
+                onClick={closeMenu}
+                className={drawerLinkClass('/lab')}
+              >
+                <FlaskConical className={drawerIconClass('/lab')} />
+                EntreUS Lab
               </Link>
 
               <div className="my-4 border-t border-zinc-200 dark:border-zinc-800" />

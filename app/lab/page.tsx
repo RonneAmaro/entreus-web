@@ -1,3 +1,4 @@
+import Image from 'next/image'
 import Link from 'next/link'
 import { ImageIcon, QrCode, Scissors, Wand2 } from 'lucide-react'
 
@@ -5,19 +6,50 @@ export default function LabPage() {
   return (
     <main className="min-h-screen bg-zinc-50 px-4 py-10 text-zinc-950 dark:bg-black dark:text-white sm:px-6">
       <section className="mx-auto max-w-6xl">
-        <div className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 sm:p-8">
-          <p className="text-sm font-semibold uppercase tracking-[0.25em] text-blue-600 dark:text-blue-400">
-            EntreUS Lab
-          </p>
+        <div className="overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+          <div className="relative p-6 sm:p-8">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(37,99,235,0.18),transparent_35%),radial-gradient(circle_at_bottom_left,rgba(59,130,246,0.12),transparent_30%)]" />
 
-          <h1 className="mt-3 text-3xl font-black tracking-tight sm:text-5xl">
-            Laboratório de ferramentas criativas
-          </h1>
+            <div className="relative flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+              <div className="max-w-3xl">
+                <Link
+                  href="/feed"
+                  className="inline-flex items-center gap-3"
+                  aria-label="Ir para a EntreUS"
+                >
+                  <Image
+                    src="/logo.png"
+                    alt="Logo EntreUS"
+                    width={180}
+                    height={110}
+                    className="h-auto w-36 object-contain drop-shadow-[0_8px_18px_rgba(0,0,0,0.35)] sm:w-44"
+                    priority
+                  />
+                </Link>
 
-          <p className="mt-4 max-w-3xl text-base leading-7 text-zinc-600 dark:text-zinc-400">
-            Ferramentas simples para escola, design, impressão e criação de materiais.
-            Começamos com o gerador de pôster em várias folhas A4, aceitando imagem e PDF.
-          </p>
+                <p className="mt-5 text-sm font-semibold uppercase tracking-[0.25em] text-blue-600 dark:text-blue-400">
+                  EntreUS Lab
+                </p>
+
+                <h1 className="mt-3 text-3xl font-black tracking-tight sm:text-5xl">
+                  Ferramentas criativas para escola, imagem e PDF
+                </h1>
+
+                <p className="mt-4 max-w-3xl text-base leading-7 text-zinc-600 dark:text-zinc-400">
+                  Um laboratório dentro do ecossistema EntreUS para criar materiais,
+                  ampliar imagens, dividir arquivos em folhas e facilitar o trabalho
+                  de professores, escolas e criadores.
+                </p>
+              </div>
+
+              <Link
+                href="/lab/poster"
+                className="inline-flex shrink-0 items-center justify-center rounded-full bg-black px-6 py-3 text-sm font-bold text-white shadow-lg transition hover:opacity-90 dark:bg-white dark:text-black"
+              >
+                Abrir gerador de pôster
+              </Link>
+            </div>
+          </div>
         </div>
 
         <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">

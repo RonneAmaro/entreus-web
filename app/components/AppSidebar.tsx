@@ -184,7 +184,9 @@ export default function AppSidebar({
   const isMoreActive =
     pathname === '/privacy' ||
     pathname === '/blocked' ||
-    pathname === '/settings'
+    pathname === '/settings' ||
+    pathname === '/lab' ||
+    pathname.startsWith('/lab/')
 
   return (
     <aside className="fixed left-0 top-0 z-40 hidden h-screen w-[270px] flex-col border-r border-zinc-200 bg-white dark:border-zinc-800 dark:bg-black lg:flex">
