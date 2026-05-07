@@ -17,6 +17,8 @@ type PostMediaGalleryProps = {
   media: PostMedia[]
 }
 
+type MediaFit = 'cover' | 'contain'
+
 function AutoPlayVideo({
   src,
   className,
@@ -80,13 +82,25 @@ function MediaThumb({
   onOpen,
   className = '',
   showOverlayCount,
+  fit = 'cover',
 }: {
   item: PostMedia
   index: number
   onOpen: (index: number) => void
   className?: string
   showOverlayCount?: number
+  fit?: MediaFit
 }) {
+  const imageClassName =
+    fit === 'contain'
+      ? 'block max-h-[720px] max-w-full object-contain transition duration-300 group-hover:scale-[1.01]'
+      : 'block h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]'
+
+  const videoClassName =
+    fit === 'contain'
+      ? 'block max-h-[720px] max-w-full bg-black object-contain'
+      : 'block h-full w-full bg-black object-cover'
+
   return (
     <button
       type="button"
@@ -97,13 +111,19 @@ function MediaThumb({
         <img
           src={item.media_url}
           alt="Imagem da publicação"
-          className="block h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]"
+          className={imageClassName}
         />
       ) : (
-        <div className="relative h-full w-full">
+        <div
+          className={
+            fit === 'contain'
+              ? 'relative flex w-full items-center justify-center'
+              : 'relative h-full w-full'
+          }
+        >
           <AutoPlayVideo
             src={item.media_url}
-            className="block h-full w-full bg-black object-cover"
+            className={videoClassName}
           />
 
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/10 transition group-hover:bg-black/20">
@@ -159,12 +179,13 @@ export default function PostMediaGallery({ media }: PostMediaGalleryProps) {
   function renderGallery() {
     if (visibleMedia.length === 1) {
       return (
-        <div className="mb-4 overflow-hidden rounded-3xl border border-zinc-200 bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900">
+        <div className="mb-4 flex w-full items-center justify-center overflow-hidden rounded-3xl border border-zinc-200 bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-950">
           <MediaThumb
             item={visibleMedia[0]}
             index={0}
             onOpen={openViewer}
-            className="h-[26rem] w-full rounded-3xl sm:h-[34rem]"
+            fit="contain"
+            className="flex w-full items-center justify-center rounded-3xl p-0"
           />
         </div>
       )
