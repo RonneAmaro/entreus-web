@@ -252,6 +252,14 @@ function getAudioFileExtension(mimeType: string) {
 
 const QUICK_REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏']
 
+const MESSAGE_EMOJIS = [
+  '😀', '😃', '😄', '😁', '😆', '😂', '🤣', '😊',
+  '😍', '😘', '😎', '🤩', '🥰', '😜', '🤔', '😮',
+  '😢', '😭', '😡', '😱', '🙏', '👏', '🙌', '💪',
+  '👍', '👎', '❤️', '💙', '💚', '💛', '🖤', '🔥',
+  '✨', '⭐', '🎉', '🥳', '💯', '✅', '📌', '📢',
+]
+
 function groupMessageReactions(reactions: MessageReaction[], currentUserId: string) {
   const grouped: Record<string, { emoji: string; count: number; reactedByMe: boolean }> = {}
 
@@ -311,6 +319,7 @@ export default function ConversationPage() {
   const [participants, setParticipants] = useState<ParticipantRow[]>([])
   const [messages, setMessages] = useState<MessageRow[]>([])
   const [newMessage, setNewMessage] = useState('')
+  const [openMessageEmojiPicker, setOpenMessageEmojiPicker] = useState(false)
   const [selectedMedia, setSelectedMedia] = useState<SelectedMedia[]>([])
   const [openReactionMessageId, setOpenReactionMessageId] = useState<string | null>(null)
   const [openMessageMenuId, setOpenMessageMenuId] = useState<string | null>(null)
@@ -1637,6 +1646,7 @@ export default function ConversationPage() {
     }
 
     setNewMessage('')
+    setOpenMessageEmojiPicker(false)
     setSelectedMedia([])
     setSending(false)
   }
@@ -1652,6 +1662,10 @@ export default function ConversationPage() {
 
   function handlePostClick() {
     router.push('/feed')
+  }
+
+  function handleInsertMessageEmoji(emoji: string) {
+    setNewMessage((current) => `${current}${emoji}`)
   }
 
   const otherName = getDisplayName(otherProfile)
@@ -2335,6 +2349,41 @@ export default function ConversationPage() {
             onSubmit={handleSendMessage}
             className="flex shrink-0 gap-2 border-t border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900 sm:gap-3 sm:p-4"
           >
+            {openMessageEmojiPicker && (
+              <div className="absolute bottom-full left-3 right-3 z-50 mb-3 rounded-3xl border border-zinc-200 bg-white p-3 shadow-2xl dark:border-zinc-700 dark:bg-zinc-900 sm:left-4 sm:right-auto sm:w-[360px]">
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <p className="text-sm font-bold text-zinc-900 dark:text-white">
+                    Escolha um emoji
+                  </p>
+
+                  <button
+                    type="button"
+                    onClick={() => setOpenMessageEmojiPicker(false)}
+                    className="flex h-8 w-8 items-center justify-center rounded-full text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-white"
+                    aria-label="Fechar emojis"
+                    title="Fechar"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-8 gap-1">
+                  {MESSAGE_EMOJIS.map((emoji) => (
+                    <button
+                      key={emoji}
+                      type="button"
+                      onClick={() => handleInsertMessageEmoji(emoji)}
+                      className="flex h-9 w-9 items-center justify-center rounded-xl text-xl transition hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                      aria-label={`Inserir emoji ${emoji}`}
+                      title={emoji}
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <input
               ref={fileInputRef}
               type="file"
@@ -2353,6 +2402,21 @@ export default function ConversationPage() {
               title="Anexar foto, vídeo ou áudio"
             >
               <Paperclip className="h-5 w-5" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setOpenMessageEmojiPicker((current) => !current)}
+              disabled={sending || uploadingMedia || recordingAudio}
+              className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border transition sm:h-12 sm:w-12 ${
+                openMessageEmojiPicker
+                  ? 'border-blue-300 bg-blue-50 text-blue-600 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-300'
+                  : 'border-zinc-300 bg-zinc-50 text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-200 dark:hover:bg-zinc-800'
+              } disabled:cursor-not-allowed disabled:opacity-60`}
+              aria-label="Abrir emojis"
+              title="Emojis"
+            >
+              <SmilePlus className="h-5 w-5" />
             </button>
 
             <input
