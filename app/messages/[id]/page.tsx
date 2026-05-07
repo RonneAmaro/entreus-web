@@ -252,13 +252,264 @@ function getAudioFileExtension(mimeType: string) {
 
 const QUICK_REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏']
 
-const MESSAGE_EMOJIS = [
-  '😀', '😃', '😄', '😁', '😆', '😂', '🤣', '😊',
-  '😍', '😘', '😎', '🤩', '🥰', '😜', '🤔', '😮',
-  '😢', '😭', '😡', '😱', '🙏', '👏', '🙌', '💪',
-  '👍', '👎', '❤️', '💙', '💚', '💛', '🖤', '🔥',
-  '✨', '⭐', '🎉', '🥳', '💯', '✅', '📌', '📢',
+type MessageEmojiCategoryId =
+  | 'recent'
+  | 'entreus'
+  | 'smileys'
+  | 'gestos'
+  | 'coracoes'
+  | 'festa'
+  | 'simbolos'
+
+type MessageEmojiItem = {
+  emoji: string
+  label: string
+  keywords: string[]
+}
+
+type MessageEmojiCategory = {
+  id: MessageEmojiCategoryId
+  title: string
+  icon: string
+  description: string
+  emojis: MessageEmojiItem[]
+}
+
+function createMessageEmoji(
+  emoji: string,
+  label: string,
+  keywords: string[] = [],
+): MessageEmojiItem {
+  return {
+    emoji,
+    label,
+    keywords,
+  }
+}
+
+const MESSAGE_EMOJI_CATEGORIES: MessageEmojiCategory[] = [
+  {
+    id: 'recent',
+    title: 'Recentes',
+    icon: '🕘',
+    description: 'Seus últimos emojis usados',
+    emojis: [],
+  },
+  {
+    id: 'entreus',
+    title: 'EntreUS',
+    icon: '💙',
+    description: 'Emojis com a vibe da nossa plataforma',
+    emojis: [
+      createMessageEmoji('😍', 'Apaixonado', ['amor', 'lindo', 'gostei']),
+      createMessageEmoji('😏', 'Olhar provocante', ['charme', 'malicia', 'flertar']),
+      createMessageEmoji('🔥', 'Fogo', ['quente', 'top', 'destaque']),
+      createMessageEmoji('😂', 'Rindo muito', ['risada', 'engracado']),
+      createMessageEmoji('🤣', 'Gargalhada', ['risada', 'engracado']),
+      createMessageEmoji('❤️', 'Coração vermelho', ['amor', 'curtir']),
+      createMessageEmoji('💙', 'Coração EntreUS', ['entreus', 'azul', 'amor']),
+      createMessageEmoji('👀', 'De olho', ['olhar', 'curioso']),
+      createMessageEmoji('✨', 'Brilho', ['especial', 'premium']),
+      createMessageEmoji('🫶', 'Carinho', ['amor', 'apoio']),
+      createMessageEmoji('😎', 'Estiloso', ['cool', 'top']),
+      createMessageEmoji('🥳', 'Comemoração', ['festa', 'parabens']),
+      createMessageEmoji('💯', 'Cem por cento', ['perfeito', 'top']),
+      createMessageEmoji('😜', 'Brincalhão', ['zoeira', 'divertido']),
+    ],
+  },
+  {
+    id: 'smileys',
+    title: 'Smileys',
+    icon: '😀',
+    description: 'Expressões e sentimentos',
+    emojis: [
+      createMessageEmoji('😀', 'Feliz', ['sorriso']),
+      createMessageEmoji('😃', 'Muito feliz', ['sorriso']),
+      createMessageEmoji('😄', 'Sorrindo', ['alegre']),
+      createMessageEmoji('😁', 'Sorriso aberto', ['alegre']),
+      createMessageEmoji('😆', 'Rindo', ['risada']),
+      createMessageEmoji('😊', 'Sorriso fofo', ['feliz']),
+      createMessageEmoji('😉', 'Piscadinha', ['flertar']),
+      createMessageEmoji('😌', 'Aliviado', ['calmo']),
+      createMessageEmoji('😋', 'Gostoso', ['comida', 'sabor']),
+      createMessageEmoji('😜', 'Língua', ['brincadeira']),
+      createMessageEmoji('🤪', 'Doidinho', ['zoeira']),
+      createMessageEmoji('🤗', 'Abraço', ['carinho']),
+      createMessageEmoji('🤭', 'Segurando riso', ['vergonha']),
+      createMessageEmoji('🤔', 'Pensando', ['duvida']),
+      createMessageEmoji('🫢', 'Surpreso tímido', ['surpresa']),
+      createMessageEmoji('😮', 'Surpreso', ['uau']),
+      createMessageEmoji('😳', 'Envergonhado', ['vergonha']),
+      createMessageEmoji('🥺', 'Fofo', ['pedido']),
+      createMessageEmoji('😢', 'Triste', ['choro']),
+      createMessageEmoji('😭', 'Chorando', ['triste']),
+      createMessageEmoji('😡', 'Bravo', ['raiva']),
+      createMessageEmoji('😱', 'Assustado', ['medo']),
+      createMessageEmoji('😴', 'Sono', ['dormir']),
+    ],
+  },
+  {
+    id: 'gestos',
+    title: 'Gestos',
+    icon: '👍',
+    description: 'Mãos, força e interação',
+    emojis: [
+      createMessageEmoji('👍', 'Curtir', ['like', 'positivo']),
+      createMessageEmoji('👎', 'Não curtir', ['deslike', 'negativo']),
+      createMessageEmoji('👏', 'Palmas', ['aplauso']),
+      createMessageEmoji('🙌', 'Celebração', ['vitoria']),
+      createMessageEmoji('🙏', 'Gratidão', ['obrigado', 'amem']),
+      createMessageEmoji('💪', 'Força', ['forte']),
+      createMessageEmoji('🤝', 'Acordo', ['parceria']),
+      createMessageEmoji('👊', 'Toque', ['forca']),
+      createMessageEmoji('🤌', 'Perfeito', ['italiano']),
+      createMessageEmoji('🤞', 'Torcendo', ['sorte']),
+      createMessageEmoji('✌️', 'Paz', ['vitoria']),
+      createMessageEmoji('🤙', 'Chama', ['aloha']),
+      createMessageEmoji('👋', 'Tchau', ['oi']),
+      createMessageEmoji('☝️', 'Atenção', ['cima']),
+      createMessageEmoji('👉', 'Direita', ['apontar']),
+      createMessageEmoji('👈', 'Esquerda', ['apontar']),
+      createMessageEmoji('👀', 'Olhando', ['olhar']),
+    ],
+  },
+  {
+    id: 'coracoes',
+    title: 'Corações',
+    icon: '❤️',
+    description: 'Amor, carinho e conexão',
+    emojis: [
+      createMessageEmoji('❤️', 'Coração vermelho', ['amor']),
+      createMessageEmoji('🧡', 'Coração laranja', ['amor']),
+      createMessageEmoji('💛', 'Coração amarelo', ['amor']),
+      createMessageEmoji('💚', 'Coração verde', ['amor']),
+      createMessageEmoji('💙', 'Coração azul', ['entreus']),
+      createMessageEmoji('💜', 'Coração roxo', ['amor']),
+      createMessageEmoji('🖤', 'Coração preto', ['amor']),
+      createMessageEmoji('🤍', 'Coração branco', ['amor']),
+      createMessageEmoji('🤎', 'Coração marrom', ['amor']),
+      createMessageEmoji('💔', 'Coração partido', ['triste']),
+      createMessageEmoji('❣️', 'Exclamação coração', ['amor']),
+      createMessageEmoji('💕', 'Dois corações', ['amor']),
+      createMessageEmoji('💞', 'Corações girando', ['amor']),
+      createMessageEmoji('💓', 'Coração batendo', ['amor']),
+      createMessageEmoji('💗', 'Coração crescendo', ['amor']),
+      createMessageEmoji('💖', 'Coração brilhando', ['amor']),
+      createMessageEmoji('💘', 'Flechado', ['paixao']),
+    ],
+  },
+  {
+    id: 'festa',
+    title: 'Festa',
+    icon: '🎉',
+    description: 'Comemoração, brilho e destaque',
+    emojis: [
+      createMessageEmoji('🎉', 'Confete', ['festa']),
+      createMessageEmoji('🥳', 'Festa', ['parabens']),
+      createMessageEmoji('🎊', 'Celebração', ['festa']),
+      createMessageEmoji('✨', 'Brilho', ['especial']),
+      createMessageEmoji('⭐', 'Estrela', ['favorito']),
+      createMessageEmoji('🌟', 'Estrela brilhante', ['destaque']),
+      createMessageEmoji('💫', 'Tontura brilhante', ['magico']),
+      createMessageEmoji('🔥', 'Fogo', ['quente']),
+      createMessageEmoji('🎁', 'Presente', ['gift']),
+      createMessageEmoji('🎈', 'Balão', ['festa']),
+      createMessageEmoji('🏆', 'Troféu', ['vitoria']),
+      createMessageEmoji('🥇', 'Medalha', ['primeiro']),
+      createMessageEmoji('🚀', 'Foguete', ['crescimento']),
+      createMessageEmoji('💎', 'Diamante', ['premium']),
+    ],
+  },
+  {
+    id: 'simbolos',
+    title: 'Símbolos',
+    icon: '✅',
+    description: 'Ações rápidas e marcações',
+    emojis: [
+      createMessageEmoji('✅', 'Confirmado', ['ok', 'feito']),
+      createMessageEmoji('☑️', 'Marcado', ['check']),
+      createMessageEmoji('❌', 'Erro', ['nao']),
+      createMessageEmoji('⚠️', 'Atenção', ['alerta']),
+      createMessageEmoji('📌', 'Fixar', ['pin']),
+      createMessageEmoji('📢', 'Aviso', ['anuncio']),
+      createMessageEmoji('🔒', 'Privado', ['seguro']),
+      createMessageEmoji('🔓', 'Aberto', ['liberado']),
+      createMessageEmoji('💬', 'Mensagem', ['chat']),
+      createMessageEmoji('📷', 'Foto', ['camera']),
+      createMessageEmoji('🎥', 'Vídeo', ['video']),
+      createMessageEmoji('🎧', 'Áudio', ['som']),
+      createMessageEmoji('🎤', 'Microfone', ['voz']),
+      createMessageEmoji('📎', 'Anexo', ['arquivo']),
+      createMessageEmoji('🔗', 'Link', ['url']),
+    ],
+  },
 ]
+
+const MESSAGE_EMOJI_INDEX = Array.from(
+  new Map(
+    MESSAGE_EMOJI_CATEGORIES
+      .filter((category) => category.id !== 'recent')
+      .flatMap((category) => category.emojis)
+      .map((item) => [item.emoji, item]),
+  ).values(),
+)
+
+const MESSAGE_EMOJI_LOOKUP = new Map(
+  MESSAGE_EMOJI_INDEX.map((item) => [item.emoji, item]),
+)
+
+const MESSAGE_EMOJIS = MESSAGE_EMOJI_INDEX.map((item) => item.emoji)
+
+const MESSAGE_QUICK_EMOJIS = ['❤️', '😂', '🔥', '😍', '👀', '✨', '😏', '💙']
+
+function normalizeMessageEmojiText(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+}
+
+function getMessageEmojiItem(emoji: string): MessageEmojiItem {
+  return (
+    MESSAGE_EMOJI_LOOKUP.get(emoji) || {
+      emoji,
+      label: emoji,
+      keywords: [],
+    }
+  )
+}
+
+function getMessageEmojiCategory(categoryId: MessageEmojiCategoryId) {
+  return (
+    MESSAGE_EMOJI_CATEGORIES.find((category) => category.id === categoryId) ||
+    MESSAGE_EMOJI_CATEGORIES[1]
+  )
+}
+
+function getVisibleMessageEmojis(
+  categoryId: MessageEmojiCategoryId,
+  search: string,
+  recentEmojis: string[],
+) {
+  const query = normalizeMessageEmojiText(search)
+
+  if (query) {
+    return MESSAGE_EMOJI_INDEX.filter((item) => {
+      const searchable = normalizeMessageEmojiText(
+        [item.emoji, item.label, ...item.keywords].join(' '),
+      )
+
+      return searchable.includes(query)
+    })
+  }
+
+  if (categoryId === 'recent') {
+    return recentEmojis.map((emoji) => getMessageEmojiItem(emoji))
+  }
+
+  return getMessageEmojiCategory(categoryId).emojis
+}
 
 function groupMessageReactions(reactions: MessageReaction[], currentUserId: string) {
   const grouped: Record<string, { emoji: string; count: number; reactedByMe: boolean }> = {}
@@ -320,6 +571,10 @@ export default function ConversationPage() {
   const [messages, setMessages] = useState<MessageRow[]>([])
   const [newMessage, setNewMessage] = useState('')
   const [openMessageEmojiPicker, setOpenMessageEmojiPicker] = useState(false)
+  const [messageEmojiSearch, setMessageEmojiSearch] = useState('')
+  const [activeMessageEmojiCategory, setActiveMessageEmojiCategory] =
+    useState<MessageEmojiCategoryId>('entreus')
+  const [recentMessageEmojis, setRecentMessageEmojis] = useState<string[]>([])
   const [selectedMedia, setSelectedMedia] = useState<SelectedMedia[]>([])
   const [openReactionMessageId, setOpenReactionMessageId] = useState<string | null>(null)
   const [openMessageMenuId, setOpenMessageMenuId] = useState<string | null>(null)
@@ -1666,6 +1921,10 @@ export default function ConversationPage() {
 
   function handleInsertMessageEmoji(emoji: string) {
     setNewMessage((current) => `${current}${emoji}`)
+    setRecentMessageEmojis((current) => {
+      return [emoji, ...current.filter((item) => item !== emoji)].slice(0, 24)
+    })
+    setMessageEmojiSearch('')
   }
 
   const otherName = getDisplayName(otherProfile)
@@ -2350,36 +2609,161 @@ export default function ConversationPage() {
             className="relative flex shrink-0 gap-2 border-t border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900 sm:gap-3 sm:p-4"
           >
             {openMessageEmojiPicker && (
-              <div className="absolute bottom-full left-3 right-3 z-50 mb-3 rounded-3xl border border-zinc-200 bg-white p-3 shadow-2xl dark:border-zinc-700 dark:bg-zinc-900 sm:left-4 sm:right-auto sm:w-[360px]">
-                <div className="mb-2 flex items-center justify-between gap-3">
-                  <p className="text-sm font-bold text-zinc-900 dark:text-white">
-                    Escolha um emoji
-                  </p>
+              <div className="absolute bottom-full left-3 right-3 z-50 mb-3 max-h-[76vh] overflow-hidden rounded-[2rem] border border-zinc-200 bg-white/95 shadow-2xl shadow-black/20 backdrop-blur-xl dark:border-zinc-700 dark:bg-zinc-950/95 sm:left-4 sm:right-auto sm:w-[430px]">
+                <div className="border-b border-zinc-200 bg-gradient-to-br from-blue-50 via-white to-purple-50 p-3 dark:border-zinc-800 dark:from-blue-950/30 dark:via-zinc-950 dark:to-purple-950/30 sm:p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-black text-zinc-950 dark:text-white">
+                        Emojis EntreUS
+                      </p>
+                      <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+                        Busque, escolha uma categoria ou use os favoritos rápidos.
+                      </p>
+                    </div>
 
-                  <button
-                    type="button"
-                    onClick={() => setOpenMessageEmojiPicker(false)}
-                    className="flex h-8 w-8 items-center justify-center rounded-full text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-white"
-                    aria-label="Fechar emojis"
-                    title="Fechar"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => setOpenMessageEmojiPicker(false)}
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-zinc-500 transition hover:scale-105 hover:bg-white hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-white"
+                      aria-label="Fechar emojis"
+                      title="Fechar"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  <label className="mt-3 flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm shadow-sm transition focus-within:border-blue-400 dark:border-zinc-700 dark:bg-zinc-900">
+                    <span className="text-base" aria-hidden="true">
+                      🔎
+                    </span>
+                    <input
+                      type="text"
+                      value={messageEmojiSearch}
+                      onChange={(event) => setMessageEmojiSearch(event.target.value)}
+                      placeholder="Buscar emoji..."
+                      className="min-w-0 flex-1 bg-transparent text-sm text-zinc-900 outline-none placeholder:text-zinc-400 dark:text-white"
+                    />
+                  </label>
+
+                  <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+                    {MESSAGE_EMOJI_CATEGORIES.map((category) => {
+                      const active = activeMessageEmojiCategory === category.id
+                      const disabled =
+                        category.id === 'recent' && recentMessageEmojis.length === 0
+
+                      return (
+                        <button
+                          key={category.id}
+                          type="button"
+                          onClick={() => {
+                            setActiveMessageEmojiCategory(category.id)
+                            setMessageEmojiSearch('')
+                          }}
+                          disabled={disabled}
+                          className={`flex shrink-0 items-center gap-2 rounded-2xl border px-3 py-2 text-xs font-bold transition ${
+                            active
+                              ? 'border-blue-300 bg-blue-600 text-white shadow-lg shadow-blue-600/20 dark:border-blue-500'
+                              : 'border-zinc-200 bg-white text-zinc-700 hover:-translate-y-0.5 hover:border-blue-200 hover:bg-blue-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:border-blue-800 dark:hover:bg-blue-950/40'
+                          } disabled:cursor-not-allowed disabled:opacity-40`}
+                          title={category.description}
+                        >
+                          <span className="text-base">{category.icon}</span>
+                          {category.title}
+                        </button>
+                      )
+                    })}
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-8 gap-1">
-                  {MESSAGE_EMOJIS.map((emoji) => (
-                    <button
-                      key={emoji}
-                      type="button"
-                      onClick={() => handleInsertMessageEmoji(emoji)}
-                      className="flex h-9 w-9 items-center justify-center rounded-xl text-xl transition hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                      aria-label={`Inserir emoji ${emoji}`}
-                      title={emoji}
-                    >
-                      {emoji}
-                    </button>
-                  ))}
+                <div className="max-h-[360px] overflow-y-auto p-3 sm:p-4">
+                  <div className="mb-3 rounded-3xl border border-blue-100 bg-blue-50/70 p-3 dark:border-blue-900/50 dark:bg-blue-950/20">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-700 dark:text-blue-300">
+                        Rápidos EntreUS
+                      </p>
+                      <span className="rounded-full bg-white px-2 py-1 text-[10px] font-bold text-blue-600 dark:bg-zinc-900 dark:text-blue-300">
+                        toque para inserir
+                      </span>
+                    </div>
+
+                    <div className="flex flex-wrap gap-1.5">
+                      {MESSAGE_QUICK_EMOJIS.map((emoji) => {
+                        const item = getMessageEmojiItem(emoji)
+
+                        return (
+                          <button
+                            key={`quick-${emoji}`}
+                            type="button"
+                            onClick={() => handleInsertMessageEmoji(emoji)}
+                            className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white text-2xl shadow-sm transition hover:-translate-y-1 hover:scale-110 hover:shadow-md active:scale-95 dark:bg-zinc-900"
+                            aria-label={`Inserir emoji ${item.label}`}
+                            title={item.label}
+                          >
+                            {emoji}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  {(() => {
+                    const visibleEmojis = getVisibleMessageEmojis(
+                      activeMessageEmojiCategory,
+                      messageEmojiSearch,
+                      recentMessageEmojis,
+                    )
+                    const activeCategory = getMessageEmojiCategory(activeMessageEmojiCategory)
+
+                    if (visibleEmojis.length === 0) {
+                      return (
+                        <div className="rounded-3xl border border-dashed border-zinc-300 p-6 text-center dark:border-zinc-700">
+                          <p className="text-3xl">🫣</p>
+                          <p className="mt-2 text-sm font-bold text-zinc-900 dark:text-white">
+                            Nenhum emoji encontrado
+                          </p>
+                          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                            Tente buscar por amor, fogo, risada, festa ou coração.
+                          </p>
+                        </div>
+                      )
+                    }
+
+                    return (
+                      <>
+                        <div className="mb-3 flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-black text-zinc-950 dark:text-white">
+                              {messageEmojiSearch.trim()
+                                ? 'Resultado da busca'
+                                : activeCategory.title}
+                            </p>
+                            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                              {messageEmojiSearch.trim()
+                                ? `Encontramos ${visibleEmojis.length} opção(ões)`
+                                : activeCategory.description}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-8 gap-1.5 sm:grid-cols-9">
+                          {visibleEmojis.map((item) => (
+                            <button
+                              key={`${activeMessageEmojiCategory}-${item.emoji}`}
+                              type="button"
+                              onClick={() => handleInsertMessageEmoji(item.emoji)}
+                              className="group relative flex h-10 w-10 items-center justify-center rounded-2xl text-2xl transition hover:-translate-y-1 hover:scale-110 hover:bg-zinc-100 active:scale-95 dark:hover:bg-zinc-800"
+                              aria-label={`Inserir emoji ${item.label}`}
+                              title={item.label}
+                            >
+                              <span className="transition group-hover:drop-shadow-md">
+                                {item.emoji}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )
+                  })()}
                 </div>
               </div>
             )}
