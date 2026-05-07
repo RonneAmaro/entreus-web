@@ -12,16 +12,21 @@ import UserBadges from '../components/UserBadges'
 import TranslatePostButton from '../components/TranslatePostButton'
 import Link from 'next/link'
 import {
+  Award,
+  CreditCard,
   Edit3,
-  MoreHorizontal,
-  Repeat2,
-  Trash2,
-  ImageIcon,
-  Search,
   FlaskConical,
   Heart,
-  Sparkles,
+  ImageIcon,
+  Landmark,
   MessageCircle,
+  MoreHorizontal,
+  Newspaper,
+  Play,
+  Repeat2,
+  Search,
+  Sparkles,
+  Trash2,
 } from 'lucide-react'
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -321,18 +326,18 @@ function getCategoryKey(value: string | null) {
 
 type FeedItem =
   | {
-      type: 'post'
-      id: string
-      created_at: string
-      post: Post
-    }
+    type: 'post'
+    id: string
+    created_at: string
+    post: Post
+  }
   | {
-      type: 'repost'
-      id: string
-      created_at: string
-      post: Post
-      repost: Repost
-    }
+    type: 'repost'
+    id: string
+    created_at: string
+    post: Post
+    repost: Repost
+  }
 
 function FeedContent() {
   const router = useRouter()
@@ -409,11 +414,11 @@ function FeedContent() {
       const loadedCurrentProfile: CurrentProfile | null =
         !profileError && profileData
           ? {
-              username: profileData.username,
-              display_name: profileData.display_name,
-              avatar_url: profileData.avatar_url,
-              show_sensitive_content: profileData.show_sensitive_content || false,
-            }
+            username: profileData.username,
+            display_name: profileData.display_name,
+            avatar_url: profileData.avatar_url,
+            show_sensitive_content: profileData.show_sensitive_content || false,
+          }
           : null
 
       if (loadedCurrentProfile) {
@@ -978,10 +983,10 @@ function FeedContent() {
       created_at: new Date().toISOString(),
       profiles: currentProfile
         ? {
-            username: currentProfile.username || t('common.username'),
-            display_name: currentProfile.display_name,
-            avatar_url: currentProfile.avatar_url,
-          }
+          username: currentProfile.username || t('common.username'),
+          display_name: currentProfile.display_name,
+          avatar_url: currentProfile.avatar_url,
+        }
         : null,
     }
 
@@ -1758,506 +1763,501 @@ function FeedContent() {
               )}
             </div>
 
-              <div className="space-y-4 sm:space-y-5">
-                {visibleFeedItems.length === 0 && (
-                  <div className="rounded-2xl border border-zinc-200 bg-white p-4 text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 sm:p-6">
-                    {hasSearch ? localTexts.mural.noSearchResults : t('feed.noPosts')}
-                  </div>
-                )}
+            <div className="space-y-4 sm:space-y-5">
+              {visibleFeedItems.length === 0 && (
+                <div className="rounded-2xl border border-zinc-200 bg-white p-4 text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 sm:p-6">
+                  {hasSearch ? localTexts.mural.noSearchResults : t('feed.noPosts')}
+                </div>
+              )}
 
-                {visibleFeedItems.map((item) => {
-                  const post = item.post
+              {visibleFeedItems.map((item) => {
+                const post = item.post
 
-                  const postComments = comments.filter((comment) => comment.post_id === post.id)
-                  const postLikes = likes.filter((like) => like.post_id === post.id)
-                  const postReposts = reposts.filter((repost) => repost.post_id === post.id)
+                const postComments = comments.filter((comment) => comment.post_id === post.id)
+                const postLikes = likes.filter((like) => like.post_id === post.id)
+                const postReposts = reposts.filter((repost) => repost.post_id === post.id)
 
-                  const userLiked = likes.some(
-                    (like) => like.post_id === post.id && like.user_id === userId
-                  )
+                const userLiked = likes.some(
+                  (like) => like.post_id === post.id && like.user_id === userId
+                )
 
-                  const postSaved = bookmarks.some(
-                    (bookmark) => bookmark.post_id === post.id && bookmark.user_id === userId
-                  )
+                const postSaved = bookmarks.some(
+                  (bookmark) => bookmark.post_id === post.id && bookmark.user_id === userId
+                )
 
-                  const postReposted = reposts.some(
-                    (repost) => repost.post_id === post.id && repost.user_id === userId
-                  )
+                const postReposted = reposts.some(
+                  (repost) => repost.post_id === post.id && repost.user_id === userId
+                )
 
-                  const isEditing = editingPostId === post.id
+                const isEditing = editingPostId === post.id
 
-                  const authorName =
-                    post.profiles?.display_name || post.profiles?.username || t('common.user')
+                const authorName =
+                  post.profiles?.display_name || post.profiles?.username || t('common.user')
 
-                  const authorUsername = post.profiles?.username || t('common.username')
-                  const authorAvatar = post.profiles?.avatar_url || ''
-                  const isOwnPost = post.user_id === userId
-                  const isBlockedRelation = blockedUserIds.includes(post.user_id)
-                  const isFollowingAuthor = followStateMap.get(post.user_id) || false
-                  const isHighlighted = highlightedPostId === post.id
-                  const postMedia = getPostMedia(post)
+                const authorUsername = post.profiles?.username || t('common.username')
+                const authorAvatar = post.profiles?.avatar_url || ''
+                const isOwnPost = post.user_id === userId
+                const isBlockedRelation = blockedUserIds.includes(post.user_id)
+                const isFollowingAuthor = followStateMap.get(post.user_id) || false
+                const isHighlighted = highlightedPostId === post.id
+                const postMedia = getPostMedia(post)
 
-                  const isSensitivePostItem = isSensitivePost(post)
+                const isSensitivePostItem = isSensitivePost(post)
 
-                  const shouldShowSensitiveWarning =
-                    isSensitivePostItem && !currentProfile?.show_sensitive_content
+                const shouldShowSensitiveWarning =
+                  isSensitivePostItem && !currentProfile?.show_sensitive_content
 
-                  const reposterName =
-                    item.type === 'repost'
-                      ? item.repost.profiles?.display_name ||
-                        item.repost.profiles?.username ||
-                        t('common.user')
-                      : ''
+                const reposterName =
+                  item.type === 'repost'
+                    ? item.repost.profiles?.display_name ||
+                    item.repost.profiles?.username ||
+                    t('common.user')
+                    : ''
 
-                  const reposterUsername =
-                    item.type === 'repost'
-                      ? item.repost.profiles?.username || t('common.username')
-                      : t('common.username')
+                const reposterUsername =
+                  item.type === 'repost'
+                    ? item.repost.profiles?.username || t('common.username')
+                    : t('common.username')
 
-                  const reposterAvatar =
-                    item.type === 'repost' ? item.repost.profiles?.avatar_url || '' : ''
+                const reposterAvatar =
+                  item.type === 'repost' ? item.repost.profiles?.avatar_url || '' : ''
 
-                  return (
-                    <article
-                      id={item.type === 'post' ? `post-${post.id}` : `repost-${item.id}`}
-                      key={item.id}
-                      className={`rounded-2xl border bg-white p-4 transition dark:bg-zinc-900 sm:p-6 ${
-                        isHighlighted
-                          ? 'border-blue-500 ring-2 ring-blue-200 dark:border-blue-400 dark:ring-blue-900'
-                          : 'border-zinc-200 dark:border-zinc-800'
+                return (
+                  <article
+                    id={item.type === 'post' ? `post-${post.id}` : `repost-${item.id}`}
+                    key={item.id}
+                    className={`rounded-2xl border bg-white p-4 transition dark:bg-zinc-900 sm:p-6 ${isHighlighted
+                        ? 'border-blue-500 ring-2 ring-blue-200 dark:border-blue-400 dark:ring-blue-900'
+                        : 'border-zinc-200 dark:border-zinc-800'
                       }`}
-                    >
-                      {item.type === 'repost' && (
-                        <Link
-                          href={`/u/${reposterUsername}`}
-                          className="mb-4 flex items-center gap-2 text-sm font-medium text-green-600 transition hover:opacity-80 dark:text-green-400"
-                        >
-                          {reposterAvatar ? (
-                            <img
-                              src={reposterAvatar}
-                              alt={reposterName}
-                              className="h-7 w-7 rounded-full border border-green-200 object-cover dark:border-green-800"
-                            />
-                          ) : (
-                            <div className="flex h-7 w-7 items-center justify-center rounded-full border border-green-200 bg-green-50 text-xs font-bold text-green-700 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
-                              {reposterName.charAt(0).toUpperCase()}
-                            </div>
-                          )}
-
-                          <Repeat2 className="h-4 w-4" />
-
-                          <span className="inline-flex min-w-0 items-center gap-1">
-                            <UserBadges userId={item.repost.user_id} size="sm" max={1} />
-
-                            <span className="truncate">
-                              {item.repost.user_id === userId
-                                ? t('postCard.youReposted')
-                                : t('postCard.repostedBy').replace('{name}', reposterName)}
-                            </span>
-                          </span>
-                        </Link>
-                      )}
-
-                      <div className="mb-3 flex items-start justify-between gap-3">
-                        <Link
-                          href={`/u/${authorUsername}`}
-                          className="flex min-w-0 items-center gap-3 transition hover:opacity-80"
-                        >
-                          {authorAvatar ? (
-                            <img
-                              src={authorAvatar}
-                              alt={authorName}
-                              className="h-12 w-12 shrink-0 rounded-full border border-zinc-300 object-cover dark:border-zinc-700"
-                            />
-                          ) : (
-                            <div className="flex h-12 w-12 items-center justify-center rounded-full border border-zinc-300 bg-zinc-100 text-sm font-semibold text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
-                              {authorName.charAt(0).toUpperCase()}
-                            </div>
-                          )}
-
-                          <div className="min-w-0">
-                            <p className="inline-flex max-w-full items-center gap-1 font-semibold text-black dark:text-white">
-                              <UserBadges userId={post.user_id} size="sm" max={1} />
-
-                              <span className="min-w-0 break-words">
-                                {authorName}
-                              </span>
-                            </p>
-
-                            <p className="break-all text-sm text-zinc-500">
-                              @{authorUsername}
-                            </p>
-                          </div>
-                        </Link>
-
-                        <PostMoreMenu
-                          isOwnPost={isOwnPost}
-                          copied={copiedPostId === post.id}
-                          reported={reportedPostIds.includes(post.id)}
-                          reporting={reportingPostId === post.id}
-                          onCopy={() => handleCopyPostLink(post.id)}
-                          onEdit={() => handleStartEdit(post)}
-                          onDelete={() => handleDeletePost(post.id)}
-                          onReport={() => handleReportPost(post.id, post.user_id)}
-                        />
-                      </div>
-
-                      {!isOwnPost && !isBlockedRelation && (
-                        <div className="mb-3">
-                          <button
-                            type="button"
-                            onClick={() => handleToggleFollow(post.user_id)}
-                            disabled={followLoadingUserId === post.user_id}
-                            className={`rounded-full px-4 py-2 text-sm font-medium transition ${
-                              isFollowingAuthor
-                                ? 'border border-zinc-300 text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800'
-                                : 'bg-black text-white hover:opacity-90 dark:bg-white dark:text-black'
-                            } ${
-                              followLoadingUserId === post.user_id
-                                ? 'cursor-not-allowed opacity-60'
-                                : ''
-                            }`}
-                          >
-                            {followLoadingUserId === post.user_id
-                              ? t('common.loading')
-                              : isFollowingAuthor
-                                ? t('postCard.following')
-                                : t('postCard.follow')}
-                          </button>
-                        </div>
-                      )}
-
-                      <div className="mb-3 flex flex-wrap items-center gap-2">
-                        <p className="text-sm text-zinc-500">
-                          {t(getCategoryKey(post.category))}
-                        </p>
-
-                        <span className="rounded-full border border-zinc-200 bg-zinc-100 px-2 py-1 text-xs text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
-                          {getVisibilityLabel(post.visibility)}
-                        </span>
-
-                        {isSensitivePostItem && (
-                          <span className="rounded-full border border-yellow-200 bg-yellow-50 px-2 py-1 text-xs text-yellow-700 dark:border-yellow-800 dark:bg-yellow-950 dark:text-yellow-300">
-                            18+
-                          </span>
-                        )}
-
-                        {postReposted && (
-                          <span className="rounded-full border border-green-200 bg-green-50 px-2 py-1 text-xs text-green-700 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
-                            {t('postStatus.reposted')}
-                          </span>
-                        )}
-
-                        {postSaved && (
-                          <span className="rounded-full border border-yellow-200 bg-yellow-50 px-2 py-1 text-xs text-yellow-700 dark:border-yellow-800 dark:bg-yellow-950 dark:text-yellow-300">
-                            {t('postStatus.saved')}
-                          </span>
-                        )}
-
-                        {isHighlighted && (
-                          <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-xs text-blue-700 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300">
-                            {t('postStatus.highlighted')}
-                          </span>
-                        )}
-                      </div>
-
-                      {isEditing ? (
-                        <div className="mb-4">
-                          <textarea
-                            value={editContent}
-                            onChange={(e) => setEditContent(e.target.value)}
-                            className="min-h-28 w-full resize-none rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 sm:text-base"
+                  >
+                    {item.type === 'repost' && (
+                      <Link
+                        href={`/u/${reposterUsername}`}
+                        className="mb-4 flex items-center gap-2 text-sm font-medium text-green-600 transition hover:opacity-80 dark:text-green-400"
+                      >
+                        {reposterAvatar ? (
+                          <img
+                            src={reposterAvatar}
+                            alt={reposterName}
+                            className="h-7 w-7 rounded-full border border-green-200 object-cover dark:border-green-800"
                           />
-
-                          <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-                            <button
-                              onClick={() => handleSaveEdit(post.id)}
-                              disabled={savingEdit}
-                              className={`w-full rounded-xl px-4 py-2 font-medium sm:w-auto ${
-                                savingEdit
-                                  ? 'cursor-not-allowed bg-zinc-300 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300'
-                                  : 'bg-black text-white hover:opacity-90 dark:bg-white dark:text-black'
-                              }`}
-                            >
-                              {savingEdit ? t('common.saving') : t('common.save')}
-                            </button>
-
-                            <button
-                              onClick={handleCancelEdit}
-                              className="w-full rounded-xl border border-zinc-300 px-4 py-2 hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800 sm:w-auto"
-                            >
-                              {t('common.cancel')}
-                            </button>
+                        ) : (
+                          <div className="flex h-7 w-7 items-center justify-center rounded-full border border-green-200 bg-green-50 text-xs font-bold text-green-700 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
+                            {reposterName.charAt(0).toUpperCase()}
                           </div>
+                        )}
+
+                        <Repeat2 className="h-4 w-4" />
+
+                        <span className="inline-flex min-w-0 items-center gap-1">
+                          <UserBadges userId={item.repost.user_id} size="sm" max={1} />
+
+                          <span className="truncate">
+                            {item.repost.user_id === userId
+                              ? t('postCard.youReposted')
+                              : t('postCard.repostedBy').replace('{name}', reposterName)}
+                          </span>
+                        </span>
+                      </Link>
+                    )}
+
+                    <div className="mb-3 flex items-start justify-between gap-3">
+                      <Link
+                        href={`/u/${authorUsername}`}
+                        className="flex min-w-0 items-center gap-3 transition hover:opacity-80"
+                      >
+                        {authorAvatar ? (
+                          <img
+                            src={authorAvatar}
+                            alt={authorName}
+                            className="h-12 w-12 shrink-0 rounded-full border border-zinc-300 object-cover dark:border-zinc-700"
+                          />
+                        ) : (
+                          <div className="flex h-12 w-12 items-center justify-center rounded-full border border-zinc-300 bg-zinc-100 text-sm font-semibold text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                            {authorName.charAt(0).toUpperCase()}
+                          </div>
+                        )}
+
+                        <div className="min-w-0">
+                          <p className="inline-flex max-w-full items-center gap-1 font-semibold text-black dark:text-white">
+                            <UserBadges userId={post.user_id} size="sm" max={1} />
+
+                            <span className="min-w-0 break-words">
+                              {authorName}
+                            </span>
+                          </p>
+
+                          <p className="break-all text-sm text-zinc-500">
+                            @{authorUsername}
+                          </p>
                         </div>
-                      ) : (
-                        <>
-                          {shouldShowSensitiveWarning ? (
-                            <SensitiveContent>
-                              {post.content && (
-                                <p className="mb-3 whitespace-pre-wrap break-words text-sm text-zinc-800 dark:text-zinc-200 sm:text-base">
-                                  {post.content}
-                                </p>
-                              )}
+                      </Link>
 
-                              <TranslatePostButton content={post.content} />
-
-                              <LinkPreview content={post.content} />
-
-                              <PostMediaGallery media={postMedia} />
-                            </SensitiveContent>
-                          ) : (
-                            <>
-                              {post.content && (
-                                <p className="mb-3 whitespace-pre-wrap break-words text-sm text-zinc-800 dark:text-zinc-200 sm:text-base">
-                                  {post.content}
-                                </p>
-                              )}
-
-                              <TranslatePostButton content={post.content} />
-
-                              <LinkPreview content={post.content} />
-
-                              <PostMediaGallery media={postMedia} />
-                            </>
-                          )}
-                        </>
-                      )}
-
-                      <PostActions
-                        commentsCount={postComments.length}
-                        likesCount={postLikes.length}
-                        repostsCount={postReposts.length}
-                        liked={userLiked}
-                        reposted={postReposted}
-                        saved={postSaved}
+                      <PostMoreMenu
+                        isOwnPost={isOwnPost}
                         copied={copiedPostId === post.id}
-                        onLike={() => handleToggleLike(post.id)}
-                        onCommentClick={() => handleFocusCommentInput(post.id)}
-                        onRepost={() => handleToggleRepost(post.id)}
-                        onSave={() => handleToggleBookmark(post.id)}
-                        onShare={() => handleCopyPostLink(post.id)}
+                        reported={reportedPostIds.includes(post.id)}
+                        reporting={reportingPostId === post.id}
+                        onCopy={() => handleCopyPostLink(post.id)}
+                        onEdit={() => handleStartEdit(post)}
+                        onDelete={() => handleDeletePost(post.id)}
+                        onReport={() => handleReportPost(post.id, post.user_id)}
                       />
+                    </div>
 
-                      <p className="mb-4 mt-3 text-xs text-zinc-500 dark:text-zinc-600">
-                        {item.type === 'repost'
-                          ? `${t('feed.repostedAt')} ${new Date(item.repost.created_at).toLocaleString(getDateLocale(language))}`
-                          : new Date(post.created_at).toLocaleString(getDateLocale(language))}
+                    {!isOwnPost && !isBlockedRelation && (
+                      <div className="mb-3">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleFollow(post.user_id)}
+                          disabled={followLoadingUserId === post.user_id}
+                          className={`rounded-full px-4 py-2 text-sm font-medium transition ${isFollowingAuthor
+                              ? 'border border-zinc-300 text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800'
+                              : 'bg-black text-white hover:opacity-90 dark:bg-white dark:text-black'
+                            } ${followLoadingUserId === post.user_id
+                              ? 'cursor-not-allowed opacity-60'
+                              : ''
+                            }`}
+                        >
+                          {followLoadingUserId === post.user_id
+                            ? t('common.loading')
+                            : isFollowingAuthor
+                              ? t('postCard.following')
+                              : t('postCard.follow')}
+                        </button>
+                      </div>
+                    )}
+
+                    <div className="mb-3 flex flex-wrap items-center gap-2">
+                      <p className="text-sm text-zinc-500">
+                        {t(getCategoryKey(post.category))}
                       </p>
 
-                      <div className="border-t border-zinc-200 pt-4 dark:border-zinc-800">
-                        <h3 className="mb-3 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
-                          {t('feed.comments')}
-                        </h3>
+                      <span className="rounded-full border border-zinc-200 bg-zinc-100 px-2 py-1 text-xs text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                        {getVisibilityLabel(post.visibility)}
+                      </span>
 
-                        <div className="mb-4 space-y-3">
-                          {postComments.length === 0 && (
-                            <p className="text-sm text-zinc-500">
-                              {t('feed.noComments')}
-                            </p>
-                          )}
+                      {isSensitivePostItem && (
+                        <span className="rounded-full border border-yellow-200 bg-yellow-50 px-2 py-1 text-xs text-yellow-700 dark:border-yellow-800 dark:bg-yellow-950 dark:text-yellow-300">
+                          18+
+                        </span>
+                      )}
 
-                          {postComments.map((comment) => {
-                            const commentAuthorName =
-                              comment.profiles?.display_name ||
-                              comment.profiles?.username ||
-                              t('common.user')
+                      {postReposted && (
+                        <span className="rounded-full border border-green-200 bg-green-50 px-2 py-1 text-xs text-green-700 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
+                          {t('postStatus.reposted')}
+                        </span>
+                      )}
 
-                            const commentAuthorUsername =
-                              comment.profiles?.username || t('common.username')
+                      {postSaved && (
+                        <span className="rounded-full border border-yellow-200 bg-yellow-50 px-2 py-1 text-xs text-yellow-700 dark:border-yellow-800 dark:bg-yellow-950 dark:text-yellow-300">
+                          {t('postStatus.saved')}
+                        </span>
+                      )}
 
-                            const commentAuthorAvatar =
-                              comment.profiles?.avatar_url || ''
+                      {isHighlighted && (
+                        <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-xs text-blue-700 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300">
+                          {t('postStatus.highlighted')}
+                        </span>
+                      )}
+                    </div>
 
-                            const commentIsMine = comment.user_id === userId
-                            const isEditingThisComment = editingCommentId === comment.id
+                    {isEditing ? (
+                      <div className="mb-4">
+                        <textarea
+                          value={editContent}
+                          onChange={(e) => setEditContent(e.target.value)}
+                          className="min-h-28 w-full resize-none rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 sm:text-base"
+                        />
 
-                            const likesForComment = commentLikes.filter(
-                              (like) => like.comment_id === comment.id
-                            )
+                        <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+                          <button
+                            onClick={() => handleSaveEdit(post.id)}
+                            disabled={savingEdit}
+                            className={`w-full rounded-xl px-4 py-2 font-medium sm:w-auto ${savingEdit
+                                ? 'cursor-not-allowed bg-zinc-300 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300'
+                                : 'bg-black text-white hover:opacity-90 dark:bg-white dark:text-black'
+                              }`}
+                          >
+                            {savingEdit ? t('common.saving') : t('common.save')}
+                          </button>
 
-                            const userLikedComment = likesForComment.some(
-                              (like) => like.user_id === userId
-                            )
+                          <button
+                            onClick={handleCancelEdit}
+                            className="w-full rounded-xl border border-zinc-300 px-4 py-2 hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800 sm:w-auto"
+                          >
+                            {t('common.cancel')}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        {shouldShowSensitiveWarning ? (
+                          <SensitiveContent>
+                            {post.content && (
+                              <p className="mb-3 whitespace-pre-wrap break-words text-sm text-zinc-800 dark:text-zinc-200 sm:text-base">
+                                {post.content}
+                              </p>
+                            )}
 
-                            return (
-                              <div
-                                key={comment.id}
-                                className="rounded-xl bg-zinc-50 px-4 py-3 text-sm dark:bg-zinc-800"
-                              >
-                                <div className="flex items-start gap-3">
-                                  <Link
-                                    href={`/u/${commentAuthorUsername}`}
-                                    className="shrink-0 transition hover:opacity-80"
-                                  >
-                                    {commentAuthorAvatar ? (
-                                      <img
-                                        src={commentAuthorAvatar}
-                                        alt={commentAuthorName}
-                                        className="h-10 w-10 rounded-full border border-zinc-300 object-cover dark:border-zinc-700"
-                                      />
-                                    ) : (
-                                      <div className="flex h-10 w-10 items-center justify-center rounded-full border border-zinc-300 bg-zinc-100 text-xs font-semibold text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
-                                        {commentAuthorName.charAt(0).toUpperCase()}
-                                      </div>
-                                    )}
-                                  </Link>
+                            <TranslatePostButton content={post.content} />
 
-                                  <div className="min-w-0 flex-1">
-                                    <div className="flex items-start justify-between gap-2">
-                                      <Link
-                                        href={`/u/${commentAuthorUsername}`}
-                                        className="block min-w-0 transition hover:opacity-80"
-                                      >
-                                        <p className="inline-flex max-w-full items-center gap-1 font-semibold text-black dark:text-white">
-                                          <UserBadges userId={comment.user_id} size="sm" max={1} />
+                            <LinkPreview content={post.content} />
 
-                                          <span className="min-w-0 break-words">
-                                            {commentAuthorName}
-                                          </span>
-                                        </p>
+                            <PostMediaGallery media={postMedia} />
+                          </SensitiveContent>
+                        ) : (
+                          <>
+                            {post.content && (
+                              <p className="mb-3 whitespace-pre-wrap break-words text-sm text-zinc-800 dark:text-zinc-200 sm:text-base">
+                                {post.content}
+                              </p>
+                            )}
 
-                                        <p className="break-all text-xs text-zinc-500">
-                                          @{commentAuthorUsername}
-                                        </p>
-                                      </Link>
+                            <TranslatePostButton content={post.content} />
 
-                                      {commentIsMine && (
-                                        <div className="relative shrink-0">
-                                          <button
-                                            type="button"
-                                            onClick={() =>
-                                              setOpenCommentMenuId((current) =>
-                                                current === comment.id ? null : comment.id
-                                              )
-                                            }
-                                            className="flex h-8 w-8 items-center justify-center rounded-full text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-700"
-                                            aria-label={t('feed.commentOptions')}
-                                          >
-                                            <MoreHorizontal className="h-4 w-4" />
-                                          </button>
+                            <LinkPreview content={post.content} />
 
-                                          {openCommentMenuId === comment.id && (
-                                            <>
+                            <PostMediaGallery media={postMedia} />
+                          </>
+                        )}
+                      </>
+                    )}
+
+                    <PostActions
+                      commentsCount={postComments.length}
+                      likesCount={postLikes.length}
+                      repostsCount={postReposts.length}
+                      liked={userLiked}
+                      reposted={postReposted}
+                      saved={postSaved}
+                      copied={copiedPostId === post.id}
+                      onLike={() => handleToggleLike(post.id)}
+                      onCommentClick={() => handleFocusCommentInput(post.id)}
+                      onRepost={() => handleToggleRepost(post.id)}
+                      onSave={() => handleToggleBookmark(post.id)}
+                      onShare={() => handleCopyPostLink(post.id)}
+                    />
+
+                    <p className="mb-4 mt-3 text-xs text-zinc-500 dark:text-zinc-600">
+                      {item.type === 'repost'
+                        ? `${t('feed.repostedAt')} ${new Date(item.repost.created_at).toLocaleString(getDateLocale(language))}`
+                        : new Date(post.created_at).toLocaleString(getDateLocale(language))}
+                    </p>
+
+                    <div className="border-t border-zinc-200 pt-4 dark:border-zinc-800">
+                      <h3 className="mb-3 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+                        {t('feed.comments')}
+                      </h3>
+
+                      <div className="mb-4 space-y-3">
+                        {postComments.length === 0 && (
+                          <p className="text-sm text-zinc-500">
+                            {t('feed.noComments')}
+                          </p>
+                        )}
+
+                        {postComments.map((comment) => {
+                          const commentAuthorName =
+                            comment.profiles?.display_name ||
+                            comment.profiles?.username ||
+                            t('common.user')
+
+                          const commentAuthorUsername =
+                            comment.profiles?.username || t('common.username')
+
+                          const commentAuthorAvatar =
+                            comment.profiles?.avatar_url || ''
+
+                          const commentIsMine = comment.user_id === userId
+                          const isEditingThisComment = editingCommentId === comment.id
+
+                          const likesForComment = commentLikes.filter(
+                            (like) => like.comment_id === comment.id
+                          )
+
+                          const userLikedComment = likesForComment.some(
+                            (like) => like.user_id === userId
+                          )
+
+                          return (
+                            <div
+                              key={comment.id}
+                              className="rounded-xl bg-zinc-50 px-4 py-3 text-sm dark:bg-zinc-800"
+                            >
+                              <div className="flex items-start gap-3">
+                                <Link
+                                  href={`/u/${commentAuthorUsername}`}
+                                  className="shrink-0 transition hover:opacity-80"
+                                >
+                                  {commentAuthorAvatar ? (
+                                    <img
+                                      src={commentAuthorAvatar}
+                                      alt={commentAuthorName}
+                                      className="h-10 w-10 rounded-full border border-zinc-300 object-cover dark:border-zinc-700"
+                                    />
+                                  ) : (
+                                    <div className="flex h-10 w-10 items-center justify-center rounded-full border border-zinc-300 bg-zinc-100 text-xs font-semibold text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
+                                      {commentAuthorName.charAt(0).toUpperCase()}
+                                    </div>
+                                  )}
+                                </Link>
+
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-start justify-between gap-2">
+                                    <Link
+                                      href={`/u/${commentAuthorUsername}`}
+                                      className="block min-w-0 transition hover:opacity-80"
+                                    >
+                                      <p className="inline-flex max-w-full items-center gap-1 font-semibold text-black dark:text-white">
+                                        <UserBadges userId={comment.user_id} size="sm" max={1} />
+
+                                        <span className="min-w-0 break-words">
+                                          {commentAuthorName}
+                                        </span>
+                                      </p>
+
+                                      <p className="break-all text-xs text-zinc-500">
+                                        @{commentAuthorUsername}
+                                      </p>
+                                    </Link>
+
+                                    {commentIsMine && (
+                                      <div className="relative shrink-0">
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            setOpenCommentMenuId((current) =>
+                                              current === comment.id ? null : comment.id
+                                            )
+                                          }
+                                          className="flex h-8 w-8 items-center justify-center rounded-full text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                                          aria-label={t('feed.commentOptions')}
+                                        >
+                                          <MoreHorizontal className="h-4 w-4" />
+                                        </button>
+
+                                        {openCommentMenuId === comment.id && (
+                                          <>
+                                            <button
+                                              type="button"
+                                              onClick={() => setOpenCommentMenuId(null)}
+                                              className="fixed inset-0 z-40 cursor-default"
+                                              aria-label={t('common.closeMenu')}
+                                            />
+
+                                            <div className="absolute right-0 top-9 z-50 w-52 overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-xl dark:border-zinc-700 dark:bg-zinc-950">
                                               <button
                                                 type="button"
-                                                onClick={() => setOpenCommentMenuId(null)}
-                                                className="fixed inset-0 z-40 cursor-default"
-                                                aria-label={t('common.closeMenu')}
-                                              />
+                                                onClick={() => handleStartEditComment(comment)}
+                                                className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-zinc-800 hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-900"
+                                              >
+                                                <Edit3 className="h-4 w-4" />
+                                                {t('feed.editComment')}
+                                              </button>
 
-                                              <div className="absolute right-0 top-9 z-50 w-52 overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-xl dark:border-zinc-700 dark:bg-zinc-950">
-                                                <button
-                                                  type="button"
-                                                  onClick={() => handleStartEditComment(comment)}
-                                                  className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-zinc-800 hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-900"
-                                                >
-                                                  <Edit3 className="h-4 w-4" />
-                                                  {t('feed.editComment')}
-                                                </button>
-
-                                                <button
-                                                  type="button"
-                                                  onClick={() => handleDeleteComment(comment.id)}
-                                                  className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30"
-                                                >
-                                                  <Trash2 className="h-4 w-4" />
-                                                  {t('feed.deleteComment')}
-                                                </button>
-                                              </div>
-                                            </>
-                                          )}
-                                        </div>
-                                      )}
-                                    </div>
-
-                                    {isEditingThisComment ? (
-                                      <div className="mt-3">
-                                        <textarea
-                                          value={editCommentContent}
-                                          onChange={(e) => setEditCommentContent(e.target.value)}
-                                          className="min-h-24 w-full resize-none rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white"
-                                        />
-
-                                        <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-                                          <button
-                                            type="button"
-                                            onClick={() => handleSaveCommentEdit(comment.id)}
-                                            disabled={savingCommentId === comment.id}
-                                            className="rounded-xl bg-black px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-60 dark:bg-white dark:text-black"
-                                          >
-                                            {savingCommentId === comment.id
-                                              ? t('common.saving')
-                                              : t('common.save')}
-                                          </button>
-
-                                          <button
-                                            type="button"
-                                            onClick={handleCancelEditComment}
-                                            className="rounded-xl border border-zinc-300 px-4 py-2 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900"
-                                          >
-                                            {t('common.cancel')}
-                                          </button>
-                                        </div>
+                                              <button
+                                                type="button"
+                                                onClick={() => handleDeleteComment(comment.id)}
+                                                className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30"
+                                              >
+                                                <Trash2 className="h-4 w-4" />
+                                                {t('feed.deleteComment')}
+                                              </button>
+                                            </div>
+                                          </>
+                                        )}
                                       </div>
-                                    ) : (
-                                      <p className="mt-2 break-words text-zinc-800 dark:text-zinc-200">
-                                        {comment.content}
-                                      </p>
                                     )}
+                                  </div>
 
-                                    <div className="mt-2 flex items-center gap-3">
-                                      <button
-                                        type="button"
-                                        onClick={() => handleToggleCommentLike(comment.id)}
-                                        className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium transition ${
-                                          userLikedComment
-                                            ? 'bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400'
-                                            : 'text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-700'
-                                        }`}
-                                      >
-                                        <span>{userLikedComment ? '♥' : '♡'}</span>
-                                        <span>{likesForComment.length}</span>
-                                      </button>
+                                  {isEditingThisComment ? (
+                                    <div className="mt-3">
+                                      <textarea
+                                        value={editCommentContent}
+                                        onChange={(e) => setEditCommentContent(e.target.value)}
+                                        className="min-h-24 w-full resize-none rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white"
+                                      />
 
-                                      <p className="text-xs text-zinc-500">
-                                        {new Date(comment.created_at).toLocaleString(getDateLocale(language))}
-                                      </p>
+                                      <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleSaveCommentEdit(comment.id)}
+                                          disabled={savingCommentId === comment.id}
+                                          className="rounded-xl bg-black px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-60 dark:bg-white dark:text-black"
+                                        >
+                                          {savingCommentId === comment.id
+                                            ? t('common.saving')
+                                            : t('common.save')}
+                                        </button>
+
+                                        <button
+                                          type="button"
+                                          onClick={handleCancelEditComment}
+                                          className="rounded-xl border border-zinc-300 px-4 py-2 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900"
+                                        >
+                                          {t('common.cancel')}
+                                        </button>
+                                      </div>
                                     </div>
+                                  ) : (
+                                    <p className="mt-2 break-words text-zinc-800 dark:text-zinc-200">
+                                      {comment.content}
+                                    </p>
+                                  )}
+
+                                  <div className="mt-2 flex items-center gap-3">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleToggleCommentLike(comment.id)}
+                                      className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium transition ${userLikedComment
+                                          ? 'bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400'
+                                          : 'text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-700'
+                                        }`}
+                                    >
+                                      <span>{userLikedComment ? '♥' : '♡'}</span>
+                                      <span>{likesForComment.length}</span>
+                                    </button>
+
+                                    <p className="text-xs text-zinc-500">
+                                      {new Date(comment.created_at).toLocaleString(getDateLocale(language))}
+                                    </p>
                                   </div>
                                 </div>
                               </div>
-                            )
-                          })}
-                        </div>
-
-                        <div className="flex flex-col gap-3 sm:flex-row">
-                          <input
-                            id={`comment-input-${post.id}`}
-                            type="text"
-                            value={commentInputs[post.id] || ''}
-                            onChange={(e) =>
-                              setCommentInputs((prev) => ({
-                                ...prev,
-                                [post.id]: e.target.value,
-                              }))
-                            }
-                            placeholder={t('feed.commentPlaceholder')}
-                            className="flex-1 rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 sm:text-base"
-                          />
-
-                          <button
-                            onClick={() => handleCreateComment(post.id)}
-                            className="w-full rounded-xl bg-black px-5 py-3 font-medium text-white hover:opacity-90 dark:bg-zinc-100 dark:text-black sm:w-auto"
-                          >
-                            {t('feed.comment')}
-                          </button>
-                        </div>
+                            </div>
+                          )
+                        })}
                       </div>
-                    </article>
-                  )
-                })}
-              </div>
+
+                      <div className="flex flex-col gap-3 sm:flex-row">
+                        <input
+                          id={`comment-input-${post.id}`}
+                          type="text"
+                          value={commentInputs[post.id] || ''}
+                          onChange={(e) =>
+                            setCommentInputs((prev) => ({
+                              ...prev,
+                              [post.id]: e.target.value,
+                            }))
+                          }
+                          placeholder={t('feed.commentPlaceholder')}
+                          className="flex-1 rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 sm:text-base"
+                        />
+
+                        <button
+                          onClick={() => handleCreateComment(post.id)}
+                          className="w-full rounded-xl bg-black px-5 py-3 font-medium text-white hover:opacity-90 dark:bg-zinc-100 dark:text-black sm:w-auto"
+                        >
+                          {t('feed.comment')}
+                        </button>
+                      </div>
+                    </div>
+                  </article>
+                )
+              })}
+            </div>
 
           </div>
 
@@ -2310,27 +2310,60 @@ function FeedContent() {
                     </span>
                   </Link>
 
-                  <a
-                    href="https://link.mercadopago.com.br/entreuslab"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="block rounded-2xl border border-green-100 bg-green-50 p-4 transition hover:-translate-y-0.5 hover:shadow-md dark:border-green-900/60 dark:bg-green-950/20"
+                  <Link
+                    href="/profile"
+                    className="block rounded-2xl border border-yellow-100 bg-yellow-50 p-4 transition hover:-translate-y-0.5 hover:shadow-md dark:border-yellow-900/60 dark:bg-yellow-950/20"
                   >
+                    <div className="mb-3 flex items-center gap-2 text-yellow-700 dark:text-yellow-300">
+                      <Award className="h-5 w-5" />
+                      <h3 className="font-bold">
+                        Selos EntreUS
+                      </h3>
+                    </div>
+
+                    <p className="text-sm leading-6 text-yellow-900/80 dark:text-yellow-100/80">
+                      Ganhe destaque na comunidade com selos especiais, como Engajador, VIP Premium e Ancião.
+                    </p>
+
+                    <span className="mt-4 inline-flex rounded-full bg-yellow-500 px-4 py-2 text-sm font-bold text-black">
+                      Ver meus selos
+                    </span>
+                  </Link>
+
+                  <div className="rounded-2xl border border-green-100 bg-green-50 p-4 dark:border-green-900/60 dark:bg-green-950/20">
                     <div className="mb-3 flex items-center gap-2 text-green-700 dark:text-green-300">
                       <Heart className="h-5 w-5" />
                       <h3 className="font-bold">
-                        {localTexts.mural.donationTitle}
+                        Apoie o projeto
                       </h3>
                     </div>
 
                     <p className="text-sm leading-6 text-green-900/80 dark:text-green-100/80">
-                      {localTexts.mural.donationDescription}
+                      Ajude o EntreUS Lab a continuar evoluindo com ferramentas gratuitas. Se puder, prefira Pix Nubank, pois não tem taxa para o projeto.
                     </p>
 
-                    <span className="mt-4 inline-flex rounded-full bg-green-600 px-4 py-2 text-sm font-bold text-white">
-                      {localTexts.mural.donationButton}
-                    </span>
-                  </a>
+                    <div className="mt-4 space-y-3">
+                      <a
+                        href="https://nubank.com.br/cobrar/u2kum/69fca421-184d-459c-a125-f760fc56c264"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center justify-center gap-2 rounded-full bg-green-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-green-700"
+                      >
+                        <Landmark className="h-4 w-4" />
+                        Pix Nubank — sem taxa
+                      </a>
+
+                      <a
+                        href="https://link.mercadopago.com.br/entreuslab"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center justify-center gap-2 rounded-full border border-green-300 bg-white px-4 py-2 text-sm font-bold text-green-700 transition hover:bg-green-100 dark:border-green-800 dark:bg-green-950 dark:text-green-300 dark:hover:bg-green-900"
+                      >
+                        <CreditCard className="h-4 w-4" />
+                        Mercado Pago — pode ter taxa
+                      </a>
+                    </div>
+                  </div>
                 </div>
               </div>
 
