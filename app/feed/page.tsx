@@ -12,17 +12,18 @@ import UserBadges from '../components/UserBadges'
 import TranslatePostButton from '../components/TranslatePostButton'
 import Link from 'next/link'
 import {
-  Beaker,
-  Bell,
   Edit3,
-  Heart,
-  ImageIcon,
-  MessageCircle,
   MoreHorizontal,
-  Newspaper,
   Repeat2,
-  Sparkles,
   Trash2,
+  ImageIcon,
+  Newspaper,
+  Search,
+  FlaskConical,
+  Heart,
+  Sparkles,
+  MessageCircle,
+  Play,
 } from 'lucide-react'
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -121,29 +122,38 @@ type Repost = {
   profiles: ProfileSummary | null
 }
 
+type MediaGalleryItem = {
+  key: string
+  post: Post
+  media: PostMedia
+  authorName: string
+  authorUsername: string
+  totalMedia: number
+}
+
 type FeedTexts = {
   tabs: {
     posts: string
     media: string
   }
   mural: {
-    title: string
-    subtitle: string
+    searchTitle: string
+    searchPlaceholder: string
+    searchHelper: string
     labTitle: string
     labDescription: string
     labButton: string
     donationTitle: string
     donationDescription: string
     donationButton: string
-    statsTitle: string
-    statsPosts: string
-    statsMedia: string
-    statsInteractions: string
     newsTitle: string
     newsOne: string
     newsTwo: string
     newsThree: string
     emptyMedia: string
+    noSearchResults: string
+    openPost: string
+    galleryMediaCount: string
   }
 }
 
@@ -154,23 +164,23 @@ const feedTexts: Record<string, FeedTexts> = {
       media: 'Mídia',
     },
     mural: {
-      title: 'Mural EntreUS',
-      subtitle: 'Novidades, ferramentas e avisos importantes da comunidade.',
+      searchTitle: 'Buscar no feed',
+      searchPlaceholder: 'Buscar posts, pessoas ou categorias...',
+      searchHelper: 'Use a busca para filtrar rapidamente o conteúdo do feed.',
       labTitle: 'EntreUS Lab',
       labDescription: 'Ferramentas criativas para gerar pôsteres, materiais e recursos digitais.',
       labButton: 'Abrir laboratório',
       donationTitle: 'Apoie o projeto',
       donationDescription: 'Ajude o EntreUS Lab a continuar evoluindo com ferramentas gratuitas.',
       donationButton: 'Doar pelo Mercado Pago',
-      statsTitle: 'Resumo do feed',
-      statsPosts: 'posts',
-      statsMedia: 'com mídia',
-      statsInteractions: 'interações',
       newsTitle: 'O que vem por aí',
       newsOne: 'Mural com avisos e destaques da comunidade.',
-      newsTwo: 'Área de mídia para fotos e vídeos.',
-      newsThree: 'Novas ferramentas criativas no EntreUS Lab.',
-      emptyMedia: 'Ainda não há posts com imagem ou vídeo por aqui.',
+      newsTwo: 'Galeria de mídia para fotos e vídeos do feed.',
+      newsThree: 'Novas ferramentas criativas dentro do EntreUS Lab.',
+      emptyMedia: 'Ainda não há mídia para mostrar nesta galeria.',
+      noSearchResults: 'Nenhum resultado encontrado para essa busca.',
+      openPost: 'Abrir post',
+      galleryMediaCount: 'mídias',
     },
   },
   en: {
@@ -179,23 +189,23 @@ const feedTexts: Record<string, FeedTexts> = {
       media: 'Media',
     },
     mural: {
-      title: 'EntreUS Board',
-      subtitle: 'Community news, tools and important updates.',
+      searchTitle: 'Search feed',
+      searchPlaceholder: 'Search posts, people or categories...',
+      searchHelper: 'Use search to quickly filter feed content.',
       labTitle: 'EntreUS Lab',
-      labDescription: 'Creative tools for posters, materials and digital resources.',
+      labDescription: 'Creative tools to generate posters, materials and digital resources.',
       labButton: 'Open lab',
       donationTitle: 'Support the project',
-      donationDescription: 'Help EntreUS Lab keep evolving with free creative tools.',
+      donationDescription: 'Help EntreUS Lab continue evolving with free tools.',
       donationButton: 'Donate with Mercado Pago',
-      statsTitle: 'Feed summary',
-      statsPosts: 'posts',
-      statsMedia: 'with media',
-      statsInteractions: 'interactions',
       newsTitle: 'Coming next',
-      newsOne: 'A board with community updates and highlights.',
-      newsTwo: 'A media area for photos and videos.',
+      newsOne: 'Board with community notices and highlights.',
+      newsTwo: 'Media gallery for photos and videos from the feed.',
       newsThree: 'New creative tools inside EntreUS Lab.',
-      emptyMedia: 'There are no posts with images or videos here yet.',
+      emptyMedia: 'There is no media to display in this gallery yet.',
+      noSearchResults: 'No results found for this search.',
+      openPost: 'Open post',
+      galleryMediaCount: 'media',
     },
   },
   fr: {
@@ -204,23 +214,23 @@ const feedTexts: Record<string, FeedTexts> = {
       media: 'Média',
     },
     mural: {
-      title: 'Mur EntreUS',
-      subtitle: 'Nouveautés, outils et avis importants de la communauté.',
+      searchTitle: 'Rechercher dans le fil',
+      searchPlaceholder: 'Rechercher des posts, personnes ou catégories...',
+      searchHelper: 'Utilisez la recherche pour filtrer rapidement le contenu du fil.',
       labTitle: 'EntreUS Lab',
-      labDescription: 'Outils créatifs pour affiches, contenus et ressources numériques.',
-      labButton: 'Ouvrir le lab',
+      labDescription: 'Outils créatifs pour générer des affiches, contenus et ressources numériques.',
+      labButton: 'Ouvrir le labo',
       donationTitle: 'Soutenir le projet',
-      donationDescription: 'Aidez EntreUS Lab à évoluer avec des outils gratuits.',
+      donationDescription: 'Aidez EntreUS Lab à continuer d’évoluer avec des outils gratuits.',
       donationButton: 'Faire un don',
-      statsTitle: 'Résumé du fil',
-      statsPosts: 'posts',
-      statsMedia: 'avec média',
-      statsInteractions: 'interactions',
       newsTitle: 'À venir',
-      newsOne: 'Un mur avec les avis et temps forts de la communauté.',
-      newsTwo: 'Une zone média pour photos et vidéos.',
-      newsThree: 'De nouveaux outils créatifs dans EntreUS Lab.',
-      emptyMedia: 'Il n’y a pas encore de posts avec image ou vidéo ici.',
+      newsOne: 'Mur avec avis et temps forts de la communauté.',
+      newsTwo: 'Galerie média pour photos et vidéos du fil.',
+      newsThree: 'Nouveaux outils créatifs dans EntreUS Lab.',
+      emptyMedia: 'Aucun média à afficher dans cette galerie pour le moment.',
+      noSearchResults: 'Aucun résultat trouvé pour cette recherche.',
+      openPost: 'Ouvrir le post',
+      galleryMediaCount: 'médias',
     },
   },
   id: {
@@ -229,23 +239,23 @@ const feedTexts: Record<string, FeedTexts> = {
       media: 'Media',
     },
     mural: {
-      title: 'Papan EntreUS',
-      subtitle: 'Berita, alat, dan pengumuman penting komunitas.',
+      searchTitle: 'Cari di feed',
+      searchPlaceholder: 'Cari postingan, orang, atau kategori...',
+      searchHelper: 'Gunakan pencarian untuk memfilter konten feed dengan cepat.',
       labTitle: 'EntreUS Lab',
-      labDescription: 'Alat kreatif untuk poster, materi, dan sumber daya digital.',
-      labButton: 'Buka lab',
+      labDescription: 'Alat kreatif untuk membuat poster, materi, dan sumber daya digital.',
+      labButton: 'Buka laboratorium',
       donationTitle: 'Dukung proyek',
       donationDescription: 'Bantu EntreUS Lab terus berkembang dengan alat gratis.',
       donationButton: 'Donasi Mercado Pago',
-      statsTitle: 'Ringkasan feed',
-      statsPosts: 'postingan',
-      statsMedia: 'dengan media',
-      statsInteractions: 'interaksi',
       newsTitle: 'Segera hadir',
       newsOne: 'Papan pengumuman dan sorotan komunitas.',
-      newsTwo: 'Area media untuk foto dan video.',
+      newsTwo: 'Galeri media untuk foto dan video dari feed.',
       newsThree: 'Alat kreatif baru di EntreUS Lab.',
-      emptyMedia: 'Belum ada postingan dengan gambar atau video di sini.',
+      emptyMedia: 'Belum ada media untuk ditampilkan di galeri ini.',
+      noSearchResults: 'Tidak ada hasil untuk pencarian ini.',
+      openPost: 'Buka postingan',
+      galleryMediaCount: 'media',
     },
   },
   ja: {
@@ -254,23 +264,23 @@ const feedTexts: Record<string, FeedTexts> = {
       media: 'メディア',
     },
     mural: {
-      title: 'EntreUS掲示板',
-      subtitle: 'コミュニティのお知らせ、ツール、重要な更新。',
+      searchTitle: 'フィードを検索',
+      searchPlaceholder: '投稿、人、カテゴリを検索...',
+      searchHelper: '検索を使ってフィード内容をすばやく絞り込みます。',
       labTitle: 'EntreUS Lab',
       labDescription: 'ポスターやデジタル素材を作るためのクリエイティブツール。',
       labButton: 'ラボを開く',
       donationTitle: 'プロジェクトを応援',
-      donationDescription: '無料ツールの開発を続けるためにEntreUS Labを支援してください。',
+      donationDescription: 'EntreUS Lab が無料ツールで進化し続けられるよう支援してください。',
       donationButton: 'Mercado Pagoで寄付',
-      statsTitle: 'フィード概要',
-      statsPosts: '投稿',
-      statsMedia: 'メディア付き',
-      statsInteractions: '反応',
       newsTitle: '今後の予定',
-      newsOne: 'コミュニティのお知らせと注目情報。',
-      newsTwo: '写真と動画のメディアエリア。',
-      newsThree: 'EntreUS Labの新しいクリエイティブツール。',
-      emptyMedia: '画像または動画付きの投稿はまだありません。',
+      newsOne: 'コミュニティのお知らせや注目情報。',
+      newsTwo: 'フィードの写真や動画のメディアギャラリー。',
+      newsThree: 'EntreUS Lab の新しいクリエイティブツール。',
+      emptyMedia: 'このギャラリーに表示するメディアはまだありません。',
+      noSearchResults: 'この検索に一致する結果はありません。',
+      openPost: '投稿を開く',
+      galleryMediaCount: '件のメディア',
     },
   },
   zh: {
@@ -279,23 +289,23 @@ const feedTexts: Record<string, FeedTexts> = {
       media: '媒体',
     },
     mural: {
-      title: 'EntreUS公告栏',
-      subtitle: '社区新闻、工具和重要通知。',
+      searchTitle: '搜索动态',
+      searchPlaceholder: '搜索帖子、人物或分类...',
+      searchHelper: '使用搜索快速筛选动态内容。',
       labTitle: 'EntreUS Lab',
-      labDescription: '用于海报、素材和数字资源的创意工具。',
+      labDescription: '用于生成海报、素材和数字资源的创意工具。',
       labButton: '打开实验室',
       donationTitle: '支持项目',
-      donationDescription: '帮助EntreUS Lab继续提供免费创意工具。',
-      donationButton: '通过Mercado Pago捐赠',
-      statsTitle: '动态摘要',
-      statsPosts: '帖子',
-      statsMedia: '含媒体',
-      statsInteractions: '互动',
+      donationDescription: '帮助 EntreUS Lab 持续以免费工具不断进化。',
+      donationButton: '通过 Mercado Pago 捐赠',
       newsTitle: '即将推出',
-      newsOne: '社区通知和精选内容公告栏。',
-      newsTwo: '照片和视频媒体专区。',
-      newsThree: 'EntreUS Lab中的新创意工具。',
-      emptyMedia: '这里还没有带图片或视频的帖子。',
+      newsOne: '社区公告和亮点内容墙。',
+      newsTwo: '用于展示动态中照片和视频的媒体画廊。',
+      newsThree: 'EntreUS Lab 中的新创意工具。',
+      emptyMedia: '此画廊中还没有可显示的媒体。',
+      noSearchResults: '没有找到与此搜索相关的结果。',
+      openPost: '打开帖子',
+      galleryMediaCount: '个媒体',
     },
   },
 }
@@ -324,18 +334,18 @@ function getCategoryKey(value: string | null) {
 
 type FeedItem =
   | {
-    type: 'post'
-    id: string
-    created_at: string
-    post: Post
-  }
+      type: 'post'
+      id: string
+      created_at: string
+      post: Post
+    }
   | {
-    type: 'repost'
-    id: string
-    created_at: string
-    post: Post
-    repost: Repost
-  }
+      type: 'repost'
+      id: string
+      created_at: string
+      post: Post
+      repost: Repost
+    }
 
 function FeedContent() {
   const router = useRouter()
@@ -360,6 +370,7 @@ function FeedContent() {
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([])
   const [reposts, setReposts] = useState<Repost[]>([])
   const [activeFeedTab, setActiveFeedTab] = useState<FeedTab>('posts')
+  const [feedSearch, setFeedSearch] = useState('')
 
   const likeActionInProgressRef = useRef<Set<string>>(new Set())
 
@@ -412,11 +423,11 @@ function FeedContent() {
       const loadedCurrentProfile: CurrentProfile | null =
         !profileError && profileData
           ? {
-            username: profileData.username,
-            display_name: profileData.display_name,
-            avatar_url: profileData.avatar_url,
-            show_sensitive_content: profileData.show_sensitive_content || false,
-          }
+              username: profileData.username,
+              display_name: profileData.display_name,
+              avatar_url: profileData.avatar_url,
+              show_sensitive_content: profileData.show_sensitive_content || false,
+            }
           : null
 
       if (loadedCurrentProfile) {
@@ -449,7 +460,7 @@ function FeedContent() {
   }, [router])
 
   useEffect(() => {
-    if (!highlightedPostId || posts.length === 0) return
+    if (!highlightedPostId || posts.length === 0 || activeFeedTab !== 'posts') return
 
     const timer = setTimeout(() => {
       const element = document.getElementById(`post-${highlightedPostId}`)
@@ -460,7 +471,7 @@ function FeedContent() {
     }, 300)
 
     return () => clearTimeout(timer)
-  }, [highlightedPostId, posts])
+  }, [highlightedPostId, posts, activeFeedTab])
 
   async function loadUnreadNotificationsCount(currentUserId: string = userId) {
     if (!currentUserId) return
@@ -981,10 +992,10 @@ function FeedContent() {
       created_at: new Date().toISOString(),
       profiles: currentProfile
         ? {
-          username: currentProfile.username || t('common.username'),
-          display_name: currentProfile.display_name,
-          avatar_url: currentProfile.avatar_url,
-        }
+            username: currentProfile.username || t('common.username'),
+            display_name: currentProfile.display_name,
+            avatar_url: currentProfile.avatar_url,
+          }
         : null,
     }
 
@@ -1623,7 +1634,7 @@ function FeedContent() {
     return map
   }, [follows, userId])
 
-  const feedItems = useMemo<FeedItem[]>((() => {
+  const feedItems = useMemo<FeedItem[]>(() => {
     const postMap = new Map<string, Post>()
 
     for (const post of posts) {
@@ -1656,15 +1667,72 @@ function FeedContent() {
     return [...postItems, ...repostItems].sort((a, b) => {
       return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     })
-  }) as () => FeedItem[], [posts, reposts])
+  }, [posts, reposts])
 
-  const mediaFeedItems = useMemo(() => {
-    return feedItems.filter((item) => postHasMedia(item.post))
-  }, [feedItems])
+  const normalizedSearch = feedSearch.trim().toLowerCase()
 
-  const visibleFeedItems = activeFeedTab === 'media' ? mediaFeedItems : feedItems
+  function matchesPostSearch(post: Post) {
+    if (!normalizedSearch) return true
 
-  const totalInteractions = likes.length + comments.length + reposts.length
+    const haystack = [
+      post.content || '',
+      post.category || '',
+      post.profiles?.display_name || '',
+      post.profiles?.username || '',
+    ]
+      .join(' ')
+      .toLowerCase()
+
+    return haystack.includes(normalizedSearch)
+  }
+
+  const filteredFeedItems = useMemo(() => {
+    if (!normalizedSearch) return feedItems
+
+    return feedItems.filter((item) => {
+      const postMatch = matchesPostSearch(item.post)
+
+      if (postMatch) return true
+
+      if (item.type === 'repost') {
+        const repostHaystack = [
+          item.repost.profiles?.display_name || '',
+          item.repost.profiles?.username || '',
+        ]
+          .join(' ')
+          .toLowerCase()
+
+        return repostHaystack.includes(normalizedSearch)
+      }
+
+      return false
+    })
+  }, [feedItems, normalizedSearch])
+
+  const filteredPostsWithMedia = useMemo(() => {
+    return posts.filter((post) => postHasMedia(post)).filter((post) => matchesPostSearch(post))
+  }, [posts, normalizedSearch])
+
+  const mediaGalleryItems = useMemo<MediaGalleryItem[]>(() => {
+    return filteredPostsWithMedia.flatMap((post) => {
+      const media = getPostMedia(post)
+      const authorName =
+        post.profiles?.display_name || post.profiles?.username || t('common.user')
+      const authorUsername = post.profiles?.username || t('common.username')
+
+      return media.map((mediaItem) => ({
+        key: `${post.id}-${mediaItem.id}`,
+        post,
+        media: mediaItem,
+        authorName,
+        authorUsername,
+        totalMedia: media.length,
+      }))
+    })
+  }, [filteredPostsWithMedia, t])
+
+  const visibleFeedItems = filteredFeedItems
+  const hasSearch = normalizedSearch.length > 0
 
   if (loading) {
     return (
@@ -1699,7 +1767,7 @@ function FeedContent() {
       <section className="w-full overflow-x-hidden px-4 py-20 pb-24 sm:px-6 lg:ml-[270px] lg:w-[calc(100%-270px)] lg:px-8 lg:py-8">
         <div className="mx-auto grid w-full max-w-6xl grid-cols-1 gap-6 xl:grid-cols-[minmax(0,42rem)_22rem]">
           <div className="min-w-0">
-            <div className="mb-4 sm:mb-6 text-sm text-zinc-500 dark:text-zinc-400 break-all">
+            <div className="mb-4 break-all text-sm text-zinc-500 dark:text-zinc-400 sm:mb-6">
               {t('feed.loggedAs')}{' '}
               <span className="text-black dark:text-white">
                 {email}
@@ -1736,10 +1804,11 @@ function FeedContent() {
                 <button
                   type="button"
                   onClick={() => setActiveFeedTab('posts')}
-                  className={`relative flex items-center justify-center gap-2 px-4 py-4 text-sm font-bold transition ${activeFeedTab === 'posts'
+                  className={`relative flex items-center justify-center gap-2 px-4 py-4 text-sm font-bold transition ${
+                    activeFeedTab === 'posts'
                       ? 'text-zinc-950 dark:text-white'
                       : 'text-zinc-500 hover:bg-zinc-50 dark:text-zinc-400 dark:hover:bg-zinc-800/60'
-                    }`}
+                  }`}
                 >
                   <Newspaper className="h-4 w-4" />
                   <span>{localTexts.tabs.posts}</span>
@@ -1755,15 +1824,16 @@ function FeedContent() {
                 <button
                   type="button"
                   onClick={() => setActiveFeedTab('media')}
-                  className={`relative flex items-center justify-center gap-2 border-l border-zinc-200 px-4 py-4 text-sm font-bold transition dark:border-zinc-800 ${activeFeedTab === 'media'
+                  className={`relative flex items-center justify-center gap-2 border-l border-zinc-200 px-4 py-4 text-sm font-bold transition dark:border-zinc-800 ${
+                    activeFeedTab === 'media'
                       ? 'text-zinc-950 dark:text-white'
                       : 'text-zinc-500 hover:bg-zinc-50 dark:text-zinc-400 dark:hover:bg-zinc-800/60'
-                    }`}
+                  }`}
                 >
                   <ImageIcon className="h-4 w-4" />
                   <span>{localTexts.tabs.media}</span>
                   <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
-                    {mediaFeedItems.length}
+                    {mediaGalleryItems.length}
                   </span>
 
                   {activeFeedTab === 'media' && (
@@ -1773,528 +1843,636 @@ function FeedContent() {
               </div>
             </div>
 
-            <div className="space-y-4 sm:space-y-5">
-              {visibleFeedItems.length === 0 && (
-                <div className="bg-white dark:bg-zinc-900 rounded-2xl p-4 sm:p-6 border border-zinc-200 dark:border-zinc-800 text-zinc-500 dark:text-zinc-400">
-                  {activeFeedTab === 'media' ? localTexts.mural.emptyMedia : t('feed.noPosts')}
-                </div>
-              )}
+            {activeFeedTab === 'posts' ? (
+              <div className="space-y-4 sm:space-y-5">
+                {visibleFeedItems.length === 0 && (
+                  <div className="rounded-2xl border border-zinc-200 bg-white p-4 text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 sm:p-6">
+                    {hasSearch ? localTexts.mural.noSearchResults : t('feed.noPosts')}
+                  </div>
+                )}
 
-              {visibleFeedItems.map((item) => {
-                const post = item.post
+                {visibleFeedItems.map((item) => {
+                  const post = item.post
 
-                const postComments = comments.filter((comment) => comment.post_id === post.id)
-                const postLikes = likes.filter((like) => like.post_id === post.id)
-                const postReposts = reposts.filter((repost) => repost.post_id === post.id)
+                  const postComments = comments.filter((comment) => comment.post_id === post.id)
+                  const postLikes = likes.filter((like) => like.post_id === post.id)
+                  const postReposts = reposts.filter((repost) => repost.post_id === post.id)
 
-                const userLiked = likes.some(
-                  (like) => like.post_id === post.id && like.user_id === userId
-                )
+                  const userLiked = likes.some(
+                    (like) => like.post_id === post.id && like.user_id === userId
+                  )
 
-                const postSaved = bookmarks.some(
-                  (bookmark) => bookmark.post_id === post.id && bookmark.user_id === userId
-                )
+                  const postSaved = bookmarks.some(
+                    (bookmark) => bookmark.post_id === post.id && bookmark.user_id === userId
+                  )
 
-                const postReposted = reposts.some(
-                  (repost) => repost.post_id === post.id && repost.user_id === userId
-                )
+                  const postReposted = reposts.some(
+                    (repost) => repost.post_id === post.id && repost.user_id === userId
+                  )
 
-                const isEditing = editingPostId === post.id
+                  const isEditing = editingPostId === post.id
 
-                const authorName =
-                  post.profiles?.display_name || post.profiles?.username || t('common.user')
+                  const authorName =
+                    post.profiles?.display_name || post.profiles?.username || t('common.user')
 
-                const authorUsername = post.profiles?.username || t('common.username')
-                const authorAvatar = post.profiles?.avatar_url || ''
-                const isOwnPost = post.user_id === userId
-                const isBlockedRelation = blockedUserIds.includes(post.user_id)
-                const isFollowingAuthor = followStateMap.get(post.user_id) || false
-                const isHighlighted = highlightedPostId === post.id
-                const postMedia = getPostMedia(post)
+                  const authorUsername = post.profiles?.username || t('common.username')
+                  const authorAvatar = post.profiles?.avatar_url || ''
+                  const isOwnPost = post.user_id === userId
+                  const isBlockedRelation = blockedUserIds.includes(post.user_id)
+                  const isFollowingAuthor = followStateMap.get(post.user_id) || false
+                  const isHighlighted = highlightedPostId === post.id
+                  const postMedia = getPostMedia(post)
 
-                const isSensitivePostItem = isSensitivePost(post)
+                  const isSensitivePostItem = isSensitivePost(post)
 
-                const shouldShowSensitiveWarning =
-                  isSensitivePostItem && !currentProfile?.show_sensitive_content
+                  const shouldShowSensitiveWarning =
+                    isSensitivePostItem && !currentProfile?.show_sensitive_content
 
-                const reposterName =
-                  item.type === 'repost'
-                    ? item.repost.profiles?.display_name ||
-                    item.repost.profiles?.username ||
-                    t('common.user')
-                    : ''
+                  const reposterName =
+                    item.type === 'repost'
+                      ? item.repost.profiles?.display_name ||
+                        item.repost.profiles?.username ||
+                        t('common.user')
+                      : ''
 
-                const reposterUsername =
-                  item.type === 'repost'
-                    ? item.repost.profiles?.username || t('common.username')
-                    : t('common.username')
+                  const reposterUsername =
+                    item.type === 'repost'
+                      ? item.repost.profiles?.username || t('common.username')
+                      : t('common.username')
 
-                const reposterAvatar =
-                  item.type === 'repost' ? item.repost.profiles?.avatar_url || '' : ''
+                  const reposterAvatar =
+                    item.type === 'repost' ? item.repost.profiles?.avatar_url || '' : ''
 
-                return (
-                  <article
-                    id={item.type === 'post' ? `post-${post.id}` : `repost-${item.id}`}
-                    key={item.id}
-                    className={`bg-white dark:bg-zinc-900 rounded-2xl p-4 sm:p-6 border transition ${isHighlighted
-                        ? 'border-blue-500 dark:border-blue-400 ring-2 ring-blue-200 dark:ring-blue-900'
-                        : 'border-zinc-200 dark:border-zinc-800'
+                  return (
+                    <article
+                      id={item.type === 'post' ? `post-${post.id}` : `repost-${item.id}`}
+                      key={item.id}
+                      className={`rounded-2xl border bg-white p-4 transition dark:bg-zinc-900 sm:p-6 ${
+                        isHighlighted
+                          ? 'border-blue-500 ring-2 ring-blue-200 dark:border-blue-400 dark:ring-blue-900'
+                          : 'border-zinc-200 dark:border-zinc-800'
                       }`}
-                  >
-                    {item.type === 'repost' && (
-                      <Link
-                        href={`/u/${reposterUsername}`}
-                        className="mb-4 flex items-center gap-2 text-sm font-medium text-green-600 transition hover:opacity-80 dark:text-green-400"
-                      >
-                        {reposterAvatar ? (
-                          <img
-                            src={reposterAvatar}
-                            alt={reposterName}
-                            className="h-7 w-7 rounded-full border border-green-200 object-cover dark:border-green-800"
-                          />
-                        ) : (
-                          <div className="flex h-7 w-7 items-center justify-center rounded-full border border-green-200 bg-green-50 text-xs font-bold text-green-700 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
-                            {reposterName.charAt(0).toUpperCase()}
-                          </div>
-                        )}
-
-                        <Repeat2 className="h-4 w-4" />
-
-                        <span className="inline-flex min-w-0 items-center gap-1">
-                          <UserBadges userId={item.repost.user_id} size="sm" max={1} />
-
-                          <span className="truncate">
-                            {item.repost.user_id === userId ? t('postCard.youReposted') : t('postCard.repostedBy').replace('{name}', reposterName)}
-                          </span>
-                        </span>
-                      </Link>
-                    )}
-
-                    <div className="mb-3 flex items-start justify-between gap-3">
-                      <Link
-                        href={`/u/${authorUsername}`}
-                        className="flex min-w-0 items-center gap-3 hover:opacity-80 transition"
-                      >
-                        {authorAvatar ? (
-                          <img
-                            src={authorAvatar}
-                            alt={authorName}
-                            className="w-12 h-12 rounded-full object-cover border border-zinc-300 dark:border-zinc-700 shrink-0"
-                          />
-                        ) : (
-                          <div className="w-12 h-12 rounded-full bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 flex items-center justify-center text-sm font-semibold text-zinc-700 dark:text-zinc-300">
-                            {authorName.charAt(0).toUpperCase()}
-                          </div>
-                        )}
-
-                        <div className="min-w-0">
-                          <p className="inline-flex max-w-full items-center gap-1 font-semibold text-black dark:text-white">
-                            <UserBadges userId={post.user_id} size="sm" max={1} />
-
-                            <span className="min-w-0 break-words">
-                              {authorName}
-                            </span>
-                          </p>
-
-                          <p className="text-sm text-zinc-500 break-all">
-                            @{authorUsername}
-                          </p>
-                        </div>
-                      </Link>
-
-                      <PostMoreMenu
-                        isOwnPost={isOwnPost}
-                        copied={copiedPostId === post.id}
-                        reported={reportedPostIds.includes(post.id)}
-                        reporting={reportingPostId === post.id}
-                        onCopy={() => handleCopyPostLink(post.id)}
-                        onEdit={() => handleStartEdit(post)}
-                        onDelete={() => handleDeletePost(post.id)}
-                        onReport={() => handleReportPost(post.id, post.user_id)}
-                      />
-                    </div>
-
-                    {!isOwnPost && !isBlockedRelation && (
-                      <div className="mb-3">
-                        <button
-                          type="button"
-                          onClick={() => handleToggleFollow(post.user_id)}
-                          disabled={followLoadingUserId === post.user_id}
-                          className={`rounded-full px-4 py-2 text-sm font-medium transition ${isFollowingAuthor
-                              ? 'border border-zinc-300 text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800'
-                              : 'bg-black text-white hover:opacity-90 dark:bg-white dark:text-black'
-                            } ${followLoadingUserId === post.user_id
-                              ? 'opacity-60 cursor-not-allowed'
-                              : ''
-                            }`}
+                    >
+                      {item.type === 'repost' && (
+                        <Link
+                          href={`/u/${reposterUsername}`}
+                          className="mb-4 flex items-center gap-2 text-sm font-medium text-green-600 transition hover:opacity-80 dark:text-green-400"
                         >
-                          {followLoadingUserId === post.user_id
-                            ? t('common.loading')
-                            : isFollowingAuthor
-                              ? t('postCard.following')
-                              : t('postCard.follow')}
-                        </button>
-                      </div>
-                    )}
+                          {reposterAvatar ? (
+                            <img
+                              src={reposterAvatar}
+                              alt={reposterName}
+                              className="h-7 w-7 rounded-full border border-green-200 object-cover dark:border-green-800"
+                            />
+                          ) : (
+                            <div className="flex h-7 w-7 items-center justify-center rounded-full border border-green-200 bg-green-50 text-xs font-bold text-green-700 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
+                              {reposterName.charAt(0).toUpperCase()}
+                            </div>
+                          )}
 
-                    <div className="flex items-center gap-2 mb-3 flex-wrap">
-                      <p className="text-sm text-zinc-500">
-                        {t(getCategoryKey(post.category))}
+                          <Repeat2 className="h-4 w-4" />
+
+                          <span className="inline-flex min-w-0 items-center gap-1">
+                            <UserBadges userId={item.repost.user_id} size="sm" max={1} />
+
+                            <span className="truncate">
+                              {item.repost.user_id === userId
+                                ? t('postCard.youReposted')
+                                : t('postCard.repostedBy').replace('{name}', reposterName)}
+                            </span>
+                          </span>
+                        </Link>
+                      )}
+
+                      <div className="mb-3 flex items-start justify-between gap-3">
+                        <Link
+                          href={`/u/${authorUsername}`}
+                          className="flex min-w-0 items-center gap-3 transition hover:opacity-80"
+                        >
+                          {authorAvatar ? (
+                            <img
+                              src={authorAvatar}
+                              alt={authorName}
+                              className="h-12 w-12 shrink-0 rounded-full border border-zinc-300 object-cover dark:border-zinc-700"
+                            />
+                          ) : (
+                            <div className="flex h-12 w-12 items-center justify-center rounded-full border border-zinc-300 bg-zinc-100 text-sm font-semibold text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                              {authorName.charAt(0).toUpperCase()}
+                            </div>
+                          )}
+
+                          <div className="min-w-0">
+                            <p className="inline-flex max-w-full items-center gap-1 font-semibold text-black dark:text-white">
+                              <UserBadges userId={post.user_id} size="sm" max={1} />
+
+                              <span className="min-w-0 break-words">
+                                {authorName}
+                              </span>
+                            </p>
+
+                            <p className="break-all text-sm text-zinc-500">
+                              @{authorUsername}
+                            </p>
+                          </div>
+                        </Link>
+
+                        <PostMoreMenu
+                          isOwnPost={isOwnPost}
+                          copied={copiedPostId === post.id}
+                          reported={reportedPostIds.includes(post.id)}
+                          reporting={reportingPostId === post.id}
+                          onCopy={() => handleCopyPostLink(post.id)}
+                          onEdit={() => handleStartEdit(post)}
+                          onDelete={() => handleDeletePost(post.id)}
+                          onReport={() => handleReportPost(post.id, post.user_id)}
+                        />
+                      </div>
+
+                      {!isOwnPost && !isBlockedRelation && (
+                        <div className="mb-3">
+                          <button
+                            type="button"
+                            onClick={() => handleToggleFollow(post.user_id)}
+                            disabled={followLoadingUserId === post.user_id}
+                            className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+                              isFollowingAuthor
+                                ? 'border border-zinc-300 text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800'
+                                : 'bg-black text-white hover:opacity-90 dark:bg-white dark:text-black'
+                            } ${
+                              followLoadingUserId === post.user_id
+                                ? 'cursor-not-allowed opacity-60'
+                                : ''
+                            }`}
+                          >
+                            {followLoadingUserId === post.user_id
+                              ? t('common.loading')
+                              : isFollowingAuthor
+                                ? t('postCard.following')
+                                : t('postCard.follow')}
+                          </button>
+                        </div>
+                      )}
+
+                      <div className="mb-3 flex flex-wrap items-center gap-2">
+                        <p className="text-sm text-zinc-500">
+                          {t(getCategoryKey(post.category))}
+                        </p>
+
+                        <span className="rounded-full border border-zinc-200 bg-zinc-100 px-2 py-1 text-xs text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                          {getVisibilityLabel(post.visibility)}
+                        </span>
+
+                        {isSensitivePostItem && (
+                          <span className="rounded-full border border-yellow-200 bg-yellow-50 px-2 py-1 text-xs text-yellow-700 dark:border-yellow-800 dark:bg-yellow-950 dark:text-yellow-300">
+                            18+
+                          </span>
+                        )}
+
+                        {postReposted && (
+                          <span className="rounded-full border border-green-200 bg-green-50 px-2 py-1 text-xs text-green-700 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
+                            {t('postStatus.reposted')}
+                          </span>
+                        )}
+
+                        {postSaved && (
+                          <span className="rounded-full border border-yellow-200 bg-yellow-50 px-2 py-1 text-xs text-yellow-700 dark:border-yellow-800 dark:bg-yellow-950 dark:text-yellow-300">
+                            {t('postStatus.saved')}
+                          </span>
+                        )}
+
+                        {isHighlighted && (
+                          <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-xs text-blue-700 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300">
+                            {t('postStatus.highlighted')}
+                          </span>
+                        )}
+                      </div>
+
+                      {isEditing ? (
+                        <div className="mb-4">
+                          <textarea
+                            value={editContent}
+                            onChange={(e) => setEditContent(e.target.value)}
+                            className="min-h-28 w-full resize-none rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 sm:text-base"
+                          />
+
+                          <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+                            <button
+                              onClick={() => handleSaveEdit(post.id)}
+                              disabled={savingEdit}
+                              className={`w-full rounded-xl px-4 py-2 font-medium sm:w-auto ${
+                                savingEdit
+                                  ? 'cursor-not-allowed bg-zinc-300 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300'
+                                  : 'bg-black text-white hover:opacity-90 dark:bg-white dark:text-black'
+                              }`}
+                            >
+                              {savingEdit ? t('common.saving') : t('common.save')}
+                            </button>
+
+                            <button
+                              onClick={handleCancelEdit}
+                              className="w-full rounded-xl border border-zinc-300 px-4 py-2 hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800 sm:w-auto"
+                            >
+                              {t('common.cancel')}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          {shouldShowSensitiveWarning ? (
+                            <SensitiveContent>
+                              {post.content && (
+                                <p className="mb-3 whitespace-pre-wrap break-words text-sm text-zinc-800 dark:text-zinc-200 sm:text-base">
+                                  {post.content}
+                                </p>
+                              )}
+
+                              <TranslatePostButton content={post.content} />
+
+                              <LinkPreview content={post.content} />
+
+                              <PostMediaGallery media={postMedia} />
+                            </SensitiveContent>
+                          ) : (
+                            <>
+                              {post.content && (
+                                <p className="mb-3 whitespace-pre-wrap break-words text-sm text-zinc-800 dark:text-zinc-200 sm:text-base">
+                                  {post.content}
+                                </p>
+                              )}
+
+                              <TranslatePostButton content={post.content} />
+
+                              <LinkPreview content={post.content} />
+
+                              <PostMediaGallery media={postMedia} />
+                            </>
+                          )}
+                        </>
+                      )}
+
+                      <PostActions
+                        commentsCount={postComments.length}
+                        likesCount={postLikes.length}
+                        repostsCount={postReposts.length}
+                        liked={userLiked}
+                        reposted={postReposted}
+                        saved={postSaved}
+                        copied={copiedPostId === post.id}
+                        onLike={() => handleToggleLike(post.id)}
+                        onCommentClick={() => handleFocusCommentInput(post.id)}
+                        onRepost={() => handleToggleRepost(post.id)}
+                        onSave={() => handleToggleBookmark(post.id)}
+                        onShare={() => handleCopyPostLink(post.id)}
+                      />
+
+                      <p className="mb-4 mt-3 text-xs text-zinc-500 dark:text-zinc-600">
+                        {item.type === 'repost'
+                          ? `${t('feed.repostedAt')} ${new Date(item.repost.created_at).toLocaleString(getDateLocale(language))}`
+                          : new Date(post.created_at).toLocaleString(getDateLocale(language))}
                       </p>
 
-                      <span className="text-xs px-2 py-1 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-700">
-                        {getVisibilityLabel(post.visibility)}
-                      </span>
+                      <div className="border-t border-zinc-200 pt-4 dark:border-zinc-800">
+                        <h3 className="mb-3 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+                          {t('feed.comments')}
+                        </h3>
 
-                      {isSensitivePostItem && (
-                        <span className="text-xs px-2 py-1 rounded-full bg-yellow-50 dark:bg-yellow-950 text-yellow-700 dark:text-yellow-300 border border-yellow-200 dark:border-yellow-800">
-                          18+
-                        </span>
-                      )}
+                        <div className="mb-4 space-y-3">
+                          {postComments.length === 0 && (
+                            <p className="text-sm text-zinc-500">
+                              {t('feed.noComments')}
+                            </p>
+                          )}
 
-                      {postReposted && (
-                        <span className="text-xs px-2 py-1 rounded-full bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800">
-                          {t('postStatus.reposted')}
-                        </span>
-                      )}
+                          {postComments.map((comment) => {
+                            const commentAuthorName =
+                              comment.profiles?.display_name ||
+                              comment.profiles?.username ||
+                              t('common.user')
 
-                      {postSaved && (
-                        <span className="text-xs px-2 py-1 rounded-full bg-yellow-50 dark:bg-yellow-950 text-yellow-700 dark:text-yellow-300 border border-yellow-200 dark:border-yellow-800">
-                          {t('postStatus.saved')}
-                        </span>
-                      )}
+                            const commentAuthorUsername =
+                              comment.profiles?.username || t('common.username')
 
-                      {isHighlighted && (
-                        <span className="text-xs px-2 py-1 rounded-full bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-                          {t('postStatus.highlighted')}
-                        </span>
-                      )}
-                    </div>
+                            const commentAuthorAvatar =
+                              comment.profiles?.avatar_url || ''
 
-                    {isEditing ? (
-                      <div className="mb-4">
-                        <textarea
-                          value={editContent}
-                          onChange={(e) => setEditContent(e.target.value)}
-                          className="w-full min-h-28 rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 px-4 py-3 outline-none focus:border-zinc-500 resize-none text-sm sm:text-base"
-                        />
+                            const commentIsMine = comment.user_id === userId
+                            const isEditingThisComment = editingCommentId === comment.id
 
-                        <div className="flex flex-col sm:flex-row gap-3 mt-4">
-                          <button
-                            onClick={() => handleSaveEdit(post.id)}
-                            disabled={savingEdit}
-                            className={`w-full sm:w-auto px-4 py-2 rounded-xl font-medium ${savingEdit
-                                ? 'bg-zinc-300 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300 cursor-not-allowed'
-                                : 'bg-black text-white dark:bg-white dark:text-black hover:opacity-90'
-                              }`}
-                          >
-                            {savingEdit ? t('common.saving') : t('common.save')}
-                          </button>
+                            const likesForComment = commentLikes.filter(
+                              (like) => like.comment_id === comment.id
+                            )
 
-                          <button
-                            onClick={handleCancelEdit}
-                            className="w-full sm:w-auto border border-zinc-300 dark:border-zinc-700 px-4 py-2 rounded-xl hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                          >
-                            {t('common.cancel')}
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <>
-                        {shouldShowSensitiveWarning ? (
-                          <SensitiveContent>
-                            {post.content && (
-                              <p className="text-zinc-800 dark:text-zinc-200 whitespace-pre-wrap mb-3 break-words text-sm sm:text-base">
-                                {post.content}
-                              </p>
-                            )}
+                            const userLikedComment = likesForComment.some(
+                              (like) => like.user_id === userId
+                            )
 
-                            <TranslatePostButton content={post.content} />
-
-                            <LinkPreview content={post.content} />
-
-                            <PostMediaGallery media={postMedia} />
-                          </SensitiveContent>
-                        ) : (
-                          <>
-                            {post.content && (
-                              <p className="text-zinc-800 dark:text-zinc-200 whitespace-pre-wrap mb-3 break-words text-sm sm:text-base">
-                                {post.content}
-                              </p>
-                            )}
-
-                            <TranslatePostButton content={post.content} />
-
-                            <LinkPreview content={post.content} />
-
-                            <PostMediaGallery media={postMedia} />
-                          </>
-                        )}
-                      </>
-                    )}
-
-                    <PostActions
-                      commentsCount={postComments.length}
-                      likesCount={postLikes.length}
-                      repostsCount={postReposts.length}
-                      liked={userLiked}
-                      reposted={postReposted}
-                      saved={postSaved}
-                      copied={copiedPostId === post.id}
-                      onLike={() => handleToggleLike(post.id)}
-                      onCommentClick={() => handleFocusCommentInput(post.id)}
-                      onRepost={() => handleToggleRepost(post.id)}
-                      onSave={() => handleToggleBookmark(post.id)}
-                      onShare={() => handleCopyPostLink(post.id)}
-                    />
-
-                    <p className="text-xs text-zinc-500 dark:text-zinc-600 mt-3 mb-4">
-                      {item.type === 'repost'
-                        ? `${t('feed.repostedAt')} ${new Date(item.repost.created_at).toLocaleString(getDateLocale(language))}`
-                        : new Date(post.created_at).toLocaleString(getDateLocale(language))}
-                    </p>
-
-                    <div className="border-t border-zinc-200 dark:border-zinc-800 pt-4">
-                      <h3 className="text-sm font-semibold mb-3 text-zinc-700 dark:text-zinc-300">
-                        {t('feed.comments')}
-                      </h3>
-
-                      <div className="space-y-3 mb-4">
-                        {postComments.length === 0 && (
-                          <p className="text-sm text-zinc-500">
-                            {t('feed.noComments')}
-                          </p>
-                        )}
-
-                        {postComments.map((comment) => {
-                          const commentAuthorName =
-                            comment.profiles?.display_name ||
-                            comment.profiles?.username ||
-                            t('common.user')
-
-                          const commentAuthorUsername =
-                            comment.profiles?.username || t('common.username')
-
-                          const commentAuthorAvatar =
-                            comment.profiles?.avatar_url || ''
-
-                          const commentIsMine = comment.user_id === userId
-                          const isEditingThisComment = editingCommentId === comment.id
-
-                          const likesForComment = commentLikes.filter(
-                            (like) => like.comment_id === comment.id
-                          )
-
-                          const userLikedComment = likesForComment.some(
-                            (like) => like.user_id === userId
-                          )
-
-                          return (
-                            <div
-                              key={comment.id}
-                              className="rounded-xl bg-zinc-50 px-4 py-3 text-sm dark:bg-zinc-800"
-                            >
-                              <div className="flex items-start gap-3">
-                                <Link
-                                  href={`/u/${commentAuthorUsername}`}
-                                  className="shrink-0 hover:opacity-80 transition"
-                                >
-                                  {commentAuthorAvatar ? (
-                                    <img
-                                      src={commentAuthorAvatar}
-                                      alt={commentAuthorName}
-                                      className="w-10 h-10 rounded-full object-cover border border-zinc-300 dark:border-zinc-700"
-                                    />
-                                  ) : (
-                                    <div className="w-10 h-10 rounded-full bg-zinc-100 dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 flex items-center justify-center text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-                                      {commentAuthorName.charAt(0).toUpperCase()}
-                                    </div>
-                                  )}
-                                </Link>
-
-                                <div className="min-w-0 flex-1">
-                                  <div className="flex items-start justify-between gap-2">
-                                    <Link
-                                      href={`/u/${commentAuthorUsername}`}
-                                      className="block min-w-0 hover:opacity-80 transition"
-                                    >
-                                      <p className="inline-flex max-w-full items-center gap-1 font-semibold text-black dark:text-white">
-                                        <UserBadges userId={comment.user_id} size="sm" max={1} />
-
-                                        <span className="min-w-0 break-words">
-                                          {commentAuthorName}
-                                        </span>
-                                      </p>
-
-                                      <p className="text-xs text-zinc-500 break-all">
-                                        @{commentAuthorUsername}
-                                      </p>
-                                    </Link>
-
-                                    {commentIsMine && (
-                                      <div className="relative shrink-0">
-                                        <button
-                                          type="button"
-                                          onClick={() =>
-                                            setOpenCommentMenuId((current) =>
-                                              current === comment.id ? null : comment.id
-                                            )
-                                          }
-                                          className="flex h-8 w-8 items-center justify-center rounded-full text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-700"
-                                          aria-label={t('feed.commentOptions')}
-                                        >
-                                          <MoreHorizontal className="h-4 w-4" />
-                                        </button>
-
-                                        {openCommentMenuId === comment.id && (
-                                          <>
-                                            <button
-                                              type="button"
-                                              onClick={() => setOpenCommentMenuId(null)}
-                                              className="fixed inset-0 z-40 cursor-default"
-                                              aria-label={t('common.closeMenu')}
-                                            />
-
-                                            <div className="absolute right-0 top-9 z-50 w-52 overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-xl dark:border-zinc-700 dark:bg-zinc-950">
-                                              <button
-                                                type="button"
-                                                onClick={() => handleStartEditComment(comment)}
-                                                className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-zinc-800 hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-900"
-                                              >
-                                                <Edit3 className="h-4 w-4" />
-                                                {t('feed.editComment')}
-                                              </button>
-
-                                              <button
-                                                type="button"
-                                                onClick={() => handleDeleteComment(comment.id)}
-                                                className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30"
-                                              >
-                                                <Trash2 className="h-4 w-4" />
-                                                {t('feed.deleteComment')}
-                                              </button>
-                                            </div>
-                                          </>
-                                        )}
+                            return (
+                              <div
+                                key={comment.id}
+                                className="rounded-xl bg-zinc-50 px-4 py-3 text-sm dark:bg-zinc-800"
+                              >
+                                <div className="flex items-start gap-3">
+                                  <Link
+                                    href={`/u/${commentAuthorUsername}`}
+                                    className="shrink-0 transition hover:opacity-80"
+                                  >
+                                    {commentAuthorAvatar ? (
+                                      <img
+                                        src={commentAuthorAvatar}
+                                        alt={commentAuthorName}
+                                        className="h-10 w-10 rounded-full border border-zinc-300 object-cover dark:border-zinc-700"
+                                      />
+                                    ) : (
+                                      <div className="flex h-10 w-10 items-center justify-center rounded-full border border-zinc-300 bg-zinc-100 text-xs font-semibold text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
+                                        {commentAuthorName.charAt(0).toUpperCase()}
                                       </div>
                                     )}
-                                  </div>
+                                  </Link>
 
-                                  {isEditingThisComment ? (
-                                    <div className="mt-3">
-                                      <textarea
-                                        value={editCommentContent}
-                                        onChange={(e) => setEditCommentContent(e.target.value)}
-                                        className="w-full min-h-24 resize-none rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white"
-                                      />
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex items-start justify-between gap-2">
+                                      <Link
+                                        href={`/u/${commentAuthorUsername}`}
+                                        className="block min-w-0 transition hover:opacity-80"
+                                      >
+                                        <p className="inline-flex max-w-full items-center gap-1 font-semibold text-black dark:text-white">
+                                          <UserBadges userId={comment.user_id} size="sm" max={1} />
 
-                                      <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-                                        <button
-                                          type="button"
-                                          onClick={() => handleSaveCommentEdit(comment.id)}
-                                          disabled={savingCommentId === comment.id}
-                                          className="rounded-xl bg-black px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-60 dark:bg-white dark:text-black"
-                                        >
-                                          {savingCommentId === comment.id
-                                            ? t('common.saving')
-                                            : t('common.save')}
-                                        </button>
+                                          <span className="min-w-0 break-words">
+                                            {commentAuthorName}
+                                          </span>
+                                        </p>
 
-                                        <button
-                                          type="button"
-                                          onClick={handleCancelEditComment}
-                                          className="rounded-xl border border-zinc-300 px-4 py-2 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900"
-                                        >
-                                          {t('common.cancel')}
-                                        </button>
-                                      </div>
+                                        <p className="break-all text-xs text-zinc-500">
+                                          @{commentAuthorUsername}
+                                        </p>
+                                      </Link>
+
+                                      {commentIsMine && (
+                                        <div className="relative shrink-0">
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              setOpenCommentMenuId((current) =>
+                                                current === comment.id ? null : comment.id
+                                              )
+                                            }
+                                            className="flex h-8 w-8 items-center justify-center rounded-full text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                                            aria-label={t('feed.commentOptions')}
+                                          >
+                                            <MoreHorizontal className="h-4 w-4" />
+                                          </button>
+
+                                          {openCommentMenuId === comment.id && (
+                                            <>
+                                              <button
+                                                type="button"
+                                                onClick={() => setOpenCommentMenuId(null)}
+                                                className="fixed inset-0 z-40 cursor-default"
+                                                aria-label={t('common.closeMenu')}
+                                              />
+
+                                              <div className="absolute right-0 top-9 z-50 w-52 overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-xl dark:border-zinc-700 dark:bg-zinc-950">
+                                                <button
+                                                  type="button"
+                                                  onClick={() => handleStartEditComment(comment)}
+                                                  className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-zinc-800 hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-900"
+                                                >
+                                                  <Edit3 className="h-4 w-4" />
+                                                  {t('feed.editComment')}
+                                                </button>
+
+                                                <button
+                                                  type="button"
+                                                  onClick={() => handleDeleteComment(comment.id)}
+                                                  className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30"
+                                                >
+                                                  <Trash2 className="h-4 w-4" />
+                                                  {t('feed.deleteComment')}
+                                                </button>
+                                              </div>
+                                            </>
+                                          )}
+                                        </div>
+                                      )}
                                     </div>
-                                  ) : (
-                                    <p className="text-zinc-800 dark:text-zinc-200 mt-2 break-words">
-                                      {comment.content}
-                                    </p>
-                                  )}
 
-                                  <div className="mt-2 flex items-center gap-3">
-                                    <button
-                                      type="button"
-                                      onClick={() => handleToggleCommentLike(comment.id)}
-                                      className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium transition ${userLikedComment
-                                          ? 'bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400'
-                                          : 'text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-700'
+                                    {isEditingThisComment ? (
+                                      <div className="mt-3">
+                                        <textarea
+                                          value={editCommentContent}
+                                          onChange={(e) => setEditCommentContent(e.target.value)}
+                                          className="min-h-24 w-full resize-none rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white"
+                                        />
+
+                                        <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                                          <button
+                                            type="button"
+                                            onClick={() => handleSaveCommentEdit(comment.id)}
+                                            disabled={savingCommentId === comment.id}
+                                            className="rounded-xl bg-black px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-60 dark:bg-white dark:text-black"
+                                          >
+                                            {savingCommentId === comment.id
+                                              ? t('common.saving')
+                                              : t('common.save')}
+                                          </button>
+
+                                          <button
+                                            type="button"
+                                            onClick={handleCancelEditComment}
+                                            className="rounded-xl border border-zinc-300 px-4 py-2 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900"
+                                          >
+                                            {t('common.cancel')}
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <p className="mt-2 break-words text-zinc-800 dark:text-zinc-200">
+                                        {comment.content}
+                                      </p>
+                                    )}
+
+                                    <div className="mt-2 flex items-center gap-3">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleToggleCommentLike(comment.id)}
+                                        className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium transition ${
+                                          userLikedComment
+                                            ? 'bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400'
+                                            : 'text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-700'
                                         }`}
-                                    >
-                                      <span>{userLikedComment ? '♥' : '♡'}</span>
-                                      <span>{likesForComment.length}</span>
-                                    </button>
+                                      >
+                                        <span>{userLikedComment ? '♥' : '♡'}</span>
+                                        <span>{likesForComment.length}</span>
+                                      </button>
 
-                                    <p className="text-xs text-zinc-500">
-                                      {new Date(comment.created_at).toLocaleString(getDateLocale(language))}
-                                    </p>
+                                      <p className="text-xs text-zinc-500">
+                                        {new Date(comment.created_at).toLocaleString(getDateLocale(language))}
+                                      </p>
+                                    </div>
                                   </div>
                                 </div>
                               </div>
-                            </div>
-                          )
-                        })}
+                            )
+                          })}
+                        </div>
+
+                        <div className="flex flex-col gap-3 sm:flex-row">
+                          <input
+                            id={`comment-input-${post.id}`}
+                            type="text"
+                            value={commentInputs[post.id] || ''}
+                            onChange={(e) =>
+                              setCommentInputs((prev) => ({
+                                ...prev,
+                                [post.id]: e.target.value,
+                              }))
+                            }
+                            placeholder={t('feed.commentPlaceholder')}
+                            className="flex-1 rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 sm:text-base"
+                          />
+
+                          <button
+                            onClick={() => handleCreateComment(post.id)}
+                            className="w-full rounded-xl bg-black px-5 py-3 font-medium text-white hover:opacity-90 dark:bg-zinc-100 dark:text-black sm:w-auto"
+                          >
+                            {t('feed.comment')}
+                          </button>
+                        </div>
                       </div>
+                    </article>
+                  )
+                })}
+              </div>
+            ) : (
+              <div>
+                {mediaGalleryItems.length === 0 ? (
+                  <div className="rounded-2xl border border-zinc-200 bg-white p-4 text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 sm:p-6">
+                    {hasSearch ? localTexts.mural.noSearchResults : localTexts.mural.emptyMedia}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {mediaGalleryItems.map((item) => {
+                      const isVideo = item.media.media_type === 'video'
+                      const categoryLabel = t(getCategoryKey(item.post.category))
 
-                      <div className="flex flex-col sm:flex-row gap-3">
-                        <input
-                          id={`comment-input-${post.id}`}
-                          type="text"
-                          value={commentInputs[post.id] || ''}
-                          onChange={(e) =>
-                            setCommentInputs((prev) => ({
-                              ...prev,
-                              [post.id]: e.target.value,
-                            }))
-                          }
-                          placeholder={t('feed.commentPlaceholder')}
-                          className="flex-1 rounded-xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 px-4 py-3 outline-none focus:border-zinc-500 text-sm sm:text-base"
-                        />
-
-                        <button
-                          onClick={() => handleCreateComment(post.id)}
-                          className="w-full sm:w-auto bg-black text-white dark:bg-zinc-100 dark:text-black px-5 py-3 rounded-xl font-medium hover:opacity-90"
+                      return (
+                        <Link
+                          key={item.key}
+                          href={`/post/${item.post.id}`}
+                          className="group overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900"
+                          title={localTexts.mural.openPost}
                         >
-                          {t('feed.comment')}
-                        </button>
-                      </div>
-                    </div>
-                  </article>
-                )
-              })}
-            </div>
+                          <div className="relative aspect-square overflow-hidden bg-zinc-100 dark:bg-zinc-950">
+                            {isVideo ? (
+                              <video
+                                src={item.media.media_url}
+                                className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+                                muted
+                                playsInline
+                                preload="metadata"
+                              />
+                            ) : (
+                              <img
+                                src={item.media.media_url}
+                                alt={item.authorName}
+                                className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+                              />
+                            )}
+
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
+
+                            {isVideo && (
+                              <div className="absolute left-3 top-3 rounded-full bg-black/65 p-2 text-white shadow-lg">
+                                <Play className="h-4 w-4 fill-white" />
+                              </div>
+                            )}
+
+                            {item.totalMedia > 1 && (
+                              <div className="absolute right-3 top-3 rounded-full bg-black/65 px-2.5 py-1 text-xs font-semibold text-white shadow-lg">
+                                {item.totalMedia} {localTexts.mural.galleryMediaCount}
+                              </div>
+                            )}
+
+                            <div className="absolute bottom-0 left-0 right-0 p-3 text-white">
+                              <p className="truncate text-sm font-bold">
+                                {item.authorName}
+                              </p>
+                              <p className="truncate text-xs text-white/80">
+                                @{item.authorUsername}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="space-y-2 p-3">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="rounded-full border border-zinc-200 bg-zinc-100 px-2 py-1 text-[11px] font-medium text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                                {categoryLabel}
+                              </span>
+
+                              <span className="rounded-full border border-zinc-200 bg-zinc-100 px-2 py-1 text-[11px] font-medium text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                                {getVisibilityLabel(item.post.visibility)}
+                              </span>
+                            </div>
+
+                            {item.post.content ? (
+                              <p className="truncate text-sm text-zinc-700 dark:text-zinc-300">
+                                {item.post.content}
+                              </p>
+                            ) : (
+                              <p className="truncate text-sm text-zinc-500 dark:text-zinc-400">
+                                {localTexts.mural.openPost}
+                              </p>
+                            )}
+
+                            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                              {new Date(item.post.created_at).toLocaleString(getDateLocale(language))}
+                            </p>
+                          </div>
+                        </Link>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <aside className="hidden xl:block">
             <div className="sticky top-8 space-y-4">
-              <div className="overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-                <div className="border-b border-zinc-200 bg-gradient-to-br from-zinc-50 to-white p-5 dark:border-zinc-800 dark:from-zinc-950 dark:to-zinc-900">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-black text-white dark:bg-white dark:text-black">
-                      <Bell className="h-5 w-5" />
-                    </div>
-
-                    <div>
-                      <h2 className="text-lg font-black text-zinc-950 dark:text-white">
-                        {localTexts.mural.title}
-                      </h2>
-                      <p className="mt-1 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
-                        {localTexts.mural.subtitle}
-                      </p>
-                    </div>
-                  </div>
+              <div className="rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+                <div className="mb-3 flex items-center gap-2">
+                  <Search className="h-5 w-5 text-zinc-500 dark:text-zinc-400" />
+                  <h2 className="text-lg font-black text-zinc-950 dark:text-white">
+                    {localTexts.mural.searchTitle}
+                  </h2>
                 </div>
 
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+
+                  <input
+                    type="text"
+                    value={feedSearch}
+                    onChange={(e) => setFeedSearch(e.target.value)}
+                    placeholder={localTexts.mural.searchPlaceholder}
+                    className="w-full rounded-2xl border border-zinc-200 bg-zinc-50 py-3 pl-11 pr-4 text-sm outline-none transition focus:border-zinc-400 dark:border-zinc-700 dark:bg-zinc-950 dark:text-white dark:focus:border-zinc-500"
+                  />
+                </div>
+
+                <p className="mt-3 text-sm leading-6 text-zinc-500 dark:text-zinc-400">
+                  {localTexts.mural.searchHelper}
+                </p>
+              </div>
+
+              <div className="overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
                 <div className="space-y-4 p-5">
                   <Link
                     href="/lab"
                     className="block rounded-2xl border border-blue-100 bg-blue-50 p-4 transition hover:-translate-y-0.5 hover:shadow-md dark:border-blue-900/60 dark:bg-blue-950/20"
                   >
                     <div className="mb-3 flex items-center gap-2 text-blue-700 dark:text-blue-300">
-                      <Beaker className="h-5 w-5" />
+                      <FlaskConical className="h-5 w-5" />
                       <h3 className="font-bold">
                         {localTexts.mural.labTitle}
                       </h3>
@@ -2334,41 +2512,6 @@ function FeedContent() {
               </div>
 
               <div className="rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-                <h3 className="mb-4 text-lg font-black text-zinc-950 dark:text-white">
-                  {localTexts.mural.statsTitle}
-                </h3>
-
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-3 text-center dark:border-zinc-800 dark:bg-zinc-950">
-                    <p className="text-xl font-black text-zinc-950 dark:text-white">
-                      {posts.length}
-                    </p>
-                    <p className="mt-1 text-[11px] font-medium uppercase tracking-wide text-zinc-500">
-                      {localTexts.mural.statsPosts}
-                    </p>
-                  </div>
-
-                  <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-3 text-center dark:border-zinc-800 dark:bg-zinc-950">
-                    <p className="text-xl font-black text-zinc-950 dark:text-white">
-                      {mediaFeedItems.length}
-                    </p>
-                    <p className="mt-1 text-[11px] font-medium uppercase tracking-wide text-zinc-500">
-                      {localTexts.mural.statsMedia}
-                    </p>
-                  </div>
-
-                  <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-3 text-center dark:border-zinc-800 dark:bg-zinc-950">
-                    <p className="text-xl font-black text-zinc-950 dark:text-white">
-                      {totalInteractions}
-                    </p>
-                    <p className="mt-1 text-[11px] font-medium uppercase tracking-wide text-zinc-500">
-                      {localTexts.mural.statsInteractions}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
                 <div className="mb-4 flex items-center gap-2">
                   <Sparkles className="h-5 w-5 text-yellow-500" />
                   <h3 className="text-lg font-black text-zinc-950 dark:text-white">
@@ -2379,7 +2522,7 @@ function FeedContent() {
                 <div className="space-y-3">
                   <div className="flex gap-3 rounded-2xl bg-zinc-50 p-3 dark:bg-zinc-950">
                     <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-white dark:bg-white dark:text-black">
-                      <Bell className="h-4 w-4" />
+                      <MessageCircle className="h-4 w-4" />
                     </div>
                     <p className="text-sm leading-6 text-zinc-600 dark:text-zinc-300">
                       {localTexts.mural.newsOne}
@@ -2397,7 +2540,7 @@ function FeedContent() {
 
                   <div className="flex gap-3 rounded-2xl bg-zinc-50 p-3 dark:bg-zinc-950">
                     <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-white dark:bg-white dark:text-black">
-                      <Beaker className="h-4 w-4" />
+                      <FlaskConical className="h-4 w-4" />
                     </div>
                     <p className="text-sm leading-6 text-zinc-600 dark:text-zinc-300">
                       {localTexts.mural.newsThree}
@@ -2427,7 +2570,7 @@ export default function FeedPage() {
   return (
     <Suspense
       fallback={
-        <main className="min-h-screen bg-white text-black dark:bg-black dark:text-white flex items-center justify-center px-4">
+        <main className="flex min-h-screen items-center justify-center bg-white px-4 text-black dark:bg-black dark:text-white">
           <p>{t('feed.loading')}</p>
         </main>
       }
