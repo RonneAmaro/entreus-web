@@ -1088,15 +1088,19 @@ export default function ProfilePage() {
               </button>
 
               <label
-                className="absolute bottom-4 right-4 z-10 inline-flex cursor-pointer items-center justify-center gap-2 rounded-full border border-white/30 bg-black/65 px-4 py-2 text-sm font-semibold text-white shadow-lg backdrop-blur transition hover:bg-black/80"
+                htmlFor="profile-banner-upload"
+                onClick={(event) => event.stopPropagation()}
+                className="absolute bottom-2 right-4 z-50 inline-flex cursor-pointer items-center justify-center gap-2 rounded-full border border-white/30 bg-black/75 px-4 py-2 text-sm font-semibold text-white shadow-xl backdrop-blur transition hover:bg-black/90"
                 title={t('profile.banner.changeTitle')}
               >
                 <ImageIcon className="h-4 w-4" />
                 <span>{bannerPreview ? t('profile.banner.change') : t('profile.banner.add')}</span>
 
                 <input
+                  id="profile-banner-upload"
                   type="file"
                   accept="image/png,image/jpeg,image/webp"
+                  onClick={(event) => event.stopPropagation()}
                   onChange={(e) => handleBannerSelect(e.target.files?.[0] || null)}
                   className="sr-only"
                 />
