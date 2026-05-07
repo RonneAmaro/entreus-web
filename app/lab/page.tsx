@@ -92,8 +92,11 @@ export default function LabPage() {
             </span>
           </Link>
 
-          <div className="rounded-3xl border border-dashed border-zinc-300 bg-white/60 p-6 dark:border-zinc-800 dark:bg-zinc-950/60">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-500 dark:bg-zinc-900">
+          <Link
+            href="/lab/resize"
+            className="group rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-lg dark:border-zinc-800 dark:bg-zinc-950"
+          >
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 transition group-hover:bg-blue-600 group-hover:text-white dark:bg-blue-950/40 dark:text-blue-300">
               <ImageIcon className="h-6 w-6" />
             </div>
 
@@ -101,10 +104,14 @@ export default function LabPage() {
               Redimensionar imagem
             </h2>
 
-            <p className="mt-2 text-sm leading-6 text-zinc-500">
-              Em breve: ajustar tamanho, qualidade e proporção de imagens.
+            <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-400">
+              Ajuste tamanho, proporção, formato e qualidade de imagens para posts, cartazes e redes sociais.
             </p>
-          </div>
+
+            <span className="mt-5 inline-flex text-sm font-bold text-blue-600 group-hover:underline dark:text-blue-400">
+              Abrir ferramenta
+            </span>
+          </Link>
 
           <Link
             href="/lab/qrcode"
