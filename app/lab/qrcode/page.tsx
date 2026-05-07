@@ -5,8 +5,11 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   ArrowLeft,
   Copy,
+  CreditCard,
   Download,
   Eye,
+  Heart,
+  Landmark,
   LinkIcon,
   Mail,
   MessageCircle,
@@ -32,7 +35,11 @@ function onlyDigits(value: string) {
 }
 
 function escapeWifiValue(value: string) {
-  return value.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/:/g, '\\:')
+  return value
+    .replace(/\\/g, '\\\\')
+    .replace(/;/g, '\\;')
+    .replace(/,/g, '\\,')
+    .replace(/:/g, '\\:')
 }
 
 function normalizeUrl(value: string) {
@@ -81,7 +88,12 @@ function buildEmailUrl(email: string, subject: string, body: string) {
   return query ? `mailto:${trimmedEmail}?${query}` : `mailto:${trimmedEmail}`
 }
 
-function buildWifiQrValue(ssid: string, password: string, security: WifiSecurity, hidden: boolean) {
+function buildWifiQrValue(
+  ssid: string,
+  password: string,
+  security: WifiSecurity,
+  hidden: boolean
+) {
   const safeSsid = escapeWifiValue(ssid.trim())
   const safePassword = escapeWifiValue(password.trim())
 
@@ -120,9 +132,17 @@ export default function QrCodeLabPage() {
   const qrValue = useMemo(() => {
     if (mode === 'text') return textValue.trim()
     if (mode === 'url') return normalizeUrl(urlValue)
-    if (mode === 'wifi') return buildWifiQrValue(wifiSsid, wifiPassword, wifiSecurity, wifiHidden)
-    if (mode === 'whatsapp') return buildWhatsAppUrl(whatsappPhone, whatsappMessage)
-    if (mode === 'email') return buildEmailUrl(emailAddress, emailSubject, emailBody)
+    if (mode === 'wifi')
+      return buildWifiQrValue(
+        wifiSsid,
+        wifiPassword,
+        wifiSecurity,
+        wifiHidden
+      )
+    if (mode === 'whatsapp')
+      return buildWhatsAppUrl(whatsappPhone, whatsappMessage)
+    if (mode === 'email')
+      return buildEmailUrl(emailAddress, emailSubject, emailBody)
     if (mode === 'phone') {
       const digits = onlyDigits(phoneValue)
       return digits ? `tel:+${digits}` : ''
@@ -168,7 +188,9 @@ export default function QrCodeLabPage() {
 
       setQrDataUrl(dataUrl)
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Erro ao gerar QR Code.')
+      setMessage(
+        error instanceof Error ? error.message : 'Erro ao gerar QR Code.'
+      )
     }
   }
 
@@ -193,7 +215,8 @@ export default function QrCodeLabPage() {
     if (!qrDataUrl) return
 
     const link = document.createElement('a')
-    const safeTitle = title.trim().replace(/[^a-z0-9_-]/gi, '-').toLowerCase() || 'qrcode'
+    const safeTitle =
+      title.trim().replace(/[^a-z0-9_-]/gi, '-').toLowerCase() || 'qrcode'
 
     link.href = qrDataUrl
     link.download = `entreus-lab-${safeTitle}.png`
@@ -332,8 +355,9 @@ export default function QrCodeLabPage() {
                 </h1>
 
                 <p className="mt-4 max-w-4xl text-base leading-7 text-zinc-600 dark:text-zinc-400">
-                  Crie QR Codes para links, textos, Wi-Fi, WhatsApp, e-mail e telefone. Ideal para escolas,
-                  murais, atividades, cartazes, eventos, comunicados e pequenos negócios.
+                  Crie QR Codes para links, textos, Wi-Fi, WhatsApp, e-mail e
+                  telefone. Ideal para escolas, murais, atividades, cartazes,
+                  eventos, comunicados e pequenos negócios.
                 </p>
               </div>
             </div>
@@ -349,37 +373,59 @@ export default function QrCodeLabPage() {
         <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_420px]">
           <div className="space-y-5">
             <div className="rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
-              <h2 className="text-lg font-black">
-                Tipo de QR Code
-              </h2>
+              <h2 className="text-lg font-black">Tipo de QR Code</h2>
 
               <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
-                <button type="button" onClick={() => setMode('url')} className={modeButtonClass('url')}>
+                <button
+                  type="button"
+                  onClick={() => setMode('url')}
+                  className={modeButtonClass('url')}
+                >
                   <LinkIcon className="h-4 w-4" />
                   Link
                 </button>
 
-                <button type="button" onClick={() => setMode('text')} className={modeButtonClass('text')}>
+                <button
+                  type="button"
+                  onClick={() => setMode('text')}
+                  className={modeButtonClass('text')}
+                >
                   <Type className="h-4 w-4" />
                   Texto
                 </button>
 
-                <button type="button" onClick={() => setMode('wifi')} className={modeButtonClass('wifi')}>
+                <button
+                  type="button"
+                  onClick={() => setMode('wifi')}
+                  className={modeButtonClass('wifi')}
+                >
                   <Wifi className="h-4 w-4" />
                   Wi-Fi
                 </button>
 
-                <button type="button" onClick={() => setMode('whatsapp')} className={modeButtonClass('whatsapp')}>
+                <button
+                  type="button"
+                  onClick={() => setMode('whatsapp')}
+                  className={modeButtonClass('whatsapp')}
+                >
                   <MessageCircle className="h-4 w-4" />
                   WhatsApp
                 </button>
 
-                <button type="button" onClick={() => setMode('email')} className={modeButtonClass('email')}>
+                <button
+                  type="button"
+                  onClick={() => setMode('email')}
+                  className={modeButtonClass('email')}
+                >
                   <Mail className="h-4 w-4" />
                   E-mail
                 </button>
 
-                <button type="button" onClick={() => setMode('phone')} className={modeButtonClass('phone')}>
+                <button
+                  type="button"
+                  onClick={() => setMode('phone')}
+                  className={modeButtonClass('phone')}
+                >
                   <Phone className="h-4 w-4" />
                   Telefone
                 </button>
@@ -387,9 +433,7 @@ export default function QrCodeLabPage() {
             </div>
 
             <div className="rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
-              <h2 className="text-lg font-black">
-                Conteúdo
-              </h2>
+              <h2 className="text-lg font-black">Conteúdo</h2>
 
               <div className="mt-4">
                 <label className="mb-2 block text-sm font-medium text-zinc-600 dark:text-zinc-400">
@@ -474,7 +518,9 @@ export default function QrCodeLabPage() {
 
                     <select
                       value={wifiSecurity}
-                      onChange={(event) => setWifiSecurity(event.target.value as WifiSecurity)}
+                      onChange={(event) =>
+                        setWifiSecurity(event.target.value as WifiSecurity)
+                      }
                       className="w-full rounded-xl border border-zinc-300 bg-white px-4 py-3 outline-none transition focus:border-zinc-500 dark:border-zinc-700 dark:bg-black"
                     >
                       <option value="WPA">WPA/WPA2</option>
@@ -504,7 +550,9 @@ export default function QrCodeLabPage() {
                     <input
                       type="text"
                       value={whatsappPhone}
-                      onChange={(event) => setWhatsappPhone(event.target.value)}
+                      onChange={(event) =>
+                        setWhatsappPhone(event.target.value)
+                      }
                       placeholder="Ex: 5569999999999"
                       className="w-full rounded-xl border border-zinc-300 bg-white px-4 py-3 outline-none transition focus:border-zinc-500 dark:border-zinc-700 dark:bg-black"
                     />
@@ -517,7 +565,9 @@ export default function QrCodeLabPage() {
 
                     <textarea
                       value={whatsappMessage}
-                      onChange={(event) => setWhatsappMessage(event.target.value)}
+                      onChange={(event) =>
+                        setWhatsappMessage(event.target.value)
+                      }
                       placeholder="Ex: Olá, vim pelo QR Code."
                       className="min-h-28 w-full resize-none rounded-xl border border-zinc-300 bg-white px-4 py-3 outline-none transition focus:border-zinc-500 dark:border-zinc-700 dark:bg-black"
                     />
@@ -535,7 +585,9 @@ export default function QrCodeLabPage() {
                     <input
                       type="email"
                       value={emailAddress}
-                      onChange={(event) => setEmailAddress(event.target.value)}
+                      onChange={(event) =>
+                        setEmailAddress(event.target.value)
+                      }
                       placeholder="exemplo@email.com"
                       className="w-full rounded-xl border border-zinc-300 bg-white px-4 py-3 outline-none transition focus:border-zinc-500 dark:border-zinc-700 dark:bg-black"
                     />
@@ -588,9 +640,7 @@ export default function QrCodeLabPage() {
             </div>
 
             <div className="rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
-              <h2 className="text-lg font-black">
-                Personalização
-              </h2>
+              <h2 className="text-lg font-black">Personalização</h2>
 
               <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
@@ -668,9 +718,7 @@ export default function QrCodeLabPage() {
             <div className="sticky top-8 rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
               <div className="mb-4 flex items-center gap-2">
                 <Eye className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                <h2 className="text-lg font-black">
-                  Prévia
-                </h2>
+                <h2 className="text-lg font-black">Prévia</h2>
               </div>
 
               <div className="rounded-3xl border border-zinc-200 bg-zinc-50 p-5 text-center dark:border-zinc-800 dark:bg-zinc-900">
@@ -736,16 +784,18 @@ export default function QrCodeLabPage() {
         >
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.25em] text-green-700 dark:text-green-300">
-                Apoie o projeto
-              </p>
+              <div className="flex items-center gap-2 text-green-700 dark:text-green-300">
+                <Heart className="h-5 w-5" />
+                <p className="text-sm font-semibold">
+                  Apoie o EntreUS Lab
+                </p>
+              </div>
 
-              <h2 className="mt-2 text-2xl font-black text-green-950 dark:text-green-100">
-                Ajude o EntreUS Lab a continuar gratuito
-              </h2>
-
-              <p className="mt-2 max-w-3xl text-sm leading-6 text-green-900/80 dark:text-green-100/80">
-                Se puder, prefira o Pix Nubank, pois não desconta taxa do projeto. O Mercado Pago continua disponível como alternativa.
+              <p className="mt-4 max-w-3xl text-sm leading-6 text-green-900/80 dark:text-green-100/80">
+                Esta ferramenta pode ajudar escolas, professores e criadores.
+                Se puder, prefira o Pix Nubank: ele ajuda mais porque não
+                desconta taxa do projeto. O Mercado Pago continua como
+                alternativa, mas pode cobrar taxa.
               </p>
             </div>
 
@@ -754,8 +804,9 @@ export default function QrCodeLabPage() {
                 href={PIX_NUBANK_URL}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center justify-center rounded-full bg-green-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-green-700"
+                className="inline-flex items-center justify-center gap-2 rounded-full bg-green-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-green-700"
               >
+                <Landmark className="h-4 w-4" />
                 Pix Nubank — sem taxa
               </a>
 
@@ -763,8 +814,9 @@ export default function QrCodeLabPage() {
                 href={MERCADO_PAGO_URL}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center justify-center rounded-full border border-green-300 bg-white px-5 py-3 text-sm font-bold text-green-700 transition hover:bg-green-100 dark:border-green-800 dark:bg-green-950 dark:text-green-300 dark:hover:bg-green-900"
+                className="inline-flex items-center justify-center gap-2 rounded-full border border-green-300 bg-white px-5 py-3 text-sm font-bold text-green-700 transition hover:bg-green-100 dark:border-green-800 dark:bg-green-950 dark:text-green-300 dark:hover:bg-green-900"
               >
+                <CreditCard className="h-4 w-4" />
                 Mercado Pago — pode ter taxa
               </a>
             </div>

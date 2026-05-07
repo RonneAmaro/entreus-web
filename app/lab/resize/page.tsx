@@ -4,8 +4,11 @@ import Link from 'next/link'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft,
+  CreditCard,
   Download,
+  Heart,
   ImageIcon,
+  Landmark,
   Loader2,
   Maximize2,
   RefreshCw,
@@ -166,7 +169,9 @@ export default function ResizeImageLabPage() {
       setHeight(image.naturalHeight)
       setScale(100)
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Erro ao carregar imagem.')
+      setMessage(
+        error instanceof Error ? error.message : 'Erro ao carregar imagem.'
+      )
     } finally {
       setLoading(false)
     }
@@ -273,7 +278,9 @@ export default function ResizeImageLabPage() {
       setOutputUrl(nextOutputUrl)
       setMessage('Imagem redimensionada com sucesso.')
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Erro ao redimensionar imagem.')
+      setMessage(
+        error instanceof Error ? error.message : 'Erro ao redimensionar imagem.'
+      )
     } finally {
       setProcessing(false)
     }
@@ -340,8 +347,9 @@ export default function ResizeImageLabPage() {
                 </h1>
 
                 <p className="mt-4 max-w-4xl text-base leading-7 text-zinc-600 dark:text-zinc-400">
-                  Ajuste tamanho, proporção, formato e qualidade de imagens para posts,
-                  cartazes, atividades escolares, redes sociais, sites e materiais digitais.
+                  Ajuste tamanho, proporção, formato e qualidade de imagens para
+                  posts, cartazes, atividades escolares, redes sociais, sites e
+                  materiais digitais.
                 </p>
               </div>
             </div>
@@ -424,7 +432,9 @@ export default function ResizeImageLabPage() {
                     type="number"
                     min={1}
                     value={width}
-                    onChange={(event) => handleWidthChange(Number(event.target.value))}
+                    onChange={(event) =>
+                      handleWidthChange(Number(event.target.value))
+                    }
                     className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 outline-none dark:border-zinc-700 dark:bg-black"
                   />
                 </div>
@@ -438,7 +448,9 @@ export default function ResizeImageLabPage() {
                     type="number"
                     min={1}
                     value={height}
-                    onChange={(event) => handleHeightChange(Number(event.target.value))}
+                    onChange={(event) =>
+                      handleHeightChange(Number(event.target.value))
+                    }
                     className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 outline-none dark:border-zinc-700 dark:bg-black"
                   />
                 </div>
@@ -463,7 +475,9 @@ export default function ResizeImageLabPage() {
                   min={1}
                   max={500}
                   value={scale}
-                  onChange={(event) => handleScaleChange(Number(event.target.value))}
+                  onChange={(event) =>
+                    handleScaleChange(Number(event.target.value))
+                  }
                   className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 outline-none dark:border-zinc-700 dark:bg-black"
                 />
               </div>
@@ -511,7 +525,9 @@ export default function ResizeImageLabPage() {
 
                   <select
                     value={outputFormat}
-                    onChange={(event) => setOutputFormat(event.target.value as OutputFormat)}
+                    onChange={(event) =>
+                      setOutputFormat(event.target.value as OutputFormat)
+                    }
                     className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 outline-none dark:border-zinc-700 dark:bg-black"
                   >
                     <option value="image/png">PNG</option>
@@ -624,9 +640,7 @@ export default function ResizeImageLabPage() {
                 </div>
 
                 <div className="rounded-2xl bg-zinc-50 p-4 text-center dark:bg-zinc-900">
-                  <p className="text-lg font-black">
-                    {outputSizeLabel}
-                  </p>
+                  <p className="text-lg font-black">{outputSizeLabel}</p>
                   <p className="mt-1 text-xs uppercase tracking-wide text-zinc-500">
                     peso final
                   </p>
@@ -652,17 +666,18 @@ export default function ResizeImageLabPage() {
         >
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.25em] text-green-700 dark:text-green-300">
-                Apoie o projeto
-              </p>
+              <div className="flex items-center gap-2 text-green-700 dark:text-green-300">
+                <Heart className="h-5 w-5" />
+                <p className="text-sm font-semibold">
+                  Apoie o EntreUS Lab
+                </p>
+              </div>
 
-              <h2 className="mt-2 text-2xl font-black text-green-950 dark:text-green-100">
-                Ajude o EntreUS Lab a continuar gratuito
-              </h2>
-
-              <p className="mt-2 max-w-3xl text-sm leading-6 text-green-900/80 dark:text-green-100/80">
-                Se puder, prefira o Pix Nubank, pois não desconta taxa do projeto.
-                O Mercado Pago continua disponível como alternativa.
+              <p className="mt-4 max-w-3xl text-sm leading-6 text-green-900/80 dark:text-green-100/80">
+                Esta ferramenta pode ajudar escolas, professores e criadores.
+                Se puder, prefira o Pix Nubank: ele ajuda mais porque não
+                desconta taxa do projeto. O Mercado Pago continua como
+                alternativa, mas pode cobrar taxa.
               </p>
             </div>
 
@@ -671,8 +686,9 @@ export default function ResizeImageLabPage() {
                 href={PIX_NUBANK_URL}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center justify-center rounded-full bg-green-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-green-700"
+                className="inline-flex items-center justify-center gap-2 rounded-full bg-green-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-green-700"
               >
+                <Landmark className="h-4 w-4" />
                 Pix Nubank — sem taxa
               </a>
 
@@ -680,8 +696,9 @@ export default function ResizeImageLabPage() {
                 href={MERCADO_PAGO_URL}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center justify-center rounded-full border border-green-300 bg-white px-5 py-3 text-sm font-bold text-green-700 transition hover:bg-green-100 dark:border-green-800 dark:bg-green-950 dark:text-green-300 dark:hover:bg-green-900"
+                className="inline-flex items-center justify-center gap-2 rounded-full border border-green-300 bg-white px-5 py-3 text-sm font-bold text-green-700 transition hover:bg-green-100 dark:border-green-800 dark:bg-green-950 dark:text-green-300 dark:hover:bg-green-900"
               >
+                <CreditCard className="h-4 w-4" />
                 Mercado Pago — pode ter taxa
               </a>
             </div>
