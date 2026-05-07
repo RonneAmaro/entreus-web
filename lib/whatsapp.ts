@@ -39,6 +39,37 @@ function getRecord(value: unknown) {
   return isRecord(value) ? value : null
 }
 
+export function onlyWhatsAppDigits(value?: string | null) {
+  return (value || '').replace(/\D/g, '')
+}
+
+export function maskWhatsAppPhone(value?: string | null) {
+  const digits = onlyWhatsAppDigits(value)
+
+  if (!digits) {
+    return 'não informado'
+  }
+
+  if (digits.length <= 4) {
+    return '****'
+  }
+
+  const start = digits.slice(0, 4)
+  const end = digits.slice(-4)
+
+  return `${start}******${end}`
+}
+
+export function getWhatsAppReplyTo(from: string) {
+  const override = onlyWhatsAppDigits(process.env.WHATSAPP_REPLY_TO_OVERRIDE)
+
+  if (override) {
+    return override
+  }
+
+  return onlyWhatsAppDigits(from)
+}
+
 function getMediaMessage(value: unknown): WhatsAppMediaMessage | undefined {
   const media = getRecord(value)
   if (!media) return undefined
@@ -144,24 +175,33 @@ export async function sendWhatsAppTextMessage(to: string, body: string) {
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID
   const apiVersion = process.env.WHATSAPP_API_VERSION || 'v20.0'
 
-  if (!accessToken || !phoneNumberId) {
+  const cleanAccessToken = accessToken?.replace(/^Bearer\s+/i, '').trim()
+  const cleanPhoneNumberId = phoneNumberId?.trim()
+  const cleanApiVersion = apiVersion.trim()
+  const cleanTo = onlyWhatsAppDigits(to)
+
+  if (!cleanAccessToken || !cleanPhoneNumberId) {
     throw new Error(
       'Configure WHATSAPP_ACCESS_TOKEN e WHATSAPP_PHONE_NUMBER_ID no ambiente.'
     )
   }
 
+  if (!cleanTo) {
+    throw new Error('Número de destinatário WhatsApp inválido ou vazio.')
+  }
+
   const response = await fetch(
-    `https://graph.facebook.com/${apiVersion}/${phoneNumberId}/messages`,
+    `https://graph.facebook.com/${cleanApiVersion}/${cleanPhoneNumberId}/messages`,
     {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${accessToken}`,
+        Authorization: `Bearer ${cleanAccessToken}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         messaging_product: 'whatsapp',
         recipient_type: 'individual',
-        to,
+        to: cleanTo,
         type: 'text',
         text: {
           preview_url: false,
@@ -175,7 +215,9 @@ export async function sendWhatsAppTextMessage(to: string, body: string) {
 
   if (!response.ok) {
     throw new Error(
-      `Erro ao enviar mensagem WhatsApp: ${response.status} ${responseBody}`
+      `Erro ao enviar mensagem WhatsApp para ${maskWhatsAppPhone(
+        cleanTo
+      )}: ${response.status} ${responseBody}`
     )
   }
 
