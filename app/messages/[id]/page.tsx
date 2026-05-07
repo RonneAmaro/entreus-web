@@ -787,7 +787,7 @@ export default function ConversationPage() {
       setOtherProfile(other)
     }
 
-    await loadMessagesWithAttachments()
+    await loadMessagesWithAttachments(currentUserId)
     await markConversationAsRead(currentUserId)
   }
 
@@ -863,7 +863,7 @@ export default function ConversationPage() {
     )
   }
 
-  async function loadMessagesWithAttachments() {
+  async function loadMessagesWithAttachments(currentUserId: string) {
     const { data, error } = await supabase
       .from('messages')
       .select('id, conversation_id, sender_id, content, created_at, updated_at, deleted_at')
@@ -876,15 +876,35 @@ export default function ConversationPage() {
     }
 
     const loadedMessages = (data || []) as MessageRow[]
-    const messageIds = loadedMessages.map((item) => item.id)
+
+    const { data: hiddenData, error: hiddenError } = await supabase
+      .from('message_hidden_for_users')
+      .select('message_id')
+      .eq('conversation_id', conversationId)
+      .eq('user_id', currentUserId)
+
+    if (hiddenError) {
+      setMessage('Erro ao carregar mensagens ocultas: ' + hiddenError.message)
+      return
+    }
+
+    const hiddenMessageIds = new Set(
+      ((hiddenData || []) as { message_id: string }[]).map((item) => item.message_id)
+    )
+
+    const visibleMessages = loadedMessages.filter(
+      (item) => !hiddenMessageIds.has(item.id)
+    )
+
+    const visibleMessageIds = visibleMessages.map((item) => item.id)
 
     const [attachmentMap, reactionMap] = await Promise.all([
-      loadAttachmentsForMessages(messageIds),
-      loadReactionsForMessages(messageIds),
+      loadAttachmentsForMessages(visibleMessageIds),
+      loadReactionsForMessages(visibleMessageIds),
     ])
 
     setMessages(
-      loadedMessages.map((item) => ({
+      visibleMessages.map((item) => ({
         ...item,
         attachments: attachmentMap[item.id] || [],
         reactions: reactionMap[item.id] || [],
@@ -1245,6 +1265,49 @@ export default function ConversationPage() {
     setEditingMessageId(null)
     setEditingMessageContent('')
     setSavingMessageEdit(false)
+  }
+
+  async function handleHideMessageForMe(messageId: string) {
+    if (!userId || !conversationId) return
+
+    const targetMessage = messages.find((item) => item.id === messageId)
+
+    if (!targetMessage) {
+      setMessage('Mensagem não encontrada.')
+      return
+    }
+
+    const confirmHide = window.confirm('Apagar esta mensagem só para você?')
+
+    if (!confirmHide) return
+
+    setOpenMessageMenuId(null)
+    setOpenReactionMessageId(null)
+    setMessage('')
+
+    const { error } = await supabase
+      .from('message_hidden_for_users')
+      .upsert(
+        {
+          message_id: messageId,
+          conversation_id: conversationId,
+          user_id: userId,
+        },
+        {
+          onConflict: 'message_id,user_id',
+        }
+      )
+
+    if (error) {
+      setMessage('Erro ao apagar só para mim: ' + error.message)
+      return
+    }
+
+    setMessages((current) => current.filter((item) => item.id !== messageId))
+
+    if (editingMessageId === messageId) {
+      handleCancelEditMessage()
+    }
   }
 
   async function handleDeleteMessageForEveryone(messageId: string) {
@@ -2048,7 +2111,7 @@ export default function ConversationPage() {
                           </button>
                         )}
 
-                        {isMine && !item.deleted_at && !isEditingThisMessage && (
+                        {!item.deleted_at && !isEditingThisMessage && (
                           <button
                             type="button"
                             onClick={() => {
@@ -2073,9 +2136,13 @@ export default function ConversationPage() {
                           </button>
                         )}
 
-                        {openMessageMenuId === item.id && isMine && !item.deleted_at && !isEditingThisMessage && (
-                          <div className="absolute bottom-8 right-0 z-40 w-52 overflow-hidden rounded-2xl border border-zinc-200 bg-white text-sm text-zinc-900 shadow-xl dark:border-zinc-700 dark:bg-zinc-900 dark:text-white">
-                            {item.content?.trim() && (
+                        {openMessageMenuId === item.id && !item.deleted_at && !isEditingThisMessage && (
+                          <div
+                            className={`absolute bottom-8 z-40 w-56 overflow-hidden rounded-2xl border border-zinc-200 bg-white text-sm text-zinc-900 shadow-xl dark:border-zinc-700 dark:bg-zinc-900 dark:text-white ${
+                              isMine ? 'right-0' : 'left-0'
+                            }`}
+                          >
+                            {isMine && item.content?.trim() && (
                               <button
                                 type="button"
                                 onClick={() => handleStartEditMessage(item)}
@@ -2088,17 +2155,28 @@ export default function ConversationPage() {
 
                             <button
                               type="button"
-                              onClick={() => handleDeleteMessageForEveryone(item.id)}
-                              disabled={isDeletingThisMessage}
-                              className="flex w-full items-center gap-2 px-4 py-3 text-left font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:text-red-400 dark:hover:bg-red-950/30"
+                              onClick={() => handleHideMessageForMe(item.id)}
+                              className="flex w-full items-center gap-2 px-4 py-3 text-left font-semibold transition hover:bg-zinc-100 dark:hover:bg-zinc-800"
                             >
-                              {isDeletingThisMessage ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                <Trash2 className="h-4 w-4" />
-                              )}
-                              Apagar para todos
+                              <Trash2 className="h-4 w-4" />
+                              Apagar só para mim
                             </button>
+
+                            {isMine && (
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteMessageForEveryone(item.id)}
+                                disabled={isDeletingThisMessage}
+                                className="flex w-full items-center gap-2 px-4 py-3 text-left font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:text-red-400 dark:hover:bg-red-950/30"
+                              >
+                                {isDeletingThisMessage ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Trash2 className="h-4 w-4" />
+                                )}
+                                Apagar para todos
+                              </button>
+                            )}
                           </div>
                         )}
 
