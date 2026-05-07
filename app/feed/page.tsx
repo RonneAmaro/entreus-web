@@ -17,13 +17,11 @@ import {
   Repeat2,
   Trash2,
   ImageIcon,
-  Newspaper,
   Search,
   FlaskConical,
   Heart,
   Sparkles,
   MessageCircle,
-  Play,
 } from 'lucide-react'
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -32,8 +30,6 @@ import { supabase } from '@/lib/supabase'
 import { useLanguage } from '../components/LanguageProvider'
 
 type VisibilityType = 'public' | 'followers' | 'private'
-type FeedTab = 'posts' | 'media'
-
 type ComposerSubmitData = {
   content: string
   category: string
@@ -120,15 +116,6 @@ type Repost = {
   user_id: string
   created_at: string
   profiles: ProfileSummary | null
-}
-
-type MediaGalleryItem = {
-  key: string
-  post: Post
-  media: PostMedia
-  authorName: string
-  authorUsername: string
-  totalMedia: number
 }
 
 type FeedTexts = {
@@ -369,7 +356,6 @@ function FeedContent() {
   const [commentLikes, setCommentLikes] = useState<CommentLike[]>([])
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([])
   const [reposts, setReposts] = useState<Repost[]>([])
-  const [activeFeedTab, setActiveFeedTab] = useState<FeedTab>('posts')
   const [feedSearch, setFeedSearch] = useState('')
 
   const likeActionInProgressRef = useRef<Set<string>>(new Set())
@@ -460,7 +446,7 @@ function FeedContent() {
   }, [router])
 
   useEffect(() => {
-    if (!highlightedPostId || posts.length === 0 || activeFeedTab !== 'posts') return
+    if (!highlightedPostId || posts.length === 0) return
 
     const timer = setTimeout(() => {
       const element = document.getElementById(`post-${highlightedPostId}`)
@@ -471,7 +457,7 @@ function FeedContent() {
     }, 300)
 
     return () => clearTimeout(timer)
-  }, [highlightedPostId, posts, activeFeedTab])
+  }, [highlightedPostId, posts])
 
   async function loadUnreadNotificationsCount(currentUserId: string = userId) {
     if (!currentUserId) return
@@ -1226,7 +1212,6 @@ function FeedContent() {
       }
     }
 
-    setActiveFeedTab('posts')
     setMessage(t('feed.messages.publishedSuccess'))
 
     await loadPosts(
@@ -1618,10 +1603,6 @@ function FeedContent() {
     return legacyMedia
   }
 
-  function postHasMedia(post: Post) {
-    return getPostMedia(post).length > 0
-  }
-
   const followStateMap = useMemo(() => {
     const map = new Map<string, boolean>()
 
@@ -1709,28 +1690,6 @@ function FeedContent() {
     })
   }, [feedItems, normalizedSearch])
 
-  const filteredPostsWithMedia = useMemo(() => {
-    return posts.filter((post) => postHasMedia(post)).filter((post) => matchesPostSearch(post))
-  }, [posts, normalizedSearch])
-
-  const mediaGalleryItems = useMemo<MediaGalleryItem[]>(() => {
-    return filteredPostsWithMedia.flatMap((post) => {
-      const media = getPostMedia(post)
-      const authorName =
-        post.profiles?.display_name || post.profiles?.username || t('common.user')
-      const authorUsername = post.profiles?.username || t('common.username')
-
-      return media.map((mediaItem) => ({
-        key: `${post.id}-${mediaItem.id}`,
-        post,
-        media: mediaItem,
-        authorName,
-        authorUsername,
-        totalMedia: media.length,
-      }))
-    })
-  }, [filteredPostsWithMedia, t])
-
   const visibleFeedItems = filteredFeedItems
   const hasSearch = normalizedSearch.length > 0
 
@@ -1799,51 +1758,6 @@ function FeedContent() {
               )}
             </div>
 
-            <div className="mb-5 overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-              <div className="grid grid-cols-2">
-                <button
-                  type="button"
-                  onClick={() => setActiveFeedTab('posts')}
-                  className={`relative flex items-center justify-center gap-2 px-4 py-4 text-sm font-bold transition ${
-                    activeFeedTab === 'posts'
-                      ? 'text-zinc-950 dark:text-white'
-                      : 'text-zinc-500 hover:bg-zinc-50 dark:text-zinc-400 dark:hover:bg-zinc-800/60'
-                  }`}
-                >
-                  <Newspaper className="h-4 w-4" />
-                  <span>{localTexts.tabs.posts}</span>
-                  <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
-                    {feedItems.length}
-                  </span>
-
-                  {activeFeedTab === 'posts' && (
-                    <span className="absolute bottom-0 left-1/2 h-1 w-16 -translate-x-1/2 rounded-full bg-blue-500" />
-                  )}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setActiveFeedTab('media')}
-                  className={`relative flex items-center justify-center gap-2 border-l border-zinc-200 px-4 py-4 text-sm font-bold transition dark:border-zinc-800 ${
-                    activeFeedTab === 'media'
-                      ? 'text-zinc-950 dark:text-white'
-                      : 'text-zinc-500 hover:bg-zinc-50 dark:text-zinc-400 dark:hover:bg-zinc-800/60'
-                  }`}
-                >
-                  <ImageIcon className="h-4 w-4" />
-                  <span>{localTexts.tabs.media}</span>
-                  <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
-                    {mediaGalleryItems.length}
-                  </span>
-
-                  {activeFeedTab === 'media' && (
-                    <span className="absolute bottom-0 left-1/2 h-1 w-16 -translate-x-1/2 rounded-full bg-blue-500" />
-                  )}
-                </button>
-              </div>
-            </div>
-
-            {activeFeedTab === 'posts' ? (
               <div className="space-y-4 sm:space-y-5">
                 {visibleFeedItems.length === 0 && (
                   <div className="rounded-2xl border border-zinc-200 bg-white p-4 text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 sm:p-6">
@@ -2344,98 +2258,7 @@ function FeedContent() {
                   )
                 })}
               </div>
-            ) : (
-              <div>
-                {mediaGalleryItems.length === 0 ? (
-                  <div className="rounded-2xl border border-zinc-200 bg-white p-4 text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 sm:p-6">
-                    {hasSearch ? localTexts.mural.noSearchResults : localTexts.mural.emptyMedia}
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                    {mediaGalleryItems.map((item) => {
-                      const isVideo = item.media.media_type === 'video'
-                      const categoryLabel = t(getCategoryKey(item.post.category))
 
-                      return (
-                        <Link
-                          key={item.key}
-                          href={`/post/${item.post.id}`}
-                          className="group overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900"
-                          title={localTexts.mural.openPost}
-                        >
-                          <div className="relative aspect-square overflow-hidden bg-zinc-100 dark:bg-zinc-950">
-                            {isVideo ? (
-                              <video
-                                src={item.media.media_url}
-                                className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
-                                muted
-                                playsInline
-                                preload="metadata"
-                              />
-                            ) : (
-                              <img
-                                src={item.media.media_url}
-                                alt={item.authorName}
-                                className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
-                              />
-                            )}
-
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
-
-                            {isVideo && (
-                              <div className="absolute left-3 top-3 rounded-full bg-black/65 p-2 text-white shadow-lg">
-                                <Play className="h-4 w-4 fill-white" />
-                              </div>
-                            )}
-
-                            {item.totalMedia > 1 && (
-                              <div className="absolute right-3 top-3 rounded-full bg-black/65 px-2.5 py-1 text-xs font-semibold text-white shadow-lg">
-                                {item.totalMedia} {localTexts.mural.galleryMediaCount}
-                              </div>
-                            )}
-
-                            <div className="absolute bottom-0 left-0 right-0 p-3 text-white">
-                              <p className="truncate text-sm font-bold">
-                                {item.authorName}
-                              </p>
-                              <p className="truncate text-xs text-white/80">
-                                @{item.authorUsername}
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="space-y-2 p-3">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="rounded-full border border-zinc-200 bg-zinc-100 px-2 py-1 text-[11px] font-medium text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
-                                {categoryLabel}
-                              </span>
-
-                              <span className="rounded-full border border-zinc-200 bg-zinc-100 px-2 py-1 text-[11px] font-medium text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
-                                {getVisibilityLabel(item.post.visibility)}
-                              </span>
-                            </div>
-
-                            {item.post.content ? (
-                              <p className="truncate text-sm text-zinc-700 dark:text-zinc-300">
-                                {item.post.content}
-                              </p>
-                            ) : (
-                              <p className="truncate text-sm text-zinc-500 dark:text-zinc-400">
-                                {localTexts.mural.openPost}
-                              </p>
-                            )}
-
-                            <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                              {new Date(item.post.created_at).toLocaleString(getDateLocale(language))}
-                            </p>
-                          </div>
-                        </Link>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
           </div>
 
           <aside className="hidden xl:block">
