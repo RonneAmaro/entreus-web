@@ -4,12 +4,20 @@ import { LanguageProvider } from './components/LanguageProvider'
 import './globals.css'
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://entreus.vercel.app'),
+
   title: {
     default: 'EntreUS — Só Entre Nós',
     template: '%s | EntreUS',
   },
+
   description:
-    'EntreUS é uma rede social privada focada em conexão, lifestyle, liberdade, privacidade e interações reais.',
+    'EntreUS é uma rede social com privacidade, liberdade, lifestyle e conexão real.',
+
+  alternates: {
+    canonical: '/',
+  },
+
   icons: {
     icon: [
       {
@@ -20,14 +28,16 @@ export const metadata: Metadata = {
     shortcut: '/favicon-entreus.png',
     apple: '/favicon-entreus.png',
   },
+
   openGraph: {
     title: 'EntreUS — Só Entre Nós',
     description:
-      'Uma rede social privada para adultos, focada em conexão, lifestyle, liberdade e privacidade.',
+      'Rede social com privacidade, liberdade, lifestyle e conexão real.',
+    url: 'https://entreus.vercel.app',
     siteName: 'EntreUS',
     images: [
       {
-        url: '/og-image.png',
+        url: '/og/entreus-preview.png',
         width: 1200,
         height: 630,
         alt: 'EntreUS — Só Entre Nós',
@@ -36,12 +46,13 @@ export const metadata: Metadata = {
     type: 'website',
     locale: 'pt_BR',
   },
+
   twitter: {
     card: 'summary_large_image',
     title: 'EntreUS — Só Entre Nós',
     description:
-      'Uma rede social privada para adultos, focada em conexão, lifestyle, liberdade e privacidade.',
-    images: ['/og-image.png'],
+      'Rede social com privacidade, liberdade, lifestyle e conexão real.',
+    images: ['/og/entreus-preview.png'],
   },
 }
 
