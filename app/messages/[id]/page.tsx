@@ -2347,7 +2347,7 @@ export default function ConversationPage() {
 
           <form
             onSubmit={handleSendMessage}
-            className="flex shrink-0 gap-2 border-t border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900 sm:gap-3 sm:p-4"
+            className="relative flex shrink-0 gap-2 border-t border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900 sm:gap-3 sm:p-4"
           >
             {openMessageEmojiPicker && (
               <div className="absolute bottom-full left-3 right-3 z-50 mb-3 rounded-3xl border border-zinc-200 bg-white p-3 shadow-2xl dark:border-zinc-700 dark:bg-zinc-900 sm:left-4 sm:right-auto sm:w-[360px]">
