@@ -10,16 +10,20 @@ import { useParams, useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import {
   ArrowLeft,
+  Check,
   Inbox,
   Loader2,
   MessageSquarePlus,
   Mic,
+  MoreHorizontal,
   Paperclip,
+  Pencil,
   Plus,
   Search,
   Send,
   SmilePlus,
   Square,
+  Trash2,
   Video,
   X,
 } from 'lucide-react'
@@ -270,6 +274,15 @@ function groupMessageReactions(reactions: MessageReaction[], currentUserId: stri
   return Object.values(grouped)
 }
 
+function isMessageEdited(message: MessageRow) {
+  if (!message.updated_at || message.deleted_at) return false
+
+  const createdAt = new Date(message.created_at).getTime()
+  const updatedAt = new Date(message.updated_at).getTime()
+
+  return Math.abs(updatedAt - createdAt) > 3000
+}
+
 export default function ConversationPage() {
   const params = useParams()
   const router = useRouter()
@@ -300,6 +313,11 @@ export default function ConversationPage() {
   const [newMessage, setNewMessage] = useState('')
   const [selectedMedia, setSelectedMedia] = useState<SelectedMedia[]>([])
   const [openReactionMessageId, setOpenReactionMessageId] = useState<string | null>(null)
+  const [openMessageMenuId, setOpenMessageMenuId] = useState<string | null>(null)
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
+  const [editingMessageContent, setEditingMessageContent] = useState('')
+  const [savingMessageEdit, setSavingMessageEdit] = useState(false)
+  const [deletingMessageId, setDeletingMessageId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [conversations, setConversations] = useState<ConversationItem[]>([])
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0)
@@ -1143,6 +1161,197 @@ export default function ConversationPage() {
     )
   }
 
+  function handleStartEditMessage(item: MessageRow) {
+    if (!userId || item.sender_id !== userId || item.deleted_at) return
+
+    if (!item.content?.trim()) {
+      setMessage('Esta mensagem não tem texto para editar.')
+      return
+    }
+
+    setEditingMessageId(item.id)
+    setEditingMessageContent(item.content)
+    setOpenMessageMenuId(null)
+    setOpenReactionMessageId(null)
+    setMessage('')
+  }
+
+  function handleCancelEditMessage() {
+    setEditingMessageId(null)
+    setEditingMessageContent('')
+    setSavingMessageEdit(false)
+  }
+
+  async function handleSaveEditedMessage(messageId: string) {
+    if (!userId || !conversationId) return
+
+    const content = editingMessageContent.trim()
+
+    if (!content) {
+      setMessage('A mensagem não pode ficar vazia. Para remover, use “apagar para todos”.')
+      return
+    }
+
+    const targetMessage = messages.find((item) => item.id === messageId)
+
+    if (!targetMessage || targetMessage.sender_id !== userId || targetMessage.deleted_at) {
+      setMessage('Você não pode editar esta mensagem.')
+      return
+    }
+
+    setSavingMessageEdit(true)
+    setMessage('')
+
+    const updatedAt = new Date().toISOString()
+
+    const { error } = await supabase
+      .from('messages')
+      .update({
+        content,
+        updated_at: updatedAt,
+      })
+      .eq('id', messageId)
+      .eq('conversation_id', conversationId)
+      .eq('sender_id', userId)
+      .is('deleted_at', null)
+
+    if (error) {
+      setMessage('Erro ao editar mensagem: ' + error.message)
+      setSavingMessageEdit(false)
+      return
+    }
+
+    setMessages((current) =>
+      current.map((item) =>
+        item.id === messageId
+          ? {
+              ...item,
+              content,
+              updated_at: updatedAt,
+            }
+          : item
+      )
+    )
+
+    await supabase
+      .from('conversations')
+      .update({
+        updated_at: updatedAt,
+      })
+      .eq('id', conversationId)
+
+    await loadConversationList(userId)
+
+    setEditingMessageId(null)
+    setEditingMessageContent('')
+    setSavingMessageEdit(false)
+  }
+
+  async function handleDeleteMessageForEveryone(messageId: string) {
+    if (!userId || !conversationId) return
+
+    const targetMessage = messages.find((item) => item.id === messageId)
+
+    if (!targetMessage || targetMessage.sender_id !== userId || targetMessage.deleted_at) {
+      setMessage('Você não pode apagar esta mensagem.')
+      return
+    }
+
+    const confirmDelete = window.confirm('Apagar esta mensagem para todos?')
+
+    if (!confirmDelete) return
+
+    setDeletingMessageId(messageId)
+    setOpenMessageMenuId(null)
+    setOpenReactionMessageId(null)
+    setMessage('')
+
+    const deletedAt = new Date().toISOString()
+    const attachmentsToDelete = targetMessage.attachments || []
+
+    if (attachmentsToDelete.length > 0) {
+      const storagePaths = attachmentsToDelete
+        .map((attachment) => attachment.storage_path)
+        .filter(Boolean)
+
+      if (storagePaths.length > 0) {
+        const { error: storageError } = await supabase.storage
+          .from('message-media')
+          .remove(storagePaths)
+
+        if (storageError) {
+          console.error('Erro ao remover mídias da mensagem:', storageError.message)
+        }
+      }
+
+      const { error: attachmentsError } = await supabase
+        .from('message_attachments')
+        .delete()
+        .eq('message_id', messageId)
+        .eq('sender_id', userId)
+
+      if (attachmentsError) {
+        console.error('Erro ao apagar anexos da mensagem:', attachmentsError.message)
+      }
+    }
+
+    const { error: reactionsError } = await supabase
+      .from('message_reactions')
+      .delete()
+      .eq('message_id', messageId)
+
+    if (reactionsError) {
+      console.error('Erro ao apagar reações da mensagem:', reactionsError.message)
+    }
+
+    const { error } = await supabase
+      .from('messages')
+      .update({
+        content: null,
+        deleted_at: deletedAt,
+        updated_at: deletedAt,
+      })
+      .eq('id', messageId)
+      .eq('conversation_id', conversationId)
+      .eq('sender_id', userId)
+
+    if (error) {
+      setMessage('Erro ao apagar mensagem: ' + error.message)
+      setDeletingMessageId(null)
+      return
+    }
+
+    setMessages((current) =>
+      current.map((item) =>
+        item.id === messageId
+          ? {
+              ...item,
+              content: null,
+              deleted_at: deletedAt,
+              updated_at: deletedAt,
+              attachments: [],
+              reactions: [],
+            }
+          : item
+      )
+    )
+
+    await supabase
+      .from('conversations')
+      .update({
+        updated_at: deletedAt,
+      })
+      .eq('id', conversationId)
+
+    await loadConversationList(userId)
+
+    if (editingMessageId === messageId) {
+      handleCancelEditMessage()
+    }
+
+    setDeletingMessageId(null)
+  }
+
   async function handleDeleteAttachment(
     messageId: string,
     attachment: MessageAttachment
@@ -1615,6 +1824,9 @@ export default function ConversationPage() {
                 const attachments = item.attachments || []
                 const reactions = item.reactions || []
                 const reactionGroups = groupMessageReactions(reactions, userId)
+                const messageIsEdited = isMessageEdited(item)
+                const isEditingThisMessage = editingMessageId === item.id
+                const isDeletingThisMessage = deletingMessageId === item.id
 
                 return (
                   <div
@@ -1739,6 +1951,48 @@ export default function ConversationPage() {
                         <p className="whitespace-pre-wrap break-words opacity-70">
                           Mensagem apagada.
                         </p>
+                      ) : isEditingThisMessage ? (
+                        <div className="space-y-3">
+                          <textarea
+                            value={editingMessageContent}
+                            onChange={(event) => setEditingMessageContent(event.target.value)}
+                            className={`min-h-24 w-full resize-none rounded-2xl border px-3 py-2 text-sm outline-none ${
+                              isMine
+                                ? 'border-white/20 bg-white/10 text-white placeholder:text-white/50 focus:border-white/50 dark:border-black/20 dark:bg-black/10 dark:text-black dark:placeholder:text-black/50 dark:focus:border-black/40'
+                                : 'border-zinc-300 bg-white text-zinc-900 focus:border-zinc-500 dark:border-zinc-700 dark:bg-black dark:text-white'
+                            }`}
+                          />
+
+                          <div className="flex flex-wrap justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={handleCancelEditMessage}
+                              disabled={savingMessageEdit}
+                              className={`inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-bold transition disabled:opacity-60 ${
+                                isMine
+                                  ? 'border-white/20 text-white/80 hover:bg-white/10 dark:border-black/20 dark:text-black/70 dark:hover:bg-black/10'
+                                  : 'border-zinc-300 text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800'
+                              }`}
+                            >
+                              <X className="h-3.5 w-3.5" />
+                              Cancelar
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleSaveEditedMessage(item.id)}
+                              disabled={savingMessageEdit || !editingMessageContent.trim()}
+                              className="inline-flex items-center gap-1 rounded-full bg-blue-600 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {savingMessageEdit ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <Check className="h-3.5 w-3.5" />
+                              )}
+                              Salvar
+                            </button>
+                          </div>
+                        </div>
                       ) : item.content ? (
                         <>
                           <p className="whitespace-pre-wrap break-words">
@@ -1768,16 +2022,20 @@ export default function ConversationPage() {
                           }`}
                         >
                           {formatMessageTime(item.created_at)}
+                          {messageIsEdited && !item.deleted_at && (
+                            <span> · editada</span>
+                          )}
                         </p>
 
-                        {!item.deleted_at && (
+                        {!item.deleted_at && !isEditingThisMessage && (
                           <button
                             type="button"
-                            onClick={() =>
+                            onClick={() => {
+                              setOpenMessageMenuId(null)
                               setOpenReactionMessageId((current) =>
                                 current === item.id ? null : item.id
                               )
-                            }
+                            }}
                             className={`flex h-6 w-6 items-center justify-center rounded-full transition ${
                               isMine
                                 ? 'text-white/70 hover:bg-white/10 hover:text-white dark:text-black/60 dark:hover:bg-black/10 dark:hover:text-black'
@@ -1790,7 +2048,61 @@ export default function ConversationPage() {
                           </button>
                         )}
 
-                        {openReactionMessageId === item.id && !item.deleted_at && (
+                        {isMine && !item.deleted_at && !isEditingThisMessage && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setOpenReactionMessageId(null)
+                              setOpenMessageMenuId((current) =>
+                                current === item.id ? null : item.id
+                              )
+                            }}
+                            className={`flex h-6 w-6 items-center justify-center rounded-full transition ${
+                              isMine
+                                ? 'text-white/70 hover:bg-white/10 hover:text-white dark:text-black/60 dark:hover:bg-black/10 dark:hover:text-black'
+                                : 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-white'
+                            }`}
+                            aria-label="Opções da mensagem"
+                            title="Opções"
+                          >
+                            {isDeletingThisMessage ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <MoreHorizontal className="h-4 w-4" />
+                            )}
+                          </button>
+                        )}
+
+                        {openMessageMenuId === item.id && isMine && !item.deleted_at && !isEditingThisMessage && (
+                          <div className="absolute bottom-8 right-0 z-40 w-52 overflow-hidden rounded-2xl border border-zinc-200 bg-white text-sm text-zinc-900 shadow-xl dark:border-zinc-700 dark:bg-zinc-900 dark:text-white">
+                            {item.content?.trim() && (
+                              <button
+                                type="button"
+                                onClick={() => handleStartEditMessage(item)}
+                                className="flex w-full items-center gap-2 px-4 py-3 text-left font-semibold transition hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                              >
+                                <Pencil className="h-4 w-4" />
+                                Editar mensagem
+                              </button>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteMessageForEveryone(item.id)}
+                              disabled={isDeletingThisMessage}
+                              className="flex w-full items-center gap-2 px-4 py-3 text-left font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:text-red-400 dark:hover:bg-red-950/30"
+                            >
+                              {isDeletingThisMessage ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Trash2 className="h-4 w-4" />
+                              )}
+                              Apagar para todos
+                            </button>
+                          </div>
+                        )}
+
+                        {openReactionMessageId === item.id && !item.deleted_at && !isEditingThisMessage && (
                           <div
                             className={`absolute bottom-8 z-30 flex items-center gap-1 rounded-full border border-zinc-200 bg-white px-2 py-1.5 text-lg shadow-xl dark:border-zinc-700 dark:bg-zinc-900 ${
                               isMine ? 'right-0' : 'left-0'
