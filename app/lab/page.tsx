@@ -1,15 +1,11 @@
-'use client'
-
 import Image from 'next/image'
 import Link from 'next/link'
-import { ImageIcon, QrCode, Scissors, Wand2 } from 'lucide-react'
-import { useLanguage } from '../components/LanguageProvider'
+import { CreditCard, Heart, ImageIcon, Landmark, QrCode, Scissors, Wand2 } from 'lucide-react'
 
-const DONATION_URL = 'https://link.mercadopago.com.br/entreuslab'
+const PIX_DONATION_URL = 'https://nubank.com.br/cobrar/u2kum/69fca421-184d-459c-a125-f760fc56c264'
+const MERCADO_PAGO_DONATION_URL = 'https://link.mercadopago.com.br/entreuslab'
 
 export default function LabPage() {
-  const { t } = useLanguage()
-
   return (
     <main className="min-h-screen bg-zinc-50 px-4 py-10 text-zinc-950 dark:bg-black dark:text-white sm:px-6">
       <section className="mx-auto max-w-6xl">
@@ -18,14 +14,14 @@ export default function LabPage() {
             href="/feed"
             className="inline-flex items-center justify-center rounded-full border border-zinc-200 bg-white px-4 py-2 text-sm font-bold text-zinc-800 shadow-sm transition hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100 dark:hover:bg-zinc-900"
           >
-            {t('labPage.backToFeed')}
+            Voltar para o feed
           </Link>
 
           <Link
             href="/lab/poster"
             className="inline-flex items-center justify-center rounded-full bg-black px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:opacity-90 dark:bg-white dark:text-black"
           >
-            {t('labPage.openPoster')}
+            Abrir gerador de pôster
           </Link>
         </div>
 
@@ -38,11 +34,11 @@ export default function LabPage() {
                 <Link
                   href="/feed"
                   className="inline-flex items-center gap-3"
-                  aria-label={t('labPage.logoAria')}
+                  aria-label="Ir para a EntreUS"
                 >
                   <Image
                     src="/logo.png"
-                    alt={t('labPage.logoAlt')}
+                    alt="Logo EntreUS"
                     width={180}
                     height={110}
                     className="h-auto w-36 object-contain drop-shadow-[0_8px_18px_rgba(0,0,0,0.35)] sm:w-44"
@@ -51,15 +47,17 @@ export default function LabPage() {
                 </Link>
 
                 <p className="mt-5 text-sm font-semibold uppercase tracking-[0.25em] text-blue-600 dark:text-blue-400">
-                  {t('labPage.heroKicker')}
+                  EntreUS Lab
                 </p>
 
                 <h1 className="mt-3 text-3xl font-black tracking-tight sm:text-5xl">
-                  {t('labPage.title')}
+                  Ferramentas criativas para escola, imagem e PDF
                 </h1>
 
                 <p className="mt-4 max-w-3xl text-base leading-7 text-zinc-600 dark:text-zinc-400">
-                  {t('labPage.description')}
+                  Um laboratório dentro do ecossistema EntreUS para criar materiais,
+                  ampliar imagens, dividir arquivos em folhas e facilitar o trabalho
+                  de professores, escolas e criadores.
                 </p>
               </div>
 
@@ -68,16 +66,14 @@ export default function LabPage() {
                   href="/lab/poster"
                   className="inline-flex items-center justify-center rounded-full bg-black px-6 py-3 text-sm font-bold text-white shadow-lg transition hover:opacity-90 dark:bg-white dark:text-black"
                 >
-                  {t('labPage.openPoster')}
+                  Abrir gerador de pôster
                 </Link>
 
                 <a
-                  href={DONATION_URL}
-                  target="_blank"
-                  rel="noreferrer"
+                  href="#doacao"
                   className="inline-flex items-center justify-center rounded-full border border-blue-200 bg-blue-50 px-6 py-3 text-sm font-bold text-blue-700 shadow-sm transition hover:bg-blue-100 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-200 dark:hover:bg-blue-950/60"
                 >
-                  {t('labPage.donation.title')}
+                  Apoiar o EntreUS Lab
                 </a>
               </div>
             </div>
@@ -94,15 +90,15 @@ export default function LabPage() {
             </div>
 
             <h2 className="mt-5 text-xl font-black">
-              {t('labPage.posterTool.title')}
+              Pôster em folhas
             </h2>
 
             <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-400">
-              {t('labPage.posterTool.description')}
+              Transforme imagem ou PDF em um arquivo PDF dividido em várias folhas para imprimir e montar.
             </p>
 
             <span className="mt-5 inline-flex text-sm font-bold text-blue-600 group-hover:underline dark:text-blue-400">
-              {t('labPage.posterTool.action')}
+              Abrir ferramenta
             </span>
           </Link>
 
@@ -112,11 +108,11 @@ export default function LabPage() {
             </div>
 
             <h2 className="mt-5 text-xl font-black">
-              {t('labPage.imageResize.title')}
+              Redimensionar imagem
             </h2>
 
             <p className="mt-2 text-sm leading-6 text-zinc-500">
-              {t('labPage.imageResize.description')}
+              Em breve: ajustar tamanho, qualidade e proporção de imagens.
             </p>
           </div>
 
@@ -126,11 +122,11 @@ export default function LabPage() {
             </div>
 
             <h2 className="mt-5 text-xl font-black">
-              {t('labPage.qrCode.title')}
+              QR Code escolar
             </h2>
 
             <p className="mt-2 text-sm leading-6 text-zinc-500">
-              {t('labPage.qrCode.description')}
+              Em breve: gerar QR Codes para murais, atividades e comunicados.
             </p>
           </div>
 
@@ -140,35 +136,54 @@ export default function LabPage() {
             </div>
 
             <h2 className="mt-5 text-xl font-black">
-              {t('labPage.quickPosters.title')}
+              Cartazes rápidos
             </h2>
 
             <p className="mt-2 text-sm leading-6 text-zinc-500">
-              {t('labPage.quickPosters.description')}
+              Em breve: modelos prontos para avisos, eventos e projetos.
             </p>
           </div>
         </div>
 
-        <div className="mt-6 rounded-3xl border border-blue-200 bg-blue-50 p-6 shadow-sm dark:border-blue-900/60 dark:bg-blue-950/20 sm:p-7">
+        <div id="doacao" className="mt-6 rounded-3xl border border-green-200 bg-green-50 p-6 shadow-sm dark:border-green-900/60 dark:bg-green-950/20 sm:p-7">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <h2 className="text-2xl font-black text-zinc-950 dark:text-white">
-                Apoie o {t('labPage.heroKicker')}
-              </h2>
+              <div className="mb-3 flex items-center gap-2 text-green-700 dark:text-green-300">
+                <Heart className="h-5 w-5" />
+                <h2 className="text-2xl font-black text-zinc-950 dark:text-white">
+                  Apoie o EntreUS Lab
+                </h2>
+              </div>
 
-              <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-700 dark:text-zinc-300">
-                {t('labPage.donation.description')}
+              <p className="max-w-3xl text-sm leading-6 text-zinc-700 dark:text-zinc-300">
+                O EntreUS Lab nasceu para ajudar professores, escolas e criadores a transformar
+                imagens e PDFs em materiais prontos para impressão. Se puder, prefira o Pix Nubank:
+                ele ajuda mais porque não desconta taxa do projeto. O Mercado Pago continua disponível
+                como alternativa, mas pode cobrar taxa.
               </p>
             </div>
 
-            <a
-              href={DONATION_URL}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex shrink-0 items-center justify-center rounded-full bg-blue-600 px-6 py-3 text-sm font-bold text-white shadow-lg transition hover:bg-blue-500"
-            >
-              {t('labPage.donation.action')}
-            </a>
+            <div className="flex shrink-0 flex-col gap-3 sm:flex-row lg:flex-col xl:flex-row">
+              <a
+                href={PIX_DONATION_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center justify-center gap-2 rounded-full bg-green-600 px-6 py-3 text-sm font-bold text-white shadow-lg transition hover:bg-green-700"
+              >
+                <Landmark className="h-4 w-4" />
+                Pix Nubank — sem taxa
+              </a>
+
+              <a
+                href={MERCADO_PAGO_DONATION_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center justify-center gap-2 rounded-full border border-green-300 bg-white px-6 py-3 text-sm font-bold text-green-700 shadow-sm transition hover:bg-green-100 dark:border-green-800 dark:bg-green-950 dark:text-green-300 dark:hover:bg-green-900"
+              >
+                <CreditCard className="h-4 w-4" />
+                Mercado Pago — pode ter taxa
+              </a>
+            </div>
           </div>
         </div>
       </section>

@@ -3,11 +3,12 @@
 import NextImage from 'next/image'
 import Link from 'next/link'
 import { useMemo, useRef, useState } from 'react'
-import { ArrowLeft, Download, FileText, ImageIcon, Loader2, Upload } from 'lucide-react'
+import { ArrowLeft, CreditCard, Download, FileText, Heart, ImageIcon, Landmark, Loader2, Upload } from 'lucide-react'
 import { jsPDF } from 'jspdf'
 import { useLanguage } from '../../components/LanguageProvider'
 
-const DONATION_URL = 'https://link.mercadopago.com.br/entreuslab'
+const PIX_DONATION_URL = 'https://nubank.com.br/cobrar/u2kum/69fca421-184d-459c-a125-f760fc56c264'
+const MERCADO_PAGO_DONATION_URL = 'https://link.mercadopago.com.br/entreuslab'
 
 type PaperKey = 'a4' | 'a3' | 'letter'
 type Orientation = 'portrait' | 'landscape'
@@ -846,23 +847,39 @@ export default function PosterLabPage() {
               )}
             </div>
 
-            <div id="doacao" className="mt-5 rounded-3xl border border-blue-200 bg-blue-50 p-5 dark:border-blue-900/60 dark:bg-blue-950/20">
-              <h3 className="font-black text-zinc-950 dark:text-white">
-                {t('labPoster.donation.title')}
-              </h3>
+            <div id="doacao" className="mt-5 rounded-3xl border border-green-200 bg-green-50 p-5 dark:border-green-900/60 dark:bg-green-950/20">
+              <div className="mb-3 flex items-center gap-2 text-green-700 dark:text-green-300">
+                <Heart className="h-5 w-5" />
+                <h3 className="font-black text-zinc-950 dark:text-white">
+                  {t('labPoster.donation.title')}
+                </h3>
+              </div>
 
-              <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-300">
-                {t('labPoster.donation.description')}
+              <p className="text-sm leading-6 text-zinc-600 dark:text-zinc-300">
+                Esta ferramenta pode ajudar escolas, professores e criadores. Se puder, prefira o Pix Nubank: ele ajuda mais porque não desconta taxa do projeto. O Mercado Pago continua como alternativa, mas pode cobrar taxa.
               </p>
 
-              <a
-                href={DONATION_URL}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-4 inline-flex rounded-full bg-blue-600 px-5 py-2 text-sm font-bold text-white transition hover:bg-blue-500"
-              >
-                {t('labPoster.donation.action')}
-              </a>
+              <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+                <a
+                  href={PIX_DONATION_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center justify-center gap-2 rounded-full bg-green-600 px-5 py-2 text-sm font-bold text-white transition hover:bg-green-700"
+                >
+                  <Landmark className="h-4 w-4" />
+                  Pix Nubank — sem taxa
+                </a>
+
+                <a
+                  href={MERCADO_PAGO_DONATION_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center justify-center gap-2 rounded-full border border-green-300 bg-white px-5 py-2 text-sm font-bold text-green-700 transition hover:bg-green-100 dark:border-green-800 dark:bg-green-950 dark:text-green-300 dark:hover:bg-green-900"
+                >
+                  <CreditCard className="h-4 w-4" />
+                  Mercado Pago — pode ter taxa
+                </a>
+              </div>
             </div>
           </div>
         </div>
