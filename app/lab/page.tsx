@@ -17,12 +17,7 @@ export default function LabPage() {
             Voltar para o feed
           </Link>
 
-          <Link
-            href="/lab/poster"
-            className="inline-flex items-center justify-center rounded-full bg-black px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:opacity-90 dark:bg-white dark:text-black"
-          >
-            Abrir gerador de pôster
-          </Link>
+
         </div>
 
         <div className="overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
@@ -62,12 +57,7 @@ export default function LabPage() {
               </div>
 
               <div className="flex shrink-0 flex-col gap-3 sm:flex-row lg:flex-col xl:flex-row">
-                <Link
-                  href="/lab/poster"
-                  className="inline-flex items-center justify-center rounded-full bg-black px-6 py-3 text-sm font-bold text-white shadow-lg transition hover:opacity-90 dark:bg-white dark:text-black"
-                >
-                  Abrir gerador de pôster
-                </Link>
+
 
                 <a
                   href="#doacao"
@@ -116,19 +106,26 @@ export default function LabPage() {
             </p>
           </div>
 
-          <div className="rounded-3xl border border-dashed border-zinc-300 bg-white/60 p-6 dark:border-zinc-800 dark:bg-zinc-950/60">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-500 dark:bg-zinc-900">
+          <Link
+            href="/lab/qrcode"
+            className="group rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-lg dark:border-zinc-800 dark:bg-zinc-950"
+          >
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 transition group-hover:bg-blue-600 group-hover:text-white dark:bg-blue-950/40 dark:text-blue-300">
               <QrCode className="h-6 w-6" />
             </div>
 
             <h2 className="mt-5 text-xl font-black">
-              QR Code escolar
+              QR Code
             </h2>
 
-            <p className="mt-2 text-sm leading-6 text-zinc-500">
-              Em breve: gerar QR Codes para murais, atividades e comunicados.
+            <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-400">
+              Gere QR Codes para links, Wi-Fi, WhatsApp, textos, e-mails, telefones e comunicados.
             </p>
-          </div>
+
+            <span className="mt-5 inline-flex text-sm font-bold text-blue-600 group-hover:underline dark:text-blue-400">
+              Abrir ferramenta
+            </span>
+          </Link>
 
           <div className="rounded-3xl border border-dashed border-zinc-300 bg-white/60 p-6 dark:border-zinc-800 dark:bg-zinc-950/60">
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-500 dark:bg-zinc-900">
