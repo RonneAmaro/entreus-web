@@ -73,63 +73,72 @@ export default function LabPage() {
         <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
           <Link
             href="/lab/poster"
-            className="group rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-lg dark:border-zinc-800 dark:bg-zinc-950"
+            className="group relative overflow-hidden rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm transition duration-300 hover:-translate-y-2 hover:border-cyan-400 hover:shadow-2xl hover:shadow-cyan-600/20 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-cyan-400/70"
           >
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 transition group-hover:bg-blue-600 group-hover:text-white dark:bg-blue-950/40 dark:text-blue-300">
-              <Scissors className="h-6 w-6 transition duration-300 group-hover:drop-shadow-[0_0_10px_rgba(96,165,250,0.95)]" />
+            <div className="pointer-events-none absolute -right-16 -top-16 h-32 w-32 rounded-full bg-cyan-500/0 blur-3xl transition duration-300 group-hover:bg-cyan-500/25" />
+            <div className="pointer-events-none absolute -bottom-20 -left-20 h-40 w-40 rounded-full bg-blue-500/0 blur-3xl transition duration-300 group-hover:bg-blue-500/20" />
+
+            <div className="relative flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-50 text-cyan-600 shadow-sm transition duration-300 group-hover:scale-110 group-hover:bg-cyan-600 group-hover:text-white group-hover:shadow-lg group-hover:shadow-cyan-500/50 dark:bg-cyan-950/40 dark:text-cyan-300">
+              <Scissors className="h-6 w-6 transition duration-300 group-hover:drop-shadow-[0_0_10px_rgba(34,211,238,0.95)]" />
             </div>
 
-            <h2 className="mt-5 text-xl font-black">
+            <h2 className="relative mt-5 text-xl font-black">
               Pôster em folhas
             </h2>
 
-            <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-400">
+            <p className="relative mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-400">
               Transforme imagem ou PDF em um arquivo PDF dividido em várias folhas para imprimir e montar.
             </p>
 
-            <span className="mt-5 inline-flex text-sm font-bold text-blue-600 group-hover:underline dark:text-blue-400">
+            <span className="relative mt-5 inline-flex text-sm font-bold text-cyan-600 transition group-hover:translate-x-1 group-hover:text-cyan-500 dark:text-cyan-400">
               Abrir ferramenta
             </span>
           </Link>
 
           <Link
             href="/lab/resize"
-            className="group rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-lg dark:border-zinc-800 dark:bg-zinc-950"
+            className="group relative overflow-hidden rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm transition duration-300 hover:-translate-y-2 hover:border-fuchsia-400 hover:shadow-2xl hover:shadow-fuchsia-600/20 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-fuchsia-400/70"
           >
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 transition group-hover:bg-blue-600 group-hover:text-white dark:bg-blue-950/40 dark:text-blue-300">
-              <ImageIcon className="h-6 w-6 transition duration-300 group-hover:drop-shadow-[0_0_10px_rgba(96,165,250,0.95)]" />
+            <div className="pointer-events-none absolute -right-16 -top-16 h-32 w-32 rounded-full bg-fuchsia-500/0 blur-3xl transition duration-300 group-hover:bg-fuchsia-500/25" />
+            <div className="pointer-events-none absolute -bottom-20 -left-20 h-40 w-40 rounded-full bg-violet-500/0 blur-3xl transition duration-300 group-hover:bg-violet-500/20" />
+
+            <div className="relative flex h-12 w-12 items-center justify-center rounded-2xl bg-fuchsia-50 text-fuchsia-600 shadow-sm transition duration-300 group-hover:scale-110 group-hover:bg-fuchsia-600 group-hover:text-white group-hover:shadow-lg group-hover:shadow-fuchsia-500/50 dark:bg-fuchsia-950/40 dark:text-fuchsia-300">
+              <ImageIcon className="h-6 w-6 transition duration-300 group-hover:drop-shadow-[0_0_10px_rgba(217,70,239,0.95)]" />
             </div>
 
-            <h2 className="mt-5 text-xl font-black">
+            <h2 className="relative mt-5 text-xl font-black">
               Redimensionar imagem
             </h2>
 
-            <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-400">
+            <p className="relative mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-400">
               Ajuste tamanho, proporção, formato e qualidade de imagens para posts, cartazes e redes sociais.
             </p>
 
-            <span className="mt-5 inline-flex text-sm font-bold text-blue-600 group-hover:underline dark:text-blue-400">
+            <span className="relative mt-5 inline-flex text-sm font-bold text-fuchsia-600 transition group-hover:translate-x-1 group-hover:text-fuchsia-500 dark:text-fuchsia-400">
               Abrir ferramenta
             </span>
           </Link>
 
           <Link
             href="/lab/qrcode"
-            className="group rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-lg dark:border-zinc-800 dark:bg-zinc-950"
+            className="group relative overflow-hidden rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm transition duration-300 hover:-translate-y-2 hover:border-emerald-400 hover:shadow-2xl hover:shadow-emerald-600/20 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-emerald-400/70"
           >
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 transition group-hover:bg-blue-600 group-hover:text-white dark:bg-blue-950/40 dark:text-blue-300">
-              <QrCode className="h-6 w-6 transition duration-300 group-hover:drop-shadow-[0_0_10px_rgba(96,165,250,0.95)]" />
+            <div className="pointer-events-none absolute -right-16 -top-16 h-32 w-32 rounded-full bg-emerald-500/0 blur-3xl transition duration-300 group-hover:bg-emerald-500/25" />
+            <div className="pointer-events-none absolute -bottom-20 -left-20 h-40 w-40 rounded-full bg-sky-500/0 blur-3xl transition duration-300 group-hover:bg-sky-500/20" />
+
+            <div className="relative flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600 shadow-sm transition duration-300 group-hover:scale-110 group-hover:bg-emerald-600 group-hover:text-white group-hover:shadow-lg group-hover:shadow-emerald-500/50 dark:bg-emerald-950/40 dark:text-emerald-300">
+              <QrCode className="h-6 w-6 transition duration-300 group-hover:drop-shadow-[0_0_10px_rgba(52,211,153,0.95)]" />
             </div>
 
-            <h2 className="mt-5 text-xl font-black">
+            <h2 className="relative mt-5 text-xl font-black">
               QR Code
             </h2>
 
-            <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-400">
+            <p className="relative mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-400">
               Gere QR Codes para links, Wi-Fi, WhatsApp, textos, e-mails, telefones e comunicados.
             </p>
 
-            <span className="mt-5 inline-flex text-sm font-bold text-blue-600 group-hover:underline dark:text-blue-400">
+            <span className="relative mt-5 inline-flex text-sm font-bold text-emerald-600 transition group-hover:translate-x-1 group-hover:text-emerald-500 dark:text-emerald-400">
               Abrir ferramenta
             </span>
           </Link>
