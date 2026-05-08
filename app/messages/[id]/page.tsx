@@ -902,9 +902,37 @@ export default function ConversationPage() {
     }
   }, [conversationId, userId])
 
+  function scrollToBottom(behavior: ScrollBehavior = 'smooth') {
+    requestAnimationFrame(() => {
+      bottomRef.current?.scrollIntoView({
+        behavior,
+        block: 'end',
+      })
+    })
+  }
+
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages.length])
+    scrollToBottom('auto')
+
+    const firstTimer = window.setTimeout(() => {
+      scrollToBottom('auto')
+    }, 150)
+
+    const secondTimer = window.setTimeout(() => {
+      scrollToBottom('smooth')
+    }, 600)
+
+    return () => {
+      window.clearTimeout(firstTimer)
+      window.clearTimeout(secondTimer)
+    }
+  }, [conversationId, messages.length])
+
+  useEffect(() => {
+    if (selectedMedia.length > 0) {
+      scrollToBottom('smooth')
+    }
+  }, [selectedMedia.length])
 
   async function loadUnreadNotificationsCount(currentUserId: string) {
     const { count, error } = await supabase
