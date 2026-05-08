@@ -2555,7 +2555,8 @@ export default function ConversationPage() {
                   </div>
                 )
               })
-          <div ref={bottomRef} />
+            )}
+            <div ref={bottomRef} />
           </div>
 
           {selectedMedia.length > 0 && (
