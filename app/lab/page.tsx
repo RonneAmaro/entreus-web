@@ -134,19 +134,29 @@ export default function LabPage() {
             </span>
           </Link>
 
-          <div className="rounded-3xl border border-dashed border-zinc-300 bg-white/60 p-6 dark:border-zinc-800 dark:bg-zinc-950/60">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-500 dark:bg-zinc-900">
-              <Wand2 className="h-6 w-6" />
+          <Link
+            href="/lab/cartazes"
+            className="group relative overflow-hidden rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm transition duration-300 hover:-translate-y-2 hover:border-blue-400 hover:shadow-2xl hover:shadow-blue-600/20 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-blue-500/70"
+          >
+            <div className="pointer-events-none absolute -right-16 -top-16 h-32 w-32 rounded-full bg-blue-500/0 blur-3xl transition duration-300 group-hover:bg-blue-500/25" />
+            <div className="pointer-events-none absolute -bottom-20 -left-20 h-40 w-40 rounded-full bg-cyan-400/0 blur-3xl transition duration-300 group-hover:bg-cyan-400/20" />
+
+            <div className="relative flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 shadow-sm transition duration-300 group-hover:scale-110 group-hover:bg-blue-600 group-hover:text-white group-hover:shadow-lg group-hover:shadow-blue-500/50 dark:bg-blue-950/40 dark:text-blue-300">
+              <Wand2 className="h-6 w-6 transition duration-300 group-hover:drop-shadow-[0_0_10px_rgba(96,165,250,0.95)]" />
             </div>
 
-            <h2 className="mt-5 text-xl font-black">
+            <h2 className="relative mt-5 text-xl font-black">
               Cartazes rápidos
             </h2>
 
-            <p className="mt-2 text-sm leading-6 text-zinc-500">
-              Em breve: modelos prontos para avisos, eventos e projetos.
+            <p className="relative mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-400">
+              Crie avisos, eventos, comunicados e projetos com modelos prontos para baixar em PNG ou imprimir.
             </p>
-          </div>
+
+            <span className="relative mt-5 inline-flex text-sm font-bold text-blue-600 transition group-hover:translate-x-1 group-hover:text-blue-500 dark:text-blue-400">
+              Abrir ferramenta
+            </span>
+          </Link>
         </div>
 
         <div id="doacao" className="mt-6 rounded-3xl border border-green-200 bg-green-50 p-6 shadow-sm dark:border-green-900/60 dark:bg-green-950/20 sm:p-7">
