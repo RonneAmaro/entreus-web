@@ -1750,7 +1750,7 @@ function FeedContent() {
   }
 
   return (
-    <main className="min-h-screen overflow-x-hidden bg-white text-black dark:bg-black dark:text-white transition-colors">
+    <main className="min-h-screen overflow-x-hidden bg-zinc-50 text-black transition-colors dark:bg-black dark:text-white">
       <AppSidebar
         unreadNotificationsCount={unreadNotificationsCount}
         mounted={mounted}
@@ -1800,7 +1800,7 @@ function FeedContent() {
               />
 
               {message && (
-                <p className="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300">
+                <p className="mt-4 rounded-[1.35rem] border border-zinc-200/70 bg-zinc-50/90 px-4 py-3 text-sm text-zinc-700 shadow-sm dark:border-zinc-800/70 dark:bg-zinc-900/80 dark:text-zinc-300">
                   {message}
                 </p>
               )}
@@ -1808,7 +1808,7 @@ function FeedContent() {
 
             <div className="space-y-4 sm:space-y-5">
               {visibleFeedItems.length === 0 && (
-                <div className="rounded-2xl border border-zinc-200 bg-white p-4 text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 sm:p-6">
+                <div className="rounded-[2rem] border border-zinc-200/70 bg-white/90 p-5 text-zinc-500 shadow-sm shadow-black/5 backdrop-blur dark:border-zinc-800/70 dark:bg-zinc-950/80 dark:text-zinc-400 sm:p-6">
                   {hasSearch ? localTexts.mural.noSearchResults : t('feed.noPosts')}
                 </div>
               )}
@@ -1869,9 +1869,9 @@ function FeedContent() {
                   <article
                     id={item.type === 'post' ? `post-${post.id}` : `repost-${item.id}`}
                     key={item.id}
-                    className={`rounded-2xl border bg-white p-4 transition dark:bg-zinc-900 sm:p-6 ${isHighlighted
+                    className={`rounded-[2rem] border bg-white/95 p-4 shadow-sm shadow-black/5 backdrop-blur transition hover:-translate-y-0.5 hover:shadow-xl hover:shadow-black/10 dark:bg-zinc-950/90 sm:p-6 ${isHighlighted
                         ? 'border-blue-500 ring-2 ring-blue-200 dark:border-blue-400 dark:ring-blue-900'
-                        : 'border-zinc-200 dark:border-zinc-800'
+                        : 'border-zinc-200/70 dark:border-zinc-800/70'
                       }`}
                   >
                     {item.type === 'repost' && (
@@ -2089,7 +2089,7 @@ function FeedContent() {
                         : new Date(post.created_at).toLocaleString(getDateLocale(language))}
                     </p>
 
-                    <div className="border-t border-zinc-200 pt-4 dark:border-zinc-800">
+                    <div className="mt-4 border-t border-zinc-200/70 pt-4 dark:border-zinc-800/70">
                       <h3 className="mb-3 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
                         {t('feed.comments')}
                       </h3>
@@ -2127,7 +2127,7 @@ function FeedContent() {
                           return (
                             <div
                               key={comment.id}
-                              className="rounded-xl bg-zinc-50 px-4 py-3 text-sm dark:bg-zinc-800"
+                              className="rounded-[1.5rem] bg-zinc-50/90 px-4 py-3 text-sm ring-1 ring-zinc-200/60 transition hover:bg-zinc-100/80 dark:bg-zinc-900/80 dark:ring-zinc-800/70 dark:hover:bg-zinc-900"
                             >
                               <div className="flex items-start gap-3">
                                 <Link
@@ -2190,7 +2190,7 @@ function FeedContent() {
                                               aria-label={t('common.closeMenu')}
                                             />
 
-                                            <div className="absolute right-0 top-9 z-50 w-52 overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-xl dark:border-zinc-700 dark:bg-zinc-950">
+                                            <div className="absolute right-0 top-9 z-50 w-52 overflow-hidden rounded-[1.35rem] border border-zinc-200/70 bg-white/95 shadow-2xl shadow-black/15 backdrop-blur-xl dark:border-zinc-700/70 dark:bg-zinc-950/95">
                                               <button
                                                 type="button"
                                                 onClick={() => handleStartEditComment(comment)}
@@ -2220,7 +2220,7 @@ function FeedContent() {
                                       <textarea
                                         value={editCommentContent}
                                         onChange={(e) => setEditCommentContent(e.target.value)}
-                                        className="min-h-24 w-full resize-none rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white"
+                                        className="min-h-24 w-full resize-none rounded-[1.35rem] border border-zinc-300/70 bg-white px-3 py-2 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 dark:border-zinc-700/70 dark:bg-zinc-950 dark:text-white"
                                       />
 
                                       <div className="mt-2 flex flex-col gap-2 sm:flex-row">
@@ -2276,7 +2276,7 @@ function FeedContent() {
 
                       <div className="relative flex flex-col gap-3 sm:flex-row sm:items-center">
                         {openCommentEmojiPickerPostId === post.id && (
-                          <div className="absolute bottom-full left-0 right-0 z-50 mb-3 overflow-hidden rounded-[1.75rem] border border-zinc-200 bg-white/95 shadow-2xl shadow-black/15 backdrop-blur-xl dark:border-zinc-700 dark:bg-zinc-950/95 sm:right-auto sm:w-[390px]">
+                          <div className="absolute bottom-full left-0 right-0 z-50 mb-3 overflow-hidden rounded-[2rem] border border-zinc-200/70 bg-white/95 shadow-2xl shadow-black/20 backdrop-blur-xl dark:border-zinc-700/70 dark:bg-zinc-950/95 sm:right-auto sm:w-[410px]">
                             <div className="border-b border-zinc-200 bg-gradient-to-br from-blue-50 via-white to-purple-50 p-3 dark:border-zinc-800 dark:from-blue-950/30 dark:via-zinc-950 dark:to-purple-950/30">
                               <div className="flex items-center justify-between gap-3">
                                 <div>
@@ -2344,7 +2344,7 @@ function FeedContent() {
                           </div>
                         )}
 
-                        <div className="flex min-w-0 flex-1 items-center gap-2 rounded-2xl border border-zinc-300 bg-zinc-50 px-3 py-2 transition focus-within:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800">
+                        <div className="flex min-w-0 flex-1 items-center gap-2 rounded-full border border-zinc-300/70 bg-zinc-50/90 px-3 py-2 shadow-inner shadow-black/5 transition focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/10 dark:border-zinc-700/70 dark:bg-zinc-900/90">
                           <button
                             type="button"
                             onClick={() =>
@@ -2381,7 +2381,7 @@ function FeedContent() {
                         <button
                           type="button"
                           onClick={() => handleCreateComment(post.id)}
-                          className="w-full rounded-2xl bg-black px-5 py-3 font-bold text-white transition hover:scale-[1.01] hover:opacity-90 dark:bg-zinc-100 dark:text-black sm:w-auto"
+                          className="w-full rounded-full bg-black px-5 py-3 font-bold text-white shadow-sm transition hover:scale-[1.02] hover:opacity-90 active:scale-95 dark:bg-zinc-100 dark:text-black sm:w-auto"
                         >
                           {t('feed.comment')}
                         </button>
