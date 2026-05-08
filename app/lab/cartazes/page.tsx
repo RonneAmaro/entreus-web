@@ -433,28 +433,17 @@ export default function QuickPostersPage() {
       ctx.stroke()
       ctx.restore()
 
-      ctx.save()
-      ctx.fillStyle = selectedTemplate.accent
-      drawRoundedRect(ctx, 110, 120, 330, 58, 29)
-      ctx.fill()
-
-      ctx.fillStyle = selectedTemplate.lightText ? '#0f172a' : '#ffffff'
-      ctx.font = 'bold 25px Arial'
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'middle'
-      ctx.fillText(selectedTemplate.label, 275, 150)
-      ctx.restore()
 
       ctx.save()
       ctx.fillStyle = textColor
       ctx.textAlign = 'left'
       ctx.textBaseline = 'top'
       ctx.font = '900 78px Arial'
-      const titleHeight = wrapText(ctx, title || 'Título do cartaz', 110, 250, 850, 88)
+      const titleHeight = wrapText(ctx, title || 'Título do cartaz', 110, 180, 850, 88)
 
       ctx.fillStyle = mutedColor
       ctx.font = '36px Arial'
-      wrapText(ctx, subtitle || 'Escreva aqui uma breve descrição.', 110, 280 + titleHeight, 820, 48)
+      wrapText(ctx, subtitle || 'Escreva aqui uma breve descrição.', 110, 210 + titleHeight, 820, 48)
       ctx.restore()
 
       ctx.save()
@@ -692,9 +681,7 @@ export default function QuickPostersPage() {
               </p>
             </div>
 
-            <div className="rounded-3xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-200">
-              Funciona direto no navegador, sem Supabase.
-            </div>
+
           </div>
         </section>
 
