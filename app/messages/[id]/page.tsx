@@ -667,6 +667,63 @@ export default function ConversationPage() {
   }, [conversationId, router])
 
   useEffect(() => {
+    if (!userId) return
+
+    let refreshTimer: number | null = null
+
+    function scheduleConversationListRefresh() {
+      if (refreshTimer) {
+        window.clearTimeout(refreshTimer)
+      }
+
+      refreshTimer = window.setTimeout(() => {
+        loadConversationList(userId)
+        loadUnreadNotificationsCount(userId)
+      }, 250)
+    }
+
+    const conversationListMessagesChannel = supabase
+      .channel(`conversation-list-messages-${userId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'messages',
+        },
+        () => {
+          scheduleConversationListRefresh()
+        }
+      )
+      .subscribe()
+
+    const conversationListParticipantsChannel = supabase
+      .channel(`conversation-list-participants-${userId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'conversation_participants',
+          filter: `user_id=eq.${userId}`,
+        },
+        () => {
+          scheduleConversationListRefresh()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      if (refreshTimer) {
+        window.clearTimeout(refreshTimer)
+      }
+
+      supabase.removeChannel(conversationListMessagesChannel)
+      supabase.removeChannel(conversationListParticipantsChannel)
+    }
+  }, [userId])
+
+  useEffect(() => {
     if (!conversationId || !userId) return
 
     const messagesChannel = supabase
