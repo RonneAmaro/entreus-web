@@ -181,6 +181,63 @@ export default function MessagesPage() {
     loadPage()
   }, [router])
 
+  useEffect(() => {
+    if (!userId) return
+
+    let refreshTimer: number | null = null
+
+    function scheduleMessagesRefresh() {
+      if (refreshTimer) {
+        window.clearTimeout(refreshTimer)
+      }
+
+      refreshTimer = window.setTimeout(() => {
+        loadConversations(userId)
+        loadUnreadNotificationsCount(userId)
+      }, 300)
+    }
+
+    const messagesChannel = supabase
+      .channel(`messages-page-list-${userId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'messages',
+        },
+        () => {
+          scheduleMessagesRefresh()
+        }
+      )
+      .subscribe()
+
+    const participantsChannel = supabase
+      .channel(`messages-page-participants-${userId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'conversation_participants',
+          filter: `user_id=eq.${userId}`,
+        },
+        () => {
+          scheduleMessagesRefresh()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      if (refreshTimer) {
+        window.clearTimeout(refreshTimer)
+      }
+
+      supabase.removeChannel(messagesChannel)
+      supabase.removeChannel(participantsChannel)
+    }
+  }, [userId])
+
   async function loadUnreadNotificationsCount(currentUserId: string) {
     const { count, error } = await supabase
       .from('notifications')
@@ -380,9 +437,9 @@ export default function MessagesPage() {
         onPostClick={handlePostClick}
       />
 
-      <section className="w-full overflow-hidden px-4 py-20 pb-24 sm:px-6 lg:ml-[270px] lg:flex lg:h-screen lg:w-[calc(100vw-270px)] lg:px-0 lg:py-0">
-        <aside className="flex min-h-[calc(100vh-8rem)] w-full flex-col overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-black lg:h-screen lg:w-[390px] lg:shrink-0 lg:rounded-none lg:border-y-0 lg:border-l-0 lg:shadow-none">
-          <div className="shrink-0 border-b border-zinc-200 px-5 py-5 dark:border-zinc-800">
+      <section className="w-full overflow-hidden px-3 py-20 pb-24 sm:px-6 lg:ml-[270px] lg:flex lg:h-screen lg:w-[calc(100vw-270px)] lg:px-0 lg:py-0">
+        <aside className="flex min-h-[calc(100vh-8rem)] w-full flex-col overflow-hidden rounded-[2rem] border border-zinc-200/70 bg-white shadow-sm dark:border-zinc-800/70 dark:bg-black lg:h-screen lg:w-[390px] lg:shrink-0 lg:rounded-none lg:border-y-0 lg:border-l-0 lg:shadow-none">
+          <div className="shrink-0 border-b border-zinc-200/70 bg-white/90 px-5 py-5 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-black/90">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h1 className="text-2xl font-black tracking-tight text-zinc-950 dark:text-white">
@@ -395,7 +452,7 @@ export default function MessagesPage() {
 
               <Link
                 href="/search"
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-zinc-50 text-zinc-900 transition hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white dark:hover:bg-zinc-900"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-zinc-900 transition hover:scale-105 hover:bg-zinc-200 dark:bg-zinc-900 dark:text-white dark:hover:bg-zinc-800"
                 aria-label="Nova conversa"
                 title="Nova conversa"
               >
@@ -403,7 +460,7 @@ export default function MessagesPage() {
               </Link>
             </div>
 
-            <div className="mt-5 flex items-center gap-2 rounded-full border border-zinc-200 bg-zinc-100 px-4 py-3 text-zinc-500 dark:border-zinc-800 dark:bg-zinc-950">
+            <div className="mt-5 flex items-center gap-2 rounded-full border border-zinc-200/70 bg-zinc-100/80 px-4 py-3 text-zinc-500 transition focus-within:border-blue-400 dark:border-zinc-800/70 dark:bg-zinc-950">
               <Search className="h-5 w-5 shrink-0" />
               <input
                 type="search"
@@ -422,24 +479,25 @@ export default function MessagesPage() {
           )}
 
           {filteredConversations.length === 0 ? (
-            <div className="flex flex-1 items-center justify-center p-8 text-center">
-              <div>
-                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-zinc-100 text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
+            <div className="flex flex-1 items-center justify-center p-6 text-center">
+              <div className="rounded-[2rem] border border-dashed border-zinc-200 bg-zinc-50/80 p-7 dark:border-zinc-800 dark:bg-zinc-950/60">
+                <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-white text-blue-600 shadow-sm dark:bg-zinc-900 dark:text-blue-300">
                   <Inbox className="h-7 w-7" />
                 </div>
 
-                <h3 className="text-lg font-bold text-zinc-950 dark:text-white">
-                  Nenhuma conversa
+                <h3 className="text-lg font-black text-zinc-950 dark:text-white">
+                  Nenhuma conversa ainda
                 </h3>
 
-                <p className="mx-auto mt-2 max-w-xs text-sm text-zinc-500 dark:text-zinc-400">
-                  Abra o perfil de uma pessoa e toque em “Mensagem” para iniciar uma conversa.
+                <p className="mx-auto mt-2 max-w-xs text-sm leading-6 text-zinc-500 dark:text-zinc-400">
+                  Encontre uma pessoa, abra o perfil e toque em “Mensagem” para começar um bate-papo privado.
                 </p>
 
                 <Link
                   href="/search"
-                  className="mt-5 inline-flex rounded-full bg-black px-5 py-2 text-sm font-semibold text-white transition hover:opacity-90 dark:bg-white dark:text-black"
+                  className="mt-5 inline-flex items-center gap-2 rounded-full bg-blue-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm shadow-blue-600/20 transition hover:scale-[1.02] hover:bg-blue-700"
                 >
+                  <MessageSquarePlus className="h-4 w-4" />
                   Explorar usuários
                 </Link>
               </div>
@@ -455,23 +513,27 @@ export default function MessagesPage() {
                   <Link
                     key={conversation.id}
                     href={`/messages/${conversation.id}`}
-                    className="flex items-center gap-3 border-b border-zinc-100 px-4 py-4 transition hover:bg-zinc-50 dark:border-zinc-900 dark:hover:bg-zinc-950"
+                    className={`mx-3 my-1 flex items-center gap-3 rounded-[1.6rem] border px-3 py-3.5 transition ${
+                      conversation.isUnread
+                        ? 'border-blue-500/20 bg-blue-50/70 hover:bg-blue-50 dark:border-blue-500/20 dark:bg-blue-950/20 dark:hover:bg-blue-950/30'
+                        : 'border-transparent hover:bg-zinc-50 dark:hover:bg-zinc-950'
+                    }`}
                   >
                     <div className="relative shrink-0">
                       {otherUser?.avatar_url ? (
                         <img
                           src={otherUser.avatar_url}
                           alt={name}
-                          className="h-14 w-14 rounded-full border border-zinc-300 object-cover dark:border-zinc-700"
+                          className="h-12 w-12 rounded-full border border-zinc-300 object-cover shadow-sm dark:border-zinc-700"
                         />
                       ) : (
-                        <div className="flex h-14 w-14 items-center justify-center rounded-full border border-zinc-300 bg-zinc-100 text-lg font-bold text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-full border border-zinc-300 bg-zinc-100 text-base font-bold text-zinc-700 shadow-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
                           {getInitial(name)}
                         </div>
                       )}
 
                       {conversation.isUnread && (
-                        <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full border-2 border-white bg-blue-500 dark:border-black" />
+                        <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full border-2 border-white bg-blue-500 shadow-sm shadow-blue-500/40 dark:border-black" />
                       )}
                     </div>
 
@@ -490,13 +552,27 @@ export default function MessagesPage() {
                         </p>
                       </div>
 
-                      <p className="mt-1 truncate text-sm text-zinc-500">
+                      <p
+                        className={`mt-1 truncate text-sm ${
+                          conversation.isUnread
+                            ? 'font-semibold text-zinc-800 dark:text-zinc-100'
+                            : 'text-zinc-500 dark:text-zinc-400'
+                        }`}
+                      >
                         {preview}
                       </p>
                     </div>
 
-                    <div className="shrink-0 text-right text-xs text-zinc-500">
-                      {formatDate(conversation.lastMessage?.created_at || conversation.updated_at)}
+                    <div className="flex shrink-0 flex-col items-end gap-1 text-right text-xs text-zinc-500">
+                      <span>
+                        {formatDate(conversation.lastMessage?.created_at || conversation.updated_at)}
+                      </span>
+
+                      {conversation.isUnread && (
+                        <span className="rounded-full bg-blue-600 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-white shadow-sm shadow-blue-600/30">
+                          Nova
+                        </span>
+                      )}
                     </div>
                   </Link>
                 )
@@ -505,28 +581,48 @@ export default function MessagesPage() {
           )}
         </aside>
 
-        <div className="hidden min-h-0 flex-1 items-center justify-center bg-zinc-50 p-6 dark:bg-black lg:flex">
-          <div className="max-w-md text-center">
-            <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-white text-zinc-500 shadow-sm dark:bg-zinc-900 dark:text-zinc-400">
-              <MessageCircle className="h-9 w-9" />
+        <div className="hidden min-h-0 flex-1 items-center justify-center overflow-hidden bg-white p-6 dark:bg-black lg:flex">
+          <div className="relative w-full max-w-xl overflow-hidden rounded-[2.5rem] border border-zinc-200/70 bg-zinc-50 p-8 text-center shadow-sm dark:border-zinc-800/70 dark:bg-zinc-950/40">
+            <div className="pointer-events-none absolute -right-20 -top-20 h-48 w-48 rounded-full bg-blue-500/10 blur-3xl" />
+            <div className="pointer-events-none absolute -bottom-24 -left-16 h-56 w-56 rounded-full bg-purple-500/10 blur-3xl" />
+
+            <div className="relative mx-auto mb-5 flex h-24 w-24 items-center justify-center rounded-full bg-white text-blue-600 shadow-sm ring-1 ring-zinc-200 dark:bg-zinc-900 dark:text-blue-300 dark:ring-zinc-800">
+              <MessageCircle className="h-11 w-11" />
             </div>
 
-            <h2 className="text-2xl font-black text-zinc-950 dark:text-white">
-              Selecione uma conversa
-            </h2>
+            <div className="relative">
+              <p className="mb-2 text-xs font-black uppercase tracking-[0.22em] text-blue-600 dark:text-blue-300">
+                Mensagens privadas
+              </p>
 
-            <p className="mt-2 text-sm leading-6 text-zinc-500 dark:text-zinc-400">
-              Escolha uma conversa na coluna ao lado para abrir o bate-papo.
-              No celular, toque em uma conversa para abrir em tela cheia.
-            </p>
+              <h2 className="text-3xl font-black tracking-tight text-zinc-950 dark:text-white">
+                Selecione uma conversa
+              </h2>
 
-            <Link
-              href="/search"
-              className="mt-6 inline-flex items-center gap-2 rounded-full bg-black px-5 py-3 text-sm font-semibold text-white transition hover:opacity-90 dark:bg-white dark:text-black"
-            >
-              <MessageSquarePlus className="h-4 w-4" />
-              Nova conversa
-            </Link>
+              <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-zinc-500 dark:text-zinc-400">
+                Escolha alguém na lista ao lado para abrir o bate-papo. No celular, toque em uma conversa para abrir em tela cheia.
+              </p>
+
+              <div className="mt-6 flex flex-wrap items-center justify-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+                <span className="rounded-full bg-white px-3 py-1.5 shadow-sm ring-1 ring-zinc-200 dark:bg-zinc-900 dark:ring-zinc-800">
+                  💬 Mensagens rápidas
+                </span>
+                <span className="rounded-full bg-white px-3 py-1.5 shadow-sm ring-1 ring-zinc-200 dark:bg-zinc-900 dark:ring-zinc-800">
+                  🎙️ Áudio e mídia
+                </span>
+                <span className="rounded-full bg-white px-3 py-1.5 shadow-sm ring-1 ring-zinc-200 dark:bg-zinc-900 dark:ring-zinc-800">
+                  🔒 Conversas privadas
+                </span>
+              </div>
+
+              <Link
+                href="/search"
+                className="mt-7 inline-flex items-center gap-2 rounded-full bg-blue-600 px-6 py-3 text-sm font-black text-white shadow-lg shadow-blue-600/20 transition hover:scale-[1.02] hover:bg-blue-700"
+              >
+                <MessageSquarePlus className="h-4 w-4" />
+                Nova conversa
+              </Link>
+            </div>
           </div>
         </div>
       </section>
