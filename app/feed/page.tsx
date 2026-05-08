@@ -25,6 +25,7 @@ import {
   Play,
   Repeat2,
   Search,
+  SmilePlus,
   Sparkles,
   Trash2,
 } from 'lucide-react'
@@ -324,6 +325,31 @@ function getCategoryKey(value: string | null) {
   return `categories.${value}`
 }
 
+const COMMENT_EMOJI_GROUPS = [
+  {
+    title: 'EntreUS',
+    emojis: ['😍', '😏', '🔥', '😂', '🤣', '❤️', '💙', '👀', '✨', '🫶', '😎', '🥳'],
+  },
+  {
+    title: 'Reações',
+    emojis: ['👍', '👏', '🙌', '🙏', '💪', '🤝', '🤌', '✌️', '🤙', '👋', '💯', '✅'],
+  },
+  {
+    title: 'Sentimentos',
+    emojis: ['😀', '😃', '😄', '😊', '😉', '🥰', '🤗', '🤔', '😮', '🥺', '😭', '😴'],
+  },
+  {
+    title: 'Corações',
+    emojis: ['❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '💕', '💖', '💘', '💔'],
+  },
+  {
+    title: 'Festa',
+    emojis: ['🎉', '🥳', '🎊', '✨', '⭐', '🌟', '💫', '🔥', '🎁', '🎈', '🏆', '🚀'],
+  },
+]
+
+const COMMENT_QUICK_EMOJIS = ['❤️', '😂', '🔥', '😍', '👀', '✨', '😏', '💙']
+
 type FeedItem =
   | {
     type: 'post'
@@ -375,6 +401,7 @@ function FeedContent() {
   const [copiedPostId, setCopiedPostId] = useState<string | null>(null)
 
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({})
+  const [openCommentEmojiPickerPostId, setOpenCommentEmojiPickerPostId] = useState<string | null>(null)
   const [editingPostId, setEditingPostId] = useState<string | null>(null)
   const [editContent, setEditContent] = useState('')
   const [savingEdit, setSavingEdit] = useState(false)
@@ -1348,6 +1375,7 @@ function FeedContent() {
       ...prev,
       [postId]: '',
     }))
+    setOpenCommentEmojiPickerPostId(null)
 
     setMessage(t('feed.messages.commentSuccess'))
 
@@ -1567,6 +1595,21 @@ function FeedContent() {
         input.focus()
       }, 300)
     }
+  }
+
+  function handleInsertCommentEmoji(postId: string, emoji: string) {
+    setCommentInputs((prev) => ({
+      ...prev,
+      [postId]: `${prev[postId] || ''}${emoji}`,
+    }))
+
+    setTimeout(() => {
+      const input = document.getElementById(`comment-input-${postId}`)
+
+      if (input instanceof HTMLInputElement) {
+        input.focus()
+      }
+    }, 50)
   }
 
   function getVisibilityLabel(value: Post['visibility']) {
@@ -2231,24 +2274,114 @@ function FeedContent() {
                         })}
                       </div>
 
-                      <div className="flex flex-col gap-3 sm:flex-row">
-                        <input
-                          id={`comment-input-${post.id}`}
-                          type="text"
-                          value={commentInputs[post.id] || ''}
-                          onChange={(e) =>
-                            setCommentInputs((prev) => ({
-                              ...prev,
-                              [post.id]: e.target.value,
-                            }))
-                          }
-                          placeholder={t('feed.commentPlaceholder')}
-                          className="flex-1 rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 sm:text-base"
-                        />
+                      <div className="relative flex flex-col gap-3 sm:flex-row sm:items-center">
+                        {openCommentEmojiPickerPostId === post.id && (
+                          <div className="absolute bottom-full left-0 right-0 z-50 mb-3 overflow-hidden rounded-[1.75rem] border border-zinc-200 bg-white/95 shadow-2xl shadow-black/15 backdrop-blur-xl dark:border-zinc-700 dark:bg-zinc-950/95 sm:right-auto sm:w-[390px]">
+                            <div className="border-b border-zinc-200 bg-gradient-to-br from-blue-50 via-white to-purple-50 p-3 dark:border-zinc-800 dark:from-blue-950/30 dark:via-zinc-950 dark:to-purple-950/30">
+                              <div className="flex items-center justify-between gap-3">
+                                <div>
+                                  <p className="text-sm font-black text-zinc-950 dark:text-white">
+                                    Emojis no comentário
+                                  </p>
+                                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                                    Toque para inserir no texto.
+                                  </p>
+                                </div>
+
+                                <button
+                                  type="button"
+                                  onClick={() => setOpenCommentEmojiPickerPostId(null)}
+                                  className="flex h-8 w-8 items-center justify-center rounded-full text-zinc-500 transition hover:bg-white hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-white"
+                                  aria-label="Fechar emojis"
+                                  title="Fechar emojis"
+                                >
+                                  ×
+                                </button>
+                              </div>
+
+                              <div className="mt-3 flex flex-wrap gap-1.5">
+                                {COMMENT_QUICK_EMOJIS.map((emoji) => (
+                                  <button
+                                    key={`comment-quick-${post.id}-${emoji}`}
+                                    type="button"
+                                    onClick={() => handleInsertCommentEmoji(post.id, emoji)}
+                                    className="flex h-9 w-9 items-center justify-center rounded-2xl bg-white text-xl shadow-sm transition hover:-translate-y-0.5 hover:scale-110 hover:shadow-md active:scale-95 dark:bg-zinc-900"
+                                    aria-label={`Inserir emoji ${emoji}`}
+                                    title={emoji}
+                                  >
+                                    {emoji}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            <div className="max-h-[310px] overflow-y-auto p-3">
+                              <div className="space-y-4">
+                                {COMMENT_EMOJI_GROUPS.map((group) => (
+                                  <div key={`comment-group-${post.id}-${group.title}`}>
+                                    <p className="mb-2 text-xs font-black uppercase tracking-[0.16em] text-zinc-500 dark:text-zinc-400">
+                                      {group.title}
+                                    </p>
+
+                                    <div className="grid grid-cols-8 gap-1.5">
+                                      {group.emojis.map((emoji) => (
+                                        <button
+                                          key={`comment-${post.id}-${group.title}-${emoji}`}
+                                          type="button"
+                                          onClick={() => handleInsertCommentEmoji(post.id, emoji)}
+                                          className="flex h-9 w-9 items-center justify-center rounded-2xl text-xl transition hover:-translate-y-0.5 hover:scale-110 hover:bg-zinc-100 active:scale-95 dark:hover:bg-zinc-800"
+                                          aria-label={`Inserir emoji ${emoji}`}
+                                          title={emoji}
+                                        >
+                                          {emoji}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="flex min-w-0 flex-1 items-center gap-2 rounded-2xl border border-zinc-300 bg-zinc-50 px-3 py-2 transition focus-within:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setOpenCommentEmojiPickerPostId((current) =>
+                                current === post.id ? null : post.id
+                              )
+                            }
+                            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition ${
+                              openCommentEmojiPickerPostId === post.id
+                                ? 'bg-blue-600 text-white shadow-sm shadow-blue-600/20'
+                                : 'text-zinc-500 hover:bg-white hover:text-zinc-900 dark:hover:bg-zinc-900 dark:hover:text-white'
+                            }`}
+                            aria-label="Abrir emojis"
+                            title="Emojis"
+                          >
+                            <SmilePlus className="h-5 w-5" />
+                          </button>
+
+                          <input
+                            id={`comment-input-${post.id}`}
+                            type="text"
+                            value={commentInputs[post.id] || ''}
+                            onChange={(e) =>
+                              setCommentInputs((prev) => ({
+                                ...prev,
+                                [post.id]: e.target.value,
+                              }))
+                            }
+                            placeholder={t('feed.commentPlaceholder')}
+                            className="min-w-0 flex-1 bg-transparent px-1 py-1.5 text-sm outline-none placeholder:text-zinc-500 dark:text-white sm:text-base"
+                          />
+                        </div>
 
                         <button
+                          type="button"
                           onClick={() => handleCreateComment(post.id)}
-                          className="w-full rounded-xl bg-black px-5 py-3 font-medium text-white hover:opacity-90 dark:bg-zinc-100 dark:text-black sm:w-auto"
+                          className="w-full rounded-2xl bg-black px-5 py-3 font-bold text-white transition hover:scale-[1.01] hover:opacity-90 dark:bg-zinc-100 dark:text-black sm:w-auto"
                         >
                           {t('feed.comment')}
                         </button>
