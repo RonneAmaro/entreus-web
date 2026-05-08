@@ -426,6 +426,7 @@ function FeedContent() {
 
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({})
   const [openCommentEmojiPickerPostId, setOpenCommentEmojiPickerPostId] = useState<string | null>(null)
+  const [replyModalPostId, setReplyModalPostId] = useState<string | null>(null)
   const [editingPostId, setEditingPostId] = useState<string | null>(null)
   const [editContent, setEditContent] = useState('')
   const [savingEdit, setSavingEdit] = useState(false)
@@ -1400,6 +1401,7 @@ function FeedContent() {
       [postId]: '',
     }))
     setOpenCommentEmojiPickerPostId(null)
+    setReplyModalPostId((current) => (current === postId ? null : current))
 
     setMessage(t('feed.messages.commentSuccess'))
 
@@ -1628,12 +1630,47 @@ function FeedContent() {
     }))
 
     setTimeout(() => {
-      const input = document.getElementById(`comment-input-${postId}`)
+      const modalInput = document.getElementById('reply-modal-comment-input')
+      const inlineInput = document.getElementById(`comment-input-${postId}`)
 
-      if (input instanceof HTMLInputElement) {
-        input.focus()
+      if (replyModalPostId === postId && modalInput instanceof HTMLTextAreaElement) {
+        modalInput.focus()
+        return
+      }
+
+      if (inlineInput instanceof HTMLInputElement) {
+        inlineInput.focus()
       }
     }, 50)
+  }
+
+  function handleOpenReplyModal(postId: string) {
+    setReplyModalPostId(postId)
+    setOpenCommentEmojiPickerPostId(null)
+
+    setTimeout(() => {
+      const input = document.getElementById('reply-modal-comment-input')
+
+      if (input instanceof HTMLTextAreaElement) {
+        input.focus()
+      }
+    }, 150)
+  }
+
+  function handleCloseReplyModal() {
+    setReplyModalPostId(null)
+    setOpenCommentEmojiPickerPostId(null)
+  }
+
+  async function handleSubmitReplyModal(postId: string) {
+    const text = commentInputs[postId]?.trim()
+
+    if (!text) {
+      setMessage(t('feed.messages.emptyComment'))
+      return
+    }
+
+    await handleCreateComment(postId)
   }
 
   function getVisibilityLabel(value: Post['visibility']) {
@@ -1765,6 +1802,12 @@ function FeedContent() {
   const visibleFeedItems = filteredFeedItems
   const hasSearch = normalizedSearch.length > 0
 
+  const replyModalPost = useMemo(() => {
+    if (!replyModalPostId) return null
+
+    return posts.find((post) => post.id === replyModalPostId) || null
+  }, [posts, replyModalPostId])
+
   if (loading) {
     return (
       <main className="min-h-screen bg-white text-black dark:bg-black dark:text-white flex items-center justify-center px-4">
@@ -1794,6 +1837,248 @@ function FeedContent() {
         onLogout={handleLogout}
         onPostClick={handlePostComposerFocus}
       />
+
+      {replyModalPost && (
+        <div className="fixed inset-0 z-[80] flex items-start justify-center bg-black/60 px-3 py-6 backdrop-blur-sm sm:py-10">
+          <button
+            type="button"
+            onClick={handleCloseReplyModal}
+            className="absolute inset-0 cursor-default"
+            aria-label="Fechar resposta"
+          />
+
+          <div className="relative z-[81] flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden rounded-[2rem] border border-zinc-200/80 bg-white shadow-2xl shadow-black/30 dark:border-zinc-800/80 dark:bg-zinc-950">
+            <div className="flex shrink-0 items-center justify-between border-b border-zinc-200/70 px-4 py-3 dark:border-zinc-800/70">
+              <button
+                type="button"
+                onClick={handleCloseReplyModal}
+                className="flex h-10 w-10 items-center justify-center rounded-full text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-950 dark:hover:bg-zinc-900 dark:hover:text-white"
+                aria-label="Fechar"
+                title="Fechar"
+              >
+                ×
+              </button>
+
+              <p className="text-sm font-bold text-zinc-950 dark:text-white">
+                Responder publicação
+              </p>
+
+              <button
+                type="button"
+                className="rounded-full px-3 py-1.5 text-sm font-bold text-blue-600 transition hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/40"
+                title="Rascunhos futuramente"
+              >
+                Rascunhos
+              </button>
+            </div>
+
+            <div className="min-h-0 overflow-y-auto px-4 py-4 sm:px-5">
+              <div className="relative flex gap-3">
+                <div className="flex shrink-0 flex-col items-center">
+                  {replyModalPost.profiles?.avatar_url ? (
+                    <img
+                      src={replyModalPost.profiles.avatar_url}
+                      alt={replyModalPost.profiles.display_name || replyModalPost.profiles.username || t('common.user')}
+                      className="h-11 w-11 rounded-full border border-zinc-300 object-cover dark:border-zinc-700"
+                    />
+                  ) : (
+                    <div className="flex h-11 w-11 items-center justify-center rounded-full border border-zinc-300 bg-zinc-100 text-sm font-bold text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
+                      {(replyModalPost.profiles?.display_name || replyModalPost.profiles?.username || t('common.user')).charAt(0).toUpperCase()}
+                    </div>
+                  )}
+
+                  <div className="mt-2 w-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
+                </div>
+
+                <div className="min-w-0 flex-1 pb-4">
+                  <div className="flex flex-wrap items-center gap-1">
+                    <UserBadges userId={replyModalPost.user_id} size="sm" max={1} />
+
+                    <p className="font-bold text-zinc-950 dark:text-white">
+                      {replyModalPost.profiles?.display_name || replyModalPost.profiles?.username || t('common.user')}
+                    </p>
+
+                    <p className="text-sm text-zinc-500">
+                      @{replyModalPost.profiles?.username || t('common.username')}
+                    </p>
+                  </div>
+
+                  {replyModalPost.content && (
+                    <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-zinc-800 dark:text-zinc-200">
+                      {replyModalPost.content}
+                    </p>
+                  )}
+
+                  <p className="mt-2 text-xs text-zinc-500">
+                    {new Date(replyModalPost.created_at).toLocaleString(getDateLocale(language))}
+                  </p>
+
+                  <p className="mt-3 text-sm text-zinc-500">
+                    Respondendo a{' '}
+                    <span className="font-semibold text-blue-600 dark:text-blue-400">
+                      @{replyModalPost.profiles?.username || t('common.username')}
+                    </span>
+                  </p>
+                </div>
+              </div>
+
+              <div className="relative flex gap-3 pt-1">
+                <div className="shrink-0">
+                  {currentProfile?.avatar_url ? (
+                    <img
+                      src={currentProfile.avatar_url}
+                      alt={currentProfile.display_name || currentProfile.username || t('common.user')}
+                      className="h-11 w-11 rounded-full border border-zinc-300 object-cover dark:border-zinc-700"
+                    />
+                  ) : (
+                    <div className="flex h-11 w-11 items-center justify-center rounded-full border border-zinc-300 bg-zinc-100 text-sm font-bold text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
+                      {(currentProfile?.display_name || currentProfile?.username || t('common.user')).charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <textarea
+                    id="reply-modal-comment-input"
+                    value={commentInputs[replyModalPost.id] || ''}
+                    onChange={(event) =>
+                      setCommentInputs((prev) => ({
+                        ...prev,
+                        [replyModalPost.id]: event.target.value,
+                      }))
+                    }
+                    placeholder="Postar sua resposta..."
+                    className="min-h-32 w-full resize-none bg-transparent py-2 text-lg text-zinc-950 outline-none placeholder:text-zinc-400 dark:text-white"
+                  />
+
+                  {openCommentEmojiPickerPostId === replyModalPost.id && (
+                    <div className="mb-3 overflow-hidden rounded-[1.75rem] border border-zinc-200/70 bg-white/95 shadow-2xl shadow-black/15 backdrop-blur-xl dark:border-zinc-700/70 dark:bg-zinc-950/95">
+                      <div className="border-b border-zinc-200/70 bg-gradient-to-br from-blue-50 via-white to-purple-50 p-3 dark:border-zinc-800 dark:from-blue-950/30 dark:via-zinc-950 dark:to-purple-950/30">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-black text-zinc-950 dark:text-white">
+                              Emojis
+                            </p>
+                            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                              Toque para inserir na resposta.
+                            </p>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => setOpenCommentEmojiPickerPostId(null)}
+                            className="flex h-8 w-8 items-center justify-center rounded-full text-zinc-500 transition hover:bg-white hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-white"
+                            aria-label="Fechar emojis"
+                            title="Fechar emojis"
+                          >
+                            ×
+                          </button>
+                        </div>
+
+                        <div className="mt-3 flex flex-wrap gap-1.5">
+                          {COMMENT_QUICK_EMOJIS.map((emoji) => (
+                            <button
+                              key={`reply-quick-${replyModalPost.id}-${emoji}`}
+                              type="button"
+                              onClick={() => handleInsertCommentEmoji(replyModalPost.id, emoji)}
+                              className="flex h-9 w-9 items-center justify-center rounded-2xl bg-white text-xl shadow-sm transition hover:-translate-y-0.5 hover:scale-110 hover:shadow-md active:scale-95 dark:bg-zinc-900"
+                              aria-label={`Inserir emoji ${emoji}`}
+                              title={emoji}
+                            >
+                              {emoji}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="max-h-56 overflow-y-auto p-3">
+                        <div className="space-y-4">
+                          {COMMENT_EMOJI_GROUPS.map((group) => (
+                            <div key={`reply-group-${replyModalPost.id}-${group.title}`}>
+                              <p className="mb-2 text-xs font-black uppercase tracking-[0.16em] text-zinc-500 dark:text-zinc-400">
+                                {group.title}
+                              </p>
+
+                              <div className="grid grid-cols-8 gap-1.5 sm:grid-cols-10">
+                                {group.emojis.map((emoji) => (
+                                  <button
+                                    key={`reply-${replyModalPost.id}-${group.title}-${emoji}`}
+                                    type="button"
+                                    onClick={() => handleInsertCommentEmoji(replyModalPost.id, emoji)}
+                                    className="flex h-9 w-9 items-center justify-center rounded-2xl text-xl transition hover:-translate-y-0.5 hover:scale-110 hover:bg-zinc-100 active:scale-95 dark:hover:bg-zinc-800"
+                                    aria-label={`Inserir emoji ${emoji}`}
+                                    title={emoji}
+                                  >
+                                    {emoji}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between border-t border-zinc-200/70 pt-3 dark:border-zinc-800/70">
+                    <div className="flex items-center gap-1.5 text-blue-600 dark:text-blue-400">
+                      <button
+                        type="button"
+                        className="flex h-9 w-9 items-center justify-center rounded-full transition hover:bg-blue-50 dark:hover:bg-blue-950/40"
+                        title="Imagem futuramente"
+                      >
+                        <ImageIcon className="h-5 w-5" />
+                      </button>
+
+                      <button
+                        type="button"
+                        className="flex h-9 min-w-9 items-center justify-center rounded-full px-2 text-xs font-black transition hover:bg-blue-50 dark:hover:bg-blue-950/40"
+                        title="GIF futuramente"
+                      >
+                        GIF
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setOpenCommentEmojiPickerPostId((current) =>
+                            current === replyModalPost.id ? null : replyModalPost.id
+                          )
+                        }
+                        className={`flex h-9 w-9 items-center justify-center rounded-full transition ${
+                          openCommentEmojiPickerPostId === replyModalPost.id
+                            ? 'bg-blue-600 text-white'
+                            : 'hover:bg-blue-50 dark:hover:bg-blue-950/40'
+                        }`}
+                        title="Emoji"
+                      >
+                        <SmilePlus className="h-5 w-5" />
+                      </button>
+
+                      <button
+                        type="button"
+                        className="flex h-9 w-9 items-center justify-center rounded-full transition hover:bg-blue-50 dark:hover:bg-blue-950/40"
+                        title="Enquete futuramente"
+                      >
+                        <Sparkles className="h-5 w-5" />
+                      </button>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handleSubmitReplyModal(replyModalPost.id)}
+                      disabled={!commentInputs[replyModalPost.id]?.trim()}
+                      className="rounded-full bg-blue-600 px-5 py-2.5 text-sm font-black text-white shadow-sm shadow-blue-600/20 transition hover:scale-[1.02] hover:bg-blue-700 active:scale-95 disabled:cursor-not-allowed disabled:bg-zinc-300 disabled:text-zinc-600 dark:disabled:bg-zinc-800 dark:disabled:text-zinc-500"
+                    >
+                      Responder
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <section className="w-full overflow-x-hidden px-4 py-20 pb-24 sm:px-6 lg:ml-[270px] lg:w-[calc(100%-270px)] lg:px-8 lg:py-8">
         <div className="mx-auto grid w-full max-w-6xl grid-cols-1 gap-6 xl:grid-cols-[minmax(0,42rem)_22rem]">
@@ -2101,7 +2386,7 @@ function FeedContent() {
                       saved={postSaved}
                       copied={copiedPostId === post.id}
                       onLike={() => handleToggleLike(post.id)}
-                      onCommentClick={() => handleFocusCommentInput(post.id)}
+                      onCommentClick={() => handleOpenReplyModal(post.id)}
                       onRepost={() => handleToggleRepost(post.id)}
                       onSave={() => handleToggleBookmark(post.id)}
                       onShare={() => handleCopyPostLink(post.id)}
