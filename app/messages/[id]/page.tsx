@@ -2082,11 +2082,11 @@ export default function ConversationPage() {
           )}
         </aside>
 
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900 lg:rounded-none lg:border-0 lg:shadow-none">
-          <div className="flex shrink-0 items-center gap-3 border-b border-zinc-200 px-4 py-4 dark:border-zinc-800 sm:px-5 lg:px-6">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[2rem] border border-zinc-200/70 bg-white shadow-sm dark:border-zinc-800/70 dark:bg-black lg:rounded-none lg:border-0 lg:shadow-none">
+          <div className="flex shrink-0 items-center gap-3 border-b border-zinc-200/70 bg-white/90 px-4 py-3 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-black/90 sm:px-5 lg:px-6">
             <Link
               href="/messages"
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-300 bg-white text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-700 dark:bg-black dark:text-zinc-200 dark:hover:bg-zinc-900"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-zinc-700 transition hover:scale-105 hover:bg-zinc-200 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
               aria-label="Voltar para mensagens"
               title="Voltar"
             >
@@ -2124,7 +2124,7 @@ export default function ConversationPage() {
             {otherProfile?.username && (
               <Link
                 href={`/u/${otherProfile.username}`}
-                className="hidden rounded-full border border-zinc-300 px-4 py-2 text-sm font-semibold transition hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800 sm:inline-flex"
+                className="hidden rounded-full bg-zinc-100 px-4 py-2 text-sm font-semibold text-zinc-800 transition hover:bg-zinc-200 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800 sm:inline-flex"
               >
                 Ver perfil
               </Link>
@@ -2137,7 +2137,7 @@ export default function ConversationPage() {
             </div>
           )}
 
-          <div className="min-h-0 flex flex-1 flex-col gap-3 overflow-y-auto bg-zinc-50 p-3 dark:bg-zinc-950 sm:p-5">
+          <div className="min-h-0 flex flex-1 flex-col gap-2.5 overflow-y-auto bg-white p-3 dark:bg-black sm:p-5">
             {messages.length === 0 ? (
               <div className="flex flex-1 items-center justify-center text-center">
                 <div>
@@ -2170,10 +2170,10 @@ export default function ConversationPage() {
                     className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}
                   >
                     <div
-                      className={`max-w-[86%] rounded-3xl px-4 py-3 text-sm shadow-sm sm:max-w-[430px] ${
+                      className={`max-w-[86%] rounded-[1.35rem] px-4 py-2.5 text-sm shadow-sm transition sm:max-w-[430px] ${
                         isMine
-                          ? 'rounded-br-md bg-black text-white dark:bg-white dark:text-black'
-                          : 'rounded-bl-md border border-zinc-200 bg-white text-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100'
+                          ? 'rounded-br-md bg-blue-600 text-white shadow-blue-600/10 dark:bg-blue-500 dark:text-white'
+                          : 'rounded-bl-md bg-zinc-100 text-zinc-900 shadow-none dark:bg-zinc-900 dark:text-zinc-100'
                       }`}
                     >
                       {attachments.length > 0 && (
@@ -2599,32 +2599,32 @@ export default function ConversationPage() {
           )}
 
           {recordingAudio && (
-            <div className="shrink-0 border-t border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300">
+            <div className="mx-3 mb-2 shrink-0 rounded-full bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 shadow-sm dark:bg-red-950/40 dark:text-red-300 sm:mx-4">
               Gravando áudio... {formatRecordingTime(recordingSeconds)}
             </div>
           )}
 
           <form
             onSubmit={handleSendMessage}
-            className="relative flex shrink-0 gap-2 border-t border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900 sm:gap-3 sm:p-4"
+            className="relative flex shrink-0 items-center gap-1.5 border-t border-zinc-200/70 bg-white/95 px-2 py-2 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-black/95 sm:gap-2 sm:px-4 sm:py-3"
           >
             {openMessageEmojiPicker && (
-              <div className="absolute bottom-full left-3 right-3 z-50 mb-3 max-h-[76vh] overflow-hidden rounded-[2rem] border border-zinc-200 bg-white/95 shadow-2xl shadow-black/20 backdrop-blur-xl dark:border-zinc-700 dark:bg-zinc-950/95 sm:left-4 sm:right-auto sm:w-[430px]">
-                <div className="border-b border-zinc-200 bg-gradient-to-br from-blue-50 via-white to-purple-50 p-3 dark:border-zinc-800 dark:from-blue-950/30 dark:via-zinc-950 dark:to-purple-950/30 sm:p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
+              <div className="absolute bottom-full left-2 right-2 z-50 mb-2 max-h-[72vh] overflow-hidden rounded-[2rem] border border-zinc-200/80 bg-white/95 shadow-2xl shadow-black/15 backdrop-blur-2xl dark:border-zinc-800/80 dark:bg-zinc-950/95 sm:left-4 sm:right-auto sm:w-[420px]">
+                <div className="p-3 sm:p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
                       <p className="text-sm font-black text-zinc-950 dark:text-white">
-                        Emojis EntreUS
+                        Emojis
                       </p>
-                      <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-                        Busque, escolha uma categoria ou use os favoritos rápidos.
+                      <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">
+                        Rápidos, categorias e busca em um só lugar.
                       </p>
                     </div>
 
                     <button
                       type="button"
                       onClick={() => setOpenMessageEmojiPicker(false)}
-                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-zinc-500 transition hover:scale-105 hover:bg-white hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-white"
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-zinc-500 transition hover:scale-105 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-900 dark:hover:text-white"
                       aria-label="Fechar emojis"
                       title="Fechar"
                     >
@@ -2632,7 +2632,7 @@ export default function ConversationPage() {
                     </button>
                   </div>
 
-                  <label className="mt-3 flex items-center gap-2 rounded-2xl border border-zinc-200 bg-white px-3 py-2 text-sm shadow-sm transition focus-within:border-blue-400 dark:border-zinc-700 dark:bg-zinc-900">
+                  <label className="mt-3 flex items-center gap-2 rounded-full bg-zinc-100 px-3 py-2.5 text-sm transition focus-within:ring-2 focus-within:ring-blue-500/20 dark:bg-zinc-900">
                     <span className="text-base" aria-hidden="true">
                       🔎
                     </span>
@@ -2641,11 +2641,11 @@ export default function ConversationPage() {
                       value={messageEmojiSearch}
                       onChange={(event) => setMessageEmojiSearch(event.target.value)}
                       placeholder="Buscar emoji..."
-                      className="min-w-0 flex-1 bg-transparent text-sm text-zinc-900 outline-none placeholder:text-zinc-400 dark:text-white"
+                      className="min-w-0 flex-1 bg-transparent text-sm text-zinc-900 outline-none placeholder:text-zinc-500 dark:text-white"
                     />
                   </label>
 
-                  <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+                  <div className="mt-3 flex items-center gap-2 overflow-x-auto pb-1">
                     {MESSAGE_EMOJI_CATEGORIES.map((category) => {
                       const active = activeMessageEmojiCategory === category.id
                       const disabled =
@@ -2660,50 +2660,39 @@ export default function ConversationPage() {
                             setMessageEmojiSearch('')
                           }}
                           disabled={disabled}
-                          className={`flex shrink-0 items-center gap-2 rounded-2xl border px-3 py-2 text-xs font-bold transition ${
+                          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-lg transition ${
                             active
-                              ? 'border-blue-300 bg-blue-600 text-white shadow-lg shadow-blue-600/20 dark:border-blue-500'
-                              : 'border-zinc-200 bg-white text-zinc-700 hover:-translate-y-0.5 hover:border-blue-200 hover:bg-blue-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:border-blue-800 dark:hover:bg-blue-950/40'
-                          } disabled:cursor-not-allowed disabled:opacity-40`}
+                              ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20 dark:bg-blue-500'
+                              : 'bg-zinc-100 text-zinc-700 hover:scale-105 hover:bg-zinc-200 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800'
+                          } disabled:cursor-not-allowed disabled:opacity-35`}
+                          aria-label={category.title}
                           title={category.description}
                         >
-                          <span className="text-base">{category.icon}</span>
-                          {category.title}
+                          {category.icon}
                         </button>
                       )
                     })}
                   </div>
                 </div>
 
-                <div className="max-h-[360px] overflow-y-auto p-3 sm:p-4">
-                  <div className="mb-3 rounded-3xl border border-blue-100 bg-blue-50/70 p-3 dark:border-blue-900/50 dark:bg-blue-950/20">
-                    <div className="mb-2 flex items-center justify-between gap-2">
-                      <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-700 dark:text-blue-300">
-                        Rápidos EntreUS
-                      </p>
-                      <span className="rounded-full bg-white px-2 py-1 text-[10px] font-bold text-blue-600 dark:bg-zinc-900 dark:text-blue-300">
-                        toque para inserir
-                      </span>
-                    </div>
+                <div className="max-h-[360px] overflow-y-auto px-3 pb-3 sm:px-4 sm:pb-4">
+                  <div className="mb-3 flex items-center gap-1.5 overflow-x-auto rounded-full bg-zinc-100 p-1.5 dark:bg-zinc-900">
+                    {MESSAGE_QUICK_EMOJIS.map((emoji) => {
+                      const item = getMessageEmojiItem(emoji)
 
-                    <div className="flex flex-wrap gap-1.5">
-                      {MESSAGE_QUICK_EMOJIS.map((emoji) => {
-                        const item = getMessageEmojiItem(emoji)
-
-                        return (
-                          <button
-                            key={`quick-${emoji}`}
-                            type="button"
-                            onClick={() => handleInsertMessageEmoji(emoji)}
-                            className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white text-2xl shadow-sm transition hover:-translate-y-1 hover:scale-110 hover:shadow-md active:scale-95 dark:bg-zinc-900"
-                            aria-label={`Inserir emoji ${item.label}`}
-                            title={item.label}
-                          >
-                            {emoji}
-                          </button>
-                        )
-                      })}
-                    </div>
+                      return (
+                        <button
+                          key={`quick-${emoji}`}
+                          type="button"
+                          onClick={() => handleInsertMessageEmoji(emoji)}
+                          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-2xl shadow-sm transition hover:scale-110 active:scale-95 dark:bg-zinc-950"
+                          aria-label={`Inserir emoji ${item.label}`}
+                          title={item.label}
+                        >
+                          {emoji}
+                        </button>
+                      )
+                    })}
                   </div>
 
                   {(() => {
@@ -2716,7 +2705,7 @@ export default function ConversationPage() {
 
                     if (visibleEmojis.length === 0) {
                       return (
-                        <div className="rounded-3xl border border-dashed border-zinc-300 p-6 text-center dark:border-zinc-700">
+                        <div className="rounded-[1.7rem] bg-zinc-100 p-6 text-center dark:bg-zinc-900">
                           <p className="text-3xl">🫣</p>
                           <p className="mt-2 text-sm font-bold text-zinc-900 dark:text-white">
                             Nenhum emoji encontrado
@@ -2730,7 +2719,7 @@ export default function ConversationPage() {
 
                     return (
                       <>
-                        <div className="mb-3 flex items-center justify-between gap-3">
+                        <div className="mb-2 flex items-center justify-between gap-3 px-1">
                           <div>
                             <p className="text-sm font-black text-zinc-950 dark:text-white">
                               {messageEmojiSearch.trim()
@@ -2739,19 +2728,19 @@ export default function ConversationPage() {
                             </p>
                             <p className="text-xs text-zinc-500 dark:text-zinc-400">
                               {messageEmojiSearch.trim()
-                                ? `Encontramos ${visibleEmojis.length} opção(ões)`
+                                ? `${visibleEmojis.length} opção(ões)`
                                 : activeCategory.description}
                             </p>
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-8 gap-1.5 sm:grid-cols-9">
+                        <div className="grid grid-cols-8 gap-1 sm:grid-cols-9">
                           {visibleEmojis.map((item) => (
                             <button
                               key={`${activeMessageEmojiCategory}-${item.emoji}`}
                               type="button"
                               onClick={() => handleInsertMessageEmoji(item.emoji)}
-                              className="group relative flex h-10 w-10 items-center justify-center rounded-2xl text-2xl transition hover:-translate-y-1 hover:scale-110 hover:bg-zinc-100 active:scale-95 dark:hover:bg-zinc-800"
+                              className="group relative flex h-10 w-10 items-center justify-center rounded-full text-2xl transition hover:scale-110 hover:bg-zinc-100 active:scale-95 dark:hover:bg-zinc-900"
                               aria-label={`Inserir emoji ${item.label}`}
                               title={item.label}
                             >
@@ -2781,7 +2770,7 @@ export default function ConversationPage() {
               type="button"
               onClick={() => fileInputRef.current?.click()}
               disabled={sending || uploadingMedia || recordingAudio}
-              className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-zinc-300 bg-zinc-50 text-zinc-700 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-200 dark:hover:bg-zinc-800 sm:h-12 sm:w-12"
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-zinc-600 transition hover:scale-105 hover:bg-zinc-100 hover:text-zinc-950 disabled:cursor-not-allowed disabled:opacity-45 dark:text-zinc-300 dark:hover:bg-zinc-900 dark:hover:text-white sm:h-11 sm:w-11"
               aria-label="Anexar mídia"
               title="Anexar foto, vídeo ou áudio"
             >
@@ -2792,11 +2781,11 @@ export default function ConversationPage() {
               type="button"
               onClick={() => setOpenMessageEmojiPicker((current) => !current)}
               disabled={sending || uploadingMedia || recordingAudio}
-              className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border transition sm:h-12 sm:w-12 ${
+              className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition sm:h-11 sm:w-11 ${
                 openMessageEmojiPicker
-                  ? 'border-blue-300 bg-blue-50 text-blue-600 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-300'
-                  : 'border-zinc-300 bg-zinc-50 text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-200 dark:hover:bg-zinc-800'
-              } disabled:cursor-not-allowed disabled:opacity-60`}
+                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20 dark:bg-blue-500'
+                  : 'text-zinc-600 hover:scale-105 hover:bg-zinc-100 hover:text-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-900 dark:hover:text-white'
+              } disabled:cursor-not-allowed disabled:opacity-45`}
               aria-label="Abrir emojis"
               title="Emojis"
             >
@@ -2809,18 +2798,18 @@ export default function ConversationPage() {
               onChange={(event) => setNewMessage(event.target.value)}
               placeholder={recordingAudio ? 'Gravando áudio...' : 'Escreva uma mensagem...'}
               disabled={recordingAudio}
-              className="min-w-0 flex-1 rounded-2xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none transition focus:border-zinc-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-950 sm:text-base"
+              className="min-w-0 flex-1 rounded-full border-0 bg-zinc-100 px-4 py-3 text-sm outline-none transition placeholder:text-zinc-500 focus:bg-zinc-100 focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-900 dark:text-white dark:focus:bg-zinc-900 sm:text-base"
             />
 
             <button
               type="button"
               onClick={recordingAudio ? handleStopAudioRecording : handleStartAudioRecording}
               disabled={sending || uploadingMedia}
-              className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border transition sm:h-12 sm:w-12 ${
+              className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition sm:h-11 sm:w-11 ${
                 recordingAudio
-                  ? 'border-red-300 bg-red-50 text-red-600 hover:bg-red-100 dark:border-red-800 dark:bg-red-950/30 dark:text-red-300'
-                  : 'border-zinc-300 bg-zinc-50 text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-200 dark:hover:bg-zinc-800'
-              } disabled:cursor-not-allowed disabled:opacity-60`}
+                  ? 'bg-red-600 text-white shadow-lg shadow-red-600/20 hover:bg-red-700'
+                  : 'text-zinc-600 hover:scale-105 hover:bg-zinc-100 hover:text-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-900 dark:hover:text-white'
+              } disabled:cursor-not-allowed disabled:opacity-45`}
               aria-label={recordingAudio ? 'Parar gravação' : 'Gravar áudio'}
               title={recordingAudio ? 'Parar gravação' : 'Gravar áudio'}
             >
@@ -2839,13 +2828,13 @@ export default function ConversationPage() {
                 recordingAudio ||
                 (!newMessage.trim() && selectedMedia.length === 0)
               }
-              className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl font-semibold transition sm:h-12 sm:w-12 ${
+              className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full font-semibold transition sm:h-11 sm:w-11 ${
                 sending ||
                 uploadingMedia ||
                 recordingAudio ||
                 (!newMessage.trim() && selectedMedia.length === 0)
-                  ? 'cursor-not-allowed bg-zinc-200 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-600'
-                  : 'bg-black text-white hover:opacity-90 dark:bg-white dark:text-black'
+                  ? 'cursor-not-allowed bg-zinc-200 text-zinc-400 dark:bg-zinc-900 dark:text-zinc-600'
+                  : 'bg-blue-600 text-white shadow-lg shadow-blue-600/20 hover:scale-105 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-400'
               }`}
               aria-label="Enviar mensagem"
               title="Enviar"
