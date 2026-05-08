@@ -76,7 +76,7 @@ export default function LabPage() {
             className="group rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-lg dark:border-zinc-800 dark:bg-zinc-950"
           >
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 transition group-hover:bg-blue-600 group-hover:text-white dark:bg-blue-950/40 dark:text-blue-300">
-              <Scissors className="h-6 w-6" />
+              <Scissors className="h-6 w-6 transition duration-300 group-hover:drop-shadow-[0_0_10px_rgba(96,165,250,0.95)]" />
             </div>
 
             <h2 className="mt-5 text-xl font-black">
@@ -97,7 +97,7 @@ export default function LabPage() {
             className="group rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-lg dark:border-zinc-800 dark:bg-zinc-950"
           >
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 transition group-hover:bg-blue-600 group-hover:text-white dark:bg-blue-950/40 dark:text-blue-300">
-              <ImageIcon className="h-6 w-6" />
+              <ImageIcon className="h-6 w-6 transition duration-300 group-hover:drop-shadow-[0_0_10px_rgba(96,165,250,0.95)]" />
             </div>
 
             <h2 className="mt-5 text-xl font-black">
@@ -118,7 +118,7 @@ export default function LabPage() {
             className="group rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm transition hover:-translate-y-1 hover:shadow-lg dark:border-zinc-800 dark:bg-zinc-950"
           >
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 transition group-hover:bg-blue-600 group-hover:text-white dark:bg-blue-950/40 dark:text-blue-300">
-              <QrCode className="h-6 w-6" />
+              <QrCode className="h-6 w-6 transition duration-300 group-hover:drop-shadow-[0_0_10px_rgba(96,165,250,0.95)]" />
             </div>
 
             <h2 className="mt-5 text-xl font-black">
