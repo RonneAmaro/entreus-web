@@ -2163,345 +2163,373 @@ export default function ConversationPage() {
                 const messageIsEdited = isMessageEdited(item)
                 const isEditingThisMessage = editingMessageId === item.id
                 const isDeletingThisMessage = deletingMessageId === item.id
+                const hasText = !!item.content?.trim()
+                const hasMedia = attachments.length > 0
+                const isMediaFocused = hasMedia && !hasText && !item.deleted_at && !isEditingThisMessage
 
                 return (
                   <div
                     key={item.id}
-                    className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}
+                    className={`group flex w-full items-end gap-2 ${
+                      isMine ? 'justify-end' : 'justify-start'
+                    }`}
                   >
                     <div
-                      className={`max-w-[86%] rounded-[1.35rem] px-4 py-2.5 text-sm shadow-sm transition sm:max-w-[430px] ${
-                        isMine
-                          ? 'rounded-br-md bg-blue-600 text-white shadow-blue-600/10 dark:bg-blue-500 dark:text-white'
-                          : 'rounded-bl-md bg-zinc-100 text-zinc-900 shadow-none dark:bg-zinc-900 dark:text-zinc-100'
+                      className={`relative flex max-w-[88%] flex-col sm:max-w-[460px] ${
+                        isMine ? 'items-end' : 'items-start'
                       }`}
                     >
-                      {attachments.length > 0 && (
-                        <div className="mb-3 grid grid-cols-1 gap-2">
-                          {attachments.map((attachment) => {
-                            if (!attachment.signed_url) {
-                              return (
-                                <div
-                                  key={attachment.id}
-                                  className="rounded-2xl border border-zinc-300/30 p-3 text-xs opacity-70"
-                                >
-                                  Carregando mídia...
-                                </div>
-                              )
-                            }
-
-                            if (attachment.media_type === 'image') {
-                              return (
-                                <div
-                                  key={attachment.id}
-                                  className="group relative max-w-[340px] overflow-hidden rounded-2xl sm:max-w-[380px]"
-                                >
-                                  <a
-                                    href={attachment.signed_url}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="block"
+                      <div
+                        className={`relative overflow-visible rounded-[1.45rem] text-sm transition-all duration-200 ${
+                          isMediaFocused ? 'p-1.5' : 'px-4 py-2.5'
+                        } ${
+                          isMine
+                            ? 'rounded-br-md bg-blue-600 text-white shadow-sm shadow-blue-600/10 dark:bg-blue-500 dark:text-white'
+                            : 'rounded-bl-md bg-zinc-100 text-zinc-900 shadow-none dark:bg-zinc-900 dark:text-zinc-100'
+                        }`}
+                      >
+                        {attachments.length > 0 && (
+                          <div className={`${hasText || isEditingThisMessage ? 'mb-3' : ''} grid grid-cols-1 gap-2`}>
+                            {attachments.map((attachment) => {
+                              if (!attachment.signed_url) {
+                                return (
+                                  <div
+                                    key={attachment.id}
+                                    className={`flex min-h-24 min-w-[220px] items-center justify-center rounded-[1.35rem] px-4 py-5 text-xs opacity-80 ${
+                                      isMine
+                                        ? 'bg-white/10 text-white/80 dark:bg-black/10'
+                                        : 'bg-white text-zinc-500 dark:bg-zinc-950 dark:text-zinc-400'
+                                    }`}
                                   >
-                                    <img
-                                      src={attachment.signed_url}
-                                      alt={attachment.file_name || 'Imagem enviada'}
-                                      className="max-h-[220px] w-full object-contain sm:max-h-[280px]"
-                                    />
-                                  </a>
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    Carregando mídia...
+                                  </div>
+                                )
+                              }
 
-                                  {isMine && (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleDeleteAttachment(item.id, attachment)}
-                                      className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/75 text-white opacity-100 shadow-lg transition hover:bg-red-600 sm:opacity-0 sm:group-hover:opacity-100"
-                                      aria-label="Apagar mídia"
-                                      title="Apagar mídia"
+                              if (attachment.media_type === 'image') {
+                                return (
+                                  <div
+                                    key={attachment.id}
+                                    className="group/media relative max-w-[340px] overflow-hidden rounded-[1.35rem] bg-black/5 shadow-sm ring-1 ring-black/5 dark:bg-white/5 dark:ring-white/10 sm:max-w-[390px]"
+                                  >
+                                    <a
+                                      href={attachment.signed_url}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="block"
                                     >
-                                      <X className="h-4 w-4" />
-                                    </button>
-                                  )}
-                                </div>
-                              )
-                            }
+                                      <img
+                                        src={attachment.signed_url}
+                                        alt={attachment.file_name || 'Imagem enviada'}
+                                        className="max-h-[260px] w-full object-contain sm:max-h-[340px]"
+                                      />
+                                    </a>
 
-                            if (attachment.media_type === 'video') {
+                                    {isMine && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeleteAttachment(item.id, attachment)}
+                                        className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/55 text-white opacity-100 shadow-lg backdrop-blur-md transition hover:scale-105 hover:bg-red-600 sm:opacity-0 sm:group-hover/media:opacity-100"
+                                        aria-label="Apagar mídia"
+                                        title="Apagar mídia"
+                                      >
+                                        <X className="h-4 w-4" />
+                                      </button>
+                                    )}
+                                  </div>
+                                )
+                              }
+
+                              if (attachment.media_type === 'video') {
+                                return (
+                                  <div
+                                    key={attachment.id}
+                                    className="group/media relative max-w-[340px] overflow-hidden rounded-[1.35rem] bg-black shadow-sm ring-1 ring-black/5 dark:ring-white/10 sm:max-w-[390px]"
+                                  >
+                                    <video
+                                      src={attachment.signed_url}
+                                      controls
+                                      className="max-h-[260px] w-full bg-black object-contain sm:max-h-[340px]"
+                                    />
+
+                                    {isMine && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeleteAttachment(item.id, attachment)}
+                                        className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/55 text-white opacity-100 shadow-lg backdrop-blur-md transition hover:scale-105 hover:bg-red-600 sm:opacity-0 sm:group-hover/media:opacity-100"
+                                        aria-label="Apagar mídia"
+                                        title="Apagar mídia"
+                                      >
+                                        <X className="h-4 w-4" />
+                                      </button>
+                                    )}
+                                  </div>
+                                )
+                              }
+
                               return (
                                 <div
                                   key={attachment.id}
-                                  className="group relative max-w-[340px] overflow-hidden rounded-2xl sm:max-w-[380px]"
+                                  className={`group/media relative flex min-w-[250px] max-w-[360px] items-center gap-3 rounded-[1.35rem] px-3 py-3 ring-1 ${
+                                    isMine
+                                      ? 'bg-white/10 ring-white/15 dark:bg-black/10 dark:ring-black/10'
+                                      : 'bg-white ring-zinc-200 dark:bg-zinc-950 dark:ring-zinc-800'
+                                  }`}
                                 >
-                                  <video
+                                  <div
+                                    className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${
+                                      isMine
+                                        ? 'bg-white/15 text-white dark:bg-black/10'
+                                        : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-900 dark:text-zinc-300'
+                                    }`}
+                                  >
+                                    <Mic className="h-5 w-5" />
+                                  </div>
+
+                                  <audio
                                     src={attachment.signed_url}
                                     controls
-                                    className="max-h-[220px] w-full rounded-2xl bg-black object-contain sm:max-h-[280px]"
+                                    className="min-w-0 flex-1"
                                   />
 
                                   {isMine && (
                                     <button
                                       type="button"
                                       onClick={() => handleDeleteAttachment(item.id, attachment)}
-                                      className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/75 text-white opacity-100 shadow-lg transition hover:bg-red-600 sm:opacity-0 sm:group-hover:opacity-100"
-                                      aria-label="Apagar mídia"
-                                      title="Apagar mídia"
+                                      className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/55 text-white opacity-100 shadow-lg backdrop-blur-md transition hover:scale-105 hover:bg-red-600 sm:opacity-0 sm:group-hover/media:opacity-100"
+                                      aria-label="Apagar áudio"
+                                      title="Apagar áudio"
                                     >
                                       <X className="h-4 w-4" />
                                     </button>
                                   )}
                                 </div>
                               )
-                            }
+                            })}
+                          </div>
+                        )}
 
-                            return (
-                              <div
-                                key={attachment.id}
-                                className={`group relative rounded-2xl border px-3 py-3 ${
+                        {item.deleted_at ? (
+                          <p className="whitespace-pre-wrap break-words text-sm italic opacity-70">
+                            Mensagem apagada.
+                          </p>
+                        ) : isEditingThisMessage ? (
+                          <div className="space-y-3">
+                            <textarea
+                              value={editingMessageContent}
+                              onChange={(event) => setEditingMessageContent(event.target.value)}
+                              className={`min-h-24 w-full resize-none rounded-2xl border px-3 py-2 text-sm outline-none transition ${
+                                isMine
+                                  ? 'border-white/20 bg-white/10 text-white placeholder:text-white/50 focus:border-white/50 dark:border-black/20 dark:bg-black/10 dark:text-white dark:placeholder:text-white/50 dark:focus:border-white/40'
+                                  : 'border-zinc-300 bg-white text-zinc-900 focus:border-zinc-500 dark:border-zinc-700 dark:bg-black dark:text-white'
+                              }`}
+                            />
+
+                            <div className="flex flex-wrap justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={handleCancelEditMessage}
+                                disabled={savingMessageEdit}
+                                className={`inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-bold transition disabled:opacity-60 ${
                                   isMine
-                                    ? 'border-white/15 bg-white/10 dark:border-black/10 dark:bg-black/10'
-                                    : 'border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950'
+                                    ? 'border-white/20 text-white/80 hover:bg-white/10 dark:border-white/20 dark:text-white/80 dark:hover:bg-white/10'
+                                    : 'border-zinc-300 text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800'
                                 }`}
                               >
-                                <audio
-                                  src={attachment.signed_url}
-                                  controls
-                                  className="w-full min-w-[220px] max-w-[340px]"
-                                />
+                                <X className="h-3.5 w-3.5" />
+                                Cancelar
+                              </button>
 
-                                {isMine && (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDeleteAttachment(item.id, attachment)}
-                                    className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/75 text-white opacity-100 shadow-lg transition hover:bg-red-600 sm:opacity-0 sm:group-hover:opacity-100"
-                                    aria-label="Apagar áudio"
-                                    title="Apagar áudio"
-                                  >
-                                    <X className="h-4 w-4" />
-                                  </button>
+                              <button
+                                type="button"
+                                onClick={() => handleSaveEditedMessage(item.id)}
+                                disabled={savingMessageEdit || !editingMessageContent.trim()}
+                                className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1.5 text-xs font-black text-blue-600 transition hover:scale-105 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-blue-600"
+                              >
+                                {savingMessageEdit ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <Check className="h-3.5 w-3.5" />
                                 )}
-                              </div>
-                            )
-                          })}
-                        </div>
-                      )}
+                                Salvar
+                              </button>
+                            </div>
+                          </div>
+                        ) : item.content ? (
+                          <>
+                            <p className="whitespace-pre-wrap break-words leading-relaxed">
+                              {item.content}
+                            </p>
 
-                      {item.deleted_at ? (
-                        <p className="whitespace-pre-wrap break-words opacity-70">
-                          Mensagem apagada.
-                        </p>
-                      ) : isEditingThisMessage ? (
-                        <div className="space-y-3">
-                          <textarea
-                            value={editingMessageContent}
-                            onChange={(event) => setEditingMessageContent(event.target.value)}
-                            className={`min-h-24 w-full resize-none rounded-2xl border px-3 py-2 text-sm outline-none ${
-                              isMine
-                                ? 'border-white/20 bg-white/10 text-white placeholder:text-white/50 focus:border-white/50 dark:border-black/20 dark:bg-black/10 dark:text-black dark:placeholder:text-black/50 dark:focus:border-black/40'
-                                : 'border-zinc-300 bg-white text-zinc-900 focus:border-zinc-500 dark:border-zinc-700 dark:bg-black dark:text-white'
-                            }`}
-                          />
-
-                          <div className="flex flex-wrap justify-end gap-2">
-                            <button
-                              type="button"
-                              onClick={handleCancelEditMessage}
-                              disabled={savingMessageEdit}
-                              className={`inline-flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-bold transition disabled:opacity-60 ${
+                            <div
+                              className={`mt-3 overflow-hidden rounded-2xl ${
                                 isMine
-                                  ? 'border-white/20 text-white/80 hover:bg-white/10 dark:border-black/20 dark:text-black/70 dark:hover:bg-black/10'
-                                  : 'border-zinc-300 text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800'
+                                  ? 'bg-white/10 dark:bg-black/10'
+                                  : 'bg-white dark:bg-zinc-950'
                               }`}
                             >
-                              <X className="h-3.5 w-3.5" />
-                              Cancelar
-                            </button>
+                              <LinkPreview content={item.content} />
+                            </div>
+                          </>
+                        ) : null}
 
-                            <button
-                              type="button"
-                              onClick={() => handleSaveEditedMessage(item.id)}
-                              disabled={savingMessageEdit || !editingMessageContent.trim()}
-                              className="inline-flex items-center gap-1 rounded-full bg-blue-600 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                              {savingMessageEdit ? (
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                              ) : (
-                                <Check className="h-3.5 w-3.5" />
-                              )}
-                              Salvar
-                            </button>
-                          </div>
-                        </div>
-                      ) : item.content ? (
-                        <>
-                          <p className="whitespace-pre-wrap break-words">
-                            {item.content}
-                          </p>
-
-                          <div
-                            className={`mt-3 overflow-hidden rounded-2xl ${
-                              isMine ? 'bg-white/10 dark:bg-black/10' : ''
-                            }`}
-                          >
-                            <LinkPreview content={item.content} />
-                          </div>
-                        </>
-                      ) : null}
-
-                      <div
-                        className={`relative mt-2 flex items-center gap-2 ${
-                          isMine ? 'justify-end' : 'justify-start'
-                        }`}
-                      >
-                        <p
-                          className={`text-[11px] ${
-                            isMine
-                              ? 'text-white/70 dark:text-black/60'
-                              : 'text-zinc-500'
+                        <div
+                          className={`relative mt-2 flex items-center gap-1.5 ${
+                            isMine ? 'justify-end' : 'justify-start'
                           }`}
                         >
-                          {formatMessageTime(item.created_at)}
-                          {messageIsEdited && !item.deleted_at && (
-                            <span> · editada</span>
-                          )}
-                        </p>
-
-                        {!item.deleted_at && !isEditingThisMessage && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setOpenMessageMenuId(null)
-                              setOpenReactionMessageId((current) =>
-                                current === item.id ? null : item.id
-                              )
-                            }}
-                            className={`flex h-6 w-6 items-center justify-center rounded-full transition ${
-                              isMine
-                                ? 'text-white/70 hover:bg-white/10 hover:text-white dark:text-black/60 dark:hover:bg-black/10 dark:hover:text-black'
-                                : 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-white'
+                          <p
+                            className={`text-[10px] leading-none ${
+                              isMine ? 'text-white/70' : 'text-zinc-500 dark:text-zinc-400'
                             }`}
-                            aria-label="Reagir à mensagem"
-                            title="Reagir"
                           >
-                            <SmilePlus className="h-4 w-4" />
-                          </button>
-                        )}
-
-                        {!item.deleted_at && !isEditingThisMessage && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setOpenReactionMessageId(null)
-                              setOpenMessageMenuId((current) =>
-                                current === item.id ? null : item.id
-                              )
-                            }}
-                            className={`flex h-6 w-6 items-center justify-center rounded-full transition ${
-                              isMine
-                                ? 'text-white/70 hover:bg-white/10 hover:text-white dark:text-black/60 dark:hover:bg-black/10 dark:hover:text-black'
-                                : 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-white'
-                            }`}
-                            aria-label="Opções da mensagem"
-                            title="Opções"
-                          >
-                            {isDeletingThisMessage ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <MoreHorizontal className="h-4 w-4" />
+                            {formatMessageTime(item.created_at)}
+                            {messageIsEdited && !item.deleted_at && (
+                              <span> · editada</span>
                             )}
-                          </button>
-                        )}
+                          </p>
 
-                        {openMessageMenuId === item.id && !item.deleted_at && !isEditingThisMessage && (
-                          <div
-                            className={`absolute bottom-8 z-40 w-56 overflow-hidden rounded-2xl border border-zinc-200 bg-white text-sm text-zinc-900 shadow-xl dark:border-zinc-700 dark:bg-zinc-900 dark:text-white ${
-                              isMine ? 'right-0' : 'left-0'
-                            }`}
-                          >
-                            {isMine && item.content?.trim() && (
+                          {!item.deleted_at && !isEditingThisMessage && (
+                            <div className="flex items-center gap-1 opacity-100 transition sm:opacity-0 sm:group-hover:opacity-100">
                               <button
                                 type="button"
-                                onClick={() => handleStartEditMessage(item)}
-                                className="flex w-full items-center gap-2 px-4 py-3 text-left font-semibold transition hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                                onClick={() => {
+                                  setOpenMessageMenuId(null)
+                                  setOpenReactionMessageId((current) =>
+                                    current === item.id ? null : item.id
+                                  )
+                                }}
+                                className={`flex h-7 w-7 items-center justify-center rounded-full transition hover:scale-105 ${
+                                  isMine
+                                    ? 'bg-white/10 text-white/80 hover:bg-white/20 hover:text-white'
+                                    : 'bg-white/70 text-zinc-500 hover:bg-white hover:text-zinc-900 dark:bg-zinc-800/70 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white'
+                                }`}
+                                aria-label="Reagir à mensagem"
+                                title="Reagir"
                               >
-                                <Pencil className="h-4 w-4" />
-                                Editar mensagem
+                                <SmilePlus className="h-4 w-4" />
                               </button>
-                            )}
 
-                            <button
-                              type="button"
-                              onClick={() => handleHideMessageForMe(item.id)}
-                              className="flex w-full items-center gap-2 px-4 py-3 text-left font-semibold transition hover:bg-zinc-100 dark:hover:bg-zinc-800"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                              Apagar só para mim
-                            </button>
-
-                            {isMine && (
                               <button
                                 type="button"
-                                onClick={() => handleDeleteMessageForEveryone(item.id)}
-                                disabled={isDeletingThisMessage}
-                                className="flex w-full items-center gap-2 px-4 py-3 text-left font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:text-red-400 dark:hover:bg-red-950/30"
+                                onClick={() => {
+                                  setOpenReactionMessageId(null)
+                                  setOpenMessageMenuId((current) =>
+                                    current === item.id ? null : item.id
+                                  )
+                                }}
+                                className={`flex h-7 w-7 items-center justify-center rounded-full transition hover:scale-105 ${
+                                  isMine
+                                    ? 'bg-white/10 text-white/80 hover:bg-white/20 hover:text-white'
+                                    : 'bg-white/70 text-zinc-500 hover:bg-white hover:text-zinc-900 dark:bg-zinc-800/70 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white'
+                                }`}
+                                aria-label="Opções da mensagem"
+                                title="Opções"
                               >
                                 {isDeletingThisMessage ? (
                                   <Loader2 className="h-4 w-4 animate-spin" />
                                 ) : (
-                                  <Trash2 className="h-4 w-4" />
+                                  <MoreHorizontal className="h-4 w-4" />
                                 )}
-                                Apagar para todos
                               </button>
-                            )}
-                          </div>
-                        )}
+                            </div>
+                          )}
 
-                        {openReactionMessageId === item.id && !item.deleted_at && !isEditingThisMessage && (
-                          <div
-                            className={`absolute bottom-8 z-30 flex items-center gap-1 rounded-full border border-zinc-200 bg-white px-2 py-1.5 text-lg shadow-xl dark:border-zinc-700 dark:bg-zinc-900 ${
-                              isMine ? 'right-0' : 'left-0'
-                            }`}
-                          >
-                            {QUICK_REACTION_EMOJIS.map((emoji) => {
-                              const reactedByMe = reactions.some(
-                                (reaction) => reaction.user_id === userId && reaction.emoji === emoji
-                              )
-
-                              return (
-                                <button
-                                  key={emoji}
-                                  type="button"
-                                  onClick={() => handleToggleReaction(item.id, emoji)}
-                                  className={`flex h-8 w-8 items-center justify-center rounded-full transition hover:bg-zinc-100 dark:hover:bg-zinc-800 ${
-                                    reactedByMe
-                                      ? 'bg-blue-50 ring-1 ring-blue-300 dark:bg-blue-950/50 dark:ring-blue-700'
-                                      : ''
-                                  }`}
-                                  aria-label={`Reagir com ${emoji}`}
-                                  title={`Reagir com ${emoji}`}
-                                >
-                                  {emoji}
-                                </button>
-                              )
-                            })}
-
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setMessage('Galeria completa de emojis em breve.')
-                                setOpenReactionMessageId(null)
-                              }}
-                              className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-100 text-zinc-700 transition hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
-                              aria-label="Mais emojis"
-                              title="Mais emojis em breve"
+                          {openMessageMenuId === item.id && !item.deleted_at && !isEditingThisMessage && (
+                            <div
+                              className={`absolute bottom-9 z-40 w-60 overflow-hidden rounded-3xl border border-zinc-200/80 bg-white/95 p-1 text-sm text-zinc-900 shadow-2xl shadow-black/15 backdrop-blur-xl dark:border-zinc-700/80 dark:bg-zinc-950/95 dark:text-white ${
+                                isMine ? 'right-0' : 'left-0'
+                              }`}
                             >
-                              <Plus className="h-4 w-4" />
-                            </button>
-                          </div>
-                        )}
+                              {isMine && item.content?.trim() && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleStartEditMessage(item)}
+                                  className="flex w-full items-center gap-2 rounded-2xl px-3 py-2.5 text-left font-semibold transition hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                  Editar mensagem
+                                </button>
+                              )}
+
+                              <button
+                                type="button"
+                                onClick={() => handleHideMessageForMe(item.id)}
+                                className="flex w-full items-center gap-2 rounded-2xl px-3 py-2.5 text-left font-semibold transition hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                                Apagar só para mim
+                              </button>
+
+                              {isMine && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteMessageForEveryone(item.id)}
+                                  disabled={isDeletingThisMessage}
+                                  className="flex w-full items-center gap-2 rounded-2xl px-3 py-2.5 text-left font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:text-red-400 dark:hover:bg-red-950/30"
+                                >
+                                  {isDeletingThisMessage ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <Trash2 className="h-4 w-4" />
+                                  )}
+                                  Apagar para todos
+                                </button>
+                              )}
+                            </div>
+                          )}
+
+                          {openReactionMessageId === item.id && !item.deleted_at && !isEditingThisMessage && (
+                            <div
+                              className={`absolute bottom-9 z-30 flex items-center gap-1 rounded-full border border-zinc-200/80 bg-white/95 p-1.5 text-lg shadow-2xl shadow-black/15 backdrop-blur-xl dark:border-zinc-700/80 dark:bg-zinc-950/95 ${
+                                isMine ? 'right-0' : 'left-0'
+                              }`}
+                            >
+                              {QUICK_REACTION_EMOJIS.map((emoji) => {
+                                const reactedByMe = reactions.some(
+                                  (reaction) => reaction.user_id === userId && reaction.emoji === emoji
+                                )
+
+                                return (
+                                  <button
+                                    key={emoji}
+                                    type="button"
+                                    onClick={() => handleToggleReaction(item.id, emoji)}
+                                    className={`flex h-9 w-9 items-center justify-center rounded-full text-xl transition hover:-translate-y-0.5 hover:scale-110 hover:bg-zinc-100 active:scale-95 dark:hover:bg-zinc-800 ${
+                                      reactedByMe
+                                        ? 'bg-blue-50 ring-1 ring-blue-300 dark:bg-blue-950/50 dark:ring-blue-700'
+                                        : ''
+                                    }`}
+                                    aria-label={`Reagir com ${emoji}`}
+                                    title={`Reagir com ${emoji}`}
+                                  >
+                                    {emoji}
+                                  </button>
+                                )
+                              })}
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setMessage('Galeria completa de emojis em breve.')
+                                  setOpenReactionMessageId(null)
+                                }}
+                                className="flex h-9 w-9 items-center justify-center rounded-full bg-zinc-100 text-zinc-700 transition hover:scale-105 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
+                                aria-label="Mais emojis"
+                                title="Mais emojis em breve"
+                              >
+                                <Plus className="h-4 w-4" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
 
                       {reactionGroups.length > 0 && (
                         <div
-                          className={`mt-2 flex flex-wrap gap-1 ${
-                            isMine ? 'justify-end' : 'justify-start'
+                          className={`mt-1.5 flex flex-wrap gap-1 ${
+                            isMine ? 'justify-end pr-1' : 'justify-start pl-1'
                           }`}
                         >
                           {reactionGroups.map((reaction) => (
@@ -2509,12 +2537,10 @@ export default function ConversationPage() {
                               key={reaction.emoji}
                               type="button"
                               onClick={() => handleToggleReaction(item.id, reaction.emoji)}
-                              className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs shadow-sm transition ${
+                              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs shadow-sm ring-1 transition hover:-translate-y-0.5 hover:shadow-md ${
                                 reaction.reactedByMe
-                                  ? 'border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-700 dark:bg-blue-950/50 dark:text-blue-200'
-                                  : isMine
-                                    ? 'border-white/15 bg-white/10 text-white dark:border-black/10 dark:bg-black/10 dark:text-black'
-                                    : 'border-zinc-200 bg-white text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200'
+                                  ? 'bg-blue-50 text-blue-700 ring-blue-300 dark:bg-blue-950/50 dark:text-blue-200 dark:ring-blue-700'
+                                  : 'bg-white text-zinc-700 ring-zinc-200 dark:bg-zinc-900 dark:text-zinc-200 dark:ring-zinc-700'
                               }`}
                               aria-label={`Reação ${reaction.emoji}`}
                               title="Clique para trocar ou remover sua reação"
@@ -2529,9 +2555,7 @@ export default function ConversationPage() {
                   </div>
                 )
               })
-            )}
-
-            <div ref={bottomRef} />
+          <div ref={bottomRef} />
           </div>
 
           {selectedMedia.length > 0 && (
