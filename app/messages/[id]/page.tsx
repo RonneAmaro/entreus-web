@@ -2111,10 +2111,12 @@ export default function ConversationPage() {
                   <Link
                     key={conversation.id}
                     href={`/messages/${conversation.id}`}
-                    className={`flex items-center gap-3 border-b border-zinc-100 px-4 py-4 transition dark:border-zinc-900 ${
+                    className={`mx-3 my-1 flex items-center gap-3 rounded-[1.6rem] border px-3 py-3.5 transition ${
                       active
-                        ? 'bg-zinc-100 dark:bg-zinc-900'
-                        : 'hover:bg-zinc-50 dark:hover:bg-zinc-950'
+                        ? 'border-zinc-200 bg-zinc-100 shadow-sm dark:border-zinc-800 dark:bg-zinc-900'
+                        : conversation.isUnread
+                          ? 'border-blue-500/20 bg-blue-50/70 hover:bg-blue-50 dark:border-blue-500/20 dark:bg-blue-950/20 dark:hover:bg-blue-950/30'
+                          : 'border-transparent hover:bg-zinc-50 dark:hover:bg-zinc-950'
                     }`}
                   >
                     <div className="relative shrink-0">
@@ -2122,16 +2124,16 @@ export default function ConversationPage() {
                         <img
                           src={otherUser.avatar_url}
                           alt={name}
-                          className="h-14 w-14 rounded-full border border-zinc-300 object-cover dark:border-zinc-700"
+                          className="h-12 w-12 rounded-full border border-zinc-300 object-cover shadow-sm dark:border-zinc-700"
                         />
                       ) : (
-                        <div className="flex h-14 w-14 items-center justify-center rounded-full border border-zinc-300 bg-zinc-100 text-lg font-bold text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-full border border-zinc-300 bg-zinc-100 text-base font-bold text-zinc-700 shadow-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
                           {getInitial(name)}
                         </div>
                       )}
 
                       {conversation.isUnread && (
-                        <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full border-2 border-white bg-blue-500 dark:border-black" />
+                        <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full border-2 border-white bg-blue-500 shadow-sm shadow-blue-500/40 dark:border-black" />
                       )}
                     </div>
 
@@ -2150,14 +2152,28 @@ export default function ConversationPage() {
                         </p>
                       </div>
 
-                      <p className="mt-1 truncate text-sm text-zinc-500">
+                      <p
+                        className={`mt-1 truncate text-sm ${
+                          conversation.isUnread
+                            ? 'font-semibold text-zinc-800 dark:text-zinc-100'
+                            : 'text-zinc-500 dark:text-zinc-400'
+                        }`}
+                      >
                         {preview}
                       </p>
                     </div>
 
-                    <div className="shrink-0 text-right text-xs text-zinc-500">
-                      {formatConversationDate(
-                        conversation.lastMessage?.created_at || conversation.updated_at
+                    <div className="flex shrink-0 flex-col items-end gap-1 text-right text-xs text-zinc-500">
+                      <span>
+                        {formatConversationDate(
+                          conversation.lastMessage?.created_at || conversation.updated_at
+                        )}
+                      </span>
+
+                      {conversation.isUnread && (
+                        <span className="rounded-full bg-blue-600 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-white shadow-sm shadow-blue-600/30">
+                          Nova
+                        </span>
                       )}
                     </div>
                   </Link>
