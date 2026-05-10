@@ -12,9 +12,10 @@ import PostCard from "../../components/PostCard";
 import UserBadges from "../../components/UserBadges";
 import UserBadgesPanel from "../../components/UserBadgesPanel";
 import StartConversationButton from "../../components/StartConversationButton";
-import { ExternalLink, Flag, MapPin, Maximize2, UserCheck, UserPlus, UserX, X } from "lucide-react";
+import { ExternalLink, Flag, MapPin, Maximize2, Search, UserCheck, UserPlus, UserX, X } from "lucide-react";
 
 type VisibilityType = "public" | "followers" | "private";
+type ProfileTab = "posts" | "replies" | "media";
 
 type Profile = {
   id: string;
@@ -155,6 +156,7 @@ export default function PublicProfilePage() {
   const [loadingFollowers, setLoadingFollowers] = useState(false);
   const [loadingFollowing, setLoadingFollowing] = useState(false);
   const [selectedAvatarUrl, setSelectedAvatarUrl] = useState<string | null>(null);
+  const [activeProfileTab, setActiveProfileTab] = useState<ProfileTab>("posts");
 
   useEffect(() => {
     setMounted(true);
@@ -1299,6 +1301,41 @@ export default function PublicProfilePage() {
     });
   }, [posts, reposts, profile]);
 
+  const mediaItems = useMemo(() => {
+    return feedItems.filter((item) => {
+      const post = item.post;
+
+      return (
+        (post.media && post.media.length > 0) ||
+        Boolean(post.image_url) ||
+        Boolean(post.video_url)
+      );
+    });
+  }, [feedItems]);
+
+  const suggestedProfiles = useMemo(() => {
+    const suggestions = new Map<string, ProfileSummary>();
+
+    for (const item of feedItems) {
+      const itemProfile = item.post.profiles;
+
+      if (!itemProfile?.username || itemProfile.username === profile?.username) {
+        continue;
+      }
+
+      suggestions.set(itemProfile.username, itemProfile);
+    }
+
+    return Array.from(suggestions.values()).slice(0, 3);
+  }, [feedItems, profile?.username]);
+
+  const repostsCount = feedItems.filter((item) => item.type === "repost").length;
+  const profileTabs: { id: ProfileTab; label: string; count?: number }[] = [
+    { id: "posts", label: "Posts", count: feedItems.length },
+    { id: "replies", label: "Respostas" },
+    { id: "media", label: "Mídia", count: mediaItems.length },
+  ];
+
   if (loading) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-zinc-50 text-black dark:bg-black dark:text-white">
@@ -1361,6 +1398,63 @@ export default function PublicProfilePage() {
   const displayName = profile.display_name || profile.username;
   const isOwnProfile = loggedUserId === profile.id;
 
+  function renderFeedItem(item: FeedItem) {
+    const post = item.post;
+
+    const postComments = comments.filter(
+      (comment) => comment.post_id === post.id,
+    );
+    const postLikes = likes.filter((like) => like.post_id === post.id);
+    const postReposts = reposts.filter((repost) => repost.post_id === post.id);
+
+    const userLiked = likes.some(
+      (like) => like.post_id === post.id && like.user_id === loggedUserId,
+    );
+
+    const postSaved = bookmarks.some(
+      (bookmark) =>
+        bookmark.post_id === post.id && bookmark.user_id === loggedUserId,
+    );
+
+    const postReposted = reposts.some(
+      (repost) => repost.post_id === post.id && repost.user_id === loggedUserId,
+    );
+
+    return (
+      <PostCard
+        key={item.id}
+        post={post}
+        currentUserId={loggedUserId}
+        commentsCount={postComments.length}
+        likesCount={postLikes.length}
+        repostsCount={postReposts.length}
+        liked={userLiked}
+        saved={postSaved}
+        reposted={postReposted}
+        copied={copiedPostId === post.id}
+        reported={reportedPostIds.includes(post.id)}
+        reporting={reportingPostId === post.id}
+        showSensitiveContent={loggedProfile?.show_sensitive_content || false}
+        repostInfo={item.type === "repost" ? item.repost : null}
+        footerLabel={
+          item.type === "post"
+            ? `Publicado em ${new Date(post.created_at).toLocaleString("pt-BR")}`
+            : undefined
+        }
+        showMenu
+        onLike={() => handleToggleLike(post.id)}
+        onCommentClick={() => router.push(`/post/${post.id}`)}
+        onRepost={() => handleToggleRepost(post.id)}
+        onSave={() => handleToggleBookmark(post.id)}
+        onShare={() => handleCopyPostLink(post.id)}
+        onCopy={() => handleCopyPostLink(post.id)}
+        onEdit={() => router.push(`/post/${post.id}`)}
+        onDelete={() => router.push(`/post/${post.id}`)}
+        onReport={() => handleReportPost(post.id, post.user_id)}
+      />
+    );
+  }
+
   return (
     <main className="min-h-screen overflow-x-hidden bg-zinc-50 text-black transition-colors dark:bg-black dark:text-white">
       <AppSidebar
@@ -1387,7 +1481,7 @@ export default function PublicProfilePage() {
         onPostClick={handlePostClick}
       />
 
-      <section className="w-full max-w-4xl overflow-x-hidden px-4 py-20 pb-24 sm:px-6 lg:ml-[calc(270px+((100vw-270px-56rem)/2))] lg:py-8">
+      <section className="w-full max-w-7xl overflow-x-hidden px-4 py-20 pb-24 sm:px-6 lg:ml-[270px] lg:py-8 xl:pr-8">
         <BrandHeader
           subtitle="Perfil público"
           description={`Acompanhe publicações, reposts e informações públicas de ${displayName}.`}
@@ -1413,6 +1507,8 @@ export default function PublicProfilePage() {
           }
         />
 
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,42rem)_22rem] xl:items-start">
+          <div className="min-w-0">
         <div className="mb-6 overflow-hidden rounded-[2rem] border border-zinc-200/70 bg-white/95 shadow-sm ring-1 ring-black/5 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-black/80 dark:ring-white/10">
           <button
             type="button"
@@ -1533,10 +1629,7 @@ export default function PublicProfilePage() {
 
                     <span className="inline-flex items-baseline gap-1">
                       <span className="font-black text-zinc-950 dark:text-white">
-                        {
-                          feedItems.filter((item) => item.type === "repost")
-                            .length
-                        }
+                        {repostsCount}
                       </span>
                       <span>Reposts</span>
                     </span>
@@ -1739,7 +1832,118 @@ export default function PublicProfilePage() {
         )}
 
         {!hasBlockedMe && !isBlockedByMe && (
-          <>
+          <div className="overflow-hidden rounded-[2rem] border border-zinc-200/70 bg-white/95 shadow-sm ring-1 ring-black/5 dark:border-zinc-800/70 dark:bg-black/80 dark:ring-white/10">
+            <div className="grid grid-cols-3 border-b border-zinc-200/70 dark:border-zinc-800/70">
+              {profileTabs.map((tab) => {
+                const selected = activeProfileTab === tab.id;
+
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setActiveProfileTab(tab.id)}
+                    className={`relative flex min-h-12 items-center justify-center gap-1 px-2 text-sm font-bold transition ${
+                      selected
+                        ? "text-zinc-950 dark:text-white"
+                        : "text-zinc-500 hover:bg-zinc-50 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-950 dark:hover:text-white"
+                    }`}
+                  >
+                    <span>{tab.label}</span>
+                    {typeof tab.count === "number" && (
+                      <span className="text-xs font-semibold text-zinc-400">
+                        {tab.count}
+                      </span>
+                    )}
+                    {selected && (
+                      <span className="absolute bottom-0 h-1 w-12 rounded-full bg-blue-600 dark:bg-blue-400" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {activeProfileTab === "posts" && (
+              <div className="space-y-4 p-3 sm:p-4">
+                {feedItems.length === 0 && (
+                  <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-6 text-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400">
+                    Nenhuma atividade visÃ­vel ainda.
+                  </div>
+                )}
+
+                {feedItems.map(renderFeedItem)}
+              </div>
+            )}
+
+            {activeProfileTab === "replies" && (
+              <div className="p-6 text-center">
+                <p className="text-base font-bold text-zinc-900 dark:text-white">
+                  Respostas em breve
+                </p>
+                <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+                  As respostas deste perfil aparecerÃ£o aqui quando essa
+                  visualizaÃ§Ã£o estiver disponÃ­vel.
+                </p>
+              </div>
+            )}
+
+            {activeProfileTab === "media" && (
+              <div className="p-3 sm:p-4">
+                {mediaItems.length === 0 ? (
+                  <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-6 text-center text-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400">
+                    Nenhuma mÃ­dia visÃ­vel ainda.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {mediaItems.map((item) => {
+                      const post = item.post;
+                      const media = post.media?.[0];
+                      const mediaUrl =
+                        media?.media_url || post.image_url || post.video_url;
+                      const isVideo =
+                        media?.media_type === "video" || Boolean(post.video_url);
+
+                      if (!mediaUrl) return null;
+
+                      return (
+                        <button
+                          key={`media-${item.id}`}
+                          type="button"
+                          onClick={() => router.push(`/post/${post.id}`)}
+                          className="group relative aspect-square overflow-hidden rounded-2xl bg-zinc-100 ring-1 ring-zinc-200/70 transition hover:scale-[1.01] dark:bg-zinc-900 dark:ring-zinc-800/70"
+                        >
+                          {isVideo ? (
+                            <video
+                              src={mediaUrl}
+                              className="h-full w-full object-cover"
+                              muted
+                              playsInline
+                            />
+                          ) : (
+                            <img
+                              src={mediaUrl}
+                              alt="MÃ­dia do post"
+                              className="h-full w-full object-cover"
+                            />
+                          )}
+
+                          <span className="absolute inset-0 bg-black/0 transition group-hover:bg-black/20" />
+                          {isVideo && (
+                            <span className="absolute bottom-2 right-2 rounded-full bg-black/70 px-2 py-1 text-[10px] font-black uppercase text-white">
+                              VÃ­deo
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {false && !hasBlockedMe && !isBlockedByMe && (
+          <div className="hidden">
             <div className="mb-4">
               <h3 className="text-lg font-semibold text-black dark:text-white">
                 Atividades de {displayName}
@@ -1824,8 +2028,110 @@ export default function PublicProfilePage() {
                 );
               })}
             </div>
-          </>
+          </div>
         )}
+          </div>
+
+          <aside className="hidden xl:block">
+            <div className="sticky top-8 space-y-4">
+              <div className="rounded-[2rem] border border-zinc-200/70 bg-white/95 p-4 shadow-sm ring-1 ring-black/5 dark:border-zinc-800/70 dark:bg-black/80 dark:ring-white/10">
+                <label className="flex items-center gap-2 rounded-full bg-zinc-100 px-4 py-3 text-sm text-zinc-500 ring-1 ring-zinc-200/70 dark:bg-zinc-900 dark:text-zinc-400 dark:ring-zinc-800/70">
+                  <Search className="h-4 w-4" />
+                  <input
+                    type="search"
+                    placeholder="Buscar no EntreUS"
+                    onFocus={() => router.push("/search")}
+                    className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-zinc-500"
+                  />
+                </label>
+              </div>
+
+              <div className="rounded-[2rem] border border-zinc-200/70 bg-white/95 p-4 shadow-sm ring-1 ring-black/5 dark:border-zinc-800/70 dark:bg-black/80 dark:ring-white/10">
+                <h3 className="text-base font-black text-zinc-950 dark:text-white">
+                  Talvez vocÃª curta
+                </h3>
+
+                <div className="mt-4 space-y-3">
+                  {suggestedProfiles.length === 0 ? (
+                    <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                      Explore o feed para descobrir mais perfis do EntreUS.
+                    </p>
+                  ) : (
+                    suggestedProfiles.map((suggestedProfile) => {
+                      const suggestedName =
+                        suggestedProfile.display_name ||
+                        suggestedProfile.username;
+
+                      return (
+                        <Link
+                          key={suggestedProfile.username}
+                          href={`/u/${suggestedProfile.username}`}
+                          className="flex items-center gap-3 rounded-2xl p-2 transition hover:bg-zinc-50 dark:hover:bg-zinc-950"
+                        >
+                          {suggestedProfile.avatar_url ? (
+                            <img
+                              src={suggestedProfile.avatar_url}
+                              alt={suggestedName}
+                              className="h-10 w-10 rounded-full object-cover ring-1 ring-zinc-200 dark:ring-zinc-800"
+                            />
+                          ) : (
+                            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-100 text-sm font-black text-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
+                              {suggestedName.charAt(0).toUpperCase()}
+                            </span>
+                          )}
+
+                          <span className="min-w-0">
+                            <span className="block truncate text-sm font-bold text-zinc-950 dark:text-white">
+                              {suggestedName}
+                            </span>
+                            <span className="block truncate text-xs text-zinc-500 dark:text-zinc-400">
+                              @{suggestedProfile.username}
+                            </span>
+                          </span>
+                        </Link>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-[2rem] border border-zinc-200/70 bg-white/95 p-4 shadow-sm ring-1 ring-black/5 dark:border-zinc-800/70 dark:bg-black/80 dark:ring-white/10">
+                <h3 className="text-base font-black text-zinc-950 dark:text-white">
+                  Mural EntreUS
+                </h3>
+                <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-400">
+                  Conecte-se com pessoas reais, acompanhe publicaÃ§Ãµes e
+                  descubra conversas que combinam com o seu momento.
+                </p>
+                <Link
+                  href="/feed"
+                  className="mt-4 inline-flex rounded-full bg-zinc-950 px-4 py-2 text-sm font-bold text-white transition hover:bg-black dark:bg-white dark:text-black"
+                >
+                  Ir ao feed
+                </Link>
+              </div>
+
+              <nav className="flex flex-wrap gap-x-3 gap-y-2 px-2 text-xs text-zinc-500 dark:text-zinc-500">
+                <Link href="/terms" className="hover:text-zinc-900 dark:hover:text-white">
+                  Termos de Uso
+                </Link>
+                <Link href="/privacy" className="hover:text-zinc-900 dark:hover:text-white">
+                  PolÃ­tica de Privacidade
+                </Link>
+                <Link href="/cookies" className="hover:text-zinc-900 dark:hover:text-white">
+                  Cookies
+                </Link>
+                <Link href="/accessibility" className="hover:text-zinc-900 dark:hover:text-white">
+                  Acessibilidade
+                </Link>
+                <Link href="/more" className="hover:text-zinc-900 dark:hover:text-white">
+                  Mais
+                </Link>
+                <span>Â© 2026 EntreUS</span>
+              </nav>
+            </div>
+          </aside>
+        </div>
       </section>
 
       {selectedAvatarUrl && (
