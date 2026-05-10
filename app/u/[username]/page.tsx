@@ -1486,25 +1486,6 @@ export default function PublicProfilePage() {
           subtitle="Perfil público"
           description={`Acompanhe publicações, reposts e informações públicas de ${displayName}.`}
           compact
-          rightContent={
-            <div className="flex flex-wrap gap-2">
-              {isOwnProfile && (
-                <Link
-                  href="/profile"
-                  className="rounded-full border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-900 transition hover:bg-zinc-100 dark:border-zinc-700 dark:bg-black dark:text-white dark:hover:bg-zinc-900"
-                >
-                  Meu perfil
-                </Link>
-              )}
-
-              <Link
-                href="/feed"
-                className="rounded-full border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-900 transition hover:bg-zinc-100 dark:border-zinc-700 dark:bg-black dark:text-white dark:hover:bg-zinc-900"
-              >
-                Voltar ao feed
-              </Link>
-            </div>
-          }
         />
 
         <div className="grid gap-6 xl:grid-cols-[minmax(0,42rem)_22rem] xl:items-start">
@@ -1584,6 +1565,24 @@ export default function PublicProfilePage() {
                   <p className="mt-1 break-all text-sm font-medium text-zinc-500 dark:text-zinc-400 sm:text-base">
                     @{profile.username}
                   </p>
+
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    {isOwnProfile && (
+                      <Link
+                        href="/profile"
+                        className="inline-flex h-9 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-white/80 px-3 text-xs font-bold text-zinc-900 shadow-sm transition hover:bg-white dark:border-zinc-800 dark:bg-zinc-950/80 dark:text-white dark:hover:bg-zinc-900 sm:text-sm"
+                      >
+                        Meu perfil
+                      </Link>
+                    )}
+
+                    <Link
+                      href="/feed"
+                      className="inline-flex h-9 shrink-0 items-center justify-center rounded-full bg-zinc-950 px-3 text-xs font-bold text-white shadow-sm transition hover:scale-[1.02] hover:bg-black dark:bg-white dark:text-black sm:text-sm"
+                    >
+                      Ir ao feed
+                    </Link>
+                  </div>
 
                   <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm text-zinc-500 dark:text-zinc-400">
                     <button
