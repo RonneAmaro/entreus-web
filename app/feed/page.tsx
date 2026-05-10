@@ -1839,7 +1839,7 @@ function FeedContent() {
       />
 
       {replyModalPost && (
-        <div className="fixed inset-0 z-[80] flex items-start justify-center bg-black/60 px-3 py-6 backdrop-blur-sm sm:py-10">
+        <div className="fixed inset-0 z-[80] flex items-start justify-center bg-black/55 px-3 py-6 backdrop-blur-md sm:py-10">
           <button
             type="button"
             onClick={handleCloseReplyModal}
@@ -1847,8 +1847,8 @@ function FeedContent() {
             aria-label="Fechar resposta"
           />
 
-          <div className="relative z-[81] flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden rounded-[2rem] border border-zinc-200/80 bg-white shadow-2xl shadow-black/30 dark:border-zinc-800/80 dark:bg-zinc-950">
-            <div className="flex shrink-0 items-center justify-between border-b border-zinc-200/70 px-4 py-3 dark:border-zinc-800/70">
+          <div className="relative z-[81] flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden rounded-[2rem] border border-zinc-200/70 bg-white/95 shadow-2xl shadow-black/25 ring-1 ring-black/5 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-black/90 dark:ring-white/10">
+            <div className="flex shrink-0 items-center justify-between border-b border-zinc-200/70 bg-white/80 px-4 py-3 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-black/70">
               <button
                 type="button"
                 onClick={handleCloseReplyModal}
@@ -1922,7 +1922,7 @@ function FeedContent() {
                 </div>
               </div>
 
-              <div className="relative flex gap-3 pt-1">
+              <div className="relative flex gap-3 rounded-[1.75rem] bg-zinc-50/70 p-3 ring-1 ring-zinc-200/60 dark:bg-zinc-950/70 dark:ring-zinc-800/70">
                 <div className="shrink-0">
                   {currentProfile?.avatar_url ? (
                     <img
@@ -2083,15 +2083,15 @@ function FeedContent() {
       <section className="w-full overflow-x-hidden px-4 py-20 pb-24 sm:px-6 lg:ml-[270px] lg:w-[calc(100%-270px)] lg:px-8 lg:py-8">
         <div className="mx-auto grid w-full max-w-6xl grid-cols-1 gap-6 xl:grid-cols-[minmax(0,42rem)_22rem]">
           <div className="min-w-0">
-            <div className="mb-4 break-all text-sm text-zinc-500 dark:text-zinc-400 sm:mb-6">
+            <div className="mb-4 inline-flex max-w-full items-center rounded-full bg-white/80 px-3 py-1.5 text-sm text-zinc-500 shadow-sm ring-1 ring-zinc-200/70 backdrop-blur dark:bg-zinc-950/80 dark:text-zinc-400 dark:ring-zinc-800/70 sm:mb-6">
               {t('feed.loggedAs')}{' '}
-              <span className="text-black dark:text-white">
+              <span className="min-w-0 truncate text-black dark:text-white">
                 {email}
               </span>
             </div>
 
             {currentProfile && !currentProfile.show_sensitive_content && (
-              <div className="mb-4 rounded-2xl border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-800 dark:border-yellow-900/60 dark:bg-yellow-950/20 dark:text-yellow-300">
+              <div className="mb-4 rounded-[1.5rem] border border-yellow-200/70 bg-yellow-50/80 px-4 py-3 text-sm text-yellow-800 shadow-sm ring-1 ring-yellow-100/70 dark:border-yellow-900/50 dark:bg-yellow-950/10 dark:text-yellow-300 dark:ring-yellow-900/20">
                 {t('feed.sensitiveHiddenPrefix')}{' '}
                 <Link href="/profile" className="font-semibold underline">
                   {t('nav.myProfile')}
@@ -2100,7 +2100,10 @@ function FeedContent() {
               </div>
             )}
 
-            <div id="post-composer" className="mb-6 scroll-mt-24">
+            <div
+              id="post-composer"
+              className="mb-6 scroll-mt-24 rounded-[2rem] border border-zinc-200/70 bg-white/95 p-3 shadow-sm ring-1 ring-black/5 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-black/80 dark:ring-white/10 sm:p-4"
+            >
               <PostComposer
                 userName={currentProfile?.display_name || currentProfile?.username || email || t('common.user')}
                 userAvatarUrl={currentProfile?.avatar_url || null}
@@ -2178,7 +2181,7 @@ function FeedContent() {
                   <article
                     id={item.type === 'post' ? `post-${post.id}` : `repost-${item.id}`}
                     key={item.id}
-                    className={`rounded-[2rem] border bg-white/95 p-4 shadow-sm shadow-black/5 backdrop-blur transition hover:-translate-y-0.5 hover:shadow-xl hover:shadow-black/10 dark:bg-zinc-950/90 sm:p-6 ${isHighlighted
+                    className={`rounded-[2rem] border bg-white/95 p-4 shadow-sm shadow-black/5 ring-1 ring-black/5 backdrop-blur-xl transition hover:-translate-y-0.5 hover:shadow-xl hover:shadow-black/10 dark:bg-black/80 dark:ring-white/10 sm:p-6 ${isHighlighted
                         ? 'border-blue-500 ring-2 ring-blue-200 dark:border-blue-400 dark:ring-blue-900'
                         : 'border-zinc-200/70 dark:border-zinc-800/70'
                       }`}
@@ -2186,7 +2189,7 @@ function FeedContent() {
                     {item.type === 'repost' && (
                       <Link
                         href={`/u/${reposterUsername}`}
-                        className="mb-4 flex items-center gap-2 text-sm font-medium text-green-600 transition hover:opacity-80 dark:text-green-400"
+                        className="mb-4 inline-flex max-w-full items-center gap-2 rounded-full bg-green-50 px-3 py-1.5 text-sm font-bold text-green-700 transition hover:opacity-80 dark:bg-green-950/30 dark:text-green-300"
                       >
                         {reposterAvatar ? (
                           <img
@@ -2264,9 +2267,9 @@ function FeedContent() {
                           type="button"
                           onClick={() => handleToggleFollow(post.user_id)}
                           disabled={followLoadingUserId === post.user_id}
-                          className={`rounded-full px-4 py-2 text-sm font-medium transition ${isFollowingAuthor
-                              ? 'border border-zinc-300 text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800'
-                              : 'bg-black text-white hover:opacity-90 dark:bg-white dark:text-black'
+                          className={`rounded-full px-4 py-2 text-sm font-bold shadow-sm transition ${isFollowingAuthor
+                              ? 'border border-zinc-200 bg-white/80 text-zinc-800 hover:bg-white dark:border-zinc-800 dark:bg-zinc-950/80 dark:text-zinc-200 dark:hover:bg-zinc-900'
+                              : 'bg-zinc-950 text-white hover:scale-[1.02] hover:bg-black dark:bg-white dark:text-black'
                             } ${followLoadingUserId === post.user_id
                               ? 'cursor-not-allowed opacity-60'
                               : ''
@@ -2286,30 +2289,30 @@ function FeedContent() {
                         {t(getCategoryKey(post.category))}
                       </p>
 
-                      <span className="rounded-full border border-zinc-200 bg-zinc-100 px-2 py-1 text-xs text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                      <span className="rounded-full bg-zinc-100/80 px-2.5 py-1 text-xs font-semibold text-zinc-600 ring-1 ring-zinc-200/70 dark:bg-zinc-900/80 dark:text-zinc-300 dark:ring-zinc-800/70">
                         {getVisibilityLabel(post.visibility)}
                       </span>
 
                       {isSensitivePostItem && (
-                        <span className="rounded-full border border-yellow-200 bg-yellow-50 px-2 py-1 text-xs text-yellow-700 dark:border-yellow-800 dark:bg-yellow-950 dark:text-yellow-300">
+                        <span className="rounded-full bg-yellow-50 px-2.5 py-1 text-xs font-bold text-yellow-700 ring-1 ring-yellow-200/80 dark:bg-yellow-950/30 dark:text-yellow-300 dark:ring-yellow-900/60">
                           18+
                         </span>
                       )}
 
                       {postReposted && (
-                        <span className="rounded-full border border-green-200 bg-green-50 px-2 py-1 text-xs text-green-700 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
+                        <span className="rounded-full bg-green-50 px-2.5 py-1 text-xs font-bold text-green-700 ring-1 ring-green-200/80 dark:bg-green-950/30 dark:text-green-300 dark:ring-green-900/60">
                           {t('postStatus.reposted')}
                         </span>
                       )}
 
                       {postSaved && (
-                        <span className="rounded-full border border-yellow-200 bg-yellow-50 px-2 py-1 text-xs text-yellow-700 dark:border-yellow-800 dark:bg-yellow-950 dark:text-yellow-300">
+                        <span className="rounded-full bg-yellow-50 px-2.5 py-1 text-xs font-bold text-yellow-700 ring-1 ring-yellow-200/80 dark:bg-yellow-950/30 dark:text-yellow-300 dark:ring-yellow-900/60">
                           {t('postStatus.saved')}
                         </span>
                       )}
 
                       {isHighlighted && (
-                        <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-xs text-blue-700 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300">
+                        <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700 ring-1 ring-blue-200/80 dark:bg-blue-950/30 dark:text-blue-300 dark:ring-blue-900/60">
                           {t('postStatus.highlighted')}
                         </span>
                       )}
@@ -2320,16 +2323,16 @@ function FeedContent() {
                         <textarea
                           value={editContent}
                           onChange={(e) => setEditContent(e.target.value)}
-                          className="min-h-28 w-full resize-none rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 sm:text-base"
+                          className="min-h-28 w-full resize-none rounded-[1.5rem] border border-zinc-200/80 bg-zinc-100/70 px-4 py-3 text-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800/80 dark:bg-zinc-900/80 dark:focus:border-blue-500/70 dark:focus:bg-zinc-950 sm:text-base"
                         />
 
                         <div className="mt-4 flex flex-col gap-3 sm:flex-row">
                           <button
                             onClick={() => handleSaveEdit(post.id)}
                             disabled={savingEdit}
-                            className={`w-full rounded-xl px-4 py-2 font-medium sm:w-auto ${savingEdit
+                            className={`w-full rounded-full px-5 py-2.5 font-bold shadow-sm transition sm:w-auto ${savingEdit
                                 ? 'cursor-not-allowed bg-zinc-300 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300'
-                                : 'bg-black text-white hover:opacity-90 dark:bg-white dark:text-black'
+                                : 'bg-zinc-950 text-white hover:scale-[1.02] hover:bg-black dark:bg-white dark:text-black'
                               }`}
                           >
                             {savingEdit ? t('common.saving') : t('common.save')}
@@ -2337,7 +2340,7 @@ function FeedContent() {
 
                           <button
                             onClick={handleCancelEdit}
-                            className="w-full rounded-xl border border-zinc-300 px-4 py-2 hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800 sm:w-auto"
+                            className="w-full rounded-full border border-zinc-200 bg-white/70 px-5 py-2.5 font-bold text-zinc-900 transition hover:bg-white dark:border-zinc-800 dark:bg-zinc-950/70 dark:text-white dark:hover:bg-zinc-900 sm:w-auto"
                           >
                             {t('common.cancel')}
                           </button>
@@ -2484,7 +2487,7 @@ function FeedContent() {
                                               current === comment.id ? null : comment.id
                                             )
                                           }
-                                          className="flex h-8 w-8 items-center justify-center rounded-full text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                                          className="flex h-8 w-8 items-center justify-center rounded-full text-zinc-500 transition hover:bg-zinc-200 dark:hover:bg-zinc-700"
                                           aria-label={t('feed.commentOptions')}
                                         >
                                           <MoreHorizontal className="h-4 w-4" />
@@ -2503,7 +2506,7 @@ function FeedContent() {
                                               <button
                                                 type="button"
                                                 onClick={() => handleStartEditComment(comment)}
-                                                className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-zinc-800 hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-900"
+                                                className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-zinc-800 hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-900"
                                               >
                                                 <Edit3 className="h-4 w-4" />
                                                 {t('feed.editComment')}
@@ -2512,7 +2515,7 @@ function FeedContent() {
                                               <button
                                                 type="button"
                                                 onClick={() => handleDeleteComment(comment.id)}
-                                                className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30"
+                                                className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-semibold text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30"
                                               >
                                                 <Trash2 className="h-4 w-4" />
                                                 {t('feed.deleteComment')}
@@ -2529,7 +2532,7 @@ function FeedContent() {
                                       <textarea
                                         value={editCommentContent}
                                         onChange={(e) => setEditCommentContent(e.target.value)}
-                                        className="min-h-24 w-full resize-none rounded-[1.35rem] border border-zinc-300/70 bg-white px-3 py-2 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 dark:border-zinc-700/70 dark:bg-zinc-950 dark:text-white"
+                                          className="min-h-24 w-full resize-none rounded-[1.35rem] border border-zinc-200/80 bg-white/90 px-3 py-2 text-sm outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800/80 dark:bg-zinc-950 dark:text-white"
                                       />
 
                                       <div className="mt-2 flex flex-col gap-2 sm:flex-row">
@@ -2537,7 +2540,7 @@ function FeedContent() {
                                           type="button"
                                           onClick={() => handleSaveCommentEdit(comment.id)}
                                           disabled={savingCommentId === comment.id}
-                                          className="rounded-xl bg-black px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-60 dark:bg-white dark:text-black"
+                                          className="rounded-full bg-zinc-950 px-4 py-2 text-sm font-bold text-white transition hover:scale-[1.02] hover:bg-black disabled:opacity-60 dark:bg-white dark:text-black"
                                         >
                                           {savingCommentId === comment.id
                                             ? t('common.saving')
@@ -2547,7 +2550,7 @@ function FeedContent() {
                                         <button
                                           type="button"
                                           onClick={handleCancelEditComment}
-                                          className="rounded-xl border border-zinc-300 px-4 py-2 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900"
+                                          className="rounded-full border border-zinc-200 bg-white/70 px-4 py-2 text-sm font-bold transition hover:bg-white dark:border-zinc-800 dark:bg-zinc-950/70 dark:hover:bg-zinc-900"
                                         >
                                           {t('common.cancel')}
                                         </button>
@@ -2563,7 +2566,7 @@ function FeedContent() {
                                     <button
                                       type="button"
                                       onClick={() => handleToggleCommentLike(comment.id)}
-                                      className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium transition ${userLikedComment
+                                      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold transition ${userLikedComment
                                           ? 'bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400'
                                           : 'text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-700'
                                         }`}
@@ -2587,7 +2590,7 @@ function FeedContent() {
                         <button
                           type="button"
                           onClick={() => handleOpenReplyModal(post.id)}
-                          className="rounded-full bg-zinc-100 px-4 py-2 text-sm font-bold text-zinc-800 transition hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700"
+                          className="rounded-full bg-zinc-100 px-4 py-2 text-sm font-bold text-zinc-800 transition hover:scale-[1.02] hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700"
                         >
                           Responder
                         </button>
@@ -2602,7 +2605,7 @@ function FeedContent() {
 
           <aside className="hidden xl:block">
             <div className="sticky top-8 space-y-4">
-              <div className="rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+              <div className="rounded-[2rem] border border-zinc-200/70 bg-white/95 p-5 shadow-sm ring-1 ring-black/5 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-black/80 dark:ring-white/10">
                 <div className="mb-3 flex items-center gap-2">
                   <Search className="h-5 w-5 text-zinc-500 dark:text-zinc-400" />
                   <h2 className="text-lg font-black text-zinc-950 dark:text-white">
@@ -2618,7 +2621,7 @@ function FeedContent() {
                     value={feedSearch}
                     onChange={(e) => setFeedSearch(e.target.value)}
                     placeholder={localTexts.mural.searchPlaceholder}
-                    className="w-full rounded-2xl border border-zinc-200 bg-zinc-50 py-3 pl-11 pr-4 text-sm outline-none transition focus:border-zinc-400 dark:border-zinc-700 dark:bg-zinc-950 dark:text-white dark:focus:border-zinc-500"
+                    className="w-full rounded-full border border-zinc-200/70 bg-zinc-100/80 py-3 pl-11 pr-4 text-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800/70 dark:bg-zinc-900 dark:text-white dark:focus:border-blue-500/70 dark:focus:bg-zinc-950"
                   />
                 </div>
 
@@ -2627,11 +2630,11 @@ function FeedContent() {
                 </p>
               </div>
 
-              <div className="overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+              <div className="overflow-hidden rounded-[2rem] border border-zinc-200/70 bg-white/95 shadow-sm ring-1 ring-black/5 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-black/80 dark:ring-white/10">
                 <div className="space-y-4 p-5">
                   <Link
                     href="/lab"
-                    className="block rounded-2xl border border-blue-100 bg-blue-50 p-4 transition hover:-translate-y-0.5 hover:shadow-md dark:border-blue-900/60 dark:bg-blue-950/20"
+                    className="block rounded-[1.5rem] border border-blue-100/70 bg-blue-50/80 p-4 ring-1 ring-blue-100/70 transition hover:-translate-y-0.5 hover:bg-blue-50 hover:shadow-md dark:border-blue-900/50 dark:bg-blue-950/20 dark:ring-blue-900/20"
                   >
                     <div className="mb-3 flex items-center gap-2 text-blue-700 dark:text-blue-300">
                       <FlaskConical className="h-5 w-5" />
@@ -2651,7 +2654,7 @@ function FeedContent() {
 
                   <Link
                     href="/profile"
-                    className="block rounded-2xl border border-yellow-100 bg-yellow-50 p-4 transition hover:-translate-y-0.5 hover:shadow-md dark:border-yellow-900/60 dark:bg-yellow-950/20"
+                    className="block rounded-[1.5rem] border border-yellow-100/70 bg-yellow-50/80 p-4 ring-1 ring-yellow-100/70 transition hover:-translate-y-0.5 hover:bg-yellow-50 hover:shadow-md dark:border-yellow-900/50 dark:bg-yellow-950/20 dark:ring-yellow-900/20"
                   >
                     <div className="mb-3 flex items-center gap-2 text-yellow-700 dark:text-yellow-300">
                       <Award className="h-5 w-5" />
@@ -2669,7 +2672,7 @@ function FeedContent() {
                     </span>
                   </Link>
 
-                  <div className="rounded-2xl border border-green-100 bg-green-50 p-4 dark:border-green-900/60 dark:bg-green-950/20">
+                  <div className="rounded-[1.5rem] border border-green-100/70 bg-green-50/80 p-4 ring-1 ring-green-100/70 dark:border-green-900/50 dark:bg-green-950/20 dark:ring-green-900/20">
                     <div className="mb-3 flex items-center gap-2 text-green-700 dark:text-green-300">
                       <Heart className="h-5 w-5" />
                       <h3 className="font-bold">
@@ -2706,7 +2709,7 @@ function FeedContent() {
                 </div>
               </div>
 
-              <div className="rounded-3xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+              <div className="rounded-[2rem] border border-zinc-200/70 bg-white/95 p-5 shadow-sm ring-1 ring-black/5 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-black/80 dark:ring-white/10">
                 <div className="mb-4 flex items-center gap-2">
                   <Sparkles className="h-5 w-5 text-yellow-500" />
                   <h3 className="text-lg font-black text-zinc-950 dark:text-white">
@@ -2715,7 +2718,7 @@ function FeedContent() {
                 </div>
 
                 <div className="space-y-3">
-                  <div className="flex gap-3 rounded-2xl bg-zinc-50 p-3 dark:bg-zinc-950">
+                  <div className="flex gap-3 rounded-[1.35rem] bg-zinc-50/90 p-3 ring-1 ring-zinc-200/60 dark:bg-zinc-950/80 dark:ring-zinc-800/70">
                     <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-white dark:bg-white dark:text-black">
                       <MessageCircle className="h-4 w-4" />
                     </div>
@@ -2724,7 +2727,7 @@ function FeedContent() {
                     </p>
                   </div>
 
-                  <div className="flex gap-3 rounded-2xl bg-zinc-50 p-3 dark:bg-zinc-950">
+                  <div className="flex gap-3 rounded-[1.35rem] bg-zinc-50/90 p-3 ring-1 ring-zinc-200/60 dark:bg-zinc-950/80 dark:ring-zinc-800/70">
                     <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-white dark:bg-white dark:text-black">
                       <ImageIcon className="h-4 w-4" />
                     </div>
@@ -2733,7 +2736,7 @@ function FeedContent() {
                     </p>
                   </div>
 
-                  <div className="flex gap-3 rounded-2xl bg-zinc-50 p-3 dark:bg-zinc-950">
+                  <div className="flex gap-3 rounded-[1.35rem] bg-zinc-50/90 p-3 ring-1 ring-zinc-200/60 dark:bg-zinc-950/80 dark:ring-zinc-800/70">
                     <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-900 text-white dark:bg-white dark:text-black">
                       <FlaskConical className="h-4 w-4" />
                     </div>
@@ -2744,7 +2747,7 @@ function FeedContent() {
                 </div>
               </div>
 
-              <div className="rounded-3xl border border-zinc-200 bg-zinc-50 p-5 text-sm leading-6 text-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400">
+              <div className="rounded-[2rem] border border-zinc-200/70 bg-white/80 p-5 text-sm leading-6 text-zinc-500 shadow-sm ring-1 ring-black/5 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-black/60 dark:text-zinc-400 dark:ring-white/10">
                 <div className="mb-2 flex items-center gap-2 font-bold text-zinc-700 dark:text-zinc-200">
                   <MessageCircle className="h-4 w-4" />
                   EntreUS
