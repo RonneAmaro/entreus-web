@@ -1413,7 +1413,7 @@ export default function PublicProfilePage() {
           }
         />
 
-        <div className="mb-6 overflow-hidden rounded-[2rem] border border-zinc-200 bg-white shadow-sm ring-1 ring-black/5 dark:border-zinc-800 dark:bg-zinc-950 dark:ring-white/5">
+        <div className="mb-6 overflow-hidden rounded-[2rem] border border-zinc-200/70 bg-white/95 shadow-sm ring-1 ring-black/5 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-black/80 dark:ring-white/10">
           <button
             type="button"
             onClick={() => profile.banner_url && setSelectedAvatarUrl(profile.banner_url)}
@@ -1489,7 +1489,60 @@ export default function PublicProfilePage() {
                     @{profile.username}
                   </p>
 
-                  <div className="mt-3 flex flex-wrap gap-2">
+                  <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm text-zinc-500 dark:text-zinc-400">
+                    <button
+                      type="button"
+                      onClick={handleOpenFollowers}
+                      className="inline-flex items-baseline gap-1 rounded-full px-0.5 font-medium transition hover:text-zinc-950 dark:hover:text-white"
+                    >
+                      <span className="font-black text-zinc-950 dark:text-white">
+                        {followersCount}
+                      </span>
+                      <span>Seguidores</span>
+                    </button>
+
+                    <span className="text-zinc-300 dark:text-zinc-700">
+                      &middot;
+                    </span>
+
+                    <button
+                      type="button"
+                      onClick={handleOpenFollowing}
+                      className="inline-flex items-baseline gap-1 rounded-full px-0.5 font-medium transition hover:text-zinc-950 dark:hover:text-white"
+                    >
+                      <span className="font-black text-zinc-950 dark:text-white">
+                        {followingCount}
+                      </span>
+                      <span>Seguindo</span>
+                    </button>
+
+                    <span className="text-zinc-300 dark:text-zinc-700">
+                      &middot;
+                    </span>
+
+                    <span className="inline-flex items-baseline gap-1">
+                      <span className="font-black text-zinc-950 dark:text-white">
+                        {feedItems.length}
+                      </span>
+                      <span>Atividades</span>
+                    </span>
+
+                    <span className="text-zinc-300 dark:text-zinc-700">
+                      &middot;
+                    </span>
+
+                    <span className="inline-flex items-baseline gap-1">
+                      <span className="font-black text-zinc-950 dark:text-white">
+                        {
+                          feedItems.filter((item) => item.type === "repost")
+                            .length
+                        }
+                      </span>
+                      <span>Reposts</span>
+                    </span>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap gap-2">
                     {isOwnProfile && (
                       <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-300">
                         Este é o seu perfil
@@ -1611,54 +1664,8 @@ export default function PublicProfilePage() {
               )}
             </div>
 
-            <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <button
-                type="button"
-                onClick={handleOpenFollowers}
-                className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4 text-left transition hover:-translate-y-[1px] hover:bg-white hover:shadow-sm dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900"
-              >
-                <span className="block text-2xl font-black text-black dark:text-white">
-                  {followersCount}
-                </span>
-                <span className="mt-1 block text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                  Seguidores
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleOpenFollowing}
-                className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4 text-left transition hover:-translate-y-[1px] hover:bg-white hover:shadow-sm dark:border-zinc-800 dark:bg-black dark:hover:bg-zinc-900"
-              >
-                <span className="block text-2xl font-black text-black dark:text-white">
-                  {followingCount}
-                </span>
-                <span className="mt-1 block text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                  Seguindo
-                </span>
-              </button>
-
-              <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-black">
-                <span className="block text-2xl font-black text-black dark:text-white">
-                  {feedItems.length}
-                </span>
-                <span className="mt-1 block text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                  Atividades
-                </span>
-              </div>
-
-              <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-black">
-                <span className="block text-2xl font-black text-black dark:text-white">
-                  {feedItems.filter((item) => item.type === "repost").length}
-                </span>
-                <span className="mt-1 block text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                  Reposts
-                </span>
-              </div>
-            </div>
-
-            <div className="mt-6 rounded-2xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-black">
-              <p className="mb-2 text-xs font-bold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+            <div className="mt-6 border-t border-zinc-200/70 pt-5 dark:border-zinc-800/70">
+              <p className="mb-2 text-xs font-black uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
                 Sobre
               </p>
 
@@ -1674,40 +1681,42 @@ export default function PublicProfilePage() {
                 </p>
               ) : (
                 <>
-                  <p className="whitespace-pre-wrap text-zinc-800 dark:text-zinc-200">
+                  <p className="whitespace-pre-wrap text-[15px] leading-7 text-zinc-800 dark:text-zinc-200">
                     {profile.bio?.trim() ||
                       "Este usuário ainda não adicionou uma bio."}
                   </p>
 
                   <div className="mt-4 flex flex-wrap gap-2">
-                  {(profile.city || profile.state || profile.country) && (
-                    <span className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-xs font-semibold text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300">
-                      <MapPin className="h-3.5 w-3.5 shrink-0" />
-                      <span className="truncate">
-                        {[profile.city, profile.state, profile.country].filter(Boolean).join(", ")}
+                    {(profile.city || profile.state || profile.country) && (
+                      <span className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-zinc-100/80 px-3 py-1.5 text-xs font-semibold text-zinc-700 ring-1 ring-zinc-200/70 dark:bg-zinc-900/80 dark:text-zinc-300 dark:ring-zinc-800/70">
+                        <MapPin className="h-3.5 w-3.5 shrink-0" />
+                        <span className="truncate">
+                          {[profile.city, profile.state, profile.country]
+                            .filter(Boolean)
+                            .join(", ")}
+                        </span>
                       </span>
-                    </span>
-                  )}
+                    )}
 
-                  {profile.website_url && (
-                    <a
-                      href={
-                        profile.website_url.startsWith("http")
-                          ? profile.website_url
-                          : `https://${profile.website_url}`
-                      }
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700 transition hover:bg-blue-100 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-300 dark:hover:bg-blue-950/50"
-                    >
-                      <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-                      <span className="truncate">
-                        {profile.website_title || profile.website_url}
-                      </span>
-                    </a>
-                  )}
-                </div>
-              </>
+                    {profile.website_url && (
+                      <a
+                        href={
+                          profile.website_url.startsWith("http")
+                            ? profile.website_url
+                            : `https://${profile.website_url}`
+                        }
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700 ring-1 ring-blue-200/80 transition hover:bg-blue-100 dark:bg-blue-950/30 dark:text-blue-300 dark:ring-blue-900/60 dark:hover:bg-blue-950/50"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                        <span className="truncate">
+                          {profile.website_title || profile.website_url}
+                        </span>
+                      </a>
+                    )}
+                  </div>
+                </>
               )}
             </div>
 
