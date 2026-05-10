@@ -12,7 +12,7 @@ import PostCard from "../../components/PostCard";
 import UserBadges from "../../components/UserBadges";
 import UserBadgesPanel from "../../components/UserBadgesPanel";
 import StartConversationButton from "../../components/StartConversationButton";
-import { Flag, Maximize2, UserCheck, UserPlus, UserX, X } from "lucide-react";
+import { ExternalLink, Flag, MapPin, Maximize2, UserCheck, UserPlus, UserX, X } from "lucide-react";
 
 type VisibilityType = "public" | "followers" | "private";
 
@@ -23,6 +23,11 @@ type Profile = {
   bio: string | null;
   avatar_url: string | null;
   banner_url: string | null;
+  country: string | null;
+  city: string | null;
+  state: string | null;
+  website_url: string | null;
+  website_title: string | null;
   show_sensitive_content?: boolean | null;
 };
 
@@ -175,7 +180,7 @@ export default function PublicProfilePage() {
       const { data: loggedProfileData } = await supabase
         .from("profiles")
         .select(
-          "id, username, display_name, bio, avatar_url, banner_url, show_sensitive_content",
+          "id, username, display_name, bio, avatar_url, banner_url, country, city, state, website_url, website_title, show_sensitive_content",
         )
         .eq("id", user.id)
         .maybeSingle();
@@ -191,7 +196,7 @@ export default function PublicProfilePage() {
       const { data: profileData, error: profileError } = await supabase
         .from("profiles")
         .select(
-          "id, username, display_name, bio, avatar_url, banner_url, show_sensitive_content",
+          "id, username, display_name, bio, avatar_url, banner_url, country, city, state, website_url, website_title, show_sensitive_content",
         )
         .eq("username", username)
         .maybeSingle();
