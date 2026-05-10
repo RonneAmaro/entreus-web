@@ -7,7 +7,7 @@ import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
-import { Camera, ImageIcon, Maximize2, ShieldAlert, X } from 'lucide-react'
+import { Camera, ExternalLink, ImageIcon, LinkIcon, MapPin, Maximize2, ShieldAlert, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import PostCard from '../components/PostCard'
 import UserBadges from '../components/UserBadges'
@@ -24,6 +24,10 @@ type Profile = {
   avatar_url: string | null
   banner_url: string | null
   country: string | null
+  city: string | null
+  state: string | null
+  website_url: string | null
+  website_title: string | null
   birth_date: string | null
   show_sensitive_content: boolean
 }
@@ -135,6 +139,10 @@ export default function ProfilePage() {
   const [displayName, setDisplayName] = useState('')
   const [bio, setBio] = useState('')
   const [country, setCountry] = useState('')
+  const [city, setCity] = useState('')
+  const [stateName, setStateName] = useState('')
+  const [websiteUrl, setWebsiteUrl] = useState('')
+  const [websiteTitle, setWebsiteTitle] = useState('')
   const [birthDate, setBirthDate] = useState('')
   const [avatarUrl, setAvatarUrl] = useState('')
   const [avatarPreview, setAvatarPreview] = useState('')
@@ -174,7 +182,7 @@ export default function ProfilePage() {
       const { data, error } = await supabase
         .from('profiles')
         .select(
-          'id, username, display_name, bio, avatar_url, banner_url, country, birth_date, show_sensitive_content'
+          'id, username, display_name, bio, avatar_url, banner_url, country, city, state, website_url, website_title, birth_date, show_sensitive_content'
         )
         .eq('id', user.id)
         .maybeSingle()
@@ -193,6 +201,10 @@ export default function ProfilePage() {
         avatar_url: '',
         banner_url: '',
         country: '',
+        city: '',
+        state: '',
+        website_url: '',
+        website_title: '',
         birth_date: '',
         show_sensitive_content: false,
       }
@@ -202,6 +214,10 @@ export default function ProfilePage() {
       setDisplayName(loadedProfile.display_name || '')
       setBio(loadedProfile.bio || '')
       setCountry(loadedProfile.country || '')
+      setCity(loadedProfile.city || '')
+      setStateName(loadedProfile.state || '')
+      setWebsiteUrl(loadedProfile.website_url || '')
+      setWebsiteTitle(loadedProfile.website_title || '')
       setBirthDate(loadedProfile.birth_date || '')
       setAvatarUrl(loadedProfile.avatar_url || '')
       setAvatarPreview(loadedProfile.avatar_url || '')
@@ -633,6 +649,10 @@ export default function ProfilePage() {
       avatar_url: avatarUrl || null,
       banner_url: bannerUrl || null,
       country: country.trim() || null,
+      city: city.trim() || null,
+      state: stateName.trim() || null,
+      website_url: websiteUrl.trim() || null,
+      website_title: websiteTitle.trim() || null,
       birth_date: birthDate || null,
       show_sensitive_content: showSensitiveContent,
       updated_at: new Date().toISOString(),
@@ -654,6 +674,10 @@ export default function ProfilePage() {
       avatar_url: avatarUrl || null,
       banner_url: bannerUrl || null,
       country: country.trim() || null,
+      city: city.trim() || null,
+      state: stateName.trim() || null,
+      website_url: websiteUrl.trim() || null,
+      website_title: websiteTitle.trim() || null,
       birth_date: birthDate || null,
       show_sensitive_content: showSensitiveContent,
     }
@@ -1301,6 +1325,68 @@ export default function ProfilePage() {
                       />
                     </div>
 
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div>
+                        <label className="mb-2 flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
+                          <MapPin className="h-4 w-4" />
+                          Cidade
+                        </label>
+
+                        <input
+                          type="text"
+                          value={city}
+                          onChange={(e) => setCity(e.target.value)}
+                          placeholder="Ex.: Ariquemes"
+                          className="w-full rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none transition focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 sm:text-base"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="mb-2 block text-sm text-zinc-700 dark:text-zinc-300">
+                          Estado
+                        </label>
+
+                        <input
+                          type="text"
+                          value={stateName}
+                          onChange={(e) => setStateName(e.target.value)}
+                          placeholder="Ex.: Rondônia"
+                          className="w-full rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none transition focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 sm:text-base"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div>
+                        <label className="mb-2 flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
+                          <LinkIcon className="h-4 w-4" />
+                          Título do link
+                        </label>
+
+                        <input
+                          type="text"
+                          value={websiteTitle}
+                          onChange={(e) => setWebsiteTitle(e.target.value)}
+                          placeholder="Ex.: Minha loja, Meu portfólio"
+                          className="w-full rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none transition focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 sm:text-base"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="mb-2 block text-sm text-zinc-700 dark:text-zinc-300">
+                          Link pessoal ou profissional
+                        </label>
+
+                        <input
+                          type="url"
+                          value={websiteUrl}
+                          onChange={(e) => setWebsiteUrl(e.target.value)}
+                          placeholder="https://seulink.com"
+                          className="w-full rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none transition focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 sm:text-base"
+                        />
+                      </div>
+                    </div>
+
                     <div>
                       <label className="mb-2 block text-sm text-zinc-700 dark:text-zinc-300">
                         Data de nascimento
@@ -1355,7 +1441,7 @@ export default function ProfilePage() {
                   <button
                     type="submit"
                     disabled={saving || uploadingAvatar || uploadingBanner}
-                    className={`w-full rounded-xl px-6 py-3 font-medium sm:w-auto ${saving || uploadingAvatar || uploadingBanner
+                    className={`w-full rounded-full px-6 py-3 font-bold shadow-sm transition sm:w-auto ${saving || uploadingAvatar || uploadingBanner
                       ? 'cursor-not-allowed bg-zinc-300 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300'
                       : 'bg-black text-white hover:opacity-90 dark:bg-white dark:text-black'
                       }`}
@@ -1366,7 +1452,7 @@ export default function ProfilePage() {
                   {username && (
                     <Link
                       href={publicProfileUrl}
-                      className="w-full rounded-xl border border-zinc-300 px-6 py-3 text-center hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900 sm:w-auto"
+                      className="w-full rounded-full border border-zinc-300 px-6 py-3 text-center font-bold transition hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900 sm:w-auto"
                     >
                       Abrir perfil público
                     </Link>
