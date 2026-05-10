@@ -7,7 +7,7 @@ import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
-import { Camera, ExternalLink, ImageIcon, LinkIcon, MapPin, Maximize2, ShieldAlert, X } from 'lucide-react'
+import { Camera, ImageIcon, LinkIcon, MapPin, Maximize2, ShieldAlert, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import PostCard from '../components/PostCard'
 import UserBadges from '../components/UserBadges'
@@ -1070,7 +1070,7 @@ export default function ProfilePage() {
 
         <form
           onSubmit={handleSaveProfile}
-          className="mt-5 overflow-hidden rounded-3xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+          className="mt-5 overflow-hidden rounded-[2rem] border border-zinc-200/70 bg-white/95 shadow-sm ring-1 ring-black/5 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-black/80 dark:ring-white/10"
         >
           <div className="flex flex-col">
             <div className="relative">
@@ -1114,11 +1114,11 @@ export default function ProfilePage() {
               <label
                 htmlFor="profile-banner-upload"
                 onClick={(event) => event.stopPropagation()}
-                className="absolute bottom-2 right-4 z-50 inline-flex cursor-pointer items-center justify-center gap-2 rounded-full border border-white/30 bg-black/75 px-4 py-2 text-sm font-semibold text-white shadow-xl backdrop-blur transition hover:bg-black/90"
+                className="absolute right-3 top-3 z-50 inline-flex h-9 cursor-pointer items-center justify-center gap-2 rounded-full border border-white/20 bg-black/55 px-3 text-xs font-bold text-white shadow-xl backdrop-blur-xl transition hover:scale-[1.02] hover:bg-black/75 sm:right-4 sm:top-4"
                 title={t('profile.banner.changeTitle')}
               >
                 <ImageIcon className="h-4 w-4" />
-                <span>{bannerPreview ? t('profile.banner.change') : t('profile.banner.add')}</span>
+                <span className="hidden sm:inline">{bannerPreview ? t('profile.banner.change') : t('profile.banner.add')}</span>
 
                 <input
                   id="profile-banner-upload"
@@ -1132,50 +1132,52 @@ export default function ProfilePage() {
             </div>
 
             <div className="px-4 pb-6 sm:px-6">
-              <div className="relative z-10 -mt-16 flex flex-col gap-5 sm:-mt-20 sm:flex-row sm:justify-between">
+              <div className="relative z-10 -mt-16 flex flex-col gap-5 sm:-mt-20 sm:flex-row">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
                   <div className="flex flex-col items-center gap-3 sm:items-start">
-                    <button
-                      type="button"
-                      onClick={() => avatarPreview && setShowAvatarModal(true)}
-                      disabled={!avatarPreview}
-                      className="group relative h-32 w-32 overflow-hidden rounded-full border-4 border-white bg-zinc-100 text-zinc-700 shadow-xl transition hover:opacity-95 disabled:cursor-default dark:border-zinc-900 dark:bg-zinc-800 dark:text-zinc-300 sm:h-40 sm:w-40"
-                      title={avatarPreview ? t('profile.avatar.viewTitle') : t('profile.avatar.fallbackTitle')}
-                      aria-label={avatarPreview ? t('profile.avatar.viewTitle') : t('profile.avatar.fallbackTitle')}
-                    >
-                      {avatarPreview ? (
-                        <img
-                          src={avatarPreview}
-                          alt={profileName}
-                          className="h-full w-full object-cover"
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => avatarPreview && setShowAvatarModal(true)}
+                        disabled={!avatarPreview}
+                        className="group relative h-32 w-32 overflow-hidden rounded-full border-4 border-white bg-zinc-100 text-zinc-700 shadow-xl ring-1 ring-black/10 transition hover:opacity-95 disabled:cursor-default dark:border-black dark:bg-zinc-800 dark:text-zinc-300 dark:ring-white/10 sm:h-40 sm:w-40"
+                        title={avatarPreview ? t('profile.avatar.viewTitle') : t('profile.avatar.fallbackTitle')}
+                        aria-label={avatarPreview ? t('profile.avatar.viewTitle') : t('profile.avatar.fallbackTitle')}
+                      >
+                        {avatarPreview ? (
+                          <img
+                            src={avatarPreview}
+                            alt={profileName}
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <span className="flex h-full w-full items-center justify-center text-5xl font-bold">
+                            {profileName.charAt(0).toUpperCase()}
+                          </span>
+                        )}
+
+                        {avatarPreview && (
+                          <span className="absolute inset-0 hidden items-center justify-center bg-black/45 text-white transition group-hover:flex">
+                            <Maximize2 className="h-6 w-6" />
+                          </span>
+                        )}
+                      </button>
+
+                      <label
+                        className="absolute bottom-1 right-1 flex h-10 w-10 cursor-pointer items-center justify-center rounded-full border border-white/80 bg-black/70 text-white shadow-xl backdrop-blur-xl transition hover:scale-105 hover:bg-black dark:border-zinc-950"
+                        title={t('profile.avatar.changeTitle')}
+                        aria-label={t('profile.avatar.changeTitle')}
+                      >
+                        <Camera className="h-4 w-4" />
+
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp"
+                          onChange={(e) => handleAvatarSelect(e.target.files?.[0] || null)}
+                          className="sr-only"
                         />
-                      ) : (
-                        <span className="flex h-full w-full items-center justify-center text-5xl font-bold">
-                          {profileName.charAt(0).toUpperCase()}
-                        </span>
-                      )}
-
-                      {avatarPreview && (
-                        <span className="absolute inset-0 hidden items-center justify-center bg-black/45 text-white transition group-hover:flex">
-                          <Maximize2 className="h-6 w-6" />
-                        </span>
-                      )}
-                    </button>
-
-                    <label
-                      className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-full border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-900 shadow-sm transition hover:bg-zinc-100 dark:border-zinc-700 dark:bg-black dark:text-white dark:hover:bg-zinc-900"
-                      title={t('profile.avatar.changeTitle')}
-                    >
-                      <Camera className="h-4 w-4" />
-                      <span>{t('profile.avatar.change')}</span>
-
-                      <input
-                        type="file"
-                        accept="image/png,image/jpeg,image/webp"
-                        onChange={(e) => handleAvatarSelect(e.target.files?.[0] || null)}
-                        className="sr-only"
-                      />
-                    </label>
+                      </label>
+                    </div>
                   </div>
 
                   <div className="min-w-0 pt-3 text-center sm:pt-16 sm:text-left">
@@ -1191,29 +1193,61 @@ export default function ProfilePage() {
                       @{username || t('profile.edit.usernamePlaceholder')}
                     </p>
 
+                    <div className="mt-3 flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 text-sm text-zinc-500 dark:text-zinc-400 sm:justify-start">
+                      <span className="inline-flex items-baseline gap-1">
+                        <span className="font-black text-zinc-950 dark:text-white">
+                          {posts.filter((post) => post.user_id === userId).length}
+                        </span>
+                        <span>Publica&ccedil;&otilde;es</span>
+                      </span>
+
+                      <span className="text-zinc-300 dark:text-zinc-700">
+                        &middot;
+                      </span>
+
+                      <span className="inline-flex items-baseline gap-1">
+                        <span className="font-black text-zinc-950 dark:text-white">
+                          {reposts.filter((repost) => repost.user_id === userId).length}
+                        </span>
+                        <span>Reposts</span>
+                      </span>
+
+                      <span className="text-zinc-300 dark:text-zinc-700">
+                        &middot;
+                      </span>
+
+                      <span className="inline-flex items-baseline gap-1">
+                        <span className="font-black text-zinc-950 dark:text-white">
+                          {feedItems.length}
+                        </span>
+                        <span>Atividades</span>
+                      </span>
+                    </div>
+
                     {bio && (
                       <p className="mt-3 max-w-2xl whitespace-pre-wrap break-words text-sm leading-6 text-zinc-700 dark:text-zinc-300 sm:text-base">
                         {bio}
                       </p>
                     )}
+
+                    <div className="mt-4 flex flex-wrap items-center justify-center gap-2 sm:justify-start">
+                      <Link
+                        href={publicProfileUrl}
+                        className={`inline-flex h-10 shrink-0 items-center justify-center whitespace-nowrap rounded-full border border-zinc-200 bg-white/80 px-4 text-sm font-bold leading-none text-zinc-900 shadow-sm transition hover:bg-white dark:border-zinc-800 dark:bg-zinc-950/80 dark:text-white dark:hover:bg-zinc-900 ${!username ? 'pointer-events-none opacity-50' : ''}`}
+                      >
+                        Ver p&uacute;blico
+                      </Link>
+
+                      <Link
+                        href="/feed"
+                        className="inline-flex h-10 shrink-0 items-center justify-center whitespace-nowrap rounded-full bg-zinc-950 px-4 text-sm font-bold leading-none text-white shadow-sm transition hover:scale-[1.02] hover:bg-black dark:bg-white dark:text-black"
+                      >
+                        Ir ao feed
+                      </Link>
+                    </div>
                   </div>
                 </div>
 
-                <div className="flex shrink-0 flex-wrap items-start justify-center gap-2 sm:justify-end sm:pt-16">
-                  <Link
-                    href={publicProfileUrl}
-                    className={`inline-flex h-10 shrink-0 items-center justify-center whitespace-nowrap rounded-full border border-zinc-300 bg-white px-4 text-sm font-semibold leading-none text-zinc-900 shadow-sm transition hover:bg-zinc-100 dark:border-zinc-700 dark:bg-black dark:text-white dark:hover:bg-zinc-900 ${!username ? 'pointer-events-none opacity-50' : ''}`}
-                  >
-                    Ver público
-                  </Link>
-
-                  <Link
-                    href="/feed"
-                    className="inline-flex h-10 shrink-0 items-center justify-center whitespace-nowrap rounded-full bg-black px-4 text-sm font-semibold leading-none text-white shadow-sm transition hover:opacity-90 dark:bg-white dark:text-black"
-                  >
-                    Ir ao feed
-                  </Link>
-                </div>
               </div>
 
               {(uploadingAvatar || uploadingBanner) && (
@@ -1223,36 +1257,7 @@ export default function ProfilePage() {
                 </div>
               )}
 
-              <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4 text-center dark:border-zinc-800 dark:bg-zinc-950">
-                  <p className="text-2xl font-black text-zinc-950 dark:text-white">
-                    {posts.filter((post) => post.user_id === userId).length}
-                  </p>
-                  <p className="mt-1 text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                    Publicações
-                  </p>
-                </div>
-
-                <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4 text-center dark:border-zinc-800 dark:bg-zinc-950">
-                  <p className="text-2xl font-black text-zinc-950 dark:text-white">
-                    {reposts.filter((repost) => repost.user_id === userId).length}
-                  </p>
-                  <p className="mt-1 text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                    Reposts
-                  </p>
-                </div>
-
-                <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4 text-center dark:border-zinc-800 dark:bg-zinc-950">
-                  <p className="text-2xl font-black text-zinc-950 dark:text-white">
-                    {feedItems.length}
-                  </p>
-                  <p className="mt-1 text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                    Atividades
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-6 rounded-2xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-950 sm:p-5">
+              <div className="mt-6 border-t border-zinc-200/70 pt-5 dark:border-zinc-800/70">
                 <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
                   <div>
                     <h3 className="text-lg font-bold text-zinc-950 dark:text-white">
@@ -1275,7 +1280,7 @@ export default function ProfilePage() {
                       value={displayName}
                       onChange={(e) => setDisplayName(e.target.value)}
                       placeholder={t('profile.edit.displayNamePlaceholder')}
-                      className="w-full rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none transition focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 sm:text-base"
+                      className="w-full rounded-2xl border border-zinc-200/80 bg-zinc-100/70 px-4 py-3 text-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800/80 dark:bg-zinc-900/80 dark:focus:border-blue-500/70 dark:focus:bg-zinc-950 sm:text-base"
                     />
                   </div>
 
@@ -1289,7 +1294,7 @@ export default function ProfilePage() {
                       value={username}
                       onChange={(e) => setUsername(sanitizeUsername(e.target.value))}
                       placeholder={t('profile.edit.usernamePlaceholder')}
-                      className="w-full rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none transition focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 sm:text-base"
+                      className="w-full rounded-2xl border border-zinc-200/80 bg-zinc-100/70 px-4 py-3 text-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800/80 dark:bg-zinc-900/80 dark:focus:border-blue-500/70 dark:focus:bg-zinc-950 sm:text-base"
                     />
 
                     <p className="mt-2 text-xs text-zinc-500">
@@ -1306,7 +1311,7 @@ export default function ProfilePage() {
                       value={bio}
                       onChange={(e) => setBio(e.target.value)}
                       placeholder={t('profile.edit.bioPlaceholder')}
-                      className="min-h-28 w-full resize-none rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none transition focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 sm:text-base"
+                      className="min-h-28 w-full resize-none rounded-2xl border border-zinc-200/80 bg-zinc-100/70 px-4 py-3 text-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800/80 dark:bg-zinc-900/80 dark:focus:border-blue-500/70 dark:focus:bg-zinc-950 sm:text-base"
                     />
                   </div>
 
@@ -1321,7 +1326,7 @@ export default function ProfilePage() {
                         value={country}
                         onChange={(e) => setCountry(e.target.value)}
                         placeholder={t('profile.edit.countryPlaceholder')}
-                        className="w-full rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none transition focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 sm:text-base"
+                        className="w-full rounded-2xl border border-zinc-200/80 bg-zinc-100/70 px-4 py-3 text-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800/80 dark:bg-zinc-900/80 dark:focus:border-blue-500/70 dark:focus:bg-zinc-950 sm:text-base"
                       />
                     </div>
 
@@ -1337,7 +1342,7 @@ export default function ProfilePage() {
                           value={city}
                           onChange={(e) => setCity(e.target.value)}
                           placeholder="Ex.: Ariquemes"
-                          className="w-full rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none transition focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 sm:text-base"
+                          className="w-full rounded-2xl border border-zinc-200/80 bg-zinc-100/70 px-4 py-3 text-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800/80 dark:bg-zinc-900/80 dark:focus:border-blue-500/70 dark:focus:bg-zinc-950 sm:text-base"
                         />
                       </div>
 
@@ -1351,7 +1356,7 @@ export default function ProfilePage() {
                           value={stateName}
                           onChange={(e) => setStateName(e.target.value)}
                           placeholder="Ex.: Rondônia"
-                          className="w-full rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none transition focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 sm:text-base"
+                          className="w-full rounded-2xl border border-zinc-200/80 bg-zinc-100/70 px-4 py-3 text-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800/80 dark:bg-zinc-900/80 dark:focus:border-blue-500/70 dark:focus:bg-zinc-950 sm:text-base"
                         />
                       </div>
                     </div>
@@ -1368,7 +1373,7 @@ export default function ProfilePage() {
                           value={websiteTitle}
                           onChange={(e) => setWebsiteTitle(e.target.value)}
                           placeholder="Ex.: Minha loja, Meu portfólio"
-                          className="w-full rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none transition focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 sm:text-base"
+                          className="w-full rounded-2xl border border-zinc-200/80 bg-zinc-100/70 px-4 py-3 text-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800/80 dark:bg-zinc-900/80 dark:focus:border-blue-500/70 dark:focus:bg-zinc-950 sm:text-base"
                         />
                       </div>
 
@@ -1382,7 +1387,7 @@ export default function ProfilePage() {
                           value={websiteUrl}
                           onChange={(e) => setWebsiteUrl(e.target.value)}
                           placeholder="https://seulink.com"
-                          className="w-full rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none transition focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 sm:text-base"
+                          className="w-full rounded-2xl border border-zinc-200/80 bg-zinc-100/70 px-4 py-3 text-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800/80 dark:bg-zinc-900/80 dark:focus:border-blue-500/70 dark:focus:bg-zinc-950 sm:text-base"
                         />
                       </div>
                     </div>
@@ -1396,12 +1401,12 @@ export default function ProfilePage() {
                         type="date"
                         value={birthDate}
                         onChange={(e) => setBirthDate(e.target.value)}
-                        className="w-full rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm outline-none transition focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 sm:text-base"
+                        className="w-full rounded-2xl border border-zinc-200/80 bg-zinc-100/70 px-4 py-3 text-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800/80 dark:bg-zinc-900/80 dark:focus:border-blue-500/70 dark:focus:bg-zinc-950 sm:text-base"
                       />
                     </div>
                   </div>
 
-                  <div className="rounded-2xl border border-yellow-200 bg-yellow-50 p-4 dark:border-yellow-900/60 dark:bg-yellow-950/20">
+                  <div className="rounded-3xl border border-yellow-200/70 bg-yellow-50/70 p-4 ring-1 ring-yellow-100/70 dark:border-yellow-900/50 dark:bg-yellow-950/10 dark:ring-yellow-900/20">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div className="flex gap-3">
                         <div className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-yellow-100 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-300">
@@ -1423,7 +1428,7 @@ export default function ProfilePage() {
                         </div>
                       </div>
 
-                      <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-yellow-300 bg-white px-4 py-3 text-sm font-medium text-zinc-900 dark:border-yellow-800 dark:bg-zinc-950 dark:text-white">
+                      <label className="flex cursor-pointer items-center gap-3 rounded-full border border-yellow-300/70 bg-white/80 px-4 py-3 text-sm font-bold text-zinc-900 shadow-sm transition hover:bg-white dark:border-yellow-800/70 dark:bg-zinc-950/80 dark:text-white dark:hover:bg-zinc-950">
                         <input
                           type="checkbox"
                           checked={showSensitiveContent}
@@ -1443,7 +1448,7 @@ export default function ProfilePage() {
                     disabled={saving || uploadingAvatar || uploadingBanner}
                     className={`w-full rounded-full px-6 py-3 font-bold shadow-sm transition sm:w-auto ${saving || uploadingAvatar || uploadingBanner
                       ? 'cursor-not-allowed bg-zinc-300 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300'
-                      : 'bg-black text-white hover:opacity-90 dark:bg-white dark:text-black'
+                      : 'bg-zinc-950 text-white hover:scale-[1.02] hover:bg-black dark:bg-white dark:text-black'
                       }`}
                   >
                     {saving ? t('profile.actions.saving') : t('profile.actions.save')}
@@ -1452,7 +1457,7 @@ export default function ProfilePage() {
                   {username && (
                     <Link
                       href={publicProfileUrl}
-                      className="w-full rounded-full border border-zinc-300 px-6 py-3 text-center font-bold transition hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900 sm:w-auto"
+                      className="w-full rounded-full border border-zinc-200 bg-white/70 px-6 py-3 text-center font-bold text-zinc-900 transition hover:bg-white dark:border-zinc-800 dark:bg-zinc-950/70 dark:text-white dark:hover:bg-zinc-900 sm:w-auto"
                     >
                       Abrir perfil público
                     </Link>
