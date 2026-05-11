@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, Play, X } from 'lucide-react'
 
 type PostMedia = {
@@ -19,47 +19,140 @@ type PostMediaGalleryProps = {
 
 type MediaFit = 'cover' | 'contain'
 
+const AUTOPLAY_EVENT = 'entreus:post-media-autoplay'
+
+type MediaAutoplayDetail = {
+  playerId: string
+}
+
+type NavigatorWithConnection = Navigator & {
+  connection?: {
+    saveData?: boolean
+  }
+}
+
+function isDataSaverEnabled() {
+  if (typeof navigator === 'undefined') return false
+
+  return Boolean((navigator as NavigatorWithConnection).connection?.saveData)
+}
+
 function AutoPlayVideo({
   src,
   className,
   onClick,
   controls = false,
+  autoplayEnabled = true,
 }: {
   src: string
   className?: string
   onClick?: () => void
   controls?: boolean
+  autoplayEnabled?: boolean
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
+  const playerId = useId()
 
   useEffect(() => {
-    const video = videoRef.current
+    const observedVideo = videoRef.current
 
-    if (!video) return
+    if (!observedVideo) return
+
+    let isVisible = false
+
+    function pauseVideo() {
+      const currentVideo = videoRef.current
+
+      if (!currentVideo) return
+
+      currentVideo.pause()
+    }
+
+    function canAutoplay() {
+      return (
+        autoplayEnabled &&
+        isVisible &&
+        document.visibilityState === 'visible' &&
+        !isDataSaverEnabled()
+      )
+    }
+
+    function requestPlay() {
+      if (!canAutoplay()) {
+        pauseVideo()
+        return
+      }
+
+      const currentVideo = videoRef.current
+
+      if (!currentVideo) return
+
+      currentVideo.muted = true
+      window.dispatchEvent(
+        new CustomEvent<MediaAutoplayDetail>(AUTOPLAY_EVENT, {
+          detail: { playerId },
+        })
+      )
+
+      currentVideo.play().catch(() => {
+        // Browsers can still block autoplay even when the video is muted.
+      })
+    }
+
+    function handleAutoplayEvent(event: Event) {
+      const detail = (event as CustomEvent<MediaAutoplayDetail>).detail
+
+      if (detail?.playerId !== playerId) {
+        pauseVideo()
+      }
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === 'hidden') {
+        pauseVideo()
+        return
+      }
+
+      requestPlay()
+    }
+
+    observedVideo.muted = true
+    observedVideo.playsInline = true
+    observedVideo.preload = 'none'
+
+    window.addEventListener(AUTOPLAY_EVENT, handleAutoplayEvent)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    if (!autoplayEnabled || typeof IntersectionObserver === 'undefined') {
+      pauseVideo()
+      return () => {
+        pauseVideo()
+        window.removeEventListener(AUTOPLAY_EVENT, handleAutoplayEvent)
+        document.removeEventListener('visibilitychange', handleVisibilityChange)
+      }
+    }
 
     const observer = new IntersectionObserver(
       (entries) => {
         const entry = entries[0]
+        isVisible = entry.isIntersecting && entry.intersectionRatio >= 0.65
 
-        if (entry.isIntersecting) {
-          video.play().catch(() => {
-            // Navegadores geralmente exigem muted para autoplay.
-          })
-        } else {
-          video.pause()
-        }
+        requestPlay()
       },
       {
-        threshold: 0.6,
+        threshold: [0, 0.35, 0.65, 0.85],
       }
     )
 
-    observer.observe(video)
+    observer.observe(observedVideo)
 
     return () => {
+      pauseVideo()
       observer.disconnect()
+      window.removeEventListener(AUTOPLAY_EVENT, handleAutoplayEvent)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
-  }, [])
+  }, [autoplayEnabled, playerId, src])
 
   return (
     <video
@@ -68,7 +161,7 @@ function AutoPlayVideo({
       muted
       loop
       playsInline
-      preload="metadata"
+      preload="none"
       controls={controls}
       onClick={onClick}
       className={className}
@@ -83,6 +176,7 @@ function MediaThumb({
   className = '',
   showOverlayCount,
   fit = 'cover',
+  autoplayEnabled = true,
 }: {
   item: PostMedia
   index: number
@@ -90,6 +184,7 @@ function MediaThumb({
   className?: string
   showOverlayCount?: number
   fit?: MediaFit
+  autoplayEnabled?: boolean
 }) {
   const imageClassName =
     fit === 'contain'
@@ -124,6 +219,7 @@ function MediaThumb({
           <AutoPlayVideo
             src={item.media_url}
             className={videoClassName}
+            autoplayEnabled={autoplayEnabled && !showOverlayCount}
           />
 
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/10 transition group-hover:bg-black/20">
@@ -185,6 +281,7 @@ export default function PostMediaGallery({ media }: PostMediaGalleryProps) {
             index={0}
             onOpen={openViewer}
             fit="contain"
+            autoplayEnabled={!open}
             className="flex w-full items-center justify-center rounded-3xl p-0"
           />
         </div>
@@ -200,6 +297,7 @@ export default function PostMediaGallery({ media }: PostMediaGalleryProps) {
               item={item}
               index={index}
               onOpen={openViewer}
+              autoplayEnabled={!open}
               className={`h-72 w-full sm:h-96 ${
                 index === 0
                   ? 'border-b border-zinc-200 dark:border-zinc-700 sm:border-b-0 sm:border-r'
@@ -218,6 +316,7 @@ export default function PostMediaGallery({ media }: PostMediaGalleryProps) {
             item={visibleMedia[0]}
             index={0}
             onOpen={openViewer}
+            autoplayEnabled={!open}
             className="h-80 w-full border-b border-zinc-200 dark:border-zinc-700 sm:h-[28rem] sm:border-b-0 sm:border-r"
           />
 
@@ -226,6 +325,7 @@ export default function PostMediaGallery({ media }: PostMediaGalleryProps) {
               item={visibleMedia[1]}
               index={1}
               onOpen={openViewer}
+              autoplayEnabled={!open}
               className="h-44 w-full border-r border-zinc-200 dark:border-zinc-700 sm:h-56 sm:border-b sm:border-r-0"
             />
 
@@ -233,6 +333,7 @@ export default function PostMediaGallery({ media }: PostMediaGalleryProps) {
               item={visibleMedia[2]}
               index={2}
               onOpen={openViewer}
+              autoplayEnabled={!open}
               className="h-44 w-full sm:h-56"
             />
           </div>
@@ -249,6 +350,7 @@ export default function PostMediaGallery({ media }: PostMediaGalleryProps) {
               item={item}
               index={index}
               onOpen={openViewer}
+              autoplayEnabled={!open}
               className={`h-48 w-full sm:h-64 ${
                 index === 0 || index === 1
                   ? 'border-b border-zinc-200 dark:border-zinc-700'
@@ -270,6 +372,7 @@ export default function PostMediaGallery({ media }: PostMediaGalleryProps) {
           item={visibleMedia[0]}
           index={0}
           onOpen={openViewer}
+          autoplayEnabled={!open}
           className="h-80 w-full border-b border-zinc-200 dark:border-zinc-700 sm:h-[30rem] sm:border-b-0 sm:border-r"
         />
 
@@ -285,6 +388,7 @@ export default function PostMediaGallery({ media }: PostMediaGalleryProps) {
                 index={realIndex}
                 onOpen={openViewer}
                 showOverlayCount={isLast ? hiddenCount : undefined}
+                autoplayEnabled={!open}
                 className={`h-40 w-full sm:h-60 ${
                   sliceIndex === 0 || sliceIndex === 1
                     ? 'border-b border-zinc-200 dark:border-zinc-700'
@@ -351,7 +455,9 @@ export default function PostMediaGallery({ media }: PostMediaGalleryProps) {
                 src={activeMedia.media_url}
                 controls
                 autoPlay
+                muted
                 playsInline
+                preload="metadata"
                 className="max-h-[90vh] max-w-full rounded-2xl bg-black object-contain"
               />
             )}
