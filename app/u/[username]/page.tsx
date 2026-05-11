@@ -1481,14 +1481,15 @@ export default function PublicProfilePage() {
         onPostClick={handlePostClick}
       />
 
-      <section className="w-full max-w-7xl overflow-x-hidden px-4 py-20 pb-24 sm:px-6 lg:ml-[270px] lg:py-8 xl:pr-8">
+      <section className="w-full overflow-x-hidden px-4 py-20 pb-24 sm:px-6 lg:ml-[270px] lg:w-[calc(100%_-_270px)] lg:py-8 xl:px-8">
+        <div className="mx-auto w-full max-w-[72rem]">
         <BrandHeader
           subtitle="Perfil público"
           description={`Acompanhe publicações, reposts e informações públicas de ${displayName}.`}
           compact
         />
 
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,42rem)_22rem] xl:items-start">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,46rem)_20rem] xl:items-start xl:justify-center">
           <div className="min-w-0">
         <div className="mb-6 overflow-hidden rounded-[2rem] border border-zinc-200/70 bg-white/95 shadow-sm ring-1 ring-black/5 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-black/80 dark:ring-white/10">
           <button
@@ -1865,7 +1866,7 @@ export default function PublicProfilePage() {
               <div className="space-y-4 p-3 sm:p-4">
                 {feedItems.length === 0 && (
                   <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-6 text-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400">
-                    Nenhuma atividade visÃ­vel ainda.
+                    Nenhuma atividade visível ainda.
                   </div>
                 )}
 
@@ -1879,8 +1880,8 @@ export default function PublicProfilePage() {
                   Respostas em breve
                 </p>
                 <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                  As respostas deste perfil aparecerÃ£o aqui quando essa
-                  visualizaÃ§Ã£o estiver disponÃ­vel.
+                  As respostas deste perfil aparecerão aqui quando essa
+                  visualização estiver disponível.
                 </p>
               </div>
             )}
@@ -1889,7 +1890,7 @@ export default function PublicProfilePage() {
               <div className="p-3 sm:p-4">
                 {mediaItems.length === 0 ? (
                   <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-6 text-center text-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400">
-                    Nenhuma mÃ­dia visÃ­vel ainda.
+                    Nenhuma mídia visível ainda.
                   </div>
                 ) : (
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -1920,7 +1921,7 @@ export default function PublicProfilePage() {
                           ) : (
                             <img
                               src={mediaUrl}
-                              alt="MÃ­dia do post"
+                              alt="Mídia do post"
                               className="h-full w-full object-cover"
                             />
                           )}
@@ -1928,7 +1929,7 @@ export default function PublicProfilePage() {
                           <span className="absolute inset-0 bg-black/0 transition group-hover:bg-black/20" />
                           {isVideo && (
                             <span className="absolute bottom-2 right-2 rounded-full bg-black/70 px-2 py-1 text-[10px] font-black uppercase text-white">
-                              VÃ­deo
+                              Vídeo
                             </span>
                           )}
                         </button>
@@ -2047,7 +2048,7 @@ export default function PublicProfilePage() {
 
               <div className="rounded-[2rem] border border-zinc-200/70 bg-white/95 p-4 shadow-sm ring-1 ring-black/5 dark:border-zinc-800/70 dark:bg-black/80 dark:ring-white/10">
                 <h3 className="text-base font-black text-zinc-950 dark:text-white">
-                  Talvez vocÃª curta
+                  Talvez você curta
                 </h3>
 
                 <div className="mt-4 space-y-3">
@@ -2099,7 +2100,7 @@ export default function PublicProfilePage() {
                   Mural EntreUS
                 </h3>
                 <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-400">
-                  Conecte-se com pessoas reais, acompanhe publicaÃ§Ãµes e
+                  Conecte-se com pessoas reais, acompanhe publicações e
                   descubra conversas que combinam com o seu momento.
                 </p>
                 <Link
@@ -2115,7 +2116,7 @@ export default function PublicProfilePage() {
                   Termos de Uso
                 </Link>
                 <Link href="/privacy" className="hover:text-zinc-900 dark:hover:text-white">
-                  PolÃ­tica de Privacidade
+                  Política de Privacidade
                 </Link>
                 <Link href="/cookies" className="hover:text-zinc-900 dark:hover:text-white">
                   Cookies
@@ -2126,10 +2127,11 @@ export default function PublicProfilePage() {
                 <Link href="/more" className="hover:text-zinc-900 dark:hover:text-white">
                   Mais
                 </Link>
-                <span>Â© 2026 EntreUS</span>
+                <span>© 2026 EntreUS</span>
               </nav>
             </div>
           </aside>
+        </div>
         </div>
       </section>
 
