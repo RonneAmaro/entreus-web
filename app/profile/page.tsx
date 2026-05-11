@@ -7,7 +7,7 @@ import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
-import { Camera, ImageIcon, LinkIcon, MapPin, Maximize2, ShieldAlert, X } from 'lucide-react'
+import { Camera, ImageIcon, LinkIcon, MapPin, Maximize2, Search, ShieldAlert, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import PostCard from '../components/PostCard'
 import UserBadges from '../components/UserBadges'
@@ -1003,6 +1003,22 @@ export default function ProfilePage() {
     })
   }, [posts, reposts, userId])
 
+  const suggestedProfiles = useMemo(() => {
+    const suggestions = new Map<string, ProfileSummary>()
+
+    for (const item of feedItems) {
+      const itemProfile = item.post.profiles
+
+      if (!itemProfile?.username || itemProfile.username === username) {
+        continue
+      }
+
+      suggestions.set(itemProfile.username, itemProfile)
+    }
+
+    return Array.from(suggestions.values()).slice(0, 3)
+  }, [feedItems, username])
+
   if (loading) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-zinc-50 px-4 text-black dark:bg-black dark:text-white">
@@ -1036,7 +1052,10 @@ export default function ProfilePage() {
         onPostClick={handlePostClick}
       />
 
-      <section className="w-full max-w-4xl overflow-x-hidden px-4 py-20 pb-24 sm:px-6 lg:ml-[calc(270px+((100vw-270px-56rem)/2))] lg:py-8">
+      <section className="w-full overflow-x-hidden px-4 py-20 pb-24 sm:px-6 lg:ml-[270px] lg:w-[calc(100%_-_270px)] lg:py-8 xl:px-8">
+        <div className="mx-auto w-full max-w-[72rem]">
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,46rem)_20rem] xl:items-start xl:justify-center">
+            <div className="min-w-0">
         <BrandHeader
           subtitle={t('profile.myProfile')}
           description={t('profile.description')}
@@ -1565,6 +1584,109 @@ export default function ProfilePage() {
             })}
           </div>
         </section>
+            </div>
+
+            <aside className="hidden xl:block">
+              <div className="sticky top-8 space-y-4">
+                <div className="rounded-[2rem] border border-zinc-200/70 bg-white/95 p-4 shadow-sm ring-1 ring-black/5 dark:border-zinc-800/70 dark:bg-black/80 dark:ring-white/10">
+                  <label className="flex items-center gap-2 rounded-full bg-zinc-100 px-4 py-3 text-sm text-zinc-500 ring-1 ring-zinc-200/70 dark:bg-zinc-900 dark:text-zinc-400 dark:ring-zinc-800/70">
+                    <Search className="h-4 w-4" />
+                    <input
+                      type="search"
+                      placeholder="Buscar no EntreUS"
+                      onFocus={() => router.push('/search')}
+                      className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-zinc-500"
+                    />
+                  </label>
+                </div>
+
+                <div className="rounded-[2rem] border border-zinc-200/70 bg-white/95 p-4 shadow-sm ring-1 ring-black/5 dark:border-zinc-800/70 dark:bg-black/80 dark:ring-white/10">
+                  <h3 className="text-base font-black text-zinc-950 dark:text-white">
+                    Talvez você curta
+                  </h3>
+
+                  <div className="mt-4 space-y-3">
+                    {suggestedProfiles.length === 0 ? (
+                      <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                        Explore o feed para descobrir mais perfis do EntreUS.
+                      </p>
+                    ) : (
+                      suggestedProfiles.map((suggestedProfile) => {
+                        const suggestedName =
+                          suggestedProfile.display_name ||
+                          suggestedProfile.username
+
+                        return (
+                          <Link
+                            key={suggestedProfile.username}
+                            href={`/u/${suggestedProfile.username}`}
+                            className="flex items-center gap-3 rounded-2xl p-2 transition hover:bg-zinc-50 dark:hover:bg-zinc-950"
+                          >
+                            {suggestedProfile.avatar_url ? (
+                              <span
+                                className="h-10 w-10 shrink-0 rounded-full bg-cover bg-center ring-1 ring-zinc-200 dark:ring-zinc-800"
+                                style={{ backgroundImage: `url(${suggestedProfile.avatar_url})` }}
+                                aria-label={suggestedName}
+                              />
+                            ) : (
+                              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-100 text-sm font-black text-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
+                                {suggestedName.charAt(0).toUpperCase()}
+                              </span>
+                            )}
+
+                            <span className="min-w-0">
+                              <span className="block truncate text-sm font-bold text-zinc-950 dark:text-white">
+                                {suggestedName}
+                              </span>
+                              <span className="block truncate text-xs text-zinc-500 dark:text-zinc-400">
+                                @{suggestedProfile.username}
+                              </span>
+                            </span>
+                          </Link>
+                        )
+                      })
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-[2rem] border border-zinc-200/70 bg-white/95 p-4 shadow-sm ring-1 ring-black/5 dark:border-zinc-800/70 dark:bg-black/80 dark:ring-white/10">
+                  <h3 className="text-base font-black text-zinc-950 dark:text-white">
+                    Mural EntreUS
+                  </h3>
+                  <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-400">
+                    Conecte-se com pessoas reais, acompanhe publicações e
+                    descubra conversas que combinam com o seu momento.
+                  </p>
+                  <Link
+                    href="/feed"
+                    className="mt-4 inline-flex rounded-full bg-zinc-950 px-4 py-2 text-sm font-bold text-white transition hover:bg-black dark:bg-white dark:text-black"
+                  >
+                    Ir ao feed
+                  </Link>
+                </div>
+
+                <nav className="flex flex-wrap gap-x-3 gap-y-2 px-2 text-xs text-zinc-500 dark:text-zinc-500">
+                  <Link href="/terms" className="hover:text-zinc-900 dark:hover:text-white">
+                    Termos de Uso
+                  </Link>
+                  <Link href="/privacy" className="hover:text-zinc-900 dark:hover:text-white">
+                    Política de Privacidade
+                  </Link>
+                  <Link href="/cookies" className="hover:text-zinc-900 dark:hover:text-white">
+                    Cookies
+                  </Link>
+                  <Link href="/accessibility" className="hover:text-zinc-900 dark:hover:text-white">
+                    Acessibilidade
+                  </Link>
+                  <Link href="/more" className="hover:text-zinc-900 dark:hover:text-white">
+                    Mais
+                  </Link>
+                  <span>© 2026 EntreUS</span>
+                </nav>
+              </div>
+            </aside>
+          </div>
+        </div>
       </section>
 
       {showBannerModal && bannerPreview && (
