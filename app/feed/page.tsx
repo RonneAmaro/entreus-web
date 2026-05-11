@@ -1847,7 +1847,7 @@ function FeedContent() {
             aria-label="Fechar resposta"
           />
 
-          <div className="relative z-[81] flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden rounded-[2rem] border border-zinc-200/70 bg-white/95 shadow-2xl shadow-black/25 ring-1 ring-black/5 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-black/90 dark:ring-white/10">
+          <div className="relative z-[81] flex max-h-[90dvh] w-full max-w-2xl flex-col overflow-hidden rounded-[2rem] border border-zinc-200/70 bg-white/95 shadow-2xl shadow-black/25 ring-1 ring-black/5 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-black/90 dark:ring-white/10 sm:max-h-[88vh]">
             <div className="flex shrink-0 items-center justify-between border-b border-zinc-200/70 bg-white/80 px-4 py-3 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-black/70">
               <button
                 type="button"
@@ -1872,7 +1872,7 @@ function FeedContent() {
               </button>
             </div>
 
-            <div className="min-h-0 overflow-y-auto px-4 py-4 sm:px-5">
+            <div className="min-h-0 overflow-y-auto px-4 py-4 pb-3 sm:px-5">
               <div className="relative flex gap-3">
                 <div className="flex shrink-0 flex-col items-center">
                   {replyModalPost.profiles?.avatar_url ? (
@@ -1952,7 +1952,7 @@ function FeedContent() {
                   />
 
                   {openCommentEmojiPickerPostId === replyModalPost.id && (
-                    <div className="mb-3 overflow-hidden rounded-[1.75rem] border border-zinc-200/70 bg-white/95 shadow-2xl shadow-black/15 backdrop-blur-xl dark:border-zinc-700/70 dark:bg-zinc-950/95">
+                    <div className="mb-3 max-h-[45vh] overflow-hidden rounded-[1.75rem] border border-zinc-200/70 bg-white/95 shadow-2xl shadow-black/15 backdrop-blur-xl dark:border-zinc-700/70 dark:bg-zinc-950/95 sm:max-h-[260px]">
                       <div className="border-b border-zinc-200/70 bg-gradient-to-br from-blue-50 via-white to-purple-50 p-3 dark:border-zinc-800 dark:from-blue-950/30 dark:via-zinc-950 dark:to-purple-950/30">
                         <div className="flex items-center justify-between gap-3">
                           <div>
@@ -1991,7 +1991,7 @@ function FeedContent() {
                         </div>
                       </div>
 
-                      <div className="max-h-56 overflow-y-auto p-3">
+                      <div className="max-h-[calc(45vh-96px)] overflow-y-auto p-3 sm:max-h-[164px]">
                         <div className="space-y-4">
                           {COMMENT_EMOJI_GROUPS.map((group) => (
                             <div key={`reply-group-${replyModalPost.id}-${group.title}`}>
@@ -2020,7 +2020,7 @@ function FeedContent() {
                     </div>
                   )}
 
-                  <div className="flex items-center justify-between border-t border-zinc-200/70 pt-3 dark:border-zinc-800/70">
+                  <div className="sticky bottom-0 z-10 mt-3 flex items-center justify-between border-t border-zinc-200/70 bg-zinc-50/95 py-3 backdrop-blur dark:border-zinc-800/70 dark:bg-zinc-950/95">
                     <div className="flex items-center gap-1.5 text-blue-600 dark:text-blue-400">
                       <button
                         type="button"
