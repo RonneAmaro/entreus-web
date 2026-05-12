@@ -1087,92 +1087,99 @@ function FeedContent() {
   }
 
   function isVideo(file: File) {
-    return ['video/mp4', 'video/webm', 'video/ogg'].includes(file.type)
+    return file.type === 'video/mp4'
   }
 
-  async function uploadMediaFile(file: File) {
+  async function uploadMediaFile(
+    file: File
+  ): Promise<{ url: string; type: 'image' | 'video' } | null> {
     if (!userId) return null
 
-    if (isImage(file)) {
+    const mediaType: 'image' | 'video' | null = isImage(file)
+      ? 'image'
+      : isVideo(file)
+        ? 'video'
+        : null
+
+    if (mediaType === 'image') {
       const maxSizeInBytes = 5 * 1024 * 1024
 
       if (file.size > maxSizeInBytes) {
         setMessage(t('feed.messages.imageTooLarge'))
         return null
       }
-
-      setUploadingPostImage(true)
-
-      const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg'
-      const filePath = `${userId}/post-${Date.now()}-${Math.random()
-        .toString(36)
-        .slice(2)}.${fileExt}`
-
-      const { error: uploadError } = await supabase.storage
-        .from('post-images')
-        .upload(filePath, file, {
-          cacheControl: '3600',
-          upsert: true,
-        })
-
-      setUploadingPostImage(false)
-
-      if (uploadError) {
-        setMessage(t('feed.messages.uploadImageError') + uploadError.message)
-        return null
-      }
-
-      const { data: publicUrlData } = supabase.storage
-        .from('post-images')
-        .getPublicUrl(filePath)
-
-      return {
-        url: publicUrlData.publicUrl,
-        type: 'image' as const,
-      }
     }
 
-    if (isVideo(file)) {
+    if (mediaType === 'video') {
       const maxSizeInBytes = 30 * 1024 * 1024
 
       if (file.size > maxSizeInBytes) {
         setMessage(t('feed.messages.videoTooLarge'))
         return null
       }
+    }
 
+    if (!mediaType) {
+      setMessage(t('feed.messages.unsupportedMedia'))
+      return null
+    }
+
+    const formData = new FormData()
+    formData.append('folder', 'posts')
+    formData.append('file', file)
+
+    if (mediaType === 'image') {
+      setUploadingPostImage(true)
+    } else {
       setUploadingPostVideo(true)
+    }
 
-      const fileExt = file.name.split('.').pop()?.toLowerCase() || 'mp4'
-      const filePath = `${userId}/video-${Date.now()}-${Math.random()
-        .toString(36)
-        .slice(2)}.${fileExt}`
+    try {
+      const response = await fetch('/api/r2/upload', {
+        method: 'POST',
+        body: formData,
+      })
 
-      const { error: uploadError } = await supabase.storage
-        .from('post-videos')
-        .upload(filePath, file, {
-          cacheControl: '3600',
-          upsert: true,
-        })
+      const data = (await response.json().catch(() => null)) as {
+        ok?: boolean
+        url?: string
+        message?: string
+        error?: string
+      } | null
 
-      setUploadingPostVideo(false)
+      if (!response.ok || !data?.ok || !data.url) {
+        const errorMessage =
+          data?.message || data?.error || 'Falha ao enviar midia para o R2.'
 
-      if (uploadError) {
-        setMessage(t('feed.messages.uploadVideoError') + uploadError.message)
+        setMessage(
+          mediaType === 'image'
+            ? t('feed.messages.uploadImageError') + errorMessage
+            : t('feed.messages.uploadVideoError') + errorMessage
+        )
         return null
       }
 
-      const { data: publicUrlData } = supabase.storage
-        .from('post-videos')
-        .getPublicUrl(filePath)
-
       return {
-        url: publicUrlData.publicUrl,
-        type: 'video' as const,
+        url: data.url,
+        type: mediaType,
+      }
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Erro inesperado no upload R2.'
+
+      setMessage(
+        mediaType === 'image'
+          ? t('feed.messages.uploadImageError') + errorMessage
+          : t('feed.messages.uploadVideoError') + errorMessage
+      )
+      return null
+    } finally {
+      if (mediaType === 'image') {
+        setUploadingPostImage(false)
+      } else {
+        setUploadingPostVideo(false)
       }
     }
-
-    setMessage(t('feed.messages.unsupportedMedia'))
-    return null
   }
 
   async function handleCreatePost({
