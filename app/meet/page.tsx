@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { FormEvent, useState } from 'react'
 import {
+  ArrowLeft,
   ArrowRight,
   Link2,
   MessageCircle,
@@ -61,7 +62,18 @@ export default function MeetPage() {
 
   return (
     <main className="min-h-screen overflow-hidden bg-black px-4 py-6 text-white sm:px-6 lg:px-8">
-      <section className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-7xl flex-col justify-center">
+      <section className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-7xl flex-col">
+        <div className="mb-5 flex justify-start">
+          <Link
+            href="/feed"
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-blue-500/40 bg-blue-500/10 px-4 py-2 text-sm font-bold text-blue-100 shadow-lg shadow-blue-500/10 transition hover:border-blue-400 hover:bg-blue-500/20 hover:shadow-blue-500/20"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Voltar ao EntreUS
+          </Link>
+        </div>
+
+        <div className="flex flex-1 items-center">
         <div className="grid items-center gap-6 lg:grid-cols-[1.05fr_0.95fr]">
           <div className="rounded-[2rem] border border-zinc-800 bg-zinc-950/90 p-5 shadow-2xl ring-1 ring-white/5 sm:p-8 lg:p-10">
             <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-zinc-800 bg-black px-4 py-2 text-xs font-bold uppercase tracking-[0.22em] text-zinc-400">
@@ -147,6 +159,7 @@ export default function MeetPage() {
               )
             })}
           </aside>
+        </div>
         </div>
       </section>
     </main>
