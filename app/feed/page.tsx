@@ -2681,57 +2681,57 @@ function FeedContent() {
                 </p>
               </div>
 
-              <div className="overflow-hidden rounded-[2rem] border border-zinc-200/70 bg-white/95 shadow-sm ring-1 ring-black/5 backdrop-blur-xl transition-all duration-300 hover:border-blue-400/35 hover:shadow-xl hover:shadow-blue-500/10 dark:border-zinc-800/70 dark:bg-slate-950/85 dark:ring-white/10">
+              <div className="overflow-hidden rounded-[2rem] border border-white/10 bg-slate-950/80 shadow-sm shadow-black/10 ring-1 ring-white/10 backdrop-blur-xl transition-all duration-300 hover:border-blue-400/35 hover:shadow-xl hover:shadow-blue-500/10">
                 <div className="space-y-4 p-5">
                   <Link
                     href="/lab"
-                    className="group relative block overflow-hidden rounded-[1.5rem] border border-blue-100/70 bg-blue-50/80 p-4 ring-1 ring-blue-100/70 transition-all duration-300 before:pointer-events-none before:absolute before:inset-0 before:bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.16),transparent_46%)] before:opacity-0 before:transition-opacity hover:-translate-y-1 hover:border-blue-400/50 hover:bg-blue-50 hover:shadow-xl hover:shadow-blue-500/10 hover:before:opacity-100 dark:border-blue-900/50 dark:bg-blue-950/20 dark:ring-blue-900/20"
+                    className="group relative block overflow-hidden rounded-[1.5rem] border border-blue-400/20 bg-blue-950/20 p-4 ring-1 ring-white/10 transition-all duration-300 before:pointer-events-none before:absolute before:inset-0 before:bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.26),transparent_48%)] before:opacity-70 before:transition-opacity hover:-translate-y-1 hover:border-blue-400/50 hover:bg-blue-950/35 hover:shadow-xl hover:shadow-blue-500/20 hover:before:opacity-100"
                   >
-                    <div className="mb-3 flex items-center gap-2 text-blue-700 dark:text-blue-300">
+                    <div className="mb-3 flex items-center gap-2 text-blue-200">
                       <FlaskConical className="h-5 w-5" />
                       <h3 className="font-bold">
                         {localTexts.mural.labTitle}
                       </h3>
                     </div>
 
-                    <p className="text-sm leading-6 text-blue-900/80 dark:text-blue-100/80">
+                    <p className="text-sm leading-6 text-blue-100/80">
                       {localTexts.mural.labDescription}
                     </p>
 
-                    <span className="mt-4 inline-flex rounded-full bg-blue-600 px-4 py-2 text-sm font-bold text-white">
+                    <span className="mt-4 inline-flex rounded-full bg-blue-500 px-4 py-2 text-sm font-bold text-white shadow-sm shadow-blue-500/25 transition group-hover:bg-blue-400">
                       {localTexts.mural.labButton}
                     </span>
                   </Link>
 
                   <Link
                     href="/profile"
-                    className="group relative block overflow-hidden rounded-[1.5rem] border border-yellow-100/70 bg-yellow-50/80 p-4 ring-1 ring-yellow-100/70 transition-all duration-300 before:pointer-events-none before:absolute before:inset-0 before:bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.12),transparent_46%)] before:opacity-0 before:transition-opacity hover:-translate-y-1 hover:border-blue-400/40 hover:bg-yellow-50 hover:shadow-xl hover:shadow-blue-500/10 hover:before:opacity-100 dark:border-yellow-900/50 dark:bg-yellow-950/20 dark:ring-yellow-900/20"
+                    className="group relative block overflow-hidden rounded-[1.5rem] border border-yellow-400/20 bg-yellow-950/15 p-4 ring-1 ring-white/10 transition-all duration-300 before:pointer-events-none before:absolute before:inset-0 before:bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.18),transparent_46%)] before:opacity-60 before:transition-opacity hover:-translate-y-1 hover:border-blue-400/40 hover:bg-yellow-950/25 hover:shadow-xl hover:shadow-blue-500/15 hover:before:opacity-100"
                   >
-                    <div className="mb-3 flex items-center gap-2 text-yellow-700 dark:text-yellow-300">
+                    <div className="mb-3 flex items-center gap-2 text-yellow-200">
                       <Award className="h-5 w-5" />
                       <h3 className="font-bold">
                         Selos EntreUS
                       </h3>
                     </div>
 
-                    <p className="text-sm leading-6 text-yellow-900/80 dark:text-yellow-100/80">
+                    <p className="text-sm leading-6 text-yellow-100/80">
                       Ganhe destaque na comunidade com selos especiais, como Engajador, VIP Premium e Ancião.
                     </p>
 
-                    <span className="mt-4 inline-flex rounded-full bg-yellow-500 px-4 py-2 text-sm font-bold text-black">
+                    <span className="mt-4 inline-flex rounded-full bg-yellow-400 px-4 py-2 text-sm font-bold text-black shadow-sm shadow-yellow-500/20 transition group-hover:bg-yellow-300">
                       Ver meus selos
                     </span>
                   </Link>
 
-                  <div className="group relative overflow-hidden rounded-[1.5rem] border border-green-100/70 bg-green-50/80 p-4 ring-1 ring-green-100/70 transition-all duration-300 before:pointer-events-none before:absolute before:inset-0 before:bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.10),transparent_46%)] before:opacity-0 before:transition-opacity hover:-translate-y-1 hover:border-blue-400/35 hover:shadow-xl hover:shadow-blue-500/10 hover:before:opacity-100 dark:border-green-900/50 dark:bg-green-950/20 dark:ring-green-900/20">
-                    <div className="mb-3 flex items-center gap-2 text-green-700 dark:text-green-300">
+                  <div className="group relative overflow-hidden rounded-[1.5rem] border border-green-400/20 bg-green-950/15 p-4 ring-1 ring-white/10 transition-all duration-300 before:pointer-events-none before:absolute before:inset-0 before:bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.16),transparent_46%)] before:opacity-60 before:transition-opacity hover:-translate-y-1 hover:border-blue-400/35 hover:bg-green-950/25 hover:shadow-xl hover:shadow-blue-500/15 hover:before:opacity-100">
+                    <div className="mb-3 flex items-center gap-2 text-green-200">
                       <Heart className="h-5 w-5" />
                       <h3 className="font-bold">
                         Apoie o projeto
                       </h3>
                     </div>
 
-                    <p className="text-sm leading-6 text-green-900/80 dark:text-green-100/80">
+                    <p className="text-sm leading-6 text-green-100/80">
                       Ajude o EntreUS Lab a continuar evoluindo com ferramentas gratuitas. Se puder, prefira Pix Nubank, pois não tem taxa para o projeto.
                     </p>
 
@@ -2740,7 +2740,7 @@ function FeedContent() {
                         href="https://nubank.com.br/cobrar/u2kum/69fca421-184d-459c-a125-f760fc56c264"
                         target="_blank"
                         rel="noreferrer"
-                        className="flex items-center justify-center gap-2 rounded-full bg-green-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-green-700"
+                        className="flex items-center justify-center gap-2 rounded-full bg-green-500 px-4 py-2 text-sm font-bold text-white shadow-sm shadow-green-500/20 transition hover:bg-green-400"
                       >
                         <Landmark className="h-4 w-4" />
                         Pix Nubank — sem taxa
@@ -2750,7 +2750,7 @@ function FeedContent() {
                         href="https://link.mercadopago.com.br/entreuslab"
                         target="_blank"
                         rel="noreferrer"
-                        className="flex items-center justify-center gap-2 rounded-full border border-green-300 bg-white px-4 py-2 text-sm font-bold text-green-700 transition hover:bg-green-100 dark:border-green-800 dark:bg-green-950 dark:text-green-300 dark:hover:bg-green-900"
+                        className="flex items-center justify-center gap-2 rounded-full border border-green-400/30 bg-white/[0.03] px-4 py-2 text-sm font-bold text-green-100 transition hover:border-green-300/50 hover:bg-green-900/40"
                       >
                         <CreditCard className="h-4 w-4" />
                         Mercado Pago — pode ter taxa
