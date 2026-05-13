@@ -10,7 +10,6 @@ import {
   Tag,
   Trash2,
   Users,
-  Video,
 } from 'lucide-react'
 import { useLanguage } from './LanguageProvider'
 
@@ -94,8 +93,7 @@ export default function PostComposer({
   onSubmit,
 }: PostComposerProps) {
   const { t } = useLanguage()
-  const imageInputRef = useRef<HTMLInputElement | null>(null)
-  const videoInputRef = useRef<HTMLInputElement | null>(null)
+  const mediaInputRef = useRef<HTMLInputElement | null>(null)
 
   const [content, setContent] = useState('')
   const [category, setCategory] = useState('cotidiano')
@@ -163,8 +161,7 @@ export default function PostComposer({
 
     setMedia([...currentMedia, ...newMedia])
 
-    if (imageInputRef.current) imageInputRef.current.value = ''
-    if (videoInputRef.current) videoInputRef.current.value = ''
+    if (mediaInputRef.current) mediaInputRef.current.value = ''
   }
 
   function removeMedia(id: string) {
@@ -299,18 +296,9 @@ export default function PostComposer({
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
                   <input
-                    ref={imageInputRef}
+                    ref={mediaInputRef}
                     type="file"
-                    accept="image/jpeg,image/png,image/webp"
-                    multiple
-                    className="hidden"
-                    onChange={(event) => addFiles(event.target.files)}
-                  />
-
-                  <input
-                    ref={videoInputRef}
-                    type="file"
-                    accept="video/mp4,video/webm,video/ogg"
+                    accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,video/ogg"
                     multiple
                     className="hidden"
                     onChange={(event) => addFiles(event.target.files)}
@@ -318,28 +306,23 @@ export default function PostComposer({
 
                   <button
                     type="button"
-                    onClick={() => imageInputRef.current?.click()}
+                    onClick={() => mediaInputRef.current?.click()}
                     className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-blue-500 transition hover:bg-blue-50 dark:hover:bg-blue-950/30"
-                    title={t('postComposer.addImages')}
+                    title={`${t('postComposer.addImages')} / ${t('postComposer.addVideos')}`}
                   >
                     <ImagePlus className="h-5 w-5" />
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={() => videoInputRef.current?.click()}
-                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-blue-500 transition hover:bg-blue-50 dark:hover:bg-blue-950/30"
-                    title={t('postComposer.addVideos')}
+                  <div
+                    className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-200 text-zinc-600 transition hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900"
+                    title={selectedCategory ? t(selectedCategory.labelKey) : t('postComposer.category')}
                   >
-                    <Video className="h-5 w-5" />
-                  </button>
-
-                  <div className="relative min-w-[132px] flex-1 sm:flex-none">
                     <select
                       value={category}
                       onChange={(event) => setCategory(event.target.value)}
-                      className="h-10 w-full appearance-none rounded-full border border-zinc-200 bg-transparent pl-9 pr-4 text-sm font-semibold text-zinc-700 outline-none transition hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-900 sm:w-[150px]"
+                      className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
                       title={t('postComposer.category')}
+                      aria-label={t('postComposer.category')}
                     >
                       {CATEGORY_OPTIONS.map((item) => (
                         <option key={item.value} value={item.value}>
@@ -348,15 +331,19 @@ export default function PostComposer({
                       ))}
                     </select>
 
-                    <Tag className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+                    <Tag className="pointer-events-none h-4 w-4" />
                   </div>
 
-                  <div className="relative min-w-[132px] flex-1 sm:flex-none">
+                  <div
+                    className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-200 text-zinc-600 transition hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900"
+                    title={selectedVisibility ? t(selectedVisibility.labelKey) : t('postComposer.privacy')}
+                  >
                     <select
                       value={visibility}
                       onChange={(event) => setVisibility(event.target.value as VisibilityType)}
-                      className="h-10 w-full appearance-none rounded-full border border-zinc-200 bg-transparent pl-9 pr-4 text-sm font-semibold text-zinc-700 outline-none transition hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-900 sm:w-[150px]"
+                      className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
                       title={t('postComposer.privacy')}
+                      aria-label={t('postComposer.privacy')}
                     >
                       {VISIBILITY_OPTIONS.map((item) => (
                         <option key={item.value} value={item.value}>
@@ -365,7 +352,7 @@ export default function PostComposer({
                       ))}
                     </select>
 
-                    <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500">
+                    <span className="pointer-events-none">
                       {selectedVisibility?.icon}
                     </span>
                   </div>
@@ -383,10 +370,6 @@ export default function PostComposer({
               </div>
 
               <div className="flex flex-wrap items-center gap-2 pl-1 text-xs text-zinc-500 dark:text-zinc-500">
-                <span>{selectedCategory ? t(selectedCategory.labelKey) : ''}</span>
-                <span>•</span>
-                <span>{selectedVisibility ? t(selectedVisibility.labelKey) : ''}</span>
-                <span>•</span>
                 <span>{t('postComposer.mediaCounter').replace('{current}', String(media.length)).replace('{max}', String(MAX_MEDIA_FILES))}</span>
               </div>
             </div>

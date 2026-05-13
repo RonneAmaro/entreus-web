@@ -1873,6 +1873,10 @@ function FeedContent() {
         unreadNotificationsCount={unreadNotificationsCount}
         mounted={mounted}
         theme={theme}
+        displayName={currentProfile?.display_name || undefined}
+        username={currentProfile?.username || null}
+        email={email}
+        avatarUrl={currentProfile?.avatar_url || null}
         onToggleTheme={handleToggleTheme}
         onLogout={handleLogout}
       />
@@ -2131,16 +2135,9 @@ function FeedContent() {
         </div>
       )}
 
-      <section className="w-full overflow-x-hidden px-4 py-20 pb-24 sm:px-6 lg:ml-[270px] lg:w-[calc(100%-270px)] lg:px-8 lg:py-8">
-        <div className="mx-auto grid w-full max-w-6xl grid-cols-1 gap-6 xl:grid-cols-[minmax(0,42rem)_22rem]">
+      <section className="w-full overflow-x-hidden px-4 py-20 pb-24 sm:px-6 lg:mx-auto lg:max-w-[1280px] lg:px-0 lg:py-8 lg:pl-[290px]">
+        <div className="mx-auto grid w-full grid-cols-1 gap-6 xl:grid-cols-[minmax(0,40rem)_20rem]">
           <div className="min-w-0">
-            <div className="mb-4 inline-flex max-w-full items-center rounded-full bg-white/80 px-3 py-1.5 text-sm text-zinc-500 shadow-sm ring-1 ring-zinc-200/70 backdrop-blur dark:bg-zinc-950/80 dark:text-zinc-400 dark:ring-zinc-800/70 sm:mb-6">
-              {t('feed.loggedAs')}{' '}
-              <span className="min-w-0 truncate text-black dark:text-white">
-                {email}
-              </span>
-            </div>
-
             {currentProfile && !currentProfile.show_sensitive_content && (
               <div className="mb-4 rounded-[1.5rem] border border-yellow-200/70 bg-yellow-50/80 px-4 py-3 text-sm text-yellow-800 shadow-sm ring-1 ring-yellow-100/70 dark:border-yellow-900/50 dark:bg-yellow-950/10 dark:text-yellow-300 dark:ring-yellow-900/20">
                 {t('feed.sensitiveHiddenPrefix')}{' '}

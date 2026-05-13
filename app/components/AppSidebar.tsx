@@ -24,6 +24,10 @@ type AppSidebarProps = {
   unreadMessagesCount?: number
   mounted: boolean
   theme?: string
+  displayName?: string
+  username?: string | null
+  email?: string
+  avatarUrl?: string | null
   onToggleTheme: () => void
   onLogout: () => void
 }
@@ -46,12 +50,16 @@ export default function AppSidebar({
   unreadMessagesCount,
   mounted,
   theme,
+  displayName,
+  username,
+  email,
+  avatarUrl,
   onToggleTheme,
   onLogout,
 }: AppSidebarProps) {
   const pathname = usePathname()
   const { t } = useLanguage()
-  const [openMoreMenu, setOpenMoreMenu] = useState(false)
+  const [moreMenuAnchor, setMoreMenuAnchor] = useState<'nav' | 'profile' | null>(null)
   const [internalUnreadMessagesCount, setInternalUnreadMessagesCount] = useState(0)
 
   const visibleUnreadMessagesCount =
@@ -184,6 +192,16 @@ export default function AppSidebar({
     return value > 99 ? '99+' : value
   }
 
+  function getInitial(name: string) {
+    if (!name) return 'U'
+    return name.slice(0, 1).toUpperCase()
+  }
+
+  function getEmailPrefix(value?: string) {
+    if (!value) return ''
+    return value.split('@')[0] || value
+  }
+
   const isMoreActive =
     pathname === '/privacy' ||
     pathname === '/blocked' ||
@@ -191,8 +209,12 @@ export default function AppSidebar({
     pathname === '/lab' ||
     pathname.startsWith('/lab/')
 
+  const profileName =
+    displayName || username || getEmailPrefix(email) || t('common.user')
+  const profileHandle = username ? `@${username}` : getEmailPrefix(email)
+
   return (
-    <aside className="fixed left-0 top-0 z-40 hidden h-screen w-[270px] flex-col border-r border-zinc-200 bg-white dark:border-zinc-800 dark:bg-black lg:flex">
+    <aside className="fixed left-0 top-0 z-40 hidden h-screen w-[270px] flex-col border-r border-zinc-200 bg-white dark:border-zinc-800 dark:bg-black lg:left-[max(0px,calc((100vw-1280px)/2))] lg:flex">
       <div className="flex h-full flex-col overflow-y-auto px-5 py-5">
         <Link
           href="/feed"
@@ -268,7 +290,9 @@ export default function AppSidebar({
           <div className="relative">
             <button
               type="button"
-              onClick={() => setOpenMoreMenu((current) => !current)}
+              onClick={() =>
+                setMoreMenuAnchor((current) => (current === 'nav' ? null : 'nav'))
+              }
               className={[
                 'flex w-full items-center gap-4 rounded-full px-4 py-3 text-lg font-medium transition',
                 isMoreActive
@@ -280,11 +304,11 @@ export default function AppSidebar({
               <span>{t('nav.more')}</span>
             </button>
 
-            {openMoreMenu && (
+            {moreMenuAnchor === 'nav' && (
               <>
                 <button
                   type="button"
-                  onClick={() => setOpenMoreMenu(false)}
+                  onClick={() => setMoreMenuAnchor(null)}
                   className="fixed inset-0 z-[998] cursor-default bg-transparent"
                   aria-label="Fechar menu"
                 />
@@ -294,7 +318,7 @@ export default function AppSidebar({
                   theme={theme}
                   onToggleTheme={onToggleTheme}
                   onLogout={onLogout}
-                  onClose={() => setOpenMoreMenu(false)}
+                  onClose={() => setMoreMenuAnchor(null)}
                 />
               </>
             )}
@@ -310,12 +334,69 @@ export default function AppSidebar({
           </button>
         </nav>
 
-        <div className="mt-auto rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-xs text-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400">
-          <p className="font-bold tracking-tight text-zinc-900 dark:text-white">
-            Entre<span className="text-blue-500">US</span>
-          </p>
+        <div className="relative mt-auto">
+          <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/80 p-3 text-left shadow-sm shadow-black/10 ring-1 ring-white/10 transition hover:border-blue-400/40 hover:bg-blue-950/25 hover:shadow-blue-500/10">
+            <Link
+              href="/profile"
+              className="flex min-w-0 flex-1 items-center gap-3"
+              title="Conta"
+            >
+              {avatarUrl ? (
+                <img
+                  src={avatarUrl}
+                  alt={profileName}
+                  className="h-11 w-11 shrink-0 rounded-full border border-blue-400/30 object-cover"
+                />
+              ) : (
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-blue-400/30 bg-blue-950/30 text-sm font-black text-blue-100">
+                  {getInitial(profileName)}
+                </div>
+              )}
 
-          <p>{t('brand.tagline')}</p>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-black text-white">
+                  {profileName}
+                </p>
+
+                {profileHandle && (
+                  <p className="truncate text-sm text-slate-400">
+                    {profileHandle}
+                  </p>
+                )}
+              </div>
+            </Link>
+
+            <button
+              type="button"
+              onClick={() =>
+                setMoreMenuAnchor((current) => (current === 'profile' ? null : 'profile'))
+              }
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:bg-white/10 hover:text-white"
+              aria-label="Conta"
+              title="Conta"
+            >
+              <MoreHorizontal className="h-5 w-5" />
+            </button>
+          </div>
+
+          {moreMenuAnchor === 'profile' && (
+            <>
+              <button
+                type="button"
+                onClick={() => setMoreMenuAnchor(null)}
+                className="fixed inset-0 z-[998] cursor-default bg-transparent"
+                aria-label="Fechar menu"
+              />
+
+              <MoreMenu
+                mounted={mounted}
+                theme={theme}
+                onToggleTheme={onToggleTheme}
+                onLogout={onLogout}
+                onClose={() => setMoreMenuAnchor(null)}
+              />
+            </>
+          )}
         </div>
       </div>
     </aside>
