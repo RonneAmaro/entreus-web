@@ -1,5 +1,6 @@
 'use client'
 
+import { supabase } from '@/lib/supabase'
 import {
   DisconnectButton,
   GridLayout,
@@ -11,17 +12,24 @@ import {
 } from '@livekit/components-react'
 import '@livekit/components-styles'
 import {
-  Loader2,
+  Check,
+  Clock3,
+  Hand,
   Link2,
+  Loader2,
   Mic,
   MonitorUp,
   PhoneOff,
   Share2,
   ShieldCheck,
+  UserCheck,
+  UserX,
   Video,
+  X,
 } from 'lucide-react'
 import { Track } from 'livekit-client'
-import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 type TokenResponse =
   | {
@@ -36,12 +44,70 @@ type TokenResponse =
       error: string
     }
 
+type RoomResponse =
+  | {
+      ok: true
+      room: {
+        roomName: string
+        title: string | null
+        ownerId: string
+        isOwner: boolean
+        plan: 'free' | 'vip'
+        status: 'active' | 'expired' | 'ended'
+        startsAt: string
+        expiresAt: string
+        maxDurationMinutes: number
+        isRecordingEnabled: boolean
+        isTranslationEnabled: boolean
+      }
+      membership: {
+        id: string
+        role: 'owner' | 'admin' | 'participant'
+        status: 'pending' | 'approved' | 'rejected' | 'left'
+        handRaised: boolean
+      } | null
+    }
+  | {
+      ok: false
+      error: string
+    }
+
+type RequestsResponse =
+  | {
+      ok: true
+      requests: {
+        id: string
+        userId: string
+        displayName: string | null
+        requestedAt: string
+      }[]
+    }
+  | { ok: false; error: string }
+
+type HandsResponse =
+  | {
+      ok: true
+      hands: {
+        userId: string
+        displayName: string | null
+        handRaisedAt: string | null
+      }[]
+    }
+  | { ok: false; error: string }
+
 type MeetRoomClientProps = {
   roomName: string
 }
 
 type JoinState = 'idle' | 'loading' | 'connected' | 'error'
 type InviteFeedback = 'idle' | 'copied'
+
+function formatSeconds(totalSeconds: number) {
+  const safeSeconds = Math.max(0, totalSeconds)
+  const minutes = Math.floor(safeSeconds / 60)
+  const seconds = safeSeconds % 60
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`
+}
 
 export function InviteActions({ compact = false }: { compact?: boolean }) {
   const [feedback, setFeedback] = useState<InviteFeedback>('idle')
@@ -92,7 +158,13 @@ export function InviteActions({ compact = false }: { compact?: boolean }) {
   )
 }
 
-function PortugueseConference() {
+function PortugueseConference({
+  handRaised,
+  onToggleHand,
+}: {
+  handRaised: boolean
+  onToggleHand: () => void
+}) {
   const tracks = useTracks([
     { source: Track.Source.Camera, withPlaceholder: true },
     { source: Track.Source.ScreenShare, withPlaceholder: false },
@@ -120,40 +192,24 @@ function PortugueseConference() {
       <div className="flex shrink-0 flex-wrap items-center justify-center gap-2 border-t border-blue-500/15 bg-blue-950/15 px-3 py-3 shadow-[0_-18px_40px_rgba(30,64,175,0.12)] backdrop-blur">
         <InviteActions compact />
 
-        <TrackToggle
-          source={Track.Source.Microphone}
-          showIcon={false}
-          className={controlClass}
-          onChange={(enabled) => setMicrophoneEnabled(enabled)}
-        >
+        <button type="button" onClick={onToggleHand} className={controlClass}>
+          <Hand className="h-4 w-4 shrink-0" />
+          <span>{handRaised ? 'Baixar mão' : 'Levantar mão'}</span>
+        </button>
+
+        <TrackToggle source={Track.Source.Microphone} showIcon={false} className={controlClass} onChange={setMicrophoneEnabled}>
           <Mic className="h-4 w-4 shrink-0" />
-          <span className="whitespace-nowrap">
-            {microphoneEnabled ? 'Desativar áudio' : 'Ativar áudio'}
-          </span>
+          <span className="whitespace-nowrap">{microphoneEnabled ? 'Desativar áudio' : 'Ativar áudio'}</span>
         </TrackToggle>
 
-        <TrackToggle
-          source={Track.Source.Camera}
-          showIcon={false}
-          className={controlClass}
-          onChange={(enabled) => setCameraEnabled(enabled)}
-        >
+        <TrackToggle source={Track.Source.Camera} showIcon={false} className={controlClass} onChange={setCameraEnabled}>
           <Video className="h-4 w-4 shrink-0" />
-          <span className="whitespace-nowrap">
-            {cameraEnabled ? 'Desativar câmera' : 'Ativar câmera'}
-          </span>
+          <span className="whitespace-nowrap">{cameraEnabled ? 'Desativar câmera' : 'Ativar câmera'}</span>
         </TrackToggle>
 
-        <TrackToggle
-          source={Track.Source.ScreenShare}
-          showIcon={false}
-          className={controlClass}
-          onChange={(enabled) => setScreenShareEnabled(enabled)}
-        >
+        <TrackToggle source={Track.Source.ScreenShare} showIcon={false} className={controlClass} onChange={setScreenShareEnabled}>
           <MonitorUp className="h-4 w-4 shrink-0" />
-          <span className="whitespace-nowrap">
-            {screenShareEnabled ? 'Parar compartilhamento' : 'Compartilhar tela'}
-          </span>
+          <span className="whitespace-nowrap">{screenShareEnabled ? 'Parar compartilhamento' : 'Compartilhar tela'}</span>
         </TrackToggle>
 
         <DisconnectButton className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-red-400/30 bg-red-600/90 px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-red-950/20 transition hover:border-red-300/60 hover:bg-red-500 hover:shadow-red-500/20">
@@ -166,68 +222,226 @@ function PortugueseConference() {
 }
 
 export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
+  const [accessToken, setAccessToken] = useState<string | null>(null)
   const [participantName, setParticipantName] = useState('')
-  const [token, setToken] = useState<string | null>(null)
-  const [serverUrl, setServerUrl] = useState<string | null>(null)
+  const [roomData, setRoomData] = useState<Extract<RoomResponse, { ok: true }>['room'] | null>(null)
+  const [membership, setMembership] = useState<Extract<RoomResponse, { ok: true }>['membership']>(null)
+  const [pendingRequests, setPendingRequests] = useState<Extract<RequestsResponse, { ok: true }>['requests']>([])
+  const [hands, setHands] = useState<Extract<HandsResponse, { ok: true }>['hands']>([])
+  const [loading, setLoading] = useState(true)
+  const [requesting, setRequesting] = useState(false)
   const [joinState, setJoinState] = useState<JoinState>('idle')
+  const [serverUrl, setServerUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(null)
+
+  const isModerator = membership?.status === 'approved' && (membership.role === 'owner' || membership.role === 'admin')
+  const isApproved = membership?.status === 'approved'
+  const expired = roomData?.status === 'expired' || roomData?.status === 'ended' || secondsLeft === 0
+
+  const authHeaders = useCallback(async () => {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+
+    if (!session) return null
+    return { Authorization: `Bearer ${session.access_token}` }
+  }, [])
+
+  const loadRoom = useCallback(async () => {
+    const headers = await authHeaders()
+
+    if (!headers) {
+      setLoading(false)
+      setRoomData(null)
+      setMembership(null)
+      return
+    }
+
+    const response = await fetch(`/api/meet/rooms/${encodeURIComponent(roomName)}`, { headers })
+    const data = (await response.json()) as RoomResponse
+
+    setLoading(false)
+
+    if (!response.ok || !data.ok) {
+      setError(data.ok ? 'Não foi possível carregar a sala.' : data.error)
+      setRoomData(null)
+      return
+    }
+
+    setError(null)
+    setRoomData(data.room)
+    setMembership(data.membership)
+  }, [authHeaders, roomName])
+
+  const loadRequests = useCallback(async () => {
+    if (!isModerator) return
+    const headers = await authHeaders()
+    if (!headers) return
+
+    const response = await fetch(`/api/meet/rooms/${encodeURIComponent(roomName)}/requests`, { headers })
+    const data = (await response.json()) as RequestsResponse
+    if (response.ok && data.ok) setPendingRequests(data.requests)
+  }, [authHeaders, isModerator, roomName])
+
+  const loadHands = useCallback(async () => {
+    if (!isApproved) return
+    const headers = await authHeaders()
+    if (!headers) return
+
+    const response = await fetch(`/api/meet/rooms/${encodeURIComponent(roomName)}/hands`, { headers })
+    const data = (await response.json()) as HandsResponse
+    if (response.ok && data.ok) setHands(data.hands)
+  }, [authHeaders, isApproved, roomName])
 
   useEffect(() => {
     setParticipantName(`Convidado-${Math.floor(1000 + Math.random() * 9000)}`)
-  }, [])
+    void loadRoom()
+  }, [loadRoom])
+
+  useEffect(() => {
+    if (!roomData?.expiresAt) return
+
+    function updateRemaining() {
+      const remaining = Math.max(0, Math.floor((Date.parse(roomData!.expiresAt) - Date.now()) / 1000))
+      setSecondsLeft(remaining)
+      if (remaining === 0) setJoinState((current) => (current === 'connected' ? current : 'idle'))
+    }
+
+    updateRemaining()
+    const timer = window.setInterval(updateRemaining, 1000)
+    return () => window.clearInterval(timer)
+  }, [roomData])
+
+  useEffect(() => {
+    if (membership?.status !== 'pending' && !isModerator) return
+    const timer = window.setInterval(() => void loadRoom(), 5000)
+    return () => window.clearInterval(timer)
+  }, [isModerator, loadRoom, membership?.status])
+
+  useEffect(() => {
+    if (!isModerator) return
+    void loadRequests()
+    const timer = window.setInterval(() => void loadRequests(), 5000)
+    return () => window.clearInterval(timer)
+  }, [isModerator, loadRequests])
+
+  useEffect(() => {
+    if (!isApproved) return
+    void loadHands()
+    const timer = window.setInterval(() => void loadHands(), 5000)
+    return () => window.clearInterval(timer)
+  }, [isApproved, loadHands])
 
   const canJoin = useMemo(() => {
-    return roomName.trim().length > 0 && participantName.trim().length > 0
-  }, [participantName, roomName])
+    return roomName.trim().length > 0 && participantName.trim().length > 0 && isApproved && !expired
+  }, [expired, isApproved, participantName, roomName])
+
+  async function requestAccess() {
+    setRequesting(true)
+    setError(null)
+    const headers = await authHeaders()
+
+    if (!headers) {
+      setRequesting(false)
+      return
+    }
+
+    const response = await fetch(`/api/meet/rooms/${encodeURIComponent(roomName)}/request-access`, {
+      method: 'POST',
+      headers,
+    })
+    const data = (await response.json()) as { ok: boolean; status?: string; error?: string }
+
+    setRequesting(false)
+
+    if (!response.ok || !data.ok) {
+      setError(data.error || 'Não foi possível pedir entrada.')
+      return
+    }
+
+    await loadRoom()
+  }
+
+  async function moderate(memberId: string, action: 'approve' | 'reject') {
+    const headers = await authHeaders()
+    if (!headers) return
+
+    const response = await fetch(`/api/meet/rooms/${encodeURIComponent(roomName)}/requests/${memberId}`, {
+      method: 'PATCH',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action }),
+    })
+
+    if (response.ok) {
+      await loadRequests()
+    }
+  }
+
+  async function toggleHand() {
+    const headers = await authHeaders()
+    if (!headers || !membership) return
+
+    const response = await fetch(`/api/meet/rooms/${encodeURIComponent(roomName)}/hand`, {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ raised: !membership.handRaised }),
+    })
+    const data = (await response.json()) as { ok: boolean; handRaised?: boolean }
+
+    if (response.ok && data.ok) {
+      setMembership({ ...membership, handRaised: Boolean(data.handRaised) })
+      await loadHands()
+    }
+  }
 
   async function handleJoin() {
     if (!canJoin) {
-      setError('Erro ao entrar na sala: informe um nome para continuar.')
-      setJoinState('error')
+      setError(expired ? 'O tempo gratuito desta sala acabou.' : 'Você ainda não tem autorização para entrar nesta sala.')
       return
     }
 
     setJoinState('loading')
     setError(null)
-    setToken(null)
+    setAccessToken(null)
     setServerUrl(null)
+
+    const headers = await authHeaders()
+    if (!headers) {
+      setJoinState('error')
+      setError('Entre na sua conta para continuar.')
+      return
+    }
 
     try {
       const response = await fetch('/api/livekit/token', {
         method: 'POST',
         headers: {
+          ...headers,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          roomName,
-          participantName,
-        }),
+        body: JSON.stringify({ roomName, participantName }),
       })
-
       const data = (await response.json()) as TokenResponse
 
       if (!response.ok || !data.ok) {
         throw new Error(data.ok ? 'Erro ao entrar na sala.' : data.error)
       }
 
-      setToken(data.token)
+      setAccessToken(data.token)
       setServerUrl(data.url)
       setJoinState('connected')
     } catch (joinError) {
       setJoinState('error')
-      setError(
-        joinError instanceof Error
-          ? joinError.message
-          : 'Erro ao entrar na sala. Tente novamente em instantes.',
-      )
+      setError(joinError instanceof Error ? joinError.message : 'Erro ao entrar na sala.')
     }
   }
 
-  if (joinState === 'connected' && token && serverUrl) {
+  if (joinState === 'connected' && accessToken && serverUrl) {
     return (
       <div className="mx-auto flex h-[calc(100vh-146px)] max-h-[720px] min-h-[460px] w-full max-w-7xl flex-col overflow-hidden rounded-[1.7rem] border border-blue-500/20 bg-black shadow-2xl shadow-blue-950/30 ring-1 ring-blue-400/10 max-sm:h-[calc(100vh-176px)] max-sm:min-h-[520px]">
         <LiveKitRoom
-          token={token}
+          token={accessToken}
           serverUrl={serverUrl}
           connect
           audio
@@ -236,54 +450,113 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
           className="h-full bg-black"
           onDisconnected={() => {
             setJoinState('idle')
-            setToken(null)
+            setAccessToken(null)
             setServerUrl(null)
           }}
           onError={(roomError) => {
             setJoinState('error')
             setError(roomError.message || 'A chamada foi interrompida.')
-            setToken(null)
+            setAccessToken(null)
             setServerUrl(null)
           }}
         >
-          <PortugueseConference />
+          <PortugueseConference handRaised={Boolean(membership?.handRaised)} onToggleHand={toggleHand} />
         </LiveKitRoom>
       </div>
     )
   }
 
+  const statusContent = (() => {
+    if (loading) return { title: 'Carregando sala...', description: 'Verificando autorização e tempo gratuito.', icon: Loader2 }
+    if (!roomData && error === 'Sala não encontrada.') return { title: 'Sala não encontrada.', description: 'Confira o link recebido e tente novamente.', icon: X }
+    if (!roomData) return { title: 'Entre na sua conta para participar.', description: 'O acesso ao EntreUS Meet exige login.', icon: ShieldCheck }
+    if (expired) return { title: 'Esta sala gratuita expirou.', description: 'O tempo gratuito desta sala acabou.', icon: Clock3 }
+    if (!membership) return { title: 'Pedir entrada', description: 'O administrador precisa aprovar você antes da chamada.', icon: UserCheck }
+    if (membership.status === 'pending') return { title: 'Aguardando aprovação', description: 'Aguardando aprovação do administrador da sala.', icon: Clock3 }
+    if (membership.status === 'rejected') return { title: 'Entrada recusada', description: 'Sua entrada foi recusada. Você pode pedir novamente.', icon: UserX }
+    return { title: isModerator ? 'Painel do administrador' : 'Pronto para entrar', description: 'Você foi aprovado para participar da chamada.', icon: ShieldCheck }
+  })()
+  const StatusIcon = statusContent.icon
+
   return (
     <div className="flex flex-1 items-center">
       <section className="grid w-full overflow-hidden rounded-[1.9rem] border border-blue-500/20 bg-[linear-gradient(135deg,rgba(15,23,42,0.92),rgba(30,64,175,0.16),rgba(2,6,23,0.96))] shadow-2xl shadow-blue-950/25 ring-1 ring-blue-400/10 lg:grid-cols-[1fr_0.95fr]">
         <div className="p-5 sm:p-8">
-          <div className="mb-8">
+          <div className="mb-7">
             <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-blue-500/30 bg-blue-500/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-blue-100">
-              <ShieldCheck className="h-4 w-4 text-blue-300" />
-              Pronto
+              <StatusIcon className={`h-4 w-4 text-blue-300 ${loading ? 'animate-spin' : ''}`} />
+              EntreUS Meet
             </div>
-            <h2 className="text-3xl font-black tracking-normal text-white">
-              Entrar na sala
-            </h2>
-            <p className="mt-3 max-w-xl text-sm leading-6 text-zinc-300">
-              Informe como você quer aparecer para os participantes e entre na
-              chamada ao vivo.
-            </p>
+            <h2 className="text-3xl font-black tracking-normal text-white">{statusContent.title}</h2>
+            <p className="mt-3 max-w-xl text-sm leading-6 text-zinc-300">{statusContent.description}</p>
           </div>
 
-          <label
-            className="block text-sm font-semibold text-blue-100"
-            htmlFor="participant-name"
-          >
-            Nome na chamada
-          </label>
-          <input
-            id="participant-name"
-            value={participantName}
-            maxLength={80}
-            onChange={(event) => setParticipantName(event.target.value)}
-            className="mt-3 w-full rounded-full border border-blue-500/20 bg-black/55 px-4 py-3 text-base text-white outline-none transition placeholder:text-zinc-600 focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10"
-            placeholder="Seu nome"
-          />
+          {roomData ? (
+            <div className="mb-5 flex flex-wrap gap-2 text-xs">
+              <span className="rounded-full border border-blue-500/20 bg-black/40 px-3 py-1.5 text-blue-100">
+                Tempo restante: {secondsLeft === null ? '--:--' : formatSeconds(secondsLeft)}
+              </span>
+              <span className="rounded-full border border-blue-500/20 bg-blue-500/10 px-3 py-1.5 text-blue-100">
+                Plano gratuito: {roomData.maxDurationMinutes} minutos por sala.
+              </span>
+            </div>
+          ) : null}
+
+          {!roomData && !loading ? (
+            <Link href="/login" className="inline-flex min-h-12 items-center justify-center rounded-full bg-blue-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-blue-600/25 transition hover:bg-blue-500">
+              Entrar na conta
+            </Link>
+          ) : null}
+
+          {roomData && !membership && !expired ? (
+            <button type="button" onClick={requestAccess} disabled={requesting} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-blue-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-blue-600/25 transition hover:bg-blue-500 disabled:opacity-60">
+              {requesting ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserCheck className="h-4 w-4" />}
+              Pedir entrada
+            </button>
+          ) : null}
+
+          {roomData && membership?.status === 'rejected' && !expired ? (
+            <button type="button" onClick={requestAccess} disabled={requesting} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-blue-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-blue-600/25 transition hover:bg-blue-500 disabled:opacity-60">
+              {requesting ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserCheck className="h-4 w-4" />}
+              Pedir novamente
+            </button>
+          ) : null}
+
+          {isApproved ? (
+            <>
+              <label className="block text-sm font-semibold text-blue-100" htmlFor="participant-name">
+                Nome na chamada
+              </label>
+              <input
+                id="participant-name"
+                value={participantName}
+                maxLength={80}
+                onChange={(event) => setParticipantName(event.target.value)}
+                className="mt-3 w-full rounded-full border border-blue-500/20 bg-black/55 px-4 py-3 text-base text-white outline-none transition placeholder:text-zinc-600 focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10"
+                placeholder="Seu nome"
+              />
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={toggleHand}
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-blue-500/30 bg-blue-950/35 px-4 py-2 text-sm font-semibold text-blue-50 transition hover:border-blue-400/60 hover:bg-blue-500/20"
+                >
+                  <Hand className="h-4 w-4" />
+                  {membership?.handRaised ? 'Baixar mão' : 'Levantar mão'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleJoin}
+                  disabled={!canJoin || joinState === 'loading'}
+                  className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-blue-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-blue-600/25 transition hover:bg-blue-500 hover:shadow-blue-500/30 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {joinState === 'loading' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Video className="h-4 w-4" />}
+                  {joinState === 'loading' ? 'Entrando...' : 'Entrar na sala'}
+                </button>
+              </div>
+            </>
+          ) : null}
 
           {error ? (
             <div className="mt-4 rounded-2xl border border-red-900/60 bg-red-950/30 px-4 py-3 text-sm text-red-200">
@@ -291,48 +564,75 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
             </div>
           ) : null}
 
-          <button
-            type="button"
-            onClick={handleJoin}
-            disabled={!canJoin || joinState === 'loading'}
-            className="mt-6 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-blue-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-blue-600/25 transition hover:bg-blue-500 hover:shadow-blue-500/30 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
-          >
-            {joinState === 'loading' ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Entrando na sala...
-              </>
-            ) : (
-              'Entrar na sala'
-            )}
-          </button>
-
-          <div className="mt-4">
+          <div className="mt-5">
             <InviteActions />
           </div>
+
+          <p className="mt-5 max-w-xl rounded-2xl border border-blue-500/15 bg-black/25 px-4 py-3 text-xs leading-5 text-blue-100/70">
+            VIP em breve: mais tempo, gravação de reunião, tradução simultânea com legendas e recursos avançados de moderação.
+          </p>
         </div>
 
-        <aside className="flex min-h-[300px] items-center justify-center border-t border-blue-500/15 bg-blue-950/10 p-5 lg:border-l lg:border-t-0 sm:p-8">
-          <div className="w-full max-w-sm text-center">
-            <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full border border-blue-500/20 bg-black/70 text-blue-300 shadow-lg shadow-blue-500/10">
-              <Video className="h-9 w-9" />
-            </div>
-            <p className="text-base font-semibold text-zinc-100">
-              Sala Entre<span className="text-blue-400">US</span>
-            </p>
-            <p className="mt-2 text-sm leading-6 text-zinc-400">
-              A chamada abre aqui depois da conexão segura.
-            </p>
+        <aside className="border-t border-blue-500/15 bg-blue-950/10 p-5 lg:border-l lg:border-t-0 sm:p-8">
+          {isModerator ? (
+            <div className="space-y-5">
+              <section>
+                <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-white">
+                  <UserCheck className="h-4 w-4 text-blue-300" />
+                  Solicitações pendentes
+                </h3>
+                <div className="space-y-2">
+                  {pendingRequests.length === 0 ? (
+                    <p className="rounded-2xl border border-blue-500/15 bg-black/30 px-4 py-3 text-sm text-zinc-400">Nenhum pedido pendente.</p>
+                  ) : (
+                    pendingRequests.map((request) => (
+                      <div key={request.id} className="flex flex-col gap-3 rounded-2xl border border-blue-500/15 bg-black/35 p-3 sm:flex-row sm:items-center sm:justify-between">
+                        <span className="text-sm font-semibold text-white">{request.displayName || 'Usuário EntreUS'}</span>
+                        <div className="flex gap-2">
+                          <button type="button" onClick={() => moderate(request.id, 'approve')} className="inline-flex h-9 items-center gap-1 rounded-full bg-blue-600 px-3 text-xs font-bold text-white transition hover:bg-blue-500">
+                            <Check className="h-3.5 w-3.5" />
+                            Aceitar
+                          </button>
+                          <button type="button" onClick={() => moderate(request.id, 'reject')} className="inline-flex h-9 items-center gap-1 rounded-full border border-red-400/30 bg-red-600/80 px-3 text-xs font-bold text-white transition hover:bg-red-500">
+                            <X className="h-3.5 w-3.5" />
+                            Recusar
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </section>
 
-            <div className="mt-6 flex flex-wrap justify-center gap-2 text-xs">
-              <span className="max-w-full truncate rounded-full border border-blue-500/20 bg-black/40 px-3 py-1.5 text-blue-100/80">
-                Sala: {roomName}
-              </span>
-              <span className="rounded-full border border-blue-500/20 bg-blue-500/10 px-3 py-1.5 text-blue-100">
-                {joinState === 'loading' ? 'Conectando...' : 'Pronto'}
-              </span>
+              <section>
+                <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-white">
+                  <Hand className="h-4 w-4 text-blue-300" />
+                  Mãos levantadas
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  {hands.length === 0 ? (
+                    <span className="rounded-full border border-blue-500/15 bg-black/30 px-3 py-1.5 text-xs text-zinc-400">Ninguém levantou a mão.</span>
+                  ) : (
+                    hands.map((item) => (
+                      <span key={item.userId} className="rounded-full border border-blue-400/35 bg-blue-500/15 px-3 py-1.5 text-xs font-semibold text-blue-50">
+                        {item.displayName || 'Usuário EntreUS'}
+                      </span>
+                    ))
+                  )}
+                </div>
+              </section>
             </div>
-          </div>
+          ) : (
+            <div className="flex min-h-[300px] items-center justify-center">
+              <div className="w-full max-w-sm text-center">
+                <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full border border-blue-500/20 bg-black/70 text-blue-300 shadow-lg shadow-blue-500/10">
+                  <Video className="h-9 w-9" />
+                </div>
+                <p className="text-base font-semibold text-zinc-100">Sala Entre<span className="text-blue-400">US</span></p>
+                <p className="mt-2 text-sm leading-6 text-zinc-400">A chamada abre aqui depois da aprovação.</p>
+              </div>
+            </div>
+          )}
         </aside>
       </section>
     </div>

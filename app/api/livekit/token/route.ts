@@ -1,3 +1,13 @@
+import {
+  canJoinRoom,
+  expireRoomIfNeeded,
+  getMembership,
+  getRoomByName,
+  getSupabaseAdmin,
+  hasRoomExpired,
+  jsonError,
+  requireUser,
+} from '@/lib/meet-server'
 import { AccessToken } from 'livekit-server-sdk'
 import { NextResponse } from 'next/server'
 
@@ -7,10 +17,6 @@ const MAX_PARTICIPANT_NAME_LENGTH = 80
 type TokenRequestBody = {
   roomName?: unknown
   participantName?: unknown
-}
-
-function jsonError(message: string, status: number) {
-  return NextResponse.json({ ok: false, error: message }, { status })
 }
 
 function readRequiredEnv(name: string) {
@@ -33,12 +39,20 @@ function validateTextField(value: unknown, fieldName: string, maxLength: number)
 }
 
 export async function POST(request: Request) {
+  const auth = await requireUser(request)
+  if ('error' in auth) return auth.error
+
   const livekitUrl = readRequiredEnv('LIVEKIT_URL')
   const livekitApiKey = readRequiredEnv('LIVEKIT_API_KEY')
   const livekitApiSecret = readRequiredEnv('LIVEKIT_API_SECRET')
+  const supabase = getSupabaseAdmin()
 
   if (!livekitUrl || !livekitApiKey || !livekitApiSecret) {
     return jsonError('Configuração LiveKit ausente no servidor.', 500)
+  }
+
+  if (!supabase) {
+    return jsonError('Configuração Supabase ausente no servidor.', 500)
   }
 
   let body: TokenRequestBody
@@ -64,17 +78,48 @@ export async function POST(request: Request) {
     return jsonError(participantName.error, 400)
   }
 
+  if (!roomName.value || !participantName.value) {
+    return jsonError('Dados obrigatórios ausentes.', 400)
+  }
+
   try {
-    const identity = `${participantName.value}-${crypto.randomUUID().slice(0, 8)}`
+    const room = await getRoomByName(supabase, roomName.value)
+
+    if (!room) {
+      return jsonError('Sala não encontrada.', 404)
+    }
+
+    const updatedRoom = await expireRoomIfNeeded(supabase, room)
+
+    if (
+      updatedRoom.status === 'expired' ||
+      updatedRoom.status === 'ended' ||
+      hasRoomExpired(updatedRoom)
+    ) {
+      return jsonError('Esta sala gratuita expirou.', 403)
+    }
+
+    const membership = await getMembership(supabase, updatedRoom.id, auth.user.id)
+
+    if (!canJoinRoom(membership)) {
+      return jsonError('Você ainda não tem autorização para entrar nesta sala.', 403)
+    }
+
+    const secondsLeft = Math.max(
+      60,
+      Math.floor((Date.parse(updatedRoom.expires_at) - Date.now()) / 1000),
+    )
+    const tokenTtl = updatedRoom.plan === 'free' ? secondsLeft : '2h'
+    const identity = `${auth.user.id}-${crypto.randomUUID().slice(0, 8)}`
     const accessToken = new AccessToken(livekitApiKey, livekitApiSecret, {
       identity,
       name: participantName.value,
-      ttl: '2h',
+      ttl: tokenTtl,
     })
 
     accessToken.addGrant({
       roomJoin: true,
-      room: roomName.value,
+      room: updatedRoom.room_name,
       canPublish: true,
       canSubscribe: true,
       canPublishData: true,
@@ -86,7 +131,7 @@ export async function POST(request: Request) {
       ok: true,
       token,
       url: livekitUrl,
-      roomName: roomName.value,
+      roomName: updatedRoom.room_name,
       participantName: participantName.value,
     })
   } catch {
