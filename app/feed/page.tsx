@@ -1083,11 +1083,11 @@ function FeedContent() {
   }
 
   function isImage(file: File) {
-    return ['image/jpeg', 'image/png', 'image/webp'].includes(file.type)
+    return ['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type)
   }
 
   function isVideo(file: File) {
-    return file.type === 'video/mp4'
+    return ['video/mp4', 'video/webm', 'video/quicktime'].includes(file.type)
   }
 
   async function uploadMediaFile(
@@ -1124,10 +1124,6 @@ function FeedContent() {
       return null
     }
 
-    const formData = new FormData()
-    formData.append('folder', 'posts')
-    formData.append('file', file)
-
     if (mediaType === 'image') {
       setUploadingPostImage(true)
     } else {
@@ -1135,21 +1131,29 @@ function FeedContent() {
     }
 
     try {
-      const response = await fetch('/api/r2/upload', {
+      const presignResponse = await fetch('/api/r2/presign', {
         method: 'POST',
-        body: formData,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          fileName: file.name,
+          contentType: file.type,
+          folder: 'posts',
+        }),
       })
 
-      const data = (await response.json().catch(() => null)) as {
+      const presignData = (await presignResponse.json().catch(() => null)) as {
         ok?: boolean
-        url?: string
+        uploadUrl?: string
+        publicUrl?: string
         message?: string
         error?: string
       } | null
 
-      if (!response.ok || !data?.ok || !data.url) {
+      if (!presignResponse.ok || !presignData?.ok || !presignData.uploadUrl || !presignData.publicUrl) {
         const errorMessage =
-          data?.message || data?.error || 'Falha ao enviar midia para o R2.'
+          presignData?.message || presignData?.error || 'Falha ao preparar upload para o R2.'
 
         setMessage(
           mediaType === 'image'
@@ -1159,13 +1163,53 @@ function FeedContent() {
         return null
       }
 
+      const uploadResponse = await fetch(presignData.uploadUrl, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': file.type,
+        },
+        body: file,
+      })
+
+      if (!uploadResponse.ok) {
+        console.error('Falha ao enviar mídia para o R2:', {
+          fileName: file.name,
+          contentType: file.type,
+          sizeMb: Number((file.size / 1024 / 1024).toFixed(2)),
+          status: uploadResponse.status,
+        })
+
+        const friendlyMessage =
+          mediaType === 'video'
+            ? 'Não foi possível enviar o vídeo. Tente novamente ou use um vídeo menor.'
+            : 'Falha ao enviar mídia para o R2.'
+
+        setMessage(
+          mediaType === 'image'
+            ? t('feed.messages.uploadImageError') + friendlyMessage
+            : t('feed.messages.uploadVideoError') + friendlyMessage
+        )
+        return null
+      }
+
       return {
-        url: data.url,
+        url: presignData.publicUrl,
         type: mediaType,
       }
     } catch (error) {
       const errorMessage =
-        error instanceof Error ? error.message : 'Erro inesperado no upload R2.'
+        mediaType === 'video'
+          ? 'Não foi possível enviar o vídeo. Tente novamente ou use um vídeo menor.'
+          : error instanceof Error
+            ? error.message
+            : 'Erro inesperado no upload R2.'
+
+      console.error('Erro ao enviar mídia do post:', {
+        fileName: file.name,
+        contentType: file.type,
+        sizeMb: Number((file.size / 1024 / 1024).toFixed(2)),
+        message: error instanceof Error ? error.message : 'Erro inesperado no upload R2.',
+      })
 
       setMessage(
         mediaType === 'image'
@@ -2188,7 +2232,7 @@ function FeedContent() {
                   <article
                     id={item.type === 'post' ? `post-${post.id}` : `repost-${item.id}`}
                     key={item.id}
-                    className={`rounded-[2rem] border bg-white/95 p-4 shadow-sm shadow-black/5 ring-1 ring-black/5 backdrop-blur-xl transition hover:-translate-y-0.5 hover:shadow-xl hover:shadow-black/10 dark:bg-black/80 dark:ring-white/10 sm:p-6 ${isHighlighted
+                    className={`group relative overflow-hidden rounded-[2rem] border bg-white/95 p-4 shadow-sm shadow-black/5 ring-1 ring-black/5 backdrop-blur-xl transition-all duration-300 before:pointer-events-none before:absolute before:inset-0 before:bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.12),transparent_42%)] before:opacity-0 before:transition-opacity before:duration-300 hover:-translate-y-1 hover:border-blue-400/50 hover:shadow-2xl hover:shadow-blue-500/10 hover:before:opacity-100 dark:bg-slate-950/85 dark:ring-white/10 sm:p-6 ${isHighlighted
                         ? 'border-blue-500 ring-2 ring-blue-200 dark:border-blue-400 dark:ring-blue-900'
                         : 'border-zinc-200/70 dark:border-zinc-800/70'
                       }`}
@@ -2637,11 +2681,11 @@ function FeedContent() {
                 </p>
               </div>
 
-              <div className="overflow-hidden rounded-[2rem] border border-zinc-200/70 bg-white/95 shadow-sm ring-1 ring-black/5 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-black/80 dark:ring-white/10">
+              <div className="overflow-hidden rounded-[2rem] border border-zinc-200/70 bg-white/95 shadow-sm ring-1 ring-black/5 backdrop-blur-xl transition-all duration-300 hover:border-blue-400/35 hover:shadow-xl hover:shadow-blue-500/10 dark:border-zinc-800/70 dark:bg-slate-950/85 dark:ring-white/10">
                 <div className="space-y-4 p-5">
                   <Link
                     href="/lab"
-                    className="block rounded-[1.5rem] border border-blue-100/70 bg-blue-50/80 p-4 ring-1 ring-blue-100/70 transition hover:-translate-y-0.5 hover:bg-blue-50 hover:shadow-md dark:border-blue-900/50 dark:bg-blue-950/20 dark:ring-blue-900/20"
+                    className="group relative block overflow-hidden rounded-[1.5rem] border border-blue-100/70 bg-blue-50/80 p-4 ring-1 ring-blue-100/70 transition-all duration-300 before:pointer-events-none before:absolute before:inset-0 before:bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.16),transparent_46%)] before:opacity-0 before:transition-opacity hover:-translate-y-1 hover:border-blue-400/50 hover:bg-blue-50 hover:shadow-xl hover:shadow-blue-500/10 hover:before:opacity-100 dark:border-blue-900/50 dark:bg-blue-950/20 dark:ring-blue-900/20"
                   >
                     <div className="mb-3 flex items-center gap-2 text-blue-700 dark:text-blue-300">
                       <FlaskConical className="h-5 w-5" />
@@ -2661,7 +2705,7 @@ function FeedContent() {
 
                   <Link
                     href="/profile"
-                    className="block rounded-[1.5rem] border border-yellow-100/70 bg-yellow-50/80 p-4 ring-1 ring-yellow-100/70 transition hover:-translate-y-0.5 hover:bg-yellow-50 hover:shadow-md dark:border-yellow-900/50 dark:bg-yellow-950/20 dark:ring-yellow-900/20"
+                    className="group relative block overflow-hidden rounded-[1.5rem] border border-yellow-100/70 bg-yellow-50/80 p-4 ring-1 ring-yellow-100/70 transition-all duration-300 before:pointer-events-none before:absolute before:inset-0 before:bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.12),transparent_46%)] before:opacity-0 before:transition-opacity hover:-translate-y-1 hover:border-blue-400/40 hover:bg-yellow-50 hover:shadow-xl hover:shadow-blue-500/10 hover:before:opacity-100 dark:border-yellow-900/50 dark:bg-yellow-950/20 dark:ring-yellow-900/20"
                   >
                     <div className="mb-3 flex items-center gap-2 text-yellow-700 dark:text-yellow-300">
                       <Award className="h-5 w-5" />
@@ -2679,7 +2723,7 @@ function FeedContent() {
                     </span>
                   </Link>
 
-                  <div className="rounded-[1.5rem] border border-green-100/70 bg-green-50/80 p-4 ring-1 ring-green-100/70 dark:border-green-900/50 dark:bg-green-950/20 dark:ring-green-900/20">
+                  <div className="group relative overflow-hidden rounded-[1.5rem] border border-green-100/70 bg-green-50/80 p-4 ring-1 ring-green-100/70 transition-all duration-300 before:pointer-events-none before:absolute before:inset-0 before:bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.10),transparent_46%)] before:opacity-0 before:transition-opacity hover:-translate-y-1 hover:border-blue-400/35 hover:shadow-xl hover:shadow-blue-500/10 hover:before:opacity-100 dark:border-green-900/50 dark:bg-green-950/20 dark:ring-green-900/20">
                     <div className="mb-3 flex items-center gap-2 text-green-700 dark:text-green-300">
                       <Heart className="h-5 w-5" />
                       <h3 className="font-bold">
