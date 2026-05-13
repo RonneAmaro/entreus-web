@@ -13,6 +13,7 @@ import {
   MoreHorizontal,
   PenLine,
   User,
+  Video,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import MoreMenu from './MoreMenu'
@@ -247,6 +248,11 @@ export default function AppSidebar({
             </div>
 
             <span>{t('nav.messages')}</span>
+          </Link>
+
+          <Link href="/meet" className={navLinkClass('/meet')}>
+            <Video className={navIconClass('/meet')} />
+            <span>Meet</span>
           </Link>
 
           <Link href="/saved" className={navLinkClass('/saved')}>

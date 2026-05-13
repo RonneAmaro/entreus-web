@@ -514,6 +514,15 @@ export default function MobileNavigation({
               </Link>
 
               <Link
+                href="/meet"
+                onClick={closeMenu}
+                className={drawerLinkClass('/meet')}
+              >
+                <Video className={drawerIconClass('/meet')} />
+                Meet
+              </Link>
+
+              <Link
                 href="/saved"
                 onClick={closeMenu}
                 className={drawerLinkClass('/saved')}
@@ -662,7 +671,7 @@ export default function MobileNavigation({
         </button>
       )}
 
-      <nav className="fixed bottom-0 left-0 z-50 grid h-16 w-full grid-cols-5 border-t border-zinc-200 bg-white dark:border-zinc-800 dark:bg-black lg:hidden">
+      <nav className="fixed bottom-0 left-0 z-50 grid h-16 w-full grid-cols-6 border-t border-zinc-200 bg-white dark:border-zinc-800 dark:bg-black lg:hidden">
         <Link
           href="/feed"
           className={bottomLinkClass('/feed')}
@@ -696,6 +705,16 @@ export default function MobileNavigation({
                 {formatBadge(visibleUnreadMessagesCount)}
               </span>
             )}
+          </span>
+        </Link>
+
+        <Link
+          href="/meet"
+          className={bottomLinkClass('/meet')}
+          aria-label="Meet"
+        >
+          <span className={bottomIconWrapperClass('/meet')}>
+            <Video className={bottomIconClass('/meet')} />
           </span>
         </Link>
 
