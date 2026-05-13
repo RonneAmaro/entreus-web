@@ -50,10 +50,10 @@ function PortugueseConference() {
   const [screenShareEnabled, setScreenShareEnabled] = useState(false)
 
   const controlClass =
-    'inline-flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-full border border-blue-500/30 bg-blue-950/35 px-4 py-2 text-sm font-semibold text-blue-50 shadow-lg shadow-blue-950/10 transition hover:border-blue-400/60 hover:bg-blue-500/20 hover:shadow-blue-500/15 data-[lk-enabled=false]:border-zinc-700 data-[lk-enabled=false]:bg-black data-[lk-enabled=false]:text-zinc-400'
+    'inline-flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-full border border-blue-500/30 bg-blue-950/35 px-4 py-2 text-sm font-semibold text-blue-50 shadow-lg shadow-blue-950/10 transition hover:border-blue-400/60 hover:bg-blue-500/20 hover:shadow-blue-500/15 data-[lk-enabled=false]:border-zinc-700 data-[lk-enabled=false]:bg-black/80 data-[lk-enabled=false]:text-zinc-400'
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-zinc-950">
+    <div className="flex h-full min-h-0 flex-col bg-black">
       <div className="min-h-0 flex-1 overflow-hidden bg-black">
         <GridLayout
           tracks={tracks}
@@ -65,7 +65,7 @@ function PortugueseConference() {
 
       <RoomAudioRenderer />
 
-      <div className="flex shrink-0 flex-wrap items-center justify-center gap-2 border-t border-blue-500/15 bg-zinc-950/95 px-3 py-3 shadow-[0_-18px_40px_rgba(30,64,175,0.12)]">
+      <div className="flex shrink-0 flex-wrap items-center justify-center gap-2 border-t border-blue-500/15 bg-blue-950/15 px-3 py-3 shadow-[0_-18px_40px_rgba(30,64,175,0.12)] backdrop-blur">
         <TrackToggle
           source={Track.Source.Microphone}
           showIcon={false}
@@ -171,7 +171,7 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
 
   if (joinState === 'connected' && token && serverUrl) {
     return (
-      <div className="mx-auto flex h-[calc(100vh-132px)] max-h-[720px] min-h-[460px] w-full max-w-7xl flex-col overflow-hidden rounded-[1.7rem] border border-blue-500/20 bg-zinc-950 shadow-2xl shadow-blue-950/20 ring-1 ring-blue-400/10 max-sm:h-[calc(100vh-156px)] max-sm:min-h-[520px]">
+      <div className="mx-auto flex h-[calc(100vh-146px)] max-h-[720px] min-h-[460px] w-full max-w-7xl flex-col overflow-hidden rounded-[1.7rem] border border-blue-500/20 bg-black shadow-2xl shadow-blue-950/30 ring-1 ring-blue-400/10 max-sm:h-[calc(100vh-176px)] max-sm:min-h-[520px]">
         <LiveKitRoom
           token={token}
           serverUrl={serverUrl}
@@ -179,7 +179,7 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
           audio
           video
           data-lk-theme="default"
-          className="h-full bg-zinc-950"
+          className="h-full bg-black"
           onDisconnected={() => {
             setJoinState('idle')
             setToken(null)
@@ -199,92 +199,84 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
   }
 
   return (
-    <div className="grid flex-1 items-center gap-5 lg:grid-cols-[1.05fr_0.95fr]">
-      <section className="rounded-[1.7rem] border border-blue-500/20 bg-blue-950/15 p-5 shadow-2xl shadow-blue-950/20 ring-1 ring-blue-400/10 sm:p-8">
-        <div className="mb-8">
-          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-blue-500/30 bg-blue-500/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-blue-100">
-            <ShieldCheck className="h-4 w-4 text-blue-300" />
-            Pronto
+    <div className="flex flex-1 items-center">
+      <section className="grid w-full overflow-hidden rounded-[1.9rem] border border-blue-500/20 bg-[linear-gradient(135deg,rgba(15,23,42,0.92),rgba(30,64,175,0.16),rgba(2,6,23,0.96))] shadow-2xl shadow-blue-950/25 ring-1 ring-blue-400/10 lg:grid-cols-[1fr_0.95fr]">
+        <div className="p-5 sm:p-8">
+          <div className="mb-8">
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-blue-500/30 bg-blue-500/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-blue-100">
+              <ShieldCheck className="h-4 w-4 text-blue-300" />
+              Pronto
+            </div>
+            <h2 className="text-3xl font-black tracking-normal text-white">
+              Entrar na sala
+            </h2>
+            <p className="mt-3 max-w-xl text-sm leading-6 text-zinc-300">
+              Informe como você quer aparecer para os participantes e entre na
+              chamada ao vivo.
+            </p>
           </div>
-          <h2 className="text-3xl font-black tracking-normal text-white">
-            Entrar na sala
-          </h2>
-          <p className="mt-3 max-w-xl text-sm leading-6 text-zinc-300">
-            Informe como voce quer aparecer para os participantes e entre na
-            chamada ao vivo.
-          </p>
+
+          <label
+            className="block text-sm font-semibold text-blue-100"
+            htmlFor="participant-name"
+          >
+            Nome na chamada
+          </label>
+          <input
+            id="participant-name"
+            value={participantName}
+            maxLength={80}
+            onChange={(event) => setParticipantName(event.target.value)}
+            className="mt-3 w-full rounded-full border border-blue-500/20 bg-black/55 px-4 py-3 text-base text-white outline-none transition placeholder:text-zinc-600 focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10"
+            placeholder="Seu nome"
+          />
+
+          {error ? (
+            <div className="mt-4 rounded-2xl border border-red-900/60 bg-red-950/30 px-4 py-3 text-sm text-red-200">
+              {error}
+            </div>
+          ) : null}
+
+          <button
+            type="button"
+            onClick={handleJoin}
+            disabled={!canJoin || joinState === 'loading'}
+            className="mt-6 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-blue-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-blue-600/25 transition hover:bg-blue-500 hover:shadow-blue-500/30 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+          >
+            {joinState === 'loading' ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Entrando na sala...
+              </>
+            ) : (
+              'Entrar na sala'
+            )}
+          </button>
         </div>
 
-        <label
-          className="block text-sm font-semibold text-blue-100"
-          htmlFor="participant-name"
-        >
-          Nome na chamada
-        </label>
-        <input
-          id="participant-name"
-          value={participantName}
-          maxLength={80}
-          onChange={(event) => setParticipantName(event.target.value)}
-          className="mt-3 w-full rounded-full border border-blue-500/20 bg-black/80 px-4 py-3 text-base text-white outline-none transition placeholder:text-zinc-600 focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10"
-          placeholder="Seu nome"
-        />
+        <aside className="flex min-h-[300px] items-center justify-center border-t border-blue-500/15 bg-blue-950/10 p-5 lg:border-l lg:border-t-0 sm:p-8">
+          <div className="w-full max-w-sm text-center">
+            <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full border border-blue-500/20 bg-black/70 text-blue-300 shadow-lg shadow-blue-500/10">
+              <Video className="h-9 w-9" />
+            </div>
+            <p className="text-base font-semibold text-zinc-100">
+              Sala Entre<span className="text-blue-400">US</span>
+            </p>
+            <p className="mt-2 text-sm leading-6 text-zinc-400">
+              A chamada abre aqui depois da conexão segura.
+            </p>
 
-        {error ? (
-          <div className="mt-4 rounded-2xl border border-red-900/60 bg-red-950/30 px-4 py-3 text-sm text-red-200">
-            {error}
-          </div>
-        ) : null}
-
-        <button
-          type="button"
-          onClick={handleJoin}
-          disabled={!canJoin || joinState === 'loading'}
-          className="mt-6 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-blue-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-blue-600/25 transition hover:bg-blue-500 hover:shadow-blue-500/30 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
-        >
-          {joinState === 'loading' ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Entrando na sala...
-            </>
-          ) : (
-            'Entrar na sala'
-          )}
-        </button>
-      </section>
-
-      <aside className="rounded-[1.7rem] border border-blue-500/20 bg-zinc-950 p-4 shadow-2xl shadow-blue-950/20 ring-1 ring-blue-400/10 sm:p-5">
-        <div className="aspect-video overflow-hidden rounded-[1.35rem] border border-blue-500/15 bg-black p-3">
-          <div className="flex h-full items-center justify-center rounded-2xl bg-blue-950/20">
-            <div className="text-center">
-              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full border border-blue-500/20 bg-black text-blue-300 shadow-lg shadow-blue-500/10">
-                <Video className="h-7 w-7" />
-              </div>
-              <p className="text-sm font-semibold text-zinc-100">
-                Sala Entre<span className="text-blue-400">US</span>
-              </p>
-              <p className="mt-2 text-xs text-zinc-500">
-                A chamada abre aqui depois da conexao segura.
-              </p>
+            <div className="mt-6 flex flex-wrap justify-center gap-2 text-xs">
+              <span className="max-w-full truncate rounded-full border border-blue-500/20 bg-black/40 px-3 py-1.5 text-blue-100/80">
+                Sala: {roomName}
+              </span>
+              <span className="rounded-full border border-blue-500/20 bg-blue-500/10 px-3 py-1.5 text-blue-100">
+                {joinState === 'loading' ? 'Conectando...' : 'Pronto'}
+              </span>
             </div>
           </div>
-        </div>
-
-        <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-          <div className="min-w-0 rounded-2xl border border-blue-500/15 bg-black px-4 py-3">
-            <span className="block text-xs text-blue-200/60">Sala</span>
-            <strong className="mt-1 block truncate font-semibold text-zinc-200">
-              {roomName}
-            </strong>
-          </div>
-          <div className="rounded-2xl border border-blue-500/15 bg-black px-4 py-3">
-            <span className="block text-xs text-blue-200/60">Status</span>
-            <strong className="mt-1 block font-semibold text-zinc-200">
-              {joinState === 'loading' ? 'Conectando...' : 'Pronto'}
-            </strong>
-          </div>
-        </div>
-      </aside>
+        </aside>
+      </section>
     </div>
   )
 }
