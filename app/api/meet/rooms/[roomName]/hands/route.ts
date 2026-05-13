@@ -45,7 +45,10 @@ export async function GET(request: Request, context: RoomRouteContext) {
     ok: true,
     hands: (data ?? []).map((item) => ({
       userId: item.user_id,
-      displayName: item.display_name,
+      displayName:
+        typeof item.display_name === 'string' && item.display_name.trim().length > 0
+          ? item.display_name.trim()
+          : 'Participante',
       handRaisedAt: item.hand_raised_at,
     })),
   })

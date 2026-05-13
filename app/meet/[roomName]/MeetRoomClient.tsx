@@ -64,6 +64,7 @@ type RoomResponse =
         id: string
         role: 'owner' | 'admin' | 'participant'
         status: 'pending' | 'approved' | 'rejected' | 'left'
+        displayName?: string | null
         handRaised: boolean
       } | null
     }
@@ -101,6 +102,17 @@ type MeetRoomClientProps = {
 
 type JoinState = 'idle' | 'loading' | 'connected' | 'error'
 type InviteFeedback = 'idle' | 'copied'
+
+const MAX_DISPLAY_NAME_LENGTH = 60
+const NAME_REQUIRED_MESSAGE = 'Informe seu nome para entrar na chamada.'
+
+function normalizeDisplayName(value: string) {
+  return value.trim().slice(0, MAX_DISPLAY_NAME_LENGTH)
+}
+
+function isValidDisplayName(value: string) {
+  return normalizeDisplayName(value).length >= 2
+}
 
 function formatSeconds(totalSeconds: number) {
   const safeSeconds = Math.max(0, totalSeconds)
@@ -160,9 +172,11 @@ export function InviteActions({ compact = false }: { compact?: boolean }) {
 
 function PortugueseConference({
   handRaised,
+  hands,
   onToggleHand,
 }: {
   handRaised: boolean
+  hands: Extract<HandsResponse, { ok: true }>['hands']
   onToggleHand: () => void
 }) {
   const tracks = useTracks([
@@ -175,16 +189,39 @@ function PortugueseConference({
 
   const controlClass =
     'inline-flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-full border border-blue-500/30 bg-blue-950/35 px-4 py-2 text-sm font-semibold text-blue-50 shadow-lg shadow-blue-950/10 transition hover:border-blue-400/60 hover:bg-blue-500/20 hover:shadow-blue-500/15 data-[lk-enabled=false]:border-zinc-700 data-[lk-enabled=false]:bg-black/80 data-[lk-enabled=false]:text-zinc-400'
+  const handButtonClass = handRaised
+    ? 'inline-flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-full border border-amber-300/45 bg-amber-300/15 px-4 py-2 text-sm font-semibold text-amber-50 shadow-lg shadow-amber-950/20 transition hover:border-amber-200/70 hover:bg-amber-300/25'
+    : 'inline-flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-full border border-blue-400/35 bg-black px-4 py-2 text-sm font-semibold text-blue-50 shadow-lg shadow-blue-950/20 transition hover:border-blue-300/70 hover:bg-blue-600/20 hover:shadow-blue-500/15'
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-black">
-      <div className="min-h-0 flex-1 overflow-hidden bg-black">
+      <div className="relative min-h-0 flex-1 overflow-hidden bg-black">
         <GridLayout
           tracks={tracks}
           className="h-full p-2 sm:p-3 [&_.lk-participant-metadata]:hidden [&_.lk-participant-tile]:overflow-hidden [&_.lk-participant-tile]:rounded-[1.4rem] [&_.lk-participant-tile]:border [&_.lk-participant-tile]:border-blue-500/15 [&_.lk-participant-tile]:bg-zinc-950 [&_.lk-participant-tile]:shadow-xl"
         >
           <ParticipantTile />
         </GridLayout>
+
+        <div className="pointer-events-none absolute left-3 right-3 top-3 z-10 flex justify-end">
+          <div className="pointer-events-auto w-full max-w-sm rounded-2xl border border-blue-400/25 bg-black/75 p-3 shadow-2xl shadow-blue-950/30 backdrop-blur-md">
+            <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-blue-100">
+              <Hand className="h-3.5 w-3.5 text-blue-300" />
+              Mãos levantadas
+            </div>
+            {hands.length === 0 ? (
+              <p className="text-sm text-zinc-400">Ninguém levantou a mão.</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {hands.map((item) => (
+                  <span key={item.userId} className="rounded-full border border-blue-300/35 bg-blue-500/20 px-3 py-1.5 text-xs font-semibold text-blue-50">
+                    ✋ {item.displayName || 'Participante'}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       <RoomAudioRenderer />
@@ -192,7 +229,7 @@ function PortugueseConference({
       <div className="flex shrink-0 flex-wrap items-center justify-center gap-2 border-t border-blue-500/15 bg-blue-950/15 px-3 py-3 shadow-[0_-18px_40px_rgba(30,64,175,0.12)] backdrop-blur">
         <InviteActions compact />
 
-        <button type="button" onClick={onToggleHand} className={controlClass}>
+        <button type="button" onClick={onToggleHand} className={handButtonClass}>
           <Hand className="h-4 w-4 shrink-0" />
           <span>{handRaised ? 'Baixar mão' : 'Levantar mão'}</span>
         </button>
@@ -238,6 +275,9 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
   const isModerator = membership?.status === 'approved' && (membership.role === 'owner' || membership.role === 'admin')
   const isApproved = membership?.status === 'approved'
   const expired = roomData?.status === 'expired' || roomData?.status === 'ended' || secondsLeft === 0
+  const inCall = joinState === 'connected' && Boolean(accessToken && serverUrl)
+  const normalizedParticipantName = normalizeDisplayName(participantName)
+  const participantNameIsValid = isValidDisplayName(participantName)
 
   const authHeaders = useCallback(async () => {
     const {
@@ -272,6 +312,9 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
     setError(null)
     setRoomData(data.room)
     setMembership(data.membership)
+    if (data.membership?.displayName && isValidDisplayName(data.membership.displayName)) {
+      setParticipantName(normalizeDisplayName(data.membership.displayName))
+    }
   }, [authHeaders, roomName])
 
   const loadRequests = useCallback(async () => {
@@ -285,19 +328,67 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
   }, [authHeaders, isModerator, roomName])
 
   const loadHands = useCallback(async () => {
-    if (!isApproved) return
+    if (!inCall) return
     const headers = await authHeaders()
     if (!headers) return
 
     const response = await fetch(`/api/meet/rooms/${encodeURIComponent(roomName)}/hands`, { headers })
     const data = (await response.json()) as HandsResponse
     if (response.ok && data.ok) setHands(data.hands)
-  }, [authHeaders, isApproved, roomName])
+  }, [authHeaders, inCall, roomName])
 
   useEffect(() => {
     setParticipantName(`Convidado-${Math.floor(1000 + Math.random() * 9000)}`)
     void loadRoom()
   }, [loadRoom])
+
+  useEffect(() => {
+    let active = true
+
+    async function loadSuggestedDisplayName() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!active || !user) return
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('display_name, username')
+        .eq('id', user.id)
+        .maybeSingle()
+
+      if (!active) return
+
+      const profileData = profile as {
+        username?: string | null
+        display_name?: string | null
+      } | null
+      const metadata = user.user_metadata as { full_name?: string; name?: string; username?: string } | null
+      const emailName = typeof user.email === 'string' ? user.email.split('@')[0] : ''
+      const suggestedName =
+        metadata?.full_name ||
+        metadata?.name ||
+        profileData?.display_name ||
+        metadata?.username ||
+        profileData?.username ||
+        emailName
+
+      if (isValidDisplayName(suggestedName || '')) {
+        setParticipantName((current) =>
+          current && !current.startsWith('Convidado-')
+            ? current
+            : normalizeDisplayName(suggestedName || ''),
+        )
+      }
+    }
+
+    void loadSuggestedDisplayName()
+
+    return () => {
+      active = false
+    }
+  }, [])
 
   useEffect(() => {
     if (!roomData?.expiresAt) return
@@ -327,17 +418,25 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
   }, [isModerator, loadRequests])
 
   useEffect(() => {
-    if (!isApproved) return
+    if (!inCall) {
+      setHands([])
+      return
+    }
     void loadHands()
     const timer = window.setInterval(() => void loadHands(), 5000)
     return () => window.clearInterval(timer)
-  }, [isApproved, loadHands])
+  }, [inCall, loadHands])
 
   const canJoin = useMemo(() => {
-    return roomName.trim().length > 0 && participantName.trim().length > 0 && isApproved && !expired
-  }, [expired, isApproved, participantName, roomName])
+    return roomName.trim().length > 0 && participantNameIsValid && isApproved && !expired
+  }, [expired, isApproved, participantNameIsValid, roomName])
 
   async function requestAccess() {
+    if (!participantNameIsValid) {
+      setError(NAME_REQUIRED_MESSAGE)
+      return
+    }
+
     setRequesting(true)
     setError(null)
     const headers = await authHeaders()
@@ -349,9 +448,10 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
 
     const response = await fetch(`/api/meet/rooms/${encodeURIComponent(roomName)}/request-access`, {
       method: 'POST',
-      headers,
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ displayName: normalizedParticipantName }),
     })
-    const data = (await response.json()) as { ok: boolean; status?: string; error?: string }
+    const data = (await response.json()) as { ok: boolean; status?: string; displayName?: string; error?: string }
 
     setRequesting(false)
 
@@ -360,6 +460,7 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
       return
     }
 
+    if (data.displayName) setParticipantName(data.displayName)
     await loadRoom()
   }
 
@@ -380,7 +481,7 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
 
   async function toggleHand() {
     const headers = await authHeaders()
-    if (!headers || !membership) return
+    if (!headers || !membership || !inCall) return
 
     const response = await fetch(`/api/meet/rooms/${encodeURIComponent(roomName)}/hand`, {
       method: 'POST',
@@ -396,6 +497,11 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
   }
 
   async function handleJoin() {
+    if (!participantNameIsValid) {
+      setError(NAME_REQUIRED_MESSAGE)
+      return
+    }
+
     if (!canJoin) {
       setError(expired ? 'O tempo gratuito desta sala acabou.' : 'Você ainda não tem autorização para entrar nesta sala.')
       return
@@ -420,7 +526,7 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
           ...headers,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ roomName, participantName }),
+        body: JSON.stringify({ roomName, participantName: normalizedParticipantName }),
       })
       const data = (await response.json()) as TokenResponse
 
@@ -437,7 +543,7 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
     }
   }
 
-  if (joinState === 'connected' && accessToken && serverUrl) {
+  if (inCall && accessToken && serverUrl) {
     return (
       <div className="mx-auto flex h-[calc(100vh-146px)] max-h-[720px] min-h-[460px] w-full max-w-7xl flex-col overflow-hidden rounded-[1.7rem] border border-blue-500/20 bg-black shadow-2xl shadow-blue-950/30 ring-1 ring-blue-400/10 max-sm:h-[calc(100vh-176px)] max-sm:min-h-[520px]">
         <LiveKitRoom
@@ -460,7 +566,7 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
             setServerUrl(null)
           }}
         >
-          <PortugueseConference handRaised={Boolean(membership?.handRaised)} onToggleHand={toggleHand} />
+          <PortugueseConference handRaised={Boolean(membership?.handRaised)} hands={hands} onToggleHand={toggleHand} />
         </LiveKitRoom>
       </div>
     )
@@ -508,15 +614,35 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
             </Link>
           ) : null}
 
+          {roomData && !expired ? (
+            <div className="mb-5">
+              <label className="block text-sm font-semibold text-blue-100" htmlFor="participant-name">
+                Nome na chamada
+              </label>
+              <input
+                id="participant-name"
+                value={participantName}
+                maxLength={MAX_DISPLAY_NAME_LENGTH}
+                onChange={(event) => setParticipantName(event.target.value)}
+                aria-invalid={!participantNameIsValid}
+                className="mt-3 w-full rounded-full border border-blue-500/20 bg-black/55 px-4 py-3 text-base text-white outline-none transition placeholder:text-zinc-600 focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10 aria-[invalid=true]:border-red-400/70 aria-[invalid=true]:focus:ring-red-500/10"
+                placeholder="Seu nome"
+              />
+              {!participantNameIsValid ? (
+                <p className="mt-2 text-sm font-medium text-red-200">{NAME_REQUIRED_MESSAGE}</p>
+              ) : null}
+            </div>
+          ) : null}
+
           {roomData && !membership && !expired ? (
-            <button type="button" onClick={requestAccess} disabled={requesting} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-blue-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-blue-600/25 transition hover:bg-blue-500 disabled:opacity-60">
+            <button type="button" onClick={requestAccess} disabled={requesting || !participantNameIsValid} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-blue-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-blue-600/25 transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50">
               {requesting ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserCheck className="h-4 w-4" />}
               Pedir entrada
             </button>
           ) : null}
 
           {roomData && membership?.status === 'rejected' && !expired ? (
-            <button type="button" onClick={requestAccess} disabled={requesting} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-blue-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-blue-600/25 transition hover:bg-blue-500 disabled:opacity-60">
+            <button type="button" onClick={requestAccess} disabled={requesting || !participantNameIsValid} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-blue-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-blue-600/25 transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50">
               {requesting ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserCheck className="h-4 w-4" />}
               Pedir novamente
             </button>
@@ -524,27 +650,7 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
 
           {isApproved ? (
             <>
-              <label className="block text-sm font-semibold text-blue-100" htmlFor="participant-name">
-                Nome na chamada
-              </label>
-              <input
-                id="participant-name"
-                value={participantName}
-                maxLength={80}
-                onChange={(event) => setParticipantName(event.target.value)}
-                className="mt-3 w-full rounded-full border border-blue-500/20 bg-black/55 px-4 py-3 text-base text-white outline-none transition placeholder:text-zinc-600 focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10"
-                placeholder="Seu nome"
-              />
-
               <div className="mt-4 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={toggleHand}
-                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-blue-500/30 bg-blue-950/35 px-4 py-2 text-sm font-semibold text-blue-50 transition hover:border-blue-400/60 hover:bg-blue-500/20"
-                >
-                  <Hand className="h-4 w-4" />
-                  {membership?.handRaised ? 'Baixar mão' : 'Levantar mão'}
-                </button>
                 <button
                   type="button"
                   onClick={handleJoin}
@@ -604,23 +710,6 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
                 </div>
               </section>
 
-              <section>
-                <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-white">
-                  <Hand className="h-4 w-4 text-blue-300" />
-                  Mãos levantadas
-                </h3>
-                <div className="flex flex-wrap gap-2">
-                  {hands.length === 0 ? (
-                    <span className="rounded-full border border-blue-500/15 bg-black/30 px-3 py-1.5 text-xs text-zinc-400">Ninguém levantou a mão.</span>
-                  ) : (
-                    hands.map((item) => (
-                      <span key={item.userId} className="rounded-full border border-blue-400/35 bg-blue-500/15 px-3 py-1.5 text-xs font-semibold text-blue-50">
-                        {item.displayName || 'Usuário EntreUS'}
-                      </span>
-                    ))
-                  )}
-                </div>
-              </section>
             </div>
           ) : (
             <div className="flex min-h-[300px] items-center justify-center">

@@ -12,7 +12,7 @@ import { AccessToken } from 'livekit-server-sdk'
 import { NextResponse } from 'next/server'
 
 const MAX_ROOM_NAME_LENGTH = 80
-const MAX_PARTICIPANT_NAME_LENGTH = 80
+const MAX_PARTICIPANT_NAME_LENGTH = 60
 
 type TokenRequestBody = {
   roomName?: unknown
@@ -36,6 +36,13 @@ function validateTextField(value: unknown, fieldName: string, maxLength: number)
   }
 
   return { value: trimmed }
+}
+
+function sanitizeOptionalTextField(value: unknown, maxLength: number) {
+  if (typeof value !== 'string') return null
+
+  const trimmed = value.trim().slice(0, maxLength)
+  return trimmed.length >= 2 ? trimmed : null
 }
 
 export async function POST(request: Request) {
@@ -64,21 +71,11 @@ export async function POST(request: Request) {
   }
 
   const roomName = validateTextField(body.roomName, 'roomName', MAX_ROOM_NAME_LENGTH)
-  const participantName = validateTextField(
-    body.participantName,
-    'participantName',
-    MAX_PARTICIPANT_NAME_LENGTH,
-  )
-
   if (roomName.error) {
     return jsonError(roomName.error, 400)
   }
 
-  if (participantName.error) {
-    return jsonError(participantName.error, 400)
-  }
-
-  if (!roomName.value || !participantName.value) {
+  if (!roomName.value) {
     return jsonError('Dados obrigatórios ausentes.', 400)
   }
 
@@ -105,6 +102,25 @@ export async function POST(request: Request) {
       return jsonError('Você ainda não tem autorização para entrar nesta sala.', 403)
     }
 
+    const requestedParticipantName = sanitizeOptionalTextField(
+      body.participantName,
+      MAX_PARTICIPANT_NAME_LENGTH,
+    )
+    const participantName =
+      requestedParticipantName ||
+      sanitizeOptionalTextField(membership?.display_name, MAX_PARTICIPANT_NAME_LENGTH)
+
+    if (!participantName) {
+      return jsonError('Informe seu nome para entrar na chamada.', 400)
+    }
+
+    if (requestedParticipantName && membership?.display_name !== requestedParticipantName) {
+      await supabase
+        .from('meet_room_members')
+        .update({ display_name: requestedParticipantName })
+        .eq('id', membership!.id)
+    }
+
     const secondsLeft = Math.max(
       60,
       Math.floor((Date.parse(updatedRoom.expires_at) - Date.now()) / 1000),
@@ -113,7 +129,7 @@ export async function POST(request: Request) {
     const identity = `${auth.user.id}-${crypto.randomUUID().slice(0, 8)}`
     const accessToken = new AccessToken(livekitApiKey, livekitApiSecret, {
       identity,
-      name: participantName.value,
+      name: participantName,
       ttl: tokenTtl,
     })
 
@@ -132,7 +148,7 @@ export async function POST(request: Request) {
       token,
       url: livekitUrl,
       roomName: updatedRoom.room_name,
-      participantName: participantName.value,
+      participantName,
     })
   } catch {
     return jsonError('Não foi possível gerar o token LiveKit.', 500)

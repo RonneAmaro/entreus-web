@@ -185,6 +185,7 @@ export function publicMembership(member: MeetMember | null) {
     id: member.id,
     role: member.role,
     status: member.status,
+    displayName: member.display_name,
     handRaised: member.hand_raised,
   }
 }
