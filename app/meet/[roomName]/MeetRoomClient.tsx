@@ -12,9 +12,11 @@ import {
 import '@livekit/components-styles'
 import {
   Loader2,
+  Link2,
   Mic,
   MonitorUp,
   PhoneOff,
+  Share2,
   ShieldCheck,
   Video,
 } from 'lucide-react'
@@ -39,6 +41,56 @@ type MeetRoomClientProps = {
 }
 
 type JoinState = 'idle' | 'loading' | 'connected' | 'error'
+type InviteFeedback = 'idle' | 'copied'
+
+export function InviteActions({ compact = false }: { compact?: boolean }) {
+  const [feedback, setFeedback] = useState<InviteFeedback>('idle')
+
+  async function copyRoomLink() {
+    if (typeof window === 'undefined') return
+
+    await navigator.clipboard.writeText(window.location.href)
+    setFeedback('copied')
+    window.setTimeout(() => setFeedback('idle'), 2500)
+  }
+
+  async function shareRoom() {
+    if (typeof window === 'undefined') return
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'EntreUS Meet',
+          text: 'Entre na minha sala do EntreUS Meet',
+          url: window.location.href,
+        })
+        return
+      } catch {
+        return
+      }
+    }
+
+    await copyRoomLink()
+  }
+
+  const baseClass = compact
+    ? 'inline-flex min-h-10 items-center justify-center gap-2 rounded-full border border-blue-500/30 bg-blue-950/35 px-3 py-2 text-xs font-semibold text-blue-50 transition hover:border-blue-400/60 hover:bg-blue-500/20'
+    : 'inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-blue-500/30 bg-blue-950/35 px-4 py-2 text-sm font-semibold text-blue-50 shadow-lg shadow-blue-950/10 transition hover:border-blue-400/60 hover:bg-blue-500/20 hover:shadow-blue-500/15'
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      <button type="button" onClick={copyRoomLink} className={baseClass}>
+        <Link2 className="h-4 w-4 shrink-0" />
+        {feedback === 'copied' ? 'Link copiado!' : 'Copiar link da sala'}
+      </button>
+
+      <button type="button" onClick={shareRoom} className={baseClass}>
+        <Share2 className="h-4 w-4 shrink-0" />
+        Compartilhar sala
+      </button>
+    </div>
+  )
+}
 
 function PortugueseConference() {
   const tracks = useTracks([
@@ -66,6 +118,8 @@ function PortugueseConference() {
       <RoomAudioRenderer />
 
       <div className="flex shrink-0 flex-wrap items-center justify-center gap-2 border-t border-blue-500/15 bg-blue-950/15 px-3 py-3 shadow-[0_-18px_40px_rgba(30,64,175,0.12)] backdrop-blur">
+        <InviteActions compact />
+
         <TrackToggle
           source={Track.Source.Microphone}
           showIcon={false}
@@ -252,6 +306,10 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
               'Entrar na sala'
             )}
           </button>
+
+          <div className="mt-4">
+            <InviteActions />
+          </div>
         </div>
 
         <aside className="flex min-h-[300px] items-center justify-center border-t border-blue-500/15 bg-blue-950/10 p-5 lg:border-l lg:border-t-0 sm:p-8">

@@ -1,7 +1,7 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
-import MeetRoomClient from './MeetRoomClient'
+import MeetRoomClient, { InviteActions } from './MeetRoomClient'
 
 type MeetPageProps = {
   params: Promise<{
@@ -59,11 +59,14 @@ export default async function MeetRoomPage({ params }: MeetPageProps) {
               </p>
             </div>
 
-            <div className="inline-flex max-w-full items-center gap-2 rounded-full border border-blue-500/20 bg-blue-950/20 px-4 py-2 text-sm text-zinc-300">
-              <span className="shrink-0 text-blue-200/70">Sala:</span>
-              <strong className="truncate font-semibold text-white">
-                {decodedRoomName}
-              </strong>
+            <div className="flex flex-col gap-2 sm:items-end">
+              <div className="inline-flex max-w-full items-center gap-2 rounded-full border border-blue-500/20 bg-blue-950/20 px-4 py-2 text-sm text-zinc-300">
+                <span className="shrink-0 text-blue-200/70">Sala:</span>
+                <strong className="truncate font-semibold text-white">
+                  {decodedRoomName}
+                </strong>
+              </div>
+              <InviteActions compact />
             </div>
           </div>
         </header>

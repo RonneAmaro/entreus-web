@@ -137,6 +137,9 @@ export default function MeetPage() {
               <p className="mt-1 text-sm text-blue-100/60">
                 Digite um nome simples para criar ou acessar uma sala.
               </p>
+              <p className="mt-1 text-sm text-blue-100/60">
+                Depois de entrar, copie o link da sala para convidar outras pessoas.
+              </p>
 
               <div className="mt-4 flex flex-col gap-3 sm:flex-row">
                 <input
