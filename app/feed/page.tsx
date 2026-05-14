@@ -89,6 +89,23 @@ type Comment = {
   content: string
   created_at: string
   profiles: ProfileSummary | null
+  media?: CommentMedia[]
+}
+
+type CommentMedia = {
+  id: string
+  comment_id: string
+  user_id: string
+  media_url: string
+  media_type: 'image' | 'video' | 'gif'
+  created_at?: string
+}
+
+type CommentMediaDraft = {
+  file?: File
+  url: string
+  type: 'image' | 'video' | 'gif'
+  source: 'file' | 'gif-url'
 }
 
 type Like = {
@@ -425,6 +442,9 @@ function FeedContent() {
   const [copiedPostId, setCopiedPostId] = useState<string | null>(null)
 
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({})
+  const [commentMediaDrafts, setCommentMediaDrafts] = useState<Record<string, CommentMediaDraft | null>>({})
+  const [commentGifInputs, setCommentGifInputs] = useState<Record<string, string>>({})
+  const [openGifPickerPostId, setOpenGifPickerPostId] = useState<string | null>(null)
   const [openCommentEmojiPickerPostId, setOpenCommentEmojiPickerPostId] = useState<string | null>(null)
   const [replyModalPostId, setReplyModalPostId] = useState<string | null>(null)
   const [editingPostId, setEditingPostId] = useState<string | null>(null)
@@ -787,7 +807,35 @@ function FeedContent() {
       }))
       .filter((comment: Comment) => !currentBlockedIds.includes(comment.user_id))
 
-    setComments(normalizedComments)
+    const commentIds = normalizedComments.map((comment: Comment) => comment.id)
+    let mediaByComment: Record<string, CommentMedia[]> = {}
+
+    if (commentIds.length > 0) {
+      const { data: mediaData, error: mediaError } = await supabase
+        .from('comment_media')
+        .select('id, comment_id, user_id, media_url, media_type, created_at')
+        .in('comment_id', commentIds)
+
+      if (mediaError) {
+        console.warn('Mídias de comentários ainda não disponíveis:', mediaError.message)
+      } else {
+        mediaByComment = ((mediaData || []) as CommentMedia[]).reduce(
+          (acc, mediaItem) => {
+            if (!acc[mediaItem.comment_id]) acc[mediaItem.comment_id] = []
+            acc[mediaItem.comment_id].push(mediaItem)
+            return acc
+          },
+          {} as Record<string, CommentMedia[]>
+        )
+      }
+    }
+
+    setComments(
+      normalizedComments.map((comment: Comment) => ({
+        ...comment,
+        media: mediaByComment[comment.id] || [],
+      }))
+    )
   }
 
   async function loadLikes() {
@@ -1226,6 +1274,89 @@ function FeedContent() {
     }
   }
 
+  async function uploadCommentMediaFile(
+    draft: CommentMediaDraft
+  ): Promise<{ url: string; type: 'image' | 'video' | 'gif' } | null> {
+    if (draft.source === 'gif-url') {
+      return {
+        url: draft.url,
+        type: 'gif',
+      }
+    }
+
+    if (!draft.file) return null
+
+    const file = draft.file
+    const mediaType: 'image' | 'video' | 'gif' | null =
+      file.type === 'image/gif'
+        ? 'gif'
+        : isImage(file)
+          ? 'image'
+          : isVideo(file)
+            ? 'video'
+            : null
+
+    if (!mediaType) {
+      setMessage(t('feed.messages.unsupportedMedia'))
+      return null
+    }
+
+    const maxSizeInBytes = mediaType === 'video' ? 30 * 1024 * 1024 : 5 * 1024 * 1024
+
+    if (file.size > maxSizeInBytes) {
+      setMessage(mediaType === 'video' ? t('feed.messages.videoTooLarge') : t('feed.messages.imageTooLarge'))
+      return null
+    }
+
+    try {
+      const presignResponse = await fetch('/api/r2/presign', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          fileName: file.name,
+          contentType: file.type,
+          folder: 'comments',
+        }),
+      })
+
+      const presignData = (await presignResponse.json().catch(() => null)) as {
+        ok?: boolean
+        uploadUrl?: string
+        publicUrl?: string
+        message?: string
+        error?: string
+      } | null
+
+      if (!presignResponse.ok || !presignData?.ok || !presignData.uploadUrl || !presignData.publicUrl) {
+        setMessage(presignData?.message || presignData?.error || 'Falha ao preparar mídia do comentário.')
+        return null
+      }
+
+      const uploadResponse = await fetch(presignData.uploadUrl, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': file.type,
+        },
+        body: file,
+      })
+
+      if (!uploadResponse.ok) {
+        setMessage('Não foi possível enviar a mídia do comentário.')
+        return null
+      }
+
+      return {
+        url: presignData.publicUrl,
+        type: mediaType,
+      }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Erro inesperado no upload do comentário.')
+      return null
+    }
+  }
+
   async function handleCreatePost({
     content,
     category,
@@ -1241,12 +1372,12 @@ function FeedContent() {
 
     if (!content.trim() && finalMediaFiles.length === 0) {
       setMessage(t('feed.messages.emptyPost'))
-      return
+      return false
     }
 
     if (finalMediaFiles.length > 5) {
       setMessage(t('feed.messages.maxMediaPost'))
-      return
+      return false
     }
 
     setMessage('')
@@ -1260,7 +1391,7 @@ function FeedContent() {
       const uploaded = await uploadMediaFile(file)
 
       if (!uploaded) {
-        return
+        return false
       }
 
       uploadedMedia.push(uploaded)
@@ -1285,7 +1416,7 @@ function FeedContent() {
 
     if (error) {
       setMessage(t('feed.messages.publishError') + error.message)
-      return
+      return false
     }
 
     if (insertedPost?.id && uploadedMedia.length > 0) {
@@ -1316,7 +1447,7 @@ function FeedContent() {
         await loadBookmarks(userId)
         await loadReposts(blockedUserIds)
 
-        return
+        return false
       }
     }
 
@@ -1333,6 +1464,8 @@ function FeedContent() {
     await loadCommentLikes()
     await loadBookmarks(userId)
     await loadReposts(blockedUserIds)
+
+    return true
   }
 
   async function handleDeletePost(postId: string) {
@@ -1414,8 +1547,9 @@ function FeedContent() {
 
   async function handleCreateComment(postId: string) {
     const text = commentInputs[postId]?.trim()
+    const mediaDraft = commentMediaDrafts[postId]
 
-    if (!text) {
+    if (!text && !mediaDraft) {
       setMessage(t('feed.messages.emptyComment'))
       return
     }
@@ -1425,7 +1559,7 @@ function FeedContent() {
       .insert({
         post_id: postId,
         user_id: userId,
-        content: text,
+        content: text || '',
       })
       .select('id')
       .single()
@@ -1433,6 +1567,27 @@ function FeedContent() {
     if (error) {
       setMessage(t('feed.messages.commentError') + error.message)
       return
+    }
+
+    if (insertedComment?.id && mediaDraft) {
+      const uploadedCommentMedia = await uploadCommentMediaFile(mediaDraft)
+
+      if (!uploadedCommentMedia) return
+
+      const { error: mediaError } = await supabase
+        .from('comment_media')
+        .insert({
+          comment_id: insertedComment.id,
+          user_id: userId,
+          media_url: uploadedCommentMedia.url,
+          media_type: uploadedCommentMedia.type,
+        })
+
+      if (mediaError) {
+        setMessage('Comentário criado, mas a mídia não foi salva. Aplique a migration de mídias de comentários no Supabase.')
+        await loadComments()
+        return
+      }
     }
 
     const commentedPost = posts.find((post) => post.id === postId)
@@ -1451,6 +1606,12 @@ function FeedContent() {
       ...prev,
       [postId]: '',
     }))
+    removeCommentMediaDraft(postId)
+    setCommentGifInputs((prev) => ({
+      ...prev,
+      [postId]: '',
+    }))
+    setOpenGifPickerPostId(null)
     setOpenCommentEmojiPickerPostId(null)
     setReplyModalPostId((current) => (current === postId ? null : current))
 
@@ -1695,6 +1856,70 @@ function FeedContent() {
     }, 50)
   }
 
+  function handleSelectCommentMedia(postId: string, files: FileList | null) {
+    const file = files?.[0]
+
+    if (!file) return
+
+    if (!isImage(file) && !isVideo(file)) {
+      setMessage(t('feed.messages.unsupportedMedia'))
+      return
+    }
+
+    setCommentMediaDrafts((current) => {
+      const previousDraft = current[postId]
+
+      if (previousDraft?.source === 'file') {
+        URL.revokeObjectURL(previousDraft.url)
+      }
+
+      return {
+        ...current,
+        [postId]: {
+          file,
+          url: URL.createObjectURL(file),
+          type: file.type === 'image/gif' ? 'gif' : isVideo(file) ? 'video' : 'image',
+          source: 'file',
+        },
+      }
+    })
+  }
+
+  function removeCommentMediaDraft(postId: string) {
+    setCommentMediaDrafts((current) => {
+      const previousDraft = current[postId]
+
+      if (previousDraft?.source === 'file') {
+        URL.revokeObjectURL(previousDraft.url)
+      }
+
+      return {
+        ...current,
+        [postId]: null,
+      }
+    })
+  }
+
+  function handleAddGifUrl(postId: string) {
+    const gifUrl = (commentGifInputs[postId] || '').trim()
+
+    if (!/^https?:\/\/.{1,500}$/i.test(gifUrl)) {
+      setMessage('Cole um link de GIF válido começando com http:// ou https://.')
+      return
+    }
+
+    removeCommentMediaDraft(postId)
+    setCommentMediaDrafts((current) => ({
+      ...current,
+      [postId]: {
+        url: gifUrl,
+        type: 'gif',
+        source: 'gif-url',
+      },
+    }))
+    setOpenGifPickerPostId(null)
+  }
+
   function handleOpenReplyModal(postId: string) {
     setReplyModalPostId(postId)
     setOpenCommentEmojiPickerPostId(null)
@@ -1715,8 +1940,9 @@ function FeedContent() {
 
   async function handleSubmitReplyModal(postId: string) {
     const text = commentInputs[postId]?.trim()
+    const mediaDraft = commentMediaDrafts[postId]
 
-    if (!text) {
+    if (!text && !mediaDraft) {
       setMessage(t('feed.messages.emptyComment'))
       return
     }
@@ -2006,6 +2232,40 @@ function FeedContent() {
                     className="min-h-32 w-full resize-none bg-transparent py-2 text-lg text-zinc-950 outline-none placeholder:text-zinc-400 dark:text-white"
                   />
 
+                  {commentMediaDrafts[replyModalPost.id] && (
+                    <div className="mb-3 overflow-hidden rounded-[1.5rem] border border-blue-400/20 bg-black/90 shadow-lg shadow-blue-950/10">
+                      {commentMediaDrafts[replyModalPost.id]?.type === 'video' ? (
+                        <video
+                          src={commentMediaDrafts[replyModalPost.id]?.url}
+                          controls
+                          playsInline
+                          preload="metadata"
+                          className="max-h-72 w-full bg-black object-contain"
+                        />
+                      ) : (
+                        <img
+                          src={commentMediaDrafts[replyModalPost.id]?.url}
+                          alt="Prévia da mídia do comentário"
+                          className="max-h-72 w-full object-contain"
+                        />
+                      )}
+
+                      <div className="flex items-center justify-between gap-3 border-t border-white/10 px-3 py-2">
+                        <span className="text-xs font-bold uppercase tracking-[0.14em] text-blue-200">
+                          {commentMediaDrafts[replyModalPost.id]?.type === 'gif' ? 'GIF' : 'Mídia'}
+                        </span>
+
+                        <button
+                          type="button"
+                          onClick={() => removeCommentMediaDraft(replyModalPost.id)}
+                          className="rounded-full bg-white/10 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-white/20"
+                        >
+                          Remover
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   {openCommentEmojiPickerPostId === replyModalPost.id && (
                     <div className="mb-3 max-h-[45vh] overflow-hidden rounded-[1.75rem] border border-zinc-200/70 bg-white/95 shadow-2xl shadow-black/15 backdrop-blur-xl dark:border-zinc-700/70 dark:bg-zinc-950/95 sm:max-h-[260px]">
                       <div className="border-b border-zinc-200/70 bg-gradient-to-br from-blue-50 via-white to-purple-50 p-3 dark:border-zinc-800 dark:from-blue-950/30 dark:via-zinc-950 dark:to-purple-950/30">
@@ -2075,20 +2335,64 @@ function FeedContent() {
                     </div>
                   )}
 
+                  {openGifPickerPostId === replyModalPost.id && (
+                    <div className="mb-3 rounded-[1.5rem] border border-blue-400/20 bg-zinc-950/95 p-3 shadow-2xl shadow-blue-950/20 ring-1 ring-white/10">
+                      <label className="text-xs font-black uppercase tracking-[0.14em] text-blue-200">
+                        Cole o link do GIF
+                      </label>
+
+                      <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                        <input
+                          type="url"
+                          value={commentGifInputs[replyModalPost.id] || ''}
+                          onChange={(event) =>
+                            setCommentGifInputs((prev) => ({
+                              ...prev,
+                              [replyModalPost.id]: event.target.value.slice(0, 500),
+                            }))
+                          }
+                          placeholder="https://..."
+                          className="min-w-0 flex-1 rounded-full border border-white/10 bg-black/40 px-4 py-2.5 text-sm text-white outline-none transition placeholder:text-zinc-500 focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10"
+                        />
+
+                        <button
+                          type="button"
+                          onClick={() => handleAddGifUrl(replyModalPost.id)}
+                          className="rounded-full bg-blue-600 px-4 py-2.5 text-sm font-black text-white transition hover:bg-blue-700"
+                        >
+                          Adicionar GIF
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="sticky bottom-0 z-10 mt-3 flex items-center justify-between border-t border-zinc-200/70 bg-zinc-50/95 py-3 backdrop-blur dark:border-zinc-800/70 dark:bg-zinc-950/95">
                     <div className="flex items-center gap-1.5 text-blue-600 dark:text-blue-400">
-                      <button
-                        type="button"
-                        className="flex h-9 w-9 items-center justify-center rounded-full transition hover:bg-blue-50 dark:hover:bg-blue-950/40"
-                        title="Imagem futuramente"
+                      <label
+                        className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full transition hover:bg-blue-50 dark:hover:bg-blue-950/40"
+                        title="Adicionar imagem ou vídeo"
                       >
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime"
+                          className="hidden"
+                          onChange={(event) => {
+                            handleSelectCommentMedia(replyModalPost.id, event.target.files)
+                            event.currentTarget.value = ''
+                          }}
+                        />
                         <ImageIcon className="h-5 w-5" />
-                      </button>
+                      </label>
 
                       <button
                         type="button"
+                        onClick={() =>
+                          setOpenGifPickerPostId((current) =>
+                            current === replyModalPost.id ? null : replyModalPost.id
+                          )
+                        }
                         className="flex h-9 min-w-9 items-center justify-center rounded-full px-2 text-xs font-black transition hover:bg-blue-50 dark:hover:bg-blue-950/40"
-                        title="GIF futuramente"
+                        title="Adicionar GIF"
                       >
                         GIF
                       </button>
@@ -2113,7 +2417,7 @@ function FeedContent() {
                       <button
                         type="button"
                         className="flex h-9 w-9 items-center justify-center rounded-full transition hover:bg-blue-50 dark:hover:bg-blue-950/40"
-                        title="Enquete futuramente"
+                        title="Enquete preparada na migration"
                       >
                         <Sparkles className="h-5 w-5" />
                       </button>
@@ -2122,7 +2426,7 @@ function FeedContent() {
                     <button
                       type="button"
                       onClick={() => handleSubmitReplyModal(replyModalPost.id)}
-                      disabled={!commentInputs[replyModalPost.id]?.trim()}
+                      disabled={!commentInputs[replyModalPost.id]?.trim() && !commentMediaDrafts[replyModalPost.id]}
                       className="rounded-full bg-blue-600 px-5 py-2.5 text-sm font-black text-white shadow-sm shadow-blue-600/20 transition hover:scale-[1.02] hover:bg-blue-700 active:scale-95 disabled:cursor-not-allowed disabled:bg-zinc-300 disabled:text-zinc-600 dark:disabled:bg-zinc-800 dark:disabled:text-zinc-500"
                     >
                       Responder
@@ -2150,7 +2454,7 @@ function FeedContent() {
 
             <div
               id="post-composer"
-              className="mb-6 scroll-mt-24 rounded-[2rem] border border-zinc-200/70 bg-white/95 p-3 shadow-sm ring-1 ring-black/5 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-black/80 dark:ring-white/10 sm:p-4"
+              className="mb-4 scroll-mt-24"
             >
               <PostComposer
                 userName={currentProfile?.display_name || currentProfile?.username || email || t('common.user')}
@@ -2610,6 +2914,33 @@ function FeedContent() {
                                     <p className="mt-2 break-words text-zinc-800 dark:text-zinc-200">
                                       {comment.content}
                                     </p>
+                                  )}
+
+                                  {!isEditingThisComment && comment.media && comment.media.length > 0 && (
+                                    <div className="mt-3 space-y-2">
+                                      {comment.media.map((mediaItem) => (
+                                        <div
+                                          key={mediaItem.id}
+                                          className="overflow-hidden rounded-[1.25rem] border border-blue-400/15 bg-black shadow-sm shadow-blue-950/10"
+                                        >
+                                          {mediaItem.media_type === 'video' ? (
+                                            <video
+                                              src={mediaItem.media_url}
+                                              controls
+                                              playsInline
+                                              preload="metadata"
+                                              className="max-h-80 w-full bg-black object-contain"
+                                            />
+                                          ) : (
+                                            <img
+                                              src={mediaItem.media_url}
+                                              alt={mediaItem.media_type === 'gif' ? 'GIF do comentário' : 'Imagem do comentário'}
+                                              className="max-h-80 w-full object-contain"
+                                            />
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
                                   )}
 
                                   <div className="mt-2 flex items-center gap-3">

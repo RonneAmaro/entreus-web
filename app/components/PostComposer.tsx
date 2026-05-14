@@ -1,15 +1,18 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
   Globe2,
   ImagePlus,
   Lock,
   Play,
   Send,
+  Smile,
   Tag,
   Trash2,
   Users,
+  X,
 } from 'lucide-react'
 import { useLanguage } from './LanguageProvider'
 
@@ -33,7 +36,7 @@ type PostComposerProps = {
     imageFile: File | null
     videoFile: File | null
     mediaFiles: File[]
-  }) => void | Promise<void>
+  }) => boolean | void | Promise<boolean | void>
 }
 
 const CATEGORY_OPTIONS = [
@@ -72,6 +75,32 @@ const VISIBILITY_OPTIONS: {
 const MAX_MEDIA_FILES = 5
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024
 const MAX_VIDEO_SIZE = 30 * 1024 * 1024
+const POST_EMOJI_GROUPS = [
+  {
+    title: 'Populares',
+    emojis: ['😀', '😍', '😂', '😎', '🔥', '❤️', '💙', '👏', '🙌', '🎉', '✨', '🚀'],
+  },
+  {
+    title: 'Emoções',
+    emojis: ['😮', '😢', '🥳', '🤔', '😘', '😜', '🥰', '😏', '😊', '😭', '😅', '🤩'],
+  },
+  {
+    title: 'Gestos',
+    emojis: ['👍', '👎', '🙏', '🫶', '💪', '🤝', '👊', '✌️', '🤙', '👋', '☝️', '🤞'],
+  },
+  {
+    title: 'Festa',
+    emojis: ['🎉', '🥳', '🎊', '🎁', '🏆', '⭐', '💎', '🌹', '📸', '🎥', '🎬', '🎵'],
+  },
+  {
+    title: 'Símbolos',
+    emojis: ['💬', '📌', '📢', '✅', '⚠️', '🔒', '🔗', '📝', '💯', '⚡', '🌎', '💡'],
+  },
+  {
+    title: 'EntreUS azul',
+    emojis: ['💙', '🫶', '🌎', '🚀', '✨', '💎', '🤝', '📣', '🌟', '🏠', '👥', '🛡️'],
+  },
+]
 
 function getInitial(name: string) {
   if (!name) return 'U'
@@ -94,12 +123,16 @@ export default function PostComposer({
 }: PostComposerProps) {
   const { t } = useLanguage()
   const mediaInputRef = useRef<HTMLInputElement | null>(null)
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
 
   const [content, setContent] = useState('')
   const [category, setCategory] = useState('cotidiano')
   const [visibility, setVisibility] = useState<VisibilityType>('public')
   const [media, setMedia] = useState<MediaPreview[]>([])
   const [error, setError] = useState('')
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [portalElement, setPortalElement] = useState<HTMLElement | null>(null)
 
   const selectedCategory = useMemo(() => {
     return CATEGORY_OPTIONS.find((item) => item.value === category)
@@ -114,6 +147,36 @@ export default function PostComposer({
       media.forEach((item) => URL.revokeObjectURL(item.url))
     }
   }, [media])
+
+  useEffect(() => {
+    setPortalElement(document.body)
+  }, [])
+
+  useEffect(() => {
+    if (!isModalOpen) return
+
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape' && content.trim().length === 0 && media.length === 0) {
+        setIsModalOpen(false)
+        setShowEmojiPicker(false)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+
+    const timer = window.setTimeout(() => {
+      textareaRef.current?.focus()
+    }, 80)
+
+    return () => {
+      document.body.style.overflow = previousOverflow
+      window.clearTimeout(timer)
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [content, isModalOpen, media.length])
 
   function addFiles(files: FileList | null) {
     if (!files || files.length === 0) return
@@ -176,6 +239,29 @@ export default function PostComposer({
     })
   }
 
+  function insertEmoji(emoji: string) {
+    const textarea = textareaRef.current
+
+    if (!textarea) {
+      setContent((current) => `${current}${emoji}`)
+      setShowEmojiPicker(false)
+      return
+    }
+
+    const selectionStart = textarea.selectionStart
+    const selectionEnd = textarea.selectionEnd
+    const nextContent = `${content.slice(0, selectionStart)}${emoji}${content.slice(selectionEnd)}`
+    const nextCursorPosition = selectionStart + emoji.length
+
+    setContent(nextContent)
+    setShowEmojiPicker(false)
+
+    window.requestAnimationFrame(() => {
+      textarea.focus()
+      textarea.setSelectionRange(nextCursorPosition, nextCursorPosition)
+    })
+  }
+
   async function handleSubmit() {
     const trimmedContent = content.trim()
 
@@ -190,7 +276,7 @@ export default function PostComposer({
     const videoFile = media.find((item) => item.type === 'video')?.file || null
     const mediaFiles = media.map((item) => item.file)
 
-    await onSubmit({
+    const result = await onSubmit({
       content: trimmedContent,
       category,
       visibility,
@@ -199,7 +285,11 @@ export default function PostComposer({
       mediaFiles,
     })
 
+    if (result === false) return
+
     setContent('')
+    setShowEmojiPicker(false)
+    setIsModalOpen(false)
     setMedia((current) => {
       current.forEach((item) => URL.revokeObjectURL(item.url))
       return []
@@ -207,9 +297,102 @@ export default function PostComposer({
   }
 
   const canPublish = content.trim().length > 0 || media.length > 0
+  const placeholderText = t('postComposer.placeholder').replace('{name}', userName)
 
   return (
-    <div className="border-b border-zinc-200 bg-white px-4 py-3 dark:border-zinc-800 dark:bg-black sm:rounded-2xl sm:border sm:px-4 sm:py-4">
+    <>
+      <div className="rounded-[1.35rem] border border-zinc-200/70 bg-white/90 px-3 py-2.5 shadow-sm ring-1 ring-black/5 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-zinc-950/80 dark:ring-white/10">
+        <div className="flex items-center gap-3">
+          {userAvatarUrl ? (
+            <img
+              src={userAvatarUrl}
+              alt={userName}
+              className="h-10 w-10 rounded-full border border-zinc-200 object-cover dark:border-zinc-800 sm:h-11 sm:w-11"
+            />
+          ) : (
+            <div className="flex h-10 w-10 items-center justify-center rounded-full border border-zinc-200 bg-zinc-100 text-sm font-bold text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200 sm:h-11 sm:w-11">
+              {getInitial(userName)}
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setIsModalOpen(true)}
+            className="min-w-0 flex-1 rounded-full px-2 py-2 text-left text-[15px] text-zinc-500 transition hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+          >
+            {placeholderText}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsModalOpen(true)}
+            className="hidden rounded-full bg-blue-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm shadow-blue-600/20 transition hover:bg-blue-700 sm:inline-flex"
+          >
+            {t('postComposer.post')}
+          </button>
+        </div>
+
+        <div className="mt-2 flex items-center gap-1 pl-[3.25rem] text-blue-600 dark:text-blue-400">
+          {[ImagePlus, Smile, Tag, selectedVisibility?.icon ? null : Globe2].map((Icon, index) =>
+            Icon ? (
+              <button
+                key={index}
+                type="button"
+                onClick={() => setIsModalOpen(true)}
+                className="flex h-8 w-8 items-center justify-center rounded-full transition hover:bg-blue-50 dark:hover:bg-blue-950/40"
+                aria-label="Abrir criador de post"
+              >
+                <Icon className="h-4 w-4" />
+              </button>
+            ) : null
+          )}
+
+          <button
+            type="button"
+            onClick={() => setIsModalOpen(true)}
+            className="flex h-8 w-8 items-center justify-center rounded-full transition hover:bg-blue-50 dark:hover:bg-blue-950/40"
+            aria-label="Abrir criador de post"
+          >
+            <span className="scale-90">{selectedVisibility?.icon}</span>
+          </button>
+        </div>
+      </div>
+
+      {portalElement && isModalOpen && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-end justify-center px-2 py-3 sm:items-center sm:px-4 sm:py-8">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" aria-hidden="true" />
+
+          <div className="relative z-[10000] flex max-h-[94dvh] w-full max-w-2xl flex-col overflow-hidden rounded-[2rem] border border-blue-400/20 bg-white shadow-2xl shadow-blue-950/25 ring-1 ring-white/10 dark:bg-zinc-950 sm:max-h-[90vh]">
+            <div className="flex shrink-0 items-center justify-between border-b border-zinc-200/70 bg-white/90 px-4 py-3 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-zinc-950/90">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsModalOpen(false)
+                  setShowEmojiPicker(false)
+                }}
+                className="flex h-10 w-10 items-center justify-center rounded-full text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-950 dark:hover:bg-zinc-900 dark:hover:text-white"
+                aria-label="Fechar"
+                title="Fechar"
+              >
+                <X className="h-5 w-5" />
+              </button>
+
+              <p className="text-sm font-black text-zinc-950 dark:text-white">
+                Criar post
+              </p>
+
+              <button
+                type="button"
+                disabled={submitting || !canPublish}
+                onClick={handleSubmit}
+                className="rounded-full bg-blue-600 px-4 py-2 text-sm font-black text-white shadow-sm shadow-blue-600/20 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-zinc-300 disabled:text-zinc-600 dark:disabled:bg-zinc-800 dark:disabled:text-zinc-500"
+              >
+                {submitting ? t('postComposer.posting') : t('postComposer.post')}
+              </button>
+            </div>
+
+            <div className="min-h-0 overflow-y-auto">
+              <div className="bg-white px-4 py-3 dark:bg-zinc-950 sm:px-5 sm:py-4">
       <div className="flex gap-3">
         <div className="shrink-0 pt-1">
           {userAvatarUrl ? (
@@ -227,6 +410,7 @@ export default function PostComposer({
 
         <div className="min-w-0 flex-1">
           <textarea
+            ref={textareaRef}
             value={content}
             onChange={(event) => setContent(event.target.value)}
             placeholder={t('postComposer.placeholder').replace('{name}', userName)}
@@ -313,6 +497,68 @@ export default function PostComposer({
                     <ImagePlus className="h-5 w-5" />
                   </button>
 
+                  <div className="relative shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setShowEmojiPicker((current) => !current)}
+                      className={`flex h-10 w-10 items-center justify-center rounded-full transition ${
+                        showEmojiPicker
+                          ? 'bg-blue-50 text-blue-600 ring-1 ring-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:ring-blue-500/30'
+                          : 'text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/30'
+                      }`}
+                      title="Adicionar emoji"
+                      aria-label="Adicionar emoji"
+                      aria-expanded={showEmojiPicker}
+                    >
+                      <Smile className="h-5 w-5" />
+                    </button>
+
+                    {showEmojiPicker && (
+                      <div className="absolute left-0 top-12 z-[10000] max-h-[52dvh] w-[min(20rem,calc(100vw-3rem))] overflow-y-auto rounded-[1.35rem] border border-blue-400/25 bg-zinc-950/95 p-3 shadow-2xl shadow-blue-950/30 ring-1 ring-white/10 backdrop-blur-xl sm:w-80">
+                        <div className="mb-2 flex items-center justify-between gap-3">
+                          <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-200">
+                            Emojis
+                          </p>
+
+                          <button
+                            type="button"
+                            onClick={() => setShowEmojiPicker(false)}
+                            className="flex h-7 w-7 items-center justify-center rounded-full text-zinc-400 transition hover:bg-white/10 hover:text-white"
+                            aria-label="Fechar emojis"
+                            title="Fechar emojis"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+
+                        <div className="space-y-3">
+                          {POST_EMOJI_GROUPS.map((group) => (
+                            <div key={group.title}>
+                              <p className="mb-1.5 text-[11px] font-bold text-zinc-400">
+                                {group.title}
+                              </p>
+
+                              <div className="grid grid-cols-6 gap-1.5">
+                                {group.emojis.map((emoji) => (
+                                  <button
+                                    key={`${group.title}-${emoji}`}
+                                    type="button"
+                                    onClick={() => insertEmoji(emoji)}
+                                    className="flex h-10 w-10 items-center justify-center rounded-full text-xl transition hover:scale-110 hover:bg-blue-500/20 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                                    aria-label={`Inserir emoji ${emoji}`}
+                                    title={emoji}
+                                  >
+                                    {emoji}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                   <div
                     className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-200 text-zinc-600 transition hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900"
                     title={selectedCategory ? t(selectedCategory.labelKey) : t('postComposer.category')}
@@ -376,6 +622,12 @@ export default function PostComposer({
           </div>
         </div>
       </div>
-    </div>
+              </div>
+            </div>
+          </div>
+        </div>,
+        portalElement
+      )}
+    </>
   )
 }
