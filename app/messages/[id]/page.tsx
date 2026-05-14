@@ -570,6 +570,11 @@ export default function ConversationPage() {
   const localCallStreamRef = useRef<MediaStream | null>(null)
   const remoteCallStreamRef = useRef<MediaStream | null>(null)
   const callChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
+  const callChannelReadyRef = useRef(false)
+  const queuedCallSignalsRef = useRef<{ event: string; payload: Record<string, unknown> }[]>([])
+  const pendingIceCandidatesRef = useRef<RTCIceCandidateInit[]>([])
+  const remoteDescriptionReadyRef = useRef(false)
+  const autoAcceptStoredCallRef = useRef(false)
   const localVideoRef = useRef<HTMLVideoElement | null>(null)
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null)
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null)
@@ -615,6 +620,7 @@ export default function ConversationPage() {
   const [remoteCallStream, setRemoteCallStream] = useState<MediaStream | null>(null)
   const [micEnabled, setMicEnabled] = useState(true)
   const [cameraEnabled, setCameraEnabled] = useState(true)
+  const [callChannelReady, setCallChannelReady] = useState(false)
 
   const otherUserId = useMemo(() => {
     return participants.find((participant) => participant.user_id !== userId)?.user_id || ''
@@ -966,23 +972,24 @@ export default function ConversationPage() {
   }, [selectedMedia.length])
 
   useEffect(() => {
-    if (localVideoRef.current) {
-      localVideoRef.current.srcObject = localCallStream
-    }
+    attachLocalMediaStream(localCallStream)
   }, [localCallStream])
 
   useEffect(() => {
-    if (remoteVideoRef.current) {
-      remoteVideoRef.current.srcObject = remoteCallStream
-    }
-
-    if (remoteAudioRef.current) {
-      remoteAudioRef.current.srcObject = remoteCallStream
-      remoteAudioRef.current.play().catch(() => {
-        // Some browsers require the user to press Accept before audio can start.
-      })
-    }
+    attachRemoteMediaStream(remoteCallStream)
   }, [remoteCallStream])
+
+  useEffect(() => {
+    if (
+      autoAcceptStoredCallRef.current &&
+      incomingCall &&
+      userId &&
+      callChannelReadyRef.current
+    ) {
+      autoAcceptStoredCallRef.current = false
+      acceptCall()
+    }
+  }, [callChannelReady, incomingCall, userId])
 
   useEffect(() => {
     if (!conversationId || typeof window === 'undefined') return
@@ -998,6 +1005,7 @@ export default function ConversationPage() {
       setCallStatus('ringing')
       setCallModalOpen(true)
       setCallError('')
+      autoAcceptStoredCallRef.current = true
       sessionStorage.removeItem(`entreus:incoming-call:${conversationId}`)
     } catch {
       sessionStorage.removeItem(`entreus:incoming-call:${conversationId}`)
@@ -1012,6 +1020,8 @@ export default function ConversationPage() {
       .on('broadcast', { event: 'call-offer' }, ({ payload }) => {
         if (payload?.fromUserId === userId) return
 
+        pendingIceCandidatesRef.current = []
+        remoteDescriptionReadyRef.current = false
         setIncomingCall({
           fromUserId: payload.fromUserId,
           mode: payload.mode,
@@ -1027,8 +1037,11 @@ export default function ConversationPage() {
 
         try {
           if (peerConnectionRef.current && payload?.answer) {
+            console.log('call: received answer')
             await peerConnectionRef.current.setRemoteDescription(payload.answer)
-            setCallStatus('connected')
+            remoteDescriptionReadyRef.current = true
+            await flushPendingIceCandidates()
+            setCallStatus('connecting')
           }
         } catch {
           setCallStatus('error')
@@ -1039,9 +1052,16 @@ export default function ConversationPage() {
         if (payload?.fromUserId === userId) return
 
         try {
-          if (peerConnectionRef.current && payload?.candidate) {
-            await peerConnectionRef.current.addIceCandidate(payload.candidate)
+          if (!payload?.candidate) return
+
+          console.log('call: received ice candidate')
+
+          if (!peerConnectionRef.current || !remoteDescriptionReadyRef.current) {
+            pendingIceCandidatesRef.current.push(payload.candidate)
+            return
           }
+
+          await peerConnectionRef.current.addIceCandidate(payload.candidate)
         } catch {
           // ICE candidates can arrive while the peer is closing. Ignore safely.
         }
@@ -1056,12 +1076,21 @@ export default function ConversationPage() {
         setCallError('Chamada recusada.')
         window.setTimeout(() => endCall(false), 1200)
       })
-      .subscribe()
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          callChannelReadyRef.current = true
+          setCallChannelReady(true)
+          flushQueuedCallSignals()
+        }
+      })
 
     callChannelRef.current = callChannel
 
     return () => {
       callChannelRef.current = null
+      callChannelReadyRef.current = false
+      setCallChannelReady(false)
+      queuedCallSignalsRef.current = []
       supabase.removeChannel(callChannel)
     }
   }, [conversationId, userId])
@@ -2145,7 +2174,12 @@ export default function ConversationPage() {
   }
 
   function sendCallSignal(event: string, payload: Record<string, unknown>) {
-    callChannelRef.current?.send({
+    if (!callChannelRef.current || !callChannelReadyRef.current) {
+      queuedCallSignalsRef.current.push({ event, payload })
+      return
+    }
+
+    callChannelRef.current.send({
       type: 'broadcast',
       event,
       payload: {
@@ -2153,6 +2187,49 @@ export default function ConversationPage() {
         fromUserId: userId,
       },
     })
+  }
+
+  function flushQueuedCallSignals() {
+    const queuedSignals = [...queuedCallSignalsRef.current]
+    queuedCallSignalsRef.current = []
+
+    queuedSignals.forEach((signal) => {
+      sendCallSignal(signal.event, signal.payload)
+    })
+  }
+
+  async function flushPendingIceCandidates() {
+    if (!peerConnectionRef.current || !remoteDescriptionReadyRef.current) return
+
+    const candidates = [...pendingIceCandidatesRef.current]
+    pendingIceCandidatesRef.current = []
+
+    for (const candidate of candidates) {
+      try {
+        await peerConnectionRef.current.addIceCandidate(candidate)
+      } catch {
+        // Candidate can become stale after reconnection/close. Ignore safely.
+      }
+    }
+  }
+
+  function attachRemoteMediaStream(stream: MediaStream | null = remoteCallStreamRef.current) {
+    if (remoteVideoRef.current) {
+      remoteVideoRef.current.srcObject = stream
+    }
+
+    if (remoteAudioRef.current) {
+      remoteAudioRef.current.srcObject = stream
+      remoteAudioRef.current.play().catch(() => {
+        // Browser autoplay policies can still require a user gesture.
+      })
+    }
+  }
+
+  function attachLocalMediaStream(stream: MediaStream | null = localCallStreamRef.current) {
+    if (localVideoRef.current) {
+      localVideoRef.current.srcObject = stream
+    }
   }
 
   function sendGlobalIncomingCall(mode: CallMode, offer: RTCSessionDescriptionInit) {
@@ -2183,6 +2260,10 @@ export default function ConversationPage() {
   }
 
   function createPeerConnection() {
+    console.log('call: creating peer connection')
+
+    remoteDescriptionReadyRef.current = false
+
     const peerConnection = new RTCPeerConnection({
       iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
     })
@@ -2196,23 +2277,26 @@ export default function ConversationPage() {
     }
 
     peerConnection.ontrack = (event) => {
-      const [stream] = event.streams
+      console.log('call: received remote track', event.track.kind)
 
-      if (stream) {
-        remoteCallStreamRef.current = stream
-        setRemoteCallStream(stream)
-        return
+      const remoteStream = remoteCallStreamRef.current || new MediaStream()
+      const alreadyAdded = remoteStream
+        .getTracks()
+        .some((track) => track.id === event.track.id)
+
+      if (!alreadyAdded) {
+        remoteStream.addTrack(event.track)
       }
 
-      const fallbackStream =
-        remoteCallStreamRef.current || new MediaStream()
-
-      fallbackStream.addTrack(event.track)
-      remoteCallStreamRef.current = fallbackStream
-      setRemoteCallStream(fallbackStream)
+      remoteCallStreamRef.current = remoteStream
+      setRemoteCallStream(remoteStream)
+      attachRemoteMediaStream(remoteStream)
+      setCallStatus('connected')
     }
 
     peerConnection.onconnectionstatechange = () => {
+      console.log('call: connection state', peerConnection.connectionState)
+
       if (peerConnection.connectionState === 'connected') {
         setCallStatus('connected')
       }
@@ -2225,8 +2309,35 @@ export default function ConversationPage() {
       }
     }
 
+    peerConnection.oniceconnectionstatechange = () => {
+      console.log('call: ice connection state', peerConnection.iceConnectionState)
+    }
+
     peerConnectionRef.current = peerConnection
     return peerConnection
+  }
+
+  function waitForIceGatheringComplete(peerConnection: RTCPeerConnection) {
+    if (peerConnection.iceGatheringState === 'complete') {
+      return Promise.resolve()
+    }
+
+    return new Promise<void>((resolve) => {
+      const timeout = window.setTimeout(() => {
+        peerConnection.removeEventListener('icegatheringstatechange', handleIceGatheringStateChange)
+        resolve()
+      }, 1800)
+
+      function handleIceGatheringStateChange() {
+        if (peerConnection.iceGatheringState !== 'complete') return
+
+        window.clearTimeout(timeout)
+        peerConnection.removeEventListener('icegatheringstatechange', handleIceGatheringStateChange)
+        resolve()
+      }
+
+      peerConnection.addEventListener('icegatheringstatechange', handleIceGatheringStateChange)
+    })
   }
 
   async function getCallStream(mode: CallMode) {
@@ -2257,22 +2368,29 @@ export default function ConversationPage() {
     setCallModalOpen(true)
     setIncomingCall(null)
     setCallError('')
+    pendingIceCandidatesRef.current = []
 
     const stream = await getCallStream(mode)
     if (!stream) return
 
     const peerConnection = createPeerConnection()
-    stream.getTracks().forEach((track) => peerConnection.addTrack(track, stream))
+    stream.getTracks().forEach((track) => {
+      console.log('call: local track added', track.kind)
+      peerConnection.addTrack(track, stream)
+    })
 
     const offer = await peerConnection.createOffer()
     await peerConnection.setLocalDescription(offer)
+    await waitForIceGatheringComplete(peerConnection)
+
+    const localOffer = peerConnection.localDescription || offer
 
     sendCallSignal('call-offer', {
       mode,
-      offer,
+      offer: localOffer,
     })
 
-    sendGlobalIncomingCall(mode, offer)
+    sendGlobalIncomingCall(mode, localOffer)
   }
 
   async function acceptCall() {
@@ -2286,18 +2404,26 @@ export default function ConversationPage() {
     if (!stream) return
 
     const peerConnection = createPeerConnection()
-    stream.getTracks().forEach((track) => peerConnection.addTrack(track, stream))
+    stream.getTracks().forEach((track) => {
+      console.log('call: local track added', track.kind)
+      peerConnection.addTrack(track, stream)
+    })
 
     await peerConnection.setRemoteDescription(incomingCall.offer)
+    remoteDescriptionReadyRef.current = true
+    await flushPendingIceCandidates()
     const answer = await peerConnection.createAnswer()
     await peerConnection.setLocalDescription(answer)
+    await waitForIceGatheringComplete(peerConnection)
+
+    const localAnswer = peerConnection.localDescription || answer
 
     sendCallSignal('call-answer', {
-      answer,
+      answer: localAnswer,
     })
 
     setIncomingCall(null)
-    setCallStatus('connected')
+    setCallStatus('connecting')
     remoteAudioRef.current?.play().catch(() => {
       // Accept is a user gesture, so this usually succeeds; keep safe if blocked.
     })
@@ -2331,6 +2457,12 @@ export default function ConversationPage() {
     localCallStreamRef.current = null
     remoteCallStreamRef.current = null
     peerConnectionRef.current = null
+    pendingIceCandidatesRef.current = []
+    remoteDescriptionReadyRef.current = false
+
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem(`entreus:incoming-call:${conversationId}`)
+    }
 
     if (remoteAudioRef.current) {
       remoteAudioRef.current.srcObject = null
@@ -2436,7 +2568,15 @@ export default function ConversationPage() {
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto p-4">
-              <audio ref={remoteAudioRef} autoPlay playsInline className="hidden" />
+              <audio
+                ref={(node) => {
+                  remoteAudioRef.current = node
+                  if (node) node.srcObject = remoteCallStreamRef.current
+                }}
+                autoPlay
+                playsInline
+                className="hidden"
+              />
 
               {callError ? (
                 <div className="rounded-[1.5rem] border border-red-400/30 bg-red-950/30 p-4 text-sm text-red-100">
@@ -2446,8 +2586,12 @@ export default function ConversationPage() {
                 <div className="relative overflow-hidden rounded-[1.5rem] border border-white/10 bg-black">
                   {remoteCallStream ? (
                     <video
-                      ref={remoteVideoRef}
+                      ref={(node) => {
+                        remoteVideoRef.current = node
+                        if (node) node.srcObject = remoteCallStreamRef.current
+                      }}
                       autoPlay
+                      muted
                       playsInline
                       className="max-h-[56dvh] min-h-64 w-full bg-black object-contain"
                     />
@@ -2459,7 +2603,10 @@ export default function ConversationPage() {
 
                   {localCallStream && (
                     <video
-                      ref={localVideoRef}
+                      ref={(node) => {
+                        localVideoRef.current = node
+                        if (node) node.srcObject = localCallStreamRef.current
+                      }}
                       autoPlay
                       muted
                       playsInline
