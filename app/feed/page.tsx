@@ -6,7 +6,7 @@ import MobileNavigation from '../components/MobileNavigation'
 import PostMoreMenu from '../components/PostMoreMenu'
 import PostMediaGallery from '../components/PostMediaGallery'
 import PostActions from '../components/PostActions'
-import LinkPreview from '../components/LinkPreview'
+import LinkPreview, { LinkedPostText } from '../components/LinkPreview'
 import SensitiveContent from '../components/SensitiveContent'
 import UserBadges from '../components/UserBadges'
 import TranslatePostButton from '../components/TranslatePostButton'
@@ -2135,8 +2135,8 @@ function FeedContent() {
         </div>
       )}
 
-      <section className="w-full overflow-x-hidden px-4 py-20 pb-24 sm:px-6 lg:mx-auto lg:max-w-[1280px] lg:px-0 lg:py-8 lg:pl-[290px]">
-        <div className="mx-auto grid w-full grid-cols-1 gap-6 xl:grid-cols-[minmax(0,40rem)_20rem]">
+      <section className="w-full overflow-x-hidden px-3 py-16 pb-24 sm:px-6 sm:py-20 lg:mx-auto lg:max-w-[1280px] lg:px-0 lg:py-8 lg:pl-[290px]">
+        <div className="mx-auto grid w-full grid-cols-1 gap-4 sm:gap-6 xl:grid-cols-[minmax(0,40rem)_20rem]">
           <div className="min-w-0">
             {currentProfile && !currentProfile.show_sensitive_content && (
               <div className="mb-4 rounded-[1.5rem] border border-yellow-200/70 bg-yellow-50/80 px-4 py-3 text-sm text-yellow-800 shadow-sm ring-1 ring-yellow-100/70 dark:border-yellow-900/50 dark:bg-yellow-950/10 dark:text-yellow-300 dark:ring-yellow-900/20">
@@ -2166,7 +2166,7 @@ function FeedContent() {
               )}
             </div>
 
-            <div className="space-y-4 sm:space-y-5">
+            <div className="space-y-3.5 sm:space-y-5">
               {visibleFeedItems.length === 0 && (
                 <div className="rounded-[2rem] border border-zinc-200/70 bg-white/90 p-5 text-zinc-500 shadow-sm shadow-black/5 backdrop-blur dark:border-zinc-800/70 dark:bg-zinc-950/80 dark:text-zinc-400 sm:p-6">
                   {hasSearch ? localTexts.mural.noSearchResults : t('feed.noPosts')}
@@ -2229,7 +2229,7 @@ function FeedContent() {
                   <article
                     id={item.type === 'post' ? `post-${post.id}` : `repost-${item.id}`}
                     key={item.id}
-                    className={`group relative overflow-hidden rounded-[2rem] border bg-white/95 p-4 shadow-sm shadow-black/5 ring-1 ring-black/5 backdrop-blur-xl transition-all duration-300 before:pointer-events-none before:absolute before:inset-0 before:bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.12),transparent_42%)] before:opacity-0 before:transition-opacity before:duration-300 hover:-translate-y-1 hover:border-blue-400/50 hover:shadow-2xl hover:shadow-blue-500/10 hover:before:opacity-100 dark:bg-slate-950/85 dark:ring-white/10 sm:p-6 ${isHighlighted
+                    className={`group relative overflow-hidden rounded-[1.65rem] border bg-white/95 p-3.5 shadow-sm shadow-black/5 ring-1 ring-black/5 backdrop-blur-xl transition-all duration-300 before:pointer-events-none before:absolute before:inset-0 before:bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.12),transparent_42%)] before:opacity-0 before:transition-opacity before:duration-300 hover:border-blue-400/50 hover:shadow-2xl hover:shadow-blue-500/10 hover:before:opacity-100 dark:bg-slate-950/85 dark:ring-white/10 sm:rounded-[2rem] sm:p-6 md:hover:-translate-y-1 ${isHighlighted
                         ? 'border-blue-500 ring-2 ring-blue-200 dark:border-blue-400 dark:ring-blue-900'
                         : 'border-zinc-200/70 dark:border-zinc-800/70'
                       }`}
@@ -2399,9 +2399,10 @@ function FeedContent() {
                         {shouldShowSensitiveWarning ? (
                           <SensitiveContent>
                             {post.content && (
-                              <p className="mb-3 whitespace-pre-wrap break-words text-sm text-zinc-800 dark:text-zinc-200 sm:text-base">
-                                {post.content}
-                              </p>
+                              <LinkedPostText
+                                content={post.content}
+                                className="mb-3 whitespace-pre-wrap break-words text-sm text-zinc-800 dark:text-zinc-200 sm:text-base"
+                              />
                             )}
 
                             <TranslatePostButton content={post.content} />
@@ -2413,9 +2414,10 @@ function FeedContent() {
                         ) : (
                           <>
                             {post.content && (
-                              <p className="mb-3 whitespace-pre-wrap break-words text-sm text-zinc-800 dark:text-zinc-200 sm:text-base">
-                                {post.content}
-                              </p>
+                              <LinkedPostText
+                                content={post.content}
+                                className="mb-3 whitespace-pre-wrap break-words text-sm text-zinc-800 dark:text-zinc-200 sm:text-base"
+                              />
                             )}
 
                             <TranslatePostButton content={post.content} />

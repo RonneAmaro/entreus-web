@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { Repeat2 } from 'lucide-react'
 import PostActions from './PostActions'
 import PostMediaGallery from './PostMediaGallery'
-import LinkPreview from './LinkPreview'
+import LinkPreview, { LinkedPostText } from './LinkPreview'
 import SensitiveContent from './SensitiveContent'
 import PostMoreMenu from './PostMoreMenu'
 import UserBadges from './UserBadges'
@@ -358,9 +358,10 @@ export default function PostCard({
       {shouldProtectSensitive ? (
         <SensitiveContent>
           {post.content && (
-            <p className="mb-4 whitespace-pre-wrap break-words text-sm text-zinc-800 dark:text-zinc-200 sm:text-base">
-              {post.content}
-            </p>
+            <LinkedPostText
+              content={post.content}
+              className="mb-4 whitespace-pre-wrap break-words text-sm text-zinc-800 dark:text-zinc-200 sm:text-base"
+            />
           )}
 
           <TranslatePostButton content={post.content} />
@@ -372,9 +373,10 @@ export default function PostCard({
       ) : (
         <>
           {post.content && (
-            <p className="mb-4 whitespace-pre-wrap break-words text-sm text-zinc-800 dark:text-zinc-200 sm:text-base">
-              {post.content}
-            </p>
+            <LinkedPostText
+              content={post.content}
+              className="mb-4 whitespace-pre-wrap break-words text-sm text-zinc-800 dark:text-zinc-200 sm:text-base"
+            />
           )}
 
           <TranslatePostButton content={post.content} />

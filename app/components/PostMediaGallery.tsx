@@ -118,7 +118,7 @@ function AutoPlayVideo({
 
     observedVideo.muted = true
     observedVideo.playsInline = true
-    observedVideo.preload = 'none'
+    observedVideo.preload = 'metadata'
 
     window.addEventListener(AUTOPLAY_EVENT, handleAutoplayEvent)
     document.addEventListener('visibilitychange', handleVisibilityChange)
@@ -161,7 +161,7 @@ function AutoPlayVideo({
       muted
       loop
       playsInline
-      preload="none"
+      preload="metadata"
       controls={controls}
       onClick={onClick}
       className={className}
@@ -188,19 +188,19 @@ function MediaThumb({
 }) {
   const imageClassName =
     fit === 'contain'
-      ? 'block max-h-[720px] max-w-full object-contain transition duration-300 group-hover:scale-[1.01]'
-      : 'block h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]'
+      ? 'block h-full max-h-[720px] w-full object-contain transition duration-300 md:group-hover:scale-[1.01]'
+      : 'block h-full w-full object-cover transition duration-300 md:group-hover:scale-[1.03]'
 
   const videoClassName =
     fit === 'contain'
-      ? 'block max-h-[720px] max-w-full bg-black object-contain'
+      ? 'block h-full w-full bg-black object-contain'
       : 'block h-full w-full bg-black object-cover'
 
   return (
     <button
       type="button"
       onClick={() => onOpen(index)}
-      className={`group relative overflow-hidden border border-zinc-200 bg-zinc-100 text-left dark:border-zinc-700 dark:bg-zinc-900 ${className}`}
+      className={`group relative overflow-hidden bg-zinc-100 text-left outline-none ring-1 ring-inset ring-zinc-200/70 transition duration-300 focus-visible:ring-2 focus-visible:ring-blue-500 dark:bg-zinc-950 dark:ring-zinc-800/80 ${className}`}
     >
       {item.media_type === 'image' ? (
         <img
@@ -212,7 +212,7 @@ function MediaThumb({
         <div
           className={
             fit === 'contain'
-              ? 'relative flex w-full items-center justify-center'
+              ? 'relative flex h-full w-full items-center justify-center'
               : 'relative h-full w-full'
           }
         >
@@ -222,16 +222,16 @@ function MediaThumb({
             autoplayEnabled={autoplayEnabled && !showOverlayCount}
           />
 
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/10 transition group-hover:bg-black/20">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-black/65 text-white shadow-lg">
-              <Play className="h-6 w-6 fill-current" />
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/10 transition md:group-hover:bg-black/20">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-black/65 text-white shadow-lg ring-1 ring-white/20 backdrop-blur sm:h-14 sm:w-14">
+              <Play className="h-5 w-5 fill-current sm:h-6 sm:w-6" />
             </div>
           </div>
         </div>
       )}
 
       {showOverlayCount && showOverlayCount > 0 && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/55 text-3xl font-bold text-white">
+        <div className="absolute inset-0 flex items-center justify-center bg-black/55 text-3xl font-bold text-white backdrop-blur-[2px]">
           +{showOverlayCount}
         </div>
       )}
@@ -274,15 +274,21 @@ export default function PostMediaGallery({ media }: PostMediaGalleryProps) {
 
   function renderGallery() {
     if (visibleMedia.length === 1) {
+      const singleItem = visibleMedia[0]
+      const singleMediaClassName =
+        singleItem.media_type === 'video'
+          ? 'aspect-video max-h-[70vh] min-h-[190px] w-full rounded-[1.5rem] sm:min-h-[300px] sm:rounded-[1.75rem]'
+          : 'max-h-[72vh] min-h-[220px] w-full rounded-[1.5rem] sm:rounded-[1.75rem]'
+
       return (
-        <div className="mb-4 flex w-full items-center justify-center overflow-hidden rounded-3xl border border-zinc-200 bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-950">
+        <div className="mb-4 w-full overflow-hidden rounded-[1.65rem] bg-zinc-100/80 p-1 ring-1 ring-zinc-200/70 shadow-sm shadow-black/5 dark:bg-zinc-950/80 dark:ring-zinc-800/80 sm:rounded-[2rem]">
           <MediaThumb
-            item={visibleMedia[0]}
+            item={singleItem}
             index={0}
             onOpen={openViewer}
             fit="contain"
             autoplayEnabled={!open}
-            className="flex w-full items-center justify-center rounded-3xl p-0"
+            className={`flex items-center justify-center ${singleMediaClassName}`}
           />
         </div>
       )
@@ -290,7 +296,7 @@ export default function PostMediaGallery({ media }: PostMediaGalleryProps) {
 
     if (visibleMedia.length === 2) {
       return (
-        <div className="mb-4 grid overflow-hidden rounded-3xl border border-zinc-200 bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900 sm:grid-cols-2">
+        <div className="mb-4 grid overflow-hidden rounded-[1.65rem] bg-zinc-100/80 p-1 ring-1 ring-zinc-200/70 shadow-sm shadow-black/5 dark:bg-zinc-950/80 dark:ring-zinc-800/80 sm:grid-cols-2 sm:rounded-[2rem]">
           {visibleMedia.map((item, index) => (
             <MediaThumb
               key={item.id}
@@ -298,9 +304,9 @@ export default function PostMediaGallery({ media }: PostMediaGalleryProps) {
               index={index}
               onOpen={openViewer}
               autoplayEnabled={!open}
-              className={`h-72 w-full sm:h-96 ${
+              className={`h-56 w-full sm:h-96 ${
                 index === 0
-                  ? 'border-b border-zinc-200 dark:border-zinc-700 sm:border-b-0 sm:border-r'
+                  ? 'mb-1 sm:mb-0 sm:mr-1'
                   : ''
               }`}
             />
@@ -311,22 +317,22 @@ export default function PostMediaGallery({ media }: PostMediaGalleryProps) {
 
     if (visibleMedia.length === 3) {
       return (
-        <div className="mb-4 grid overflow-hidden rounded-3xl border border-zinc-200 bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900 sm:grid-cols-2">
+        <div className="mb-4 grid overflow-hidden rounded-[1.65rem] bg-zinc-100/80 p-1 ring-1 ring-zinc-200/70 shadow-sm shadow-black/5 dark:bg-zinc-950/80 dark:ring-zinc-800/80 sm:grid-cols-2 sm:rounded-[2rem]">
           <MediaThumb
             item={visibleMedia[0]}
             index={0}
             onOpen={openViewer}
             autoplayEnabled={!open}
-            className="h-80 w-full border-b border-zinc-200 dark:border-zinc-700 sm:h-[28rem] sm:border-b-0 sm:border-r"
+            className="mb-1 h-64 w-full sm:mb-0 sm:mr-1 sm:h-[28rem]"
           />
 
-          <div className="grid grid-cols-2 sm:grid-cols-1">
+          <div className="grid grid-cols-2 gap-1 sm:grid-cols-1">
             <MediaThumb
               item={visibleMedia[1]}
               index={1}
               onOpen={openViewer}
               autoplayEnabled={!open}
-              className="h-44 w-full border-r border-zinc-200 dark:border-zinc-700 sm:h-56 sm:border-b sm:border-r-0"
+              className="h-36 w-full sm:h-56"
             />
 
             <MediaThumb
@@ -334,7 +340,7 @@ export default function PostMediaGallery({ media }: PostMediaGalleryProps) {
               index={2}
               onOpen={openViewer}
               autoplayEnabled={!open}
-              className="h-44 w-full sm:h-56"
+              className="h-36 w-full sm:h-56"
             />
           </div>
         </div>
@@ -343,7 +349,7 @@ export default function PostMediaGallery({ media }: PostMediaGalleryProps) {
 
     if (visibleMedia.length === 4) {
       return (
-        <div className="mb-4 grid grid-cols-2 overflow-hidden rounded-3xl border border-zinc-200 bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900">
+        <div className="mb-4 grid grid-cols-2 gap-1 overflow-hidden rounded-[1.65rem] bg-zinc-100/80 p-1 ring-1 ring-zinc-200/70 shadow-sm shadow-black/5 dark:bg-zinc-950/80 dark:ring-zinc-800/80 sm:rounded-[2rem]">
           {visibleMedia.map((item, index) => (
             <MediaThumb
               key={item.id}
@@ -351,15 +357,7 @@ export default function PostMediaGallery({ media }: PostMediaGalleryProps) {
               index={index}
               onOpen={openViewer}
               autoplayEnabled={!open}
-              className={`h-48 w-full sm:h-64 ${
-                index === 0 || index === 1
-                  ? 'border-b border-zinc-200 dark:border-zinc-700'
-                  : ''
-              } ${
-                index === 0 || index === 2
-                  ? 'border-r border-zinc-200 dark:border-zinc-700'
-                  : ''
-              }`}
+              className="h-40 w-full sm:h-64"
             />
           ))}
         </div>
@@ -367,16 +365,16 @@ export default function PostMediaGallery({ media }: PostMediaGalleryProps) {
     }
 
     return (
-      <div className="mb-4 grid overflow-hidden rounded-3xl border border-zinc-200 bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900 sm:grid-cols-2">
+      <div className="mb-4 grid overflow-hidden rounded-[1.65rem] bg-zinc-100/80 p-1 ring-1 ring-zinc-200/70 shadow-sm shadow-black/5 dark:bg-zinc-950/80 dark:ring-zinc-800/80 sm:grid-cols-2 sm:rounded-[2rem]">
         <MediaThumb
           item={visibleMedia[0]}
           index={0}
           onOpen={openViewer}
           autoplayEnabled={!open}
-          className="h-80 w-full border-b border-zinc-200 dark:border-zinc-700 sm:h-[30rem] sm:border-b-0 sm:border-r"
+          className="mb-1 h-64 w-full sm:mb-0 sm:mr-1 sm:h-[30rem]"
         />
 
-        <div className="grid grid-cols-2">
+        <div className="grid grid-cols-2 gap-1">
           {visibleMedia.slice(1, 5).map((item, sliceIndex) => {
             const realIndex = sliceIndex + 1
             const isLast = realIndex === 4
@@ -389,15 +387,7 @@ export default function PostMediaGallery({ media }: PostMediaGalleryProps) {
                 onOpen={openViewer}
                 showOverlayCount={isLast ? hiddenCount : undefined}
                 autoplayEnabled={!open}
-                className={`h-40 w-full sm:h-60 ${
-                  sliceIndex === 0 || sliceIndex === 1
-                    ? 'border-b border-zinc-200 dark:border-zinc-700'
-                    : ''
-                } ${
-                  sliceIndex === 0 || sliceIndex === 2
-                    ? 'border-r border-zinc-200 dark:border-zinc-700'
-                    : ''
-                }`}
+                className="h-32 w-full sm:h-60"
               />
             )
           })}
@@ -411,11 +401,11 @@ export default function PostMediaGallery({ media }: PostMediaGalleryProps) {
       {renderGallery()}
 
       {open && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/95 px-3 py-6">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/95 px-3 py-4 backdrop-blur-sm sm:py-6">
           <button
             type="button"
             onClick={closeViewer}
-            className="absolute right-4 top-4 z-20 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
+            className="absolute right-4 top-4 z-20 flex h-11 w-11 items-center justify-center rounded-full bg-white/10 text-white ring-1 ring-white/10 transition hover:bg-white/20"
             aria-label="Fechar mídia"
           >
             <X className="h-6 w-6" />
@@ -426,7 +416,7 @@ export default function PostMediaGallery({ media }: PostMediaGalleryProps) {
               <button
                 type="button"
                 onClick={goPrevious}
-                className="absolute left-3 top-1/2 z-20 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
+                className="absolute left-3 top-1/2 z-20 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-white ring-1 ring-white/10 transition hover:bg-white/20"
                 aria-label="Mídia anterior"
               >
                 <ChevronLeft className="h-7 w-7" />
@@ -435,7 +425,7 @@ export default function PostMediaGallery({ media }: PostMediaGalleryProps) {
               <button
                 type="button"
                 onClick={goNext}
-                className="absolute right-3 top-1/2 z-20 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
+                className="absolute right-3 top-1/2 z-20 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-white ring-1 ring-white/10 transition hover:bg-white/20"
                 aria-label="Próxima mídia"
               >
                 <ChevronRight className="h-7 w-7" />
@@ -448,18 +438,20 @@ export default function PostMediaGallery({ media }: PostMediaGalleryProps) {
               <img
                 src={activeMedia.media_url}
                 alt="Imagem ampliada"
-                className="max-h-[90vh] max-w-full rounded-2xl object-contain"
+                className="max-h-[88dvh] max-w-full rounded-2xl object-contain shadow-2xl shadow-black/40 sm:rounded-3xl"
               />
             ) : (
-              <video
-                src={activeMedia.media_url}
-                controls
-                autoPlay
-                muted
-                playsInline
-                preload="metadata"
-                className="max-h-[90vh] max-w-full rounded-2xl bg-black object-contain"
-              />
+              <div className="flex h-full max-h-[88dvh] w-full items-center justify-center">
+                <video
+                  src={activeMedia.media_url}
+                  controls
+                  autoPlay
+                  muted
+                  playsInline
+                  preload="metadata"
+                  className="h-auto max-h-[88dvh] w-full max-w-full rounded-2xl bg-black object-contain shadow-2xl shadow-black/40 sm:rounded-3xl"
+                />
+              </div>
             )}
           </div>
 
