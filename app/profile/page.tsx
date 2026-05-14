@@ -1052,9 +1052,8 @@ export default function ProfilePage() {
         onPostClick={handlePostClick}
       />
 
-      <section className="w-full overflow-x-hidden py-20 pb-24 lg:pl-[310px] lg:pr-6 lg:py-8">
-        <div className="mx-auto w-full max-w-[1320px] px-4 sm:px-6 lg:px-0">
-          <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(280px,320px)] xl:items-start 2xl:grid-cols-[minmax(0,1fr)_minmax(300px,340px)]">
+      <section className="w-full overflow-x-hidden px-3 py-16 pb-24 sm:px-6 sm:py-20 lg:mx-auto lg:max-w-[1280px] lg:px-0 lg:py-8 lg:pl-[290px]">
+        <div className="mx-auto grid w-full grid-cols-1 gap-4 sm:gap-6 xl:grid-cols-[minmax(0,40rem)_20rem]">
             <div className="min-w-0">
         <BrandHeader
           subtitle={t('profile.myProfile')}
@@ -1686,7 +1685,6 @@ export default function ProfilePage() {
               </div>
             </aside>
           </div>
-        </div>
       </section>
 
       {showBannerModal && bannerPreview && (

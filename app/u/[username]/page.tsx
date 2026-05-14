@@ -1371,8 +1371,7 @@ export default function PublicProfilePage() {
           onPostClick={handlePostClick}
         />
 
-        <section className="w-full overflow-x-hidden py-20 pb-24 lg:pl-[310px] lg:pr-6 lg:py-8">
-          <div className="mx-auto w-full max-w-[1320px] px-4 sm:px-6 lg:px-0">
+        <section className="w-full overflow-x-hidden px-3 py-16 pb-24 sm:px-6 sm:py-20 lg:mx-auto lg:max-w-[1280px] lg:px-0 lg:py-8 lg:pl-[290px]">
           <BrandHeader
             subtitle="Perfil público"
             description="Veja informações públicas, publicações e atividades de usuários do EntreUS."
@@ -1390,7 +1389,6 @@ export default function PublicProfilePage() {
             >
               Voltar ao feed
             </Link>
-          </div>
           </div>
         </section>
       </main>
@@ -1483,15 +1481,14 @@ export default function PublicProfilePage() {
         onPostClick={handlePostClick}
       />
 
-      <section className="w-full overflow-x-hidden py-20 pb-24 lg:pl-[310px] lg:pr-6 lg:py-8">
-        <div className="mx-auto w-full max-w-[1320px] px-4 sm:px-6 lg:px-0">
+      <section className="w-full overflow-x-hidden px-3 py-16 pb-24 sm:px-6 sm:py-20 lg:mx-auto lg:max-w-[1280px] lg:px-0 lg:py-8 lg:pl-[290px]">
         <BrandHeader
           subtitle="Perfil público"
           description={`Acompanhe publicações, reposts e informações públicas de ${displayName}.`}
           compact
         />
 
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(280px,320px)] xl:items-start 2xl:grid-cols-[minmax(0,1fr)_minmax(300px,340px)]">
+        <div className="mx-auto grid w-full grid-cols-1 gap-4 sm:gap-6 xl:grid-cols-[minmax(0,40rem)_20rem]">
           <div className="min-w-0">
         <div className="mb-6 overflow-hidden rounded-[2rem] border border-zinc-200/70 bg-white/95 shadow-sm ring-1 ring-black/5 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-black/80 dark:ring-white/10">
           <button
@@ -2133,7 +2130,6 @@ export default function PublicProfilePage() {
               </nav>
             </div>
           </aside>
-        </div>
         </div>
       </section>
 
