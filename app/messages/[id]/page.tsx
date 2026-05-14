@@ -15,9 +15,12 @@ import {
   Loader2,
   MessageSquarePlus,
   Mic,
+  MicOff,
   MoreHorizontal,
   Paperclip,
   Pencil,
+  Phone,
+  PhoneOff,
   Plus,
   Search,
   Send,
@@ -25,6 +28,7 @@ import {
   Square,
   Trash2,
   Video,
+  VideoOff,
   X,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
@@ -123,6 +127,15 @@ type SelectedMedia = {
   file: File
   previewUrl: string
   mediaType: 'image' | 'video' | 'audio'
+}
+
+type CallMode = 'voice' | 'video'
+type CallStatus = 'idle' | 'calling' | 'ringing' | 'connecting' | 'connected' | 'ended' | 'error'
+
+type IncomingCall = {
+  fromUserId: string
+  mode: CallMode
+  offer: RTCSessionDescriptionInit
 }
 
 function getDisplayName(profile: ProfileSummary | CurrentProfile | null) {
@@ -552,6 +565,12 @@ export default function ConversationPage() {
   const recordingChunksRef = useRef<BlobPart[]>([])
   const recordingStreamRef = useRef<MediaStream | null>(null)
   const recordingTimerRef = useRef<number | null>(null)
+  const peerConnectionRef = useRef<RTCPeerConnection | null>(null)
+  const localCallStreamRef = useRef<MediaStream | null>(null)
+  const remoteCallStreamRef = useRef<MediaStream | null>(null)
+  const callChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
+  const localVideoRef = useRef<HTMLVideoElement | null>(null)
+  const remoteVideoRef = useRef<HTMLVideoElement | null>(null)
 
   const conversationId = typeof params.id === 'string' ? params.id : ''
 
@@ -585,6 +604,15 @@ export default function ConversationPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [conversations, setConversations] = useState<ConversationItem[]>([])
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0)
+  const [callMode, setCallMode] = useState<CallMode>('voice')
+  const [callStatus, setCallStatus] = useState<CallStatus>('idle')
+  const [callModalOpen, setCallModalOpen] = useState(false)
+  const [incomingCall, setIncomingCall] = useState<IncomingCall | null>(null)
+  const [callError, setCallError] = useState('')
+  const [localCallStream, setLocalCallStream] = useState<MediaStream | null>(null)
+  const [remoteCallStream, setRemoteCallStream] = useState<MediaStream | null>(null)
+  const [micEnabled, setMicEnabled] = useState(true)
+  const [cameraEnabled, setCameraEnabled] = useState(true)
 
   const otherUserId = useMemo(() => {
     return participants.find((participant) => participant.user_id !== userId)?.user_id || ''
@@ -615,6 +643,7 @@ export default function ConversationPage() {
 
     return () => {
       stopRecordingTracks()
+      endCall(false)
 
       if (recordingTimerRef.current) {
         window.clearInterval(recordingTimerRef.current)
@@ -933,6 +962,74 @@ export default function ConversationPage() {
       scrollToBottom('smooth')
     }
   }, [selectedMedia.length])
+
+  useEffect(() => {
+    if (localVideoRef.current) {
+      localVideoRef.current.srcObject = localCallStream
+    }
+  }, [localCallStream])
+
+  useEffect(() => {
+    if (remoteVideoRef.current) {
+      remoteVideoRef.current.srcObject = remoteCallStream
+    }
+  }, [remoteCallStream])
+
+  useEffect(() => {
+    if (!conversationId || !userId) return
+
+    const callChannel = supabase
+      .channel(`chat-call-${conversationId}`)
+      .on('broadcast', { event: 'call-offer' }, ({ payload }) => {
+        if (payload?.fromUserId === userId) return
+
+        setIncomingCall({
+          fromUserId: payload.fromUserId,
+          mode: payload.mode,
+          offer: payload.offer,
+        })
+        setCallMode(payload.mode)
+        setCallStatus('ringing')
+        setCallModalOpen(true)
+        setCallError('')
+      })
+      .on('broadcast', { event: 'call-answer' }, async ({ payload }) => {
+        if (payload?.fromUserId === userId) return
+
+        try {
+          if (peerConnectionRef.current && payload?.answer) {
+            await peerConnectionRef.current.setRemoteDescription(payload.answer)
+            setCallStatus('connected')
+          }
+        } catch {
+          setCallStatus('error')
+          setCallError('Não foi possível conectar a chamada.')
+        }
+      })
+      .on('broadcast', { event: 'ice-candidate' }, async ({ payload }) => {
+        if (payload?.fromUserId === userId) return
+
+        try {
+          if (peerConnectionRef.current && payload?.candidate) {
+            await peerConnectionRef.current.addIceCandidate(payload.candidate)
+          }
+        } catch {
+          // ICE candidates can arrive while the peer is closing. Ignore safely.
+        }
+      })
+      .on('broadcast', { event: 'call-ended' }, ({ payload }) => {
+        if (payload?.fromUserId === userId) return
+        endCall(false)
+      })
+      .subscribe()
+
+    callChannelRef.current = callChannel
+
+    return () => {
+      callChannelRef.current = null
+      supabase.removeChannel(callChannel)
+    }
+  }, [conversationId, userId])
 
   async function loadUnreadNotificationsCount(currentUserId: string) {
     const { count, error } = await supabase
@@ -2012,6 +2109,164 @@ export default function ConversationPage() {
     setMessageEmojiSearch('')
   }
 
+  function sendCallSignal(event: string, payload: Record<string, unknown>) {
+    callChannelRef.current?.send({
+      type: 'broadcast',
+      event,
+      payload: {
+        ...payload,
+        fromUserId: userId,
+      },
+    })
+  }
+
+  function createPeerConnection() {
+    const peerConnection = new RTCPeerConnection({
+      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+    })
+
+    peerConnection.onicecandidate = (event) => {
+      if (event.candidate) {
+        sendCallSignal('ice-candidate', {
+          candidate: event.candidate.toJSON(),
+        })
+      }
+    }
+
+    peerConnection.ontrack = (event) => {
+      const [stream] = event.streams
+
+      if (stream) {
+        remoteCallStreamRef.current = stream
+        setRemoteCallStream(stream)
+      }
+    }
+
+    peerConnection.onconnectionstatechange = () => {
+      if (peerConnection.connectionState === 'connected') {
+        setCallStatus('connected')
+      }
+
+      if (
+        peerConnection.connectionState === 'failed' ||
+        peerConnection.connectionState === 'disconnected'
+      ) {
+        setCallStatus('ended')
+      }
+    }
+
+    peerConnectionRef.current = peerConnection
+    return peerConnection
+  }
+
+  async function getCallStream(mode: CallMode) {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: mode === 'video',
+      })
+
+      localCallStreamRef.current = stream
+      setLocalCallStream(stream)
+      setMicEnabled(true)
+      setCameraEnabled(mode === 'video')
+
+      return stream
+    } catch {
+      setCallStatus('error')
+      setCallError('Permita acesso ao microfone/câmera para iniciar a chamada.')
+      return null
+    }
+  }
+
+  async function startCall(mode: CallMode) {
+    if (!userId || !conversationId) return
+
+    setCallMode(mode)
+    setCallStatus('calling')
+    setCallModalOpen(true)
+    setIncomingCall(null)
+    setCallError('')
+
+    const stream = await getCallStream(mode)
+    if (!stream) return
+
+    const peerConnection = createPeerConnection()
+    stream.getTracks().forEach((track) => peerConnection.addTrack(track, stream))
+
+    const offer = await peerConnection.createOffer()
+    await peerConnection.setLocalDescription(offer)
+
+    sendCallSignal('call-offer', {
+      mode,
+      offer,
+    })
+  }
+
+  async function acceptCall() {
+    if (!incomingCall) return
+
+    setCallMode(incomingCall.mode)
+    setCallStatus('connecting')
+    setCallError('')
+
+    const stream = await getCallStream(incomingCall.mode)
+    if (!stream) return
+
+    const peerConnection = createPeerConnection()
+    stream.getTracks().forEach((track) => peerConnection.addTrack(track, stream))
+
+    await peerConnection.setRemoteDescription(incomingCall.offer)
+    const answer = await peerConnection.createAnswer()
+    await peerConnection.setLocalDescription(answer)
+
+    sendCallSignal('call-answer', {
+      answer,
+    })
+
+    setIncomingCall(null)
+    setCallStatus('connected')
+  }
+
+  function toggleMicrophone() {
+    const audioTrack = localCallStreamRef.current?.getAudioTracks()[0]
+    if (!audioTrack) return
+
+    audioTrack.enabled = !audioTrack.enabled
+    setMicEnabled(audioTrack.enabled)
+  }
+
+  function toggleCamera() {
+    const videoTrack = localCallStreamRef.current?.getVideoTracks()[0]
+    if (!videoTrack) return
+
+    videoTrack.enabled = !videoTrack.enabled
+    setCameraEnabled(videoTrack.enabled)
+  }
+
+  function endCall(notifyPeer: boolean = true) {
+    if (notifyPeer && userId) {
+      sendCallSignal('call-ended', {})
+    }
+
+    localCallStreamRef.current?.getTracks().forEach((track) => track.stop())
+    remoteCallStreamRef.current?.getTracks().forEach((track) => track.stop())
+    peerConnectionRef.current?.close()
+
+    localCallStreamRef.current = null
+    remoteCallStreamRef.current = null
+    peerConnectionRef.current = null
+
+    setLocalCallStream(null)
+    setRemoteCallStream(null)
+    setIncomingCall(null)
+    setCallModalOpen(false)
+    setCallStatus('idle')
+    setCallError('')
+    setMicEnabled(true)
+    setCameraEnabled(true)
+  }
+
   const otherName = getDisplayName(otherProfile)
 
   if (loading) {
@@ -2047,7 +2302,157 @@ export default function ConversationPage() {
         onPostClick={handlePostClick}
       />
 
-      <section className="fixed bottom-16 left-0 right-0 top-14 z-10 flex flex-col overflow-hidden px-3 py-2 sm:px-6 lg:static lg:ml-[270px] lg:h-screen lg:w-[calc(100vw-270px)] lg:max-w-none lg:flex-row lg:px-0 lg:py-0">
+      {callModalOpen && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/75 px-3 py-6 backdrop-blur-sm">
+          <div className="relative flex max-h-[92dvh] w-full max-w-2xl flex-col overflow-hidden rounded-[2rem] border border-blue-400/25 bg-zinc-950 text-white shadow-2xl shadow-blue-950/30 ring-1 ring-white/10">
+            <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+              <div className="flex min-w-0 items-center gap-3">
+                {otherProfile?.avatar_url ? (
+                  <img
+                    src={otherProfile.avatar_url}
+                    alt={otherName}
+                    className="h-11 w-11 rounded-full border border-blue-400/30 object-cover"
+                  />
+                ) : (
+                  <div className="flex h-11 w-11 items-center justify-center rounded-full border border-blue-400/30 bg-blue-950/60 text-sm font-black text-blue-100">
+                    {getInitial(otherName)}
+                  </div>
+                )}
+
+                <div className="min-w-0">
+                  <p className="truncate font-black">{otherName}</p>
+                  <p className="text-xs text-blue-200">
+                    {callStatus === 'calling'
+                      ? 'Chamando...'
+                      : callStatus === 'ringing'
+                        ? 'Chamada recebida'
+                        : callStatus === 'connecting'
+                          ? 'Conectando...'
+                          : callStatus === 'connected'
+                            ? 'Chamada conectada'
+                            : callStatus === 'error'
+                              ? 'Erro na chamada'
+                              : 'Chamada 1:1'}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => endCall()}
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
+                aria-label="Fechar chamada"
+                title="Fechar chamada"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto p-4">
+              {callError ? (
+                <div className="rounded-[1.5rem] border border-red-400/30 bg-red-950/30 p-4 text-sm text-red-100">
+                  {callError}
+                </div>
+              ) : callMode === 'video' ? (
+                <div className="relative overflow-hidden rounded-[1.5rem] border border-white/10 bg-black">
+                  {remoteCallStream ? (
+                    <video
+                      ref={remoteVideoRef}
+                      autoPlay
+                      playsInline
+                      className="max-h-[56dvh] min-h-64 w-full bg-black object-contain"
+                    />
+                  ) : (
+                    <div className="flex min-h-64 items-center justify-center text-sm text-zinc-400">
+                      Aguardando vídeo remoto...
+                    </div>
+                  )}
+
+                  {localCallStream && (
+                    <video
+                      ref={localVideoRef}
+                      autoPlay
+                      muted
+                      playsInline
+                      className="absolute bottom-3 right-3 h-28 w-20 rounded-2xl border border-white/20 bg-black object-cover shadow-2xl sm:h-36 sm:w-28"
+                    />
+                  )}
+                </div>
+              ) : (
+                <div className="flex min-h-64 flex-col items-center justify-center rounded-[1.5rem] border border-white/10 bg-blue-950/20 text-center">
+                  <div className="mb-4 flex h-24 w-24 items-center justify-center rounded-full bg-blue-500/20 text-blue-100 ring-1 ring-blue-300/30">
+                    <Phone className="h-10 w-10" />
+                  </div>
+                  <p className="text-lg font-black">{otherName}</p>
+                  <p className="mt-1 text-sm text-blue-100/70">Chamada de voz privada</p>
+                </div>
+              )}
+
+              {incomingCall && callStatus === 'ringing' && (
+                <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                  <button
+                    type="button"
+                    onClick={acceptCall}
+                    className="flex flex-1 items-center justify-center gap-2 rounded-full bg-blue-600 px-5 py-3 text-sm font-black text-white transition hover:bg-blue-500"
+                  >
+                    <Phone className="h-4 w-4" />
+                    Aceitar
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => endCall()}
+                    className="flex flex-1 items-center justify-center gap-2 rounded-full bg-red-600 px-5 py-3 text-sm font-black text-white transition hover:bg-red-500"
+                  >
+                    <PhoneOff className="h-4 w-4" />
+                    Recusar
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="flex shrink-0 items-center justify-center gap-3 border-t border-white/10 px-4 py-4">
+              <button
+                type="button"
+                onClick={toggleMicrophone}
+                className={`flex h-12 w-12 items-center justify-center rounded-full transition ${
+                  micEnabled ? 'bg-white/10 hover:bg-white/20' : 'bg-red-600 hover:bg-red-500'
+                }`}
+                aria-label="Ativar ou desativar microfone"
+                title="Ativar/desativar microfone"
+              >
+                {micEnabled ? <Mic className="h-5 w-5" /> : <MicOff className="h-5 w-5" />}
+              </button>
+
+              {callMode === 'video' && (
+                <button
+                  type="button"
+                  onClick={toggleCamera}
+                  className={`flex h-12 w-12 items-center justify-center rounded-full transition ${
+                    cameraEnabled ? 'bg-white/10 hover:bg-white/20' : 'bg-red-600 hover:bg-red-500'
+                  }`}
+                  aria-label="Ativar ou desativar câmera"
+                  title="Ativar/desativar câmera"
+                >
+                  {cameraEnabled ? <Video className="h-5 w-5" /> : <VideoOff className="h-5 w-5" />}
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => endCall()}
+                className="flex h-12 min-w-12 items-center justify-center rounded-full bg-red-600 px-5 text-white transition hover:bg-red-500"
+                aria-label="Encerrar chamada"
+                title="Encerrar"
+              >
+                <PhoneOff className="h-5 w-5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <section className="fixed bottom-16 left-0 right-0 top-14 z-10 flex flex-col overflow-hidden px-3 py-2 sm:px-6 lg:static lg:mx-auto lg:h-screen lg:w-full lg:max-w-[1280px] lg:flex-row lg:px-0 lg:py-0 lg:pl-[270px]">
 
         <aside className="hidden min-h-0 w-[390px] shrink-0 flex-col overflow-hidden border-r border-zinc-200 bg-white dark:border-zinc-800 dark:bg-black lg:flex">
           <div className="shrink-0 border-b border-zinc-200 px-5 py-5 dark:border-zinc-800">
@@ -2220,6 +2625,28 @@ export default function ConversationPage() {
               <p className="truncate text-sm text-zinc-500">
                 {getUsername(otherProfile)}
               </p>
+            </div>
+
+            <div className="flex shrink-0 items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => startCall('voice')}
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-100 text-zinc-700 transition hover:bg-blue-50 hover:text-blue-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-blue-950/40 dark:hover:text-blue-300"
+                aria-label="Iniciar chamada de voz"
+                title="Iniciar chamada de voz"
+              >
+                <Phone className="h-5 w-5" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => startCall('video')}
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-100 text-zinc-700 transition hover:bg-blue-50 hover:text-blue-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-blue-950/40 dark:hover:text-blue-300"
+                aria-label="Iniciar chamada de vídeo"
+                title="Iniciar chamada de vídeo"
+              >
+                <Video className="h-5 w-5" />
+              </button>
             </div>
 
             {otherProfile?.username && (
