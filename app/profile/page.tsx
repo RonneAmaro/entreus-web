@@ -1052,9 +1052,9 @@ export default function ProfilePage() {
         onPostClick={handlePostClick}
       />
 
-      <section className="w-full overflow-x-hidden px-4 py-20 pb-24 sm:px-6 lg:ml-[270px] lg:w-[calc(100%_-_270px)] lg:py-8 xl:px-8">
-        <div className="mx-auto w-full max-w-[72rem]">
-          <div className="grid gap-6 xl:grid-cols-[minmax(0,46rem)_20rem] xl:items-start xl:justify-center">
+      <section className="w-full overflow-x-hidden py-20 pb-24 lg:pl-[310px] lg:pr-6 lg:py-8">
+        <div className="mx-auto w-full max-w-[1320px] px-4 sm:px-6 lg:px-0">
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(280px,320px)] xl:items-start 2xl:grid-cols-[minmax(0,1fr)_minmax(300px,340px)]">
             <div className="min-w-0">
         <BrandHeader
           subtitle={t('profile.myProfile')}
