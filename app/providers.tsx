@@ -1,6 +1,7 @@
 'use client'
 
 import { ThemeProvider } from 'next-themes'
+import GlobalCallProvider from './components/GlobalCallProvider'
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
@@ -10,7 +11,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       enableSystem={false}
       disableTransitionOnChange
     >
-      {children}
+      <GlobalCallProvider>{children}</GlobalCallProvider>
     </ThemeProvider>
   )
 }

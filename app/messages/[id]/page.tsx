@@ -6,7 +6,7 @@ import UserBadges from '../../components/UserBadges'
 import LinkPreview from '../../components/LinkPreview'
 import Link from 'next/link'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import {
   ArrowLeft,
@@ -558,6 +558,7 @@ function isMessageEdited(message: MessageRow) {
 export default function ConversationPage() {
   const params = useParams()
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { theme, setTheme } = useTheme()
   const bottomRef = useRef<HTMLDivElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -571,6 +572,7 @@ export default function ConversationPage() {
   const callChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
   const localVideoRef = useRef<HTMLVideoElement | null>(null)
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null)
+  const remoteAudioRef = useRef<HTMLAudioElement | null>(null)
 
   const conversationId = typeof params.id === 'string' ? params.id : ''
 
@@ -973,7 +975,34 @@ export default function ConversationPage() {
     if (remoteVideoRef.current) {
       remoteVideoRef.current.srcObject = remoteCallStream
     }
+
+    if (remoteAudioRef.current) {
+      remoteAudioRef.current.srcObject = remoteCallStream
+      remoteAudioRef.current.play().catch(() => {
+        // Some browsers require the user to press Accept before audio can start.
+      })
+    }
   }, [remoteCallStream])
+
+  useEffect(() => {
+    if (!conversationId || typeof window === 'undefined') return
+    if (searchParams.get('call') !== 'accept') return
+
+    const storedCall = sessionStorage.getItem(`entreus:incoming-call:${conversationId}`)
+    if (!storedCall) return
+
+    try {
+      const parsedCall = JSON.parse(storedCall) as IncomingCall
+      setIncomingCall(parsedCall)
+      setCallMode(parsedCall.mode)
+      setCallStatus('ringing')
+      setCallModalOpen(true)
+      setCallError('')
+      sessionStorage.removeItem(`entreus:incoming-call:${conversationId}`)
+    } catch {
+      sessionStorage.removeItem(`entreus:incoming-call:${conversationId}`)
+    }
+  }, [conversationId, searchParams])
 
   useEffect(() => {
     if (!conversationId || !userId) return
@@ -1020,6 +1049,12 @@ export default function ConversationPage() {
       .on('broadcast', { event: 'call-ended' }, ({ payload }) => {
         if (payload?.fromUserId === userId) return
         endCall(false)
+      })
+      .on('broadcast', { event: 'call-rejected' }, ({ payload }) => {
+        if (payload?.fromUserId === userId) return
+        setCallStatus('ended')
+        setCallError('Chamada recusada.')
+        window.setTimeout(() => endCall(false), 1200)
       })
       .subscribe()
 
@@ -2120,6 +2155,33 @@ export default function ConversationPage() {
     })
   }
 
+  function sendGlobalIncomingCall(mode: CallMode, offer: RTCSessionDescriptionInit) {
+    if (!otherUserId || !userId) return
+
+    const channel = supabase.channel(`user-call-${otherUserId}`)
+
+    channel.subscribe((status) => {
+      if (status !== 'SUBSCRIBED') return
+
+      channel.send({
+        type: 'broadcast',
+        event: 'incoming-call',
+        payload: {
+          conversationId,
+          callerId: userId,
+          callerName: getDisplayName(currentProfile),
+          callerAvatarUrl: currentProfile?.avatar_url || null,
+          callType: mode === 'video' ? 'video' : 'audio',
+          offer,
+        },
+      })
+
+      window.setTimeout(() => {
+        supabase.removeChannel(channel)
+      }, 800)
+    })
+  }
+
   function createPeerConnection() {
     const peerConnection = new RTCPeerConnection({
       iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
@@ -2139,7 +2201,15 @@ export default function ConversationPage() {
       if (stream) {
         remoteCallStreamRef.current = stream
         setRemoteCallStream(stream)
+        return
       }
+
+      const fallbackStream =
+        remoteCallStreamRef.current || new MediaStream()
+
+      fallbackStream.addTrack(event.track)
+      remoteCallStreamRef.current = fallbackStream
+      setRemoteCallStream(fallbackStream)
     }
 
     peerConnection.onconnectionstatechange = () => {
@@ -2201,6 +2271,8 @@ export default function ConversationPage() {
       mode,
       offer,
     })
+
+    sendGlobalIncomingCall(mode, offer)
   }
 
   async function acceptCall() {
@@ -2226,6 +2298,9 @@ export default function ConversationPage() {
 
     setIncomingCall(null)
     setCallStatus('connected')
+    remoteAudioRef.current?.play().catch(() => {
+      // Accept is a user gesture, so this usually succeeds; keep safe if blocked.
+    })
   }
 
   function toggleMicrophone() {
@@ -2256,6 +2331,18 @@ export default function ConversationPage() {
     localCallStreamRef.current = null
     remoteCallStreamRef.current = null
     peerConnectionRef.current = null
+
+    if (remoteAudioRef.current) {
+      remoteAudioRef.current.srcObject = null
+    }
+
+    if (remoteVideoRef.current) {
+      remoteVideoRef.current.srcObject = null
+    }
+
+    if (localVideoRef.current) {
+      localVideoRef.current.srcObject = null
+    }
 
     setLocalCallStream(null)
     setRemoteCallStream(null)
@@ -2349,6 +2436,8 @@ export default function ConversationPage() {
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto p-4">
+              <audio ref={remoteAudioRef} autoPlay playsInline className="hidden" />
+
               {callError ? (
                 <div className="rounded-[1.5rem] border border-red-400/30 bg-red-950/30 p-4 text-sm text-red-100">
                   {callError}
