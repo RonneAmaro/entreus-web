@@ -3048,6 +3048,18 @@ function FeedContent() {
                       Ganhe destaque na comunidade com selos especiais, como Engajador, VIP Premium e Ancião.
                     </p>
 
+                    <div className="mt-4 overflow-hidden rounded-2xl border border-yellow-300/20 bg-black/40 shadow-lg shadow-blue-500/10 ring-1 ring-blue-400/10">
+                      <video
+                        src="/selos-entreus.mp4"
+                        autoPlay
+                        muted
+                        loop
+                        playsInline
+                        preload="metadata"
+                        className="aspect-video max-h-40 w-full object-cover"
+                      />
+                    </div>
+
                     <span className="mt-4 inline-flex rounded-full bg-yellow-400 px-4 py-2 text-sm font-bold text-black shadow-sm shadow-yellow-500/20 transition group-hover:bg-yellow-300">
                       Ver meus selos
                     </span>
