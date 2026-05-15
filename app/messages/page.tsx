@@ -64,6 +64,7 @@ type ConversationItem = {
   otherUser: ProfileSummary | null
   lastMessage: MessageRow | null
   isUnread: boolean
+  archived: boolean
 }
 
 type ConversationUserState = {
@@ -71,7 +72,10 @@ type ConversationUserState = {
   user_id: string
   cleared_at: string | null
   archived_at: string | null
+  deleted_at: string | null
 }
+
+type ConversationView = 'recent' | 'archived'
 
 function getDisplayName(profile: ProfileSummary | CurrentProfile | null) {
   if (!profile) return 'Usuário EntreUS'
@@ -134,6 +138,7 @@ export default function MessagesPage() {
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
+  const [conversationView, setConversationView] = useState<ConversationView>('recent')
 
   const [userId, setUserId] = useState('')
   const [email, setEmail] = useState('')
@@ -141,11 +146,27 @@ export default function MessagesPage() {
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0)
   const [conversations, setConversations] = useState<ConversationItem[]>([])
 
+  const visibleConversations = useMemo(() => {
+    return conversations.filter((conversation) =>
+      conversationView === 'archived' ? conversation.archived : !conversation.archived
+    )
+  }, [conversationView, conversations])
+
   const sortedConversations = useMemo(() => {
-    return [...conversations].sort((a, b) => {
+    return [...visibleConversations].sort((a, b) => {
       return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
     })
-  }, [conversations])
+  }, [visibleConversations])
+
+  const recentConversationsCount = useMemo(
+    () => conversations.filter((conversation) => !conversation.archived).length,
+    [conversations]
+  )
+
+  const archivedConversationsCount = useMemo(
+    () => conversations.filter((conversation) => conversation.archived).length,
+    [conversations]
+  )
 
   const filteredConversations = useMemo(() => {
     const query = searchQuery.trim().toLowerCase()
@@ -322,7 +343,7 @@ export default function MessagesPage() {
 
     const { data: conversationStatesData, error: conversationStatesError } = await supabase
       .from('conversation_user_state')
-      .select('conversation_id, user_id, cleared_at, archived_at')
+      .select('conversation_id, user_id, cleared_at, archived_at, deleted_at')
       .eq('user_id', currentUserId)
       .in('conversation_id', conversationIds)
 
@@ -409,8 +430,14 @@ export default function MessagesPage() {
     for (const item of (messagesData || []) as MessageRow[]) {
       const currentState = stateByConversation[item.conversation_id]
       const clearedAt = currentState?.cleared_at
+        ? new Date(currentState.cleared_at).getTime()
+        : 0
+      const deletedAt = currentState?.deleted_at
+        ? new Date(currentState.deleted_at).getTime()
+        : 0
+      const hiddenBefore = Math.max(clearedAt, deletedAt)
 
-      if (clearedAt && new Date(item.created_at).getTime() <= new Date(clearedAt).getTime()) {
+      if (hiddenBefore && new Date(item.created_at).getTime() <= hiddenBefore) {
         continue
       }
 
@@ -419,9 +446,7 @@ export default function MessagesPage() {
       }
     }
 
-    const items: ConversationItem[] = ((conversationsData || []) as ConversationRow[])
-      .filter((conversation) => !stateByConversation[conversation.id]?.archived_at)
-      .map(
+    const items: ConversationItem[] = ((conversationsData || []) as ConversationRow[]).flatMap(
       (conversation) => {
         const participants = participantRows.filter(
           (participant) => participant.conversation_id === conversation.id
@@ -434,6 +459,19 @@ export default function MessagesPage() {
         const lastMessage = lastMessageByConversation[conversation.id] || null
         const myParticipant = myParticipantByConversation[conversation.id]
         const currentState = stateByConversation[conversation.id]
+        const deletedAt = currentState?.deleted_at
+          ? new Date(currentState.deleted_at).getTime()
+          : 0
+        const lastMessageAt = lastMessage?.created_at
+          ? new Date(lastMessage.created_at).getTime()
+          : 0
+        const reactivatedAfterDelete = !!(deletedAt && lastMessageAt > deletedAt)
+
+        if (deletedAt && !reactivatedAfterDelete) {
+          return []
+        }
+
+        const archived = !!currentState?.archived_at && !reactivatedAfterDelete
         const lastReadAt = myParticipant?.last_read_at
           ? new Date(myParticipant.last_read_at).getTime()
           : 0
@@ -455,6 +493,7 @@ export default function MessagesPage() {
           otherUser: otherParticipant ? profilesById[otherParticipant.user_id] || null : null,
           lastMessage,
           isUnread,
+          archived,
         }
       }
     )
@@ -541,6 +580,34 @@ export default function MessagesPage() {
                 className="min-w-0 flex-1 bg-transparent text-sm text-zinc-900 outline-none placeholder:text-zinc-500 dark:text-white"
               />
             </div>
+
+            <div className="mt-4 grid grid-cols-2 rounded-full border border-zinc-200/70 bg-zinc-100/80 p-1 dark:border-zinc-800/70 dark:bg-zinc-950">
+              <button
+                type="button"
+                onClick={() => setConversationView('recent')}
+                className={`rounded-full px-3 py-2 text-sm font-black transition ${
+                  conversationView === 'recent'
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
+                    : 'text-zinc-600 hover:bg-white/70 hover:text-zinc-950 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-white'
+                }`}
+              >
+                Recentes
+                <span className="ml-1 text-xs opacity-75">{recentConversationsCount}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setConversationView('archived')}
+                className={`rounded-full px-3 py-2 text-sm font-black transition ${
+                  conversationView === 'archived'
+                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
+                    : 'text-zinc-600 hover:bg-white/70 hover:text-zinc-950 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-white'
+                }`}
+              >
+                Arquivadas
+                <span className="ml-1 text-xs opacity-75">{archivedConversationsCount}</span>
+              </button>
+            </div>
           </div>
 
           {message && (
@@ -557,7 +624,7 @@ export default function MessagesPage() {
                 </div>
 
                 <h3 className="text-lg font-black text-zinc-950 dark:text-white">
-                  Nenhuma conversa ainda
+                  {conversationView === 'archived' ? 'Nenhuma conversa arquivada' : 'Nenhuma conversa ainda'}
                 </h3>
 
                 <p className="mx-auto mt-2 max-w-xs text-sm leading-6 text-zinc-500 dark:text-zinc-400">

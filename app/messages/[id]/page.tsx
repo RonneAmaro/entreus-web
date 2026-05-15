@@ -91,6 +91,7 @@ type ConversationItem = {
   otherUser: ProfileSummary | null
   lastMessage: ConversationPreviewMessage | null
   isUnread: boolean
+  archived: boolean
 }
 
 type ConversationUserState = {
@@ -98,6 +99,7 @@ type ConversationUserState = {
   user_id: string
   cleared_at: string | null
   archived_at: string | null
+  deleted_at: string | null
 }
 
 type MessageAttachment = {
@@ -706,7 +708,7 @@ export default function ConversationPage() {
 
     const rect = button.getBoundingClientRect()
     const menuWidth = 256
-    const estimatedMenuHeight = 210
+    const estimatedMenuHeight = 260
     const viewportPadding = 8
 
     const left = Math.min(
@@ -1278,7 +1280,7 @@ export default function ConversationPage() {
 
     const { data: conversationStatesData, error: conversationStatesError } = await supabase
       .from('conversation_user_state')
-      .select('conversation_id, user_id, cleared_at, archived_at')
+      .select('conversation_id, user_id, cleared_at, archived_at, deleted_at')
       .eq('user_id', currentUserId)
       .in('conversation_id', conversationIds)
 
@@ -1365,8 +1367,14 @@ export default function ConversationPage() {
     for (const item of (messagesData || []) as ConversationPreviewMessage[]) {
       const currentState = stateByConversation[item.conversation_id]
       const clearedAt = currentState?.cleared_at
+        ? new Date(currentState.cleared_at).getTime()
+        : 0
+      const deletedAt = currentState?.deleted_at
+        ? new Date(currentState.deleted_at).getTime()
+        : 0
+      const hiddenBefore = Math.max(clearedAt, deletedAt)
 
-      if (clearedAt && new Date(item.created_at).getTime() <= new Date(clearedAt).getTime()) {
+      if (hiddenBefore && new Date(item.created_at).getTime() <= hiddenBefore) {
         continue
       }
 
@@ -1375,9 +1383,7 @@ export default function ConversationPage() {
       }
     }
 
-    const items: ConversationItem[] = ((conversationsData || []) as ConversationRow[])
-      .filter((conversation) => !stateByConversation[conversation.id]?.archived_at)
-      .map(
+    const items: ConversationItem[] = ((conversationsData || []) as ConversationRow[]).flatMap(
       (conversation) => {
         const conversationParticipants = participantRows.filter(
           (participant) => participant.conversation_id === conversation.id
@@ -1390,6 +1396,19 @@ export default function ConversationPage() {
         const lastMessage = lastMessageByConversation[conversation.id] || null
         const myParticipant = myParticipantByConversation[conversation.id]
         const currentState = stateByConversation[conversation.id]
+        const deletedAt = currentState?.deleted_at
+          ? new Date(currentState.deleted_at).getTime()
+          : 0
+        const lastMessageAt = lastMessage?.created_at
+          ? new Date(lastMessage.created_at).getTime()
+          : 0
+        const reactivatedAfterDelete = !!(deletedAt && lastMessageAt > deletedAt)
+
+        if (deletedAt && !reactivatedAfterDelete) {
+          return []
+        }
+
+        const archived = !!currentState?.archived_at && !reactivatedAfterDelete
         const lastReadAt = myParticipant?.last_read_at
           ? new Date(myParticipant.last_read_at).getTime()
           : 0
@@ -1411,6 +1430,7 @@ export default function ConversationPage() {
           otherUser: otherParticipant ? profilesById[otherParticipant.user_id] || null : null,
           lastMessage,
           isUnread,
+          archived,
         }
       }
     )
@@ -1476,7 +1496,7 @@ export default function ConversationPage() {
 
     const { data: stateData, error: stateError } = await supabase
       .from('conversation_user_state')
-      .select('conversation_id, user_id, cleared_at, archived_at')
+      .select('conversation_id, user_id, cleared_at, archived_at, deleted_at')
       .eq('conversation_id', conversationId)
       .eq('user_id', currentUserId)
       .maybeSingle()
@@ -1595,7 +1615,7 @@ export default function ConversationPage() {
 
     const { data: stateData, error: stateError } = await supabase
       .from('conversation_user_state')
-      .select('conversation_id, user_id, cleared_at, archived_at')
+      .select('conversation_id, user_id, cleared_at, archived_at, deleted_at')
       .eq('conversation_id', conversationId)
       .eq('user_id', currentUserId)
       .maybeSingle()
@@ -1609,11 +1629,15 @@ export default function ConversationPage() {
     const clearedAt = currentState?.cleared_at
       ? new Date(currentState.cleared_at).getTime()
       : 0
+    const deletedAt = currentState?.deleted_at
+      ? new Date(currentState.deleted_at).getTime()
+      : 0
+    const hiddenBefore = Math.max(clearedAt, deletedAt)
 
     setConversationState(currentState)
 
     const visibleMessages = loadedMessages.filter(
-      (item) => !hiddenMessageIds.has(item.id) && new Date(item.created_at).getTime() > clearedAt
+      (item) => !hiddenMessageIds.has(item.id) && new Date(item.created_at).getTime() > hiddenBefore
     )
 
     const visibleMessageIds = visibleMessages.map((item) => item.id)
@@ -1683,13 +1707,14 @@ export default function ConversationPage() {
           conversation_id: conversationId,
           user_id: userId,
           cleared_at: clearedAt,
+          deleted_at: null,
           updated_at: clearedAt,
         },
         {
           onConflict: 'conversation_id,user_id',
         }
       )
-      .select('conversation_id, user_id, cleared_at, archived_at')
+      .select('conversation_id, user_id, cleared_at, archived_at, deleted_at')
       .single()
 
     if (error) {
@@ -1708,7 +1733,7 @@ export default function ConversationPage() {
     await loadConversationList(userId)
   }
 
-  async function handleArchiveConversationForMe() {
+  async function handleToggleArchiveConversationForMe() {
     if (!userId || !conversationId || conversationActionLoading) return
 
     const confirmed = window.confirm(
@@ -1748,6 +1773,98 @@ export default function ConversationPage() {
     setOpenConversationMenu(false)
     setConversationActionLoading(false)
     setMessage('Conversa ocultada da sua lista principal.')
+    await loadConversationList(userId)
+    router.push('/messages')
+  }
+
+  async function handleArchiveActionForMe() {
+    if (!userId || !conversationId || conversationActionLoading) return
+
+    const archived = !!conversationState?.archived_at
+    const confirmed = window.confirm(
+      archived
+        ? 'Desarquivar esta conversa e voltar para Recentes?'
+        : 'Arquivar esta conversa? Ela ficara disponivel na aba Arquivadas.'
+    )
+
+    if (!confirmed) return
+
+    const now = new Date().toISOString()
+
+    setConversationActionLoading(true)
+    setMessage('')
+
+    const { data, error } = await supabase
+      .from('conversation_user_state')
+      .upsert(
+        {
+          conversation_id: conversationId,
+          user_id: userId,
+          archived_at: archived ? null : now,
+          deleted_at: null,
+          updated_at: now,
+        },
+        {
+          onConflict: 'conversation_id,user_id',
+        }
+      )
+      .select('conversation_id, user_id, cleared_at, archived_at, deleted_at')
+      .single()
+
+    if (error) {
+      setMessage(archived ? 'Erro ao desarquivar conversa: ' + error.message : 'Erro ao arquivar conversa: ' + error.message)
+      setConversationActionLoading(false)
+      return
+    }
+
+    setConversationState(data as ConversationUserState)
+    setOpenConversationMenu(false)
+    setConversationActionLoading(false)
+    setMessage(archived ? 'Conversa desarquivada.' : 'Conversa arquivada.')
+    await loadConversationList(userId)
+  }
+
+  async function handleDeleteConversationForMe() {
+    if (!userId || !conversationId || conversationActionLoading) return
+
+    const confirmed = window.confirm('Excluir esta conversa apenas para voce?')
+
+    if (!confirmed) return
+
+    const deletedAt = new Date().toISOString()
+
+    setConversationActionLoading(true)
+    setMessage('')
+
+    const { data, error } = await supabase
+      .from('conversation_user_state')
+      .upsert(
+        {
+          conversation_id: conversationId,
+          user_id: userId,
+          cleared_at: deletedAt,
+          archived_at: null,
+          deleted_at: deletedAt,
+          updated_at: deletedAt,
+        },
+        {
+          onConflict: 'conversation_id,user_id',
+        }
+      )
+      .select('conversation_id, user_id, cleared_at, archived_at, deleted_at')
+      .single()
+
+    if (error) {
+      setMessage('Erro ao excluir conversa para voce: ' + error.message)
+      setConversationActionLoading(false)
+      return
+    }
+
+    setConversationState(data as ConversationUserState)
+    setMessages([])
+    setOpenConversationMenu(false)
+    setConversationActionLoading(false)
+    setMessage('Conversa excluida apenas para voce.')
     await loadConversationList(userId)
     router.push('/messages')
   }
@@ -3080,17 +3197,27 @@ export default function ConversationPage() {
                 className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left font-semibold transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Trash2 className="h-4 w-4" />
-                Limpar conversa para mim
+                Limpar mensagens para mim
               </button>
 
               <button
                 type="button"
-                onClick={handleArchiveConversationForMe}
+                onClick={handleArchiveActionForMe}
                 disabled={conversationActionLoading}
                 className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left font-semibold transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Archive className="h-4 w-4" />
-                Ocultar/arquivar conversa
+                {conversationState?.archived_at ? 'Desarquivar conversa' : 'Arquivar conversa'}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleDeleteConversationForMe}
+                disabled={conversationActionLoading}
+                className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left font-semibold text-red-300 transition hover:bg-red-500/10 hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Trash2 className="h-4 w-4" />
+                Excluir conversa para mim
               </button>
 
               <button
