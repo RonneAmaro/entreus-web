@@ -24,31 +24,39 @@ export default function InstitutionalPageLayout({
   notice,
   children,
 }: InstitutionalPageLayoutProps) {
+  const brandTextShadow =
+    '0 2px 12px rgba(0,0,0,0.55), 0 0 18px rgba(100,180,251,0.20)'
+
   return (
     <main className="relative min-h-screen overflow-hidden bg-black text-white">
       <div className="absolute inset-x-0 top-0 h-80 bg-[radial-gradient(circle_at_top,rgba(37,99,235,0.30),transparent_58%)]" />
       <div className="absolute inset-x-0 bottom-0 h-96 bg-[radial-gradient(circle_at_bottom_right,rgba(30,64,175,0.18),transparent_52%)]" />
 
       <div className="relative mx-auto flex w-full max-w-6xl flex-col gap-8 px-5 py-6 sm:px-8 lg:px-10">
-        <header className="flex flex-col gap-4 rounded-[1.75rem] border border-white/10 bg-zinc-950/55 p-4 shadow-2xl shadow-black/20 ring-1 ring-blue-400/10 backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between">
-          <Link href="/feed" className="group inline-flex items-center gap-3">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-blue-400/25 bg-black shadow-lg shadow-blue-500/10 ring-1 ring-white/10 transition group-hover:border-blue-300/70">
-              <Image
-                src="/logo.png"
-                alt="Logo EntreUS"
-                width={48}
-                height={48}
-                className="h-full w-full object-contain p-1.5"
-                priority
-              />
-            </div>
+        <header className="flex flex-col gap-4 rounded-[1.75rem] border border-white/10 bg-zinc-950/55 px-5 py-4 shadow-2xl shadow-black/20 ring-1 ring-blue-400/10 backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between">
+          <Link href="/feed" className="group inline-flex min-w-0 items-center gap-3.5">
+            <Image
+              src="/logo-icon.png"
+              alt="Logo EntreUS"
+              width={58}
+              height={58}
+              className="h-14 w-14 shrink-0 object-contain drop-shadow-[0_0_18px_rgba(100,180,251,0.28)] transition duration-300 group-hover:scale-[1.03]"
+              priority
+            />
 
-            <div>
-              <p className="text-2xl font-black tracking-tight">
-                Entre<span className="text-blue-400">US</span>
+            <div className="min-w-0">
+              <p
+                className="text-2xl font-black leading-none tracking-normal sm:text-3xl"
+                style={{ textShadow: brandTextShadow }}
+              >
+                <span style={{ color: '#eeeeef' }}>Entre</span>
+                <span style={{ color: '#134a99' }}>US</span>
               </p>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-200/75">
-                Só Entre Nós
+              <p
+                className="mt-1 text-xs font-bold uppercase tracking-[0.18em] sm:text-[13px]"
+                style={{ color: '#64b4fb', textShadow: brandTextShadow }}
+              >
+                S&oacute; Entre N&oacute;s
               </p>
             </div>
           </Link>
