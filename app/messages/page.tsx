@@ -47,6 +47,8 @@ type MessageRow = {
   call_type?: 'voice' | 'video' | null
   call_status?: 'missed' | 'declined' | 'ended' | 'canceled' | null
   call_duration_seconds?: number | null
+  delivered_at?: string | null
+  read_at?: string | null
   created_at: string
   deleted_at: string | null
 }
@@ -248,7 +250,15 @@ export default function MessagesPage() {
           schema: 'public',
           table: 'messages',
         },
-        () => {
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            const receivedMessage = payload.new as MessageRow
+
+            if (receivedMessage.sender_id !== userId && !receivedMessage.delivered_at) {
+              markMessageAsDelivered(receivedMessage.id)
+            }
+          }
+
           scheduleMessagesRefresh()
         }
       )
@@ -310,6 +320,20 @@ export default function MessagesPage() {
     }
 
     setUnreadNotificationsCount(count || 0)
+  }
+
+  async function markMessageAsDelivered(messageId: string) {
+    const { error } = await supabase
+      .from('messages')
+      .update({
+        delivered_at: new Date().toISOString(),
+      })
+      .eq('id', messageId)
+      .is('delivered_at', null)
+
+    if (error) {
+      console.error('Erro ao marcar mensagem como entregue:', error.message)
+    }
   }
 
   async function loadConversations(currentUserId: string) {

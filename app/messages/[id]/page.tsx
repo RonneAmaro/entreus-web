@@ -15,6 +15,7 @@ import {
   Ban,
   ChevronDown,
   Check,
+  CheckCheck,
   Inbox,
   Loader2,
   MessageSquarePlus,
@@ -86,6 +87,8 @@ type ConversationPreviewMessage = {
   reply_to_message_id?: string | null
   edited_at?: string | null
   deleted_by?: string | null
+  delivered_at?: string | null
+  read_at?: string | null
   created_at: string
   deleted_at: string | null
 }
@@ -148,6 +151,8 @@ type MessageRow = {
   reply_to_message_id?: string | null
   edited_at?: string | null
   deleted_by?: string | null
+  delivered_at?: string | null
+  read_at?: string | null
   created_at: string
   updated_at: string
   deleted_at: string | null
@@ -653,6 +658,12 @@ function isMessageEdited(message: MessageRow) {
   return Math.abs(updatedAt - createdAt) > 3000
 }
 
+function getMessageDeliveryStatus(message: MessageRow) {
+  if (message.read_at) return 'read'
+  if (message.delivered_at) return 'delivered'
+  return 'sent'
+}
+
 export default function ConversationPage() {
   const params = useParams()
   const router = useRouter()
@@ -1049,6 +1060,11 @@ export default function ConversationPage() {
                 },
               ]
             })
+
+            if (receivedMessage.sender_id !== userId) {
+              markIncomingMessagesAsDelivered(userId)
+              markIncomingMessagesAsRead(userId)
+            }
 
             markConversationAsRead(userId)
             loadConversationList(userId)
@@ -1518,7 +1534,7 @@ export default function ConversationPage() {
 
     const { data: messagesData, error: messagesError } = await supabase
       .from('messages')
-      .select('id, conversation_id, sender_id, content, type, call_type, call_status, call_duration_seconds, reply_to_message_id, edited_at, deleted_by, created_at, deleted_at')
+      .select('id, conversation_id, sender_id, content, type, call_type, call_status, call_duration_seconds, reply_to_message_id, edited_at, deleted_by, delivered_at, read_at, created_at, deleted_at')
       .in('conversation_id', conversationIds)
       .order('created_at', { ascending: false })
       .limit(300)
@@ -1674,8 +1690,10 @@ export default function ConversationPage() {
 
     setConversationState((stateData as ConversationUserState | null) || null)
 
+    await markIncomingMessagesAsDelivered(currentUserId)
     await loadMessagesWithAttachments(currentUserId)
     await markConversationAsRead(currentUserId)
+    await markIncomingMessagesAsRead(currentUserId)
   }
 
   async function attachSignedUrl(attachment: MessageAttachment) {
@@ -1753,7 +1771,7 @@ export default function ConversationPage() {
   async function loadMessagesWithAttachments(currentUserId: string) {
     const { data, error } = await supabase
       .from('messages')
-      .select('id, conversation_id, sender_id, content, type, call_type, call_status, call_duration_seconds, reply_to_message_id, edited_at, deleted_by, created_at, updated_at, deleted_at')
+      .select('id, conversation_id, sender_id, content, type, call_type, call_status, call_duration_seconds, reply_to_message_id, edited_at, deleted_by, delivered_at, read_at, created_at, updated_at, deleted_at')
       .eq('conversation_id', conversationId)
       .order('created_at', { ascending: true })
 
@@ -1864,6 +1882,54 @@ export default function ConversationPage() {
       })
       .eq('conversation_id', conversationId)
       .eq('user_id', currentUserId)
+  }
+
+  async function markIncomingMessagesAsDelivered(currentUserId: string) {
+    const deliveredAt = new Date().toISOString()
+
+    const { error } = await supabase
+      .from('messages')
+      .update({
+        delivered_at: deliveredAt,
+      })
+      .eq('conversation_id', conversationId)
+      .neq('sender_id', currentUserId)
+      .is('delivered_at', null)
+
+    if (error) {
+      console.error('Erro ao marcar mensagens como entregues:', error.message)
+    }
+  }
+
+  async function markIncomingMessagesAsRead(currentUserId: string) {
+    const readAt = new Date().toISOString()
+
+    const { error } = await supabase
+      .from('messages')
+      .update({
+        delivered_at: readAt,
+        read_at: readAt,
+      })
+      .eq('conversation_id', conversationId)
+      .neq('sender_id', currentUserId)
+      .is('read_at', null)
+
+    if (error) {
+      console.error('Erro ao marcar mensagens como lidas:', error.message)
+      return
+    }
+
+    setMessages((current) =>
+      current.map((item) =>
+        item.sender_id !== currentUserId && !item.read_at
+          ? {
+              ...item,
+              delivered_at: item.delivered_at || readAt,
+              read_at: readAt,
+            }
+          : item
+      )
+    )
   }
 
   async function hasBlockBetweenUsers(currentUserId: string, targetUserId: string) {
@@ -2860,7 +2926,7 @@ export default function ConversationPage() {
         content: content || null,
         reply_to_message_id: replyingToMessage?.id || null,
       })
-      .select('id, conversation_id, sender_id, content, type, call_type, call_status, call_duration_seconds, reply_to_message_id, edited_at, deleted_by, created_at, updated_at, deleted_at')
+      .select('id, conversation_id, sender_id, content, type, call_type, call_status, call_duration_seconds, reply_to_message_id, edited_at, deleted_by, delivered_at, read_at, created_at, updated_at, deleted_at')
       .single()
 
     if (error || !data) {
@@ -3052,7 +3118,7 @@ export default function ConversationPage() {
         call_status: status,
         call_duration_seconds: durationSeconds,
       })
-      .select('id, conversation_id, sender_id, content, type, call_type, call_status, call_duration_seconds, reply_to_message_id, edited_at, deleted_by, created_at, updated_at, deleted_at')
+      .select('id, conversation_id, sender_id, content, type, call_type, call_status, call_duration_seconds, reply_to_message_id, edited_at, deleted_by, delivered_at, read_at, created_at, updated_at, deleted_at')
       .single()
 
     if (error || !data) {
@@ -4261,6 +4327,7 @@ export default function ConversationPage() {
                 const isMediaFocused = hasMedia && !hasText && !item.deleted_at && !isEditingThisMessage
                 const isCallEvent = item.type === 'call'
                 const isHighlighted = highlightedMessageId === item.id
+                const deliveryStatus = getMessageDeliveryStatus(item)
 
                 if (isCallEvent) {
                   const callLabel = getCallHistoryLabel(item)
@@ -4545,6 +4612,36 @@ export default function ConversationPage() {
                               <span> · editada</span>
                             )}
                           </p>
+
+                          {isMine && !item.deleted_at && (
+                            <span
+                              className={`inline-flex items-center ${
+                                deliveryStatus === 'read'
+                                  ? 'text-sky-200 dark:text-sky-200'
+                                  : 'text-white/70'
+                              }`}
+                              aria-label={
+                                deliveryStatus === 'read'
+                                  ? 'Mensagem visualizada'
+                                  : deliveryStatus === 'delivered'
+                                    ? 'Mensagem entregue'
+                                    : 'Mensagem enviada'
+                              }
+                              title={
+                                deliveryStatus === 'read'
+                                  ? 'Visualizada'
+                                  : deliveryStatus === 'delivered'
+                                    ? 'Entregue'
+                                    : 'Enviada'
+                              }
+                            >
+                              {deliveryStatus === 'sent' ? (
+                                <Check className="h-3.5 w-3.5" />
+                              ) : (
+                                <CheckCheck className="h-3.5 w-3.5" />
+                              )}
+                            </span>
+                          )}
 
                           {!item.deleted_at && !isEditingThisMessage && (
                             <div className="flex items-center gap-1 opacity-100 transition sm:opacity-0 sm:group-hover:opacity-100">
