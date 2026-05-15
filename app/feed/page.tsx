@@ -3151,6 +3151,14 @@ function FeedContent() {
               </div>
 
               <div className="rounded-[2rem] border border-zinc-200/70 bg-white/80 p-5 text-sm leading-6 text-zinc-500 shadow-sm ring-1 ring-black/5 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-black/60 dark:text-zinc-400 dark:ring-white/10">
+                <div className="mb-2 flex items-center gap-2 font-bold text-zinc-700 dark:text-zinc-200">
+                  <MessageCircle className="h-4 w-4" />
+                  EntreUS
+                </div>
+                O mural é uma área experimental. Depois podemos colocar criadores em destaque, anúncios internos, ItaCash, eventos, lives e novidades da comunidade.
+              </div>
+
+              <div className="rounded-[1.5rem] border border-zinc-200/60 bg-white/70 p-4 text-sm leading-6 text-zinc-500 shadow-sm ring-1 ring-black/5 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-black/45 dark:text-zinc-400 dark:ring-white/10">
                 <div className="flex flex-wrap gap-x-2 gap-y-1">
                   {institutionalLinks.map((item, index) => (
                     <span key={item.href} className="inline-flex items-center gap-2">
@@ -3167,17 +3175,9 @@ function FeedContent() {
                   ))}
                 </div>
 
-                <p className="mt-4 text-xs font-semibold text-zinc-400 dark:text-zinc-500">
+                <p className="mt-3 text-xs font-semibold text-zinc-400 dark:text-zinc-500">
                   © 2026 EntreUS
                 </p>
-              </div>
-
-              <div className="rounded-[2rem] border border-zinc-200/70 bg-white/80 p-5 text-sm leading-6 text-zinc-500 shadow-sm ring-1 ring-black/5 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-black/60 dark:text-zinc-400 dark:ring-white/10">
-                <div className="mb-2 flex items-center gap-2 font-bold text-zinc-700 dark:text-zinc-200">
-                  <MessageCircle className="h-4 w-4" />
-                  EntreUS
-                </div>
-                O mural é uma área experimental. Depois podemos colocar criadores em destaque, anúncios internos, ItaCash, eventos, lives e novidades da comunidade.
               </div>
             </div>
           </aside>
