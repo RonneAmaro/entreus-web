@@ -620,6 +620,7 @@ export default function ConversationPage() {
   const [remoteCallStream, setRemoteCallStream] = useState<MediaStream | null>(null)
   const [micEnabled, setMicEnabled] = useState(true)
   const [cameraEnabled, setCameraEnabled] = useState(true)
+  const [remoteAudioBlocked, setRemoteAudioBlocked] = useState(false)
   const [callChannelReady, setCallChannelReady] = useState(false)
 
   const otherUserId = useMemo(() => {
@@ -1037,7 +1038,7 @@ export default function ConversationPage() {
 
         try {
           if (peerConnectionRef.current && payload?.answer) {
-            console.log('call: received answer')
+            logCallDebug('call: received answer')
             await peerConnectionRef.current.setRemoteDescription(payload.answer)
             remoteDescriptionReadyRef.current = true
             await flushPendingIceCandidates()
@@ -1054,7 +1055,7 @@ export default function ConversationPage() {
         try {
           if (!payload?.candidate) return
 
-          console.log('call: received ice candidate')
+          logCallDebug('call: received ice candidate')
 
           if (!peerConnectionRef.current || !remoteDescriptionReadyRef.current) {
             pendingIceCandidatesRef.current.push(payload.candidate)
@@ -2213,6 +2214,17 @@ export default function ConversationPage() {
     }
   }
 
+  function logCallDebug(message: string, details?: unknown) {
+    if (process.env.NODE_ENV !== 'development') return
+
+    if (details === undefined) {
+      console.log(message)
+      return
+    }
+
+    console.log(message, details)
+  }
+
   function attachRemoteMediaStream(stream: MediaStream | null = remoteCallStreamRef.current) {
     if (remoteVideoRef.current) {
       remoteVideoRef.current.srcObject = stream
@@ -2220,8 +2232,18 @@ export default function ConversationPage() {
 
     if (remoteAudioRef.current) {
       remoteAudioRef.current.srcObject = stream
-      remoteAudioRef.current.play().catch(() => {
-        // Browser autoplay policies can still require a user gesture.
+      remoteAudioRef.current.muted = false
+      remoteAudioRef.current.volume = 1
+
+      if (!stream) {
+        setRemoteAudioBlocked(false)
+        return
+      }
+
+      remoteAudioRef.current.play().then(() => {
+        setRemoteAudioBlocked(false)
+      }).catch(() => {
+        setRemoteAudioBlocked(true)
       })
     }
   }
@@ -2229,6 +2251,19 @@ export default function ConversationPage() {
   function attachLocalMediaStream(stream: MediaStream | null = localCallStreamRef.current) {
     if (localVideoRef.current) {
       localVideoRef.current.srcObject = stream
+    }
+  }
+
+  async function playRemoteAudio() {
+    if (!remoteAudioRef.current) return
+
+    try {
+      remoteAudioRef.current.muted = false
+      remoteAudioRef.current.volume = 1
+      await remoteAudioRef.current.play()
+      setRemoteAudioBlocked(false)
+    } catch {
+      setRemoteAudioBlocked(true)
     }
   }
 
@@ -2260,7 +2295,12 @@ export default function ConversationPage() {
   }
 
   function createPeerConnection() {
-    console.log('call: creating peer connection')
+    logCallDebug('call: creating peer connection')
+
+    peerConnectionRef.current?.close()
+    peerConnectionRef.current = null
+    remoteCallStreamRef.current = null
+    setRemoteCallStream(null)
 
     remoteDescriptionReadyRef.current = false
 
@@ -2277,7 +2317,7 @@ export default function ConversationPage() {
     }
 
     peerConnection.ontrack = (event) => {
-      console.log('call: received remote track', event.track.kind)
+      logCallDebug('call: received remote track', event.track.kind)
 
       const remoteStream = remoteCallStreamRef.current || new MediaStream()
       const alreadyAdded = remoteStream
@@ -2295,7 +2335,7 @@ export default function ConversationPage() {
     }
 
     peerConnection.onconnectionstatechange = () => {
-      console.log('call: connection state', peerConnection.connectionState)
+      logCallDebug('call: connection state', peerConnection.connectionState)
 
       if (peerConnection.connectionState === 'connected') {
         setCallStatus('connected')
@@ -2310,11 +2350,42 @@ export default function ConversationPage() {
     }
 
     peerConnection.oniceconnectionstatechange = () => {
-      console.log('call: ice connection state', peerConnection.iceConnectionState)
+      logCallDebug('call: ice connection state', peerConnection.iceConnectionState)
     }
 
     peerConnectionRef.current = peerConnection
     return peerConnection
+  }
+
+  function addLocalTracksToPeerConnection(peerConnection: RTCPeerConnection, stream: MediaStream, mode: CallMode) {
+    stream.getTracks().forEach((track) => {
+      const alreadyAdded = peerConnection
+        .getSenders()
+        .some((sender) => sender.track?.id === track.id)
+
+      if (alreadyAdded) return
+
+      logCallDebug('call: local track added', track.kind)
+      peerConnection.addTrack(track, stream)
+    })
+
+    const hasAudioSender = peerConnection
+      .getSenders()
+      .some((sender) => sender.track?.kind === 'audio')
+
+    const hasAudioTransceiver = peerConnection
+      .getTransceivers()
+      .some((transceiver) => {
+        return (
+          transceiver.sender.track?.kind === 'audio' ||
+          transceiver.receiver.track.kind === 'audio'
+        )
+      })
+
+    if (mode === 'voice' && !hasAudioSender && !hasAudioTransceiver) {
+      logCallDebug('call: adding audio transceiver')
+      peerConnection.addTransceiver('audio', { direction: 'sendrecv' })
+    }
   }
 
   function waitForIceGatheringComplete(peerConnection: RTCPeerConnection) {
@@ -2344,8 +2415,18 @@ export default function ConversationPage() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: true,
-        video: mode === 'video',
+        video: mode === 'video' ? true : false,
       })
+
+      const audioTracks = stream.getAudioTracks()
+      logCallDebug('call: local audio tracks', audioTracks.length)
+
+      if (audioTracks.length === 0 || audioTracks.every((track) => track.readyState !== 'live')) {
+        stream.getTracks().forEach((track) => track.stop())
+        setCallStatus('error')
+        setCallError('Não foi possível acessar o microfone.')
+        return null
+      }
 
       localCallStreamRef.current = stream
       setLocalCallStream(stream)
@@ -2355,7 +2436,11 @@ export default function ConversationPage() {
       return stream
     } catch {
       setCallStatus('error')
-      setCallError('Permita acesso ao microfone/câmera para iniciar a chamada.')
+      setCallError(
+        mode === 'voice'
+          ? 'Não foi possível acessar o microfone.'
+          : 'Permita acesso ao microfone/câmera para iniciar a chamada.'
+      )
       return null
     }
   }
@@ -2374,10 +2459,7 @@ export default function ConversationPage() {
     if (!stream) return
 
     const peerConnection = createPeerConnection()
-    stream.getTracks().forEach((track) => {
-      console.log('call: local track added', track.kind)
-      peerConnection.addTrack(track, stream)
-    })
+    addLocalTracksToPeerConnection(peerConnection, stream, mode)
 
     const offer = await peerConnection.createOffer()
     await peerConnection.setLocalDescription(offer)
@@ -2404,10 +2486,7 @@ export default function ConversationPage() {
     if (!stream) return
 
     const peerConnection = createPeerConnection()
-    stream.getTracks().forEach((track) => {
-      console.log('call: local track added', track.kind)
-      peerConnection.addTrack(track, stream)
-    })
+    addLocalTracksToPeerConnection(peerConnection, stream, incomingCall.mode)
 
     await peerConnection.setRemoteDescription(incomingCall.offer)
     remoteDescriptionReadyRef.current = true
@@ -2424,9 +2503,7 @@ export default function ConversationPage() {
 
     setIncomingCall(null)
     setCallStatus('connecting')
-    remoteAudioRef.current?.play().catch(() => {
-      // Accept is a user gesture, so this usually succeeds; keep safe if blocked.
-    })
+    playRemoteAudio()
   }
 
   function toggleMicrophone() {
@@ -2484,6 +2561,7 @@ export default function ConversationPage() {
     setCallError('')
     setMicEnabled(true)
     setCameraEnabled(true)
+    setRemoteAudioBlocked(false)
   }
 
   const otherName = getDisplayName(otherProfile)
@@ -2575,6 +2653,7 @@ export default function ConversationPage() {
                 }}
                 autoPlay
                 playsInline
+                controls={false}
                 className="hidden"
               />
 
@@ -2621,6 +2700,21 @@ export default function ConversationPage() {
                   </div>
                   <p className="text-lg font-black">{otherName}</p>
                   <p className="mt-1 text-sm text-blue-100/70">Chamada de voz privada</p>
+                </div>
+              )}
+
+              {remoteAudioBlocked && (
+                <div className="mt-4 rounded-[1.5rem] border border-blue-300/25 bg-blue-500/10 p-4 text-center">
+                  <p className="text-sm leading-6 text-blue-100">
+                    Seu navegador bloqueou a reprodução automática do áudio remoto.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={playRemoteAudio}
+                    className="mt-3 inline-flex items-center justify-center rounded-full bg-blue-600 px-5 py-2.5 text-sm font-black text-white transition hover:bg-blue-500"
+                  >
+                    Ativar áudio
+                  </button>
                 </div>
               )}
 
