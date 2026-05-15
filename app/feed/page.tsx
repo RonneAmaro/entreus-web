@@ -391,6 +391,16 @@ const COMMENT_EMOJI_GROUPS = [
 
 const COMMENT_QUICK_EMOJIS = ['❤️', '😂', '🔥', '😍', '👀', '✨', '😏', '💙', '👏', '🥳', '🚀', '💯']
 
+const institutionalLinks = [
+  { href: '/terms', label: 'Termos' },
+  { href: '/privacy', label: 'Privacidade' },
+  { href: '/safety', label: 'Segurança' },
+  { href: '/contact', label: 'Fale Conosco' },
+  { href: '/selos', label: 'Selos' },
+  { href: '/meet-info', label: 'Meet' },
+  { href: '/itacash', label: 'ItaCash' },
+]
+
 type FeedItem =
   | {
     type: 'post'
@@ -3138,6 +3148,28 @@ function FeedContent() {
                     </p>
                   </div>
                 </div>
+              </div>
+
+              <div className="rounded-[2rem] border border-zinc-200/70 bg-white/80 p-5 text-sm leading-6 text-zinc-500 shadow-sm ring-1 ring-black/5 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-black/60 dark:text-zinc-400 dark:ring-white/10">
+                <div className="flex flex-wrap gap-x-2 gap-y-1">
+                  {institutionalLinks.map((item, index) => (
+                    <span key={item.href} className="inline-flex items-center gap-2">
+                      <Link
+                        href={item.href}
+                        className="font-semibold text-zinc-500 underline-offset-4 transition hover:text-blue-500 hover:underline dark:text-zinc-400 dark:hover:text-blue-300"
+                      >
+                        {item.label}
+                      </Link>
+                      {index < institutionalLinks.length - 1 && (
+                        <span className="text-zinc-300 dark:text-zinc-700">·</span>
+                      )}
+                    </span>
+                  ))}
+                </div>
+
+                <p className="mt-4 text-xs font-semibold text-zinc-400 dark:text-zinc-500">
+                  © 2026 EntreUS
+                </p>
               </div>
 
               <div className="rounded-[2rem] border border-zinc-200/70 bg-white/80 p-5 text-sm leading-6 text-zinc-500 shadow-sm ring-1 ring-black/5 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-black/60 dark:text-zinc-400 dark:ring-white/10">

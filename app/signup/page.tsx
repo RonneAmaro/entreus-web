@@ -27,6 +27,7 @@ export default function SignupPage() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [acceptedTerms, setAcceptedTerms] = useState(false)
   const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -43,6 +44,11 @@ export default function SignupPage() {
 
     if (password !== confirmPassword) {
       setMessage('As senhas não conferem.')
+      return
+    }
+
+    if (!acceptedTerms) {
+      setMessage('Você precisa aceitar os Termos de Uso e a Política de Privacidade para criar sua conta.')
       return
     }
 
@@ -63,6 +69,7 @@ export default function SignupPage() {
     setEmail('')
     setPassword('')
     setConfirmPassword('')
+    setAcceptedTerms(false)
     setMessage('Conta criada com sucesso! Agora você já pode entrar.')
   }
 
@@ -156,6 +163,27 @@ export default function SignupPage() {
               </button>
             </div>
           </div>
+
+          <label className="flex gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/70 p-4 text-sm leading-6 text-zinc-300">
+            <input
+              type="checkbox"
+              checked={acceptedTerms}
+              onChange={(e) => setAcceptedTerms(e.target.checked)}
+              className="mt-1 h-4 w-4 shrink-0 rounded border-zinc-600 bg-zinc-950 text-blue-500 accent-blue-500"
+            />
+
+            <span>
+              Li e concordo com os{' '}
+              <Link href="/terms" className="font-semibold text-blue-300 underline-offset-4 hover:underline">
+                Termos de Uso
+              </Link>{' '}
+              e a{' '}
+              <Link href="/privacy" className="font-semibold text-blue-300 underline-offset-4 hover:underline">
+                Política de Privacidade
+              </Link>{' '}
+              do EntreUS.
+            </span>
+          </label>
 
           <button
             type="submit"
