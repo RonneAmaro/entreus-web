@@ -4055,7 +4055,7 @@ export default function ConversationPage() {
         </div>
       )}
 
-      <section className="fixed bottom-16 left-0 right-0 top-14 z-10 flex flex-col overflow-hidden px-3 py-2 sm:px-6 lg:static lg:mx-auto lg:h-screen lg:w-full lg:max-w-[1280px] lg:flex-row lg:px-0 lg:py-0 lg:pl-[270px]">
+      <section className="fixed bottom-16 left-0 right-0 top-14 z-10 flex flex-col overflow-hidden px-3 py-2 sm:px-6 lg:static lg:mx-auto lg:h-screen lg:w-full lg:max-w-[1280px] lg:flex-row lg:px-0 lg:py-0 lg:pl-[104px]">
 
         <aside className="hidden min-h-0 w-[390px] shrink-0 flex-col overflow-hidden border-r border-zinc-200 bg-white dark:border-zinc-800 dark:bg-black lg:flex">
           <div className="shrink-0 border-b border-zinc-200 px-5 py-5 dark:border-zinc-800">

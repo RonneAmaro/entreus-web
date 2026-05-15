@@ -177,16 +177,22 @@ export default function AppSidebar({
     const active = isActive(path)
 
     return [
-      'flex items-center gap-4 rounded-full px-4 py-3 text-lg font-medium transition',
+      'group/item relative flex h-12 min-h-12 items-center gap-0 rounded-2xl px-3 text-sm font-bold transition group-hover/sidebar:gap-3',
       active
-        ? 'bg-zinc-900 text-white shadow-sm hover:bg-zinc-800 dark:bg-white dark:text-black dark:hover:bg-zinc-200'
-        : 'text-zinc-900 hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-900',
+        ? 'text-white drop-shadow-[0_0_10px_rgba(59,130,246,0.45)]'
+        : 'text-zinc-500 hover:bg-white/5 hover:text-zinc-100 dark:text-zinc-400 dark:hover:bg-white/5 dark:hover:text-white',
     ].join(' ')
   }
 
   function navIconClass(path: string) {
     return `h-6 w-6 shrink-0 ${isActive(path) ? 'stroke-[2.5]' : ''}`
   }
+
+  const navTextClass =
+    'block max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-all duration-200 group-hover/sidebar:max-w-[150px] group-hover/sidebar:opacity-100'
+
+  const collapsedCenterClass =
+    'justify-center group-hover/sidebar:justify-start'
 
   function formatBadge(value: number) {
     return value > 99 ? '99+' : value
@@ -214,37 +220,45 @@ export default function AppSidebar({
   const profileHandle = username ? `@${username}` : getEmailPrefix(email)
 
   return (
-    <aside className="fixed left-0 top-0 z-40 hidden h-screen w-[270px] flex-col border-r border-zinc-200 bg-white dark:border-zinc-800 dark:bg-black lg:left-[max(0px,calc((100vw-1280px)/2))] lg:flex">
-      <div className="flex h-full flex-col overflow-y-auto px-5 py-5">
+    <aside className="group/sidebar fixed left-0 top-0 z-40 hidden h-screen w-[84px] flex-col border-r border-blue-400/10 bg-black/95 shadow-2xl shadow-black/30 backdrop-blur-2xl transition-[width,box-shadow] duration-300 hover:w-[252px] hover:shadow-blue-950/20 lg:flex">
+      <div className="flex h-full flex-col overflow-x-visible overflow-y-auto px-3.5 py-4">
         <Link
           href="/feed"
-          className="mb-8 flex w-full shrink-0 items-center justify-center"
+          className="mb-5 flex h-14 w-full shrink-0 items-center justify-center rounded-2xl px-2 transition hover:bg-white/5 group-hover/sidebar:justify-start"
           aria-label={t('mobile.goHome')}
         >
-          <div className="flex w-full justify-center">
+          <div className="flex min-w-0 items-center gap-0 transition-[gap] duration-200 group-hover/sidebar:gap-3">
             <Image
-              src="/logo.png"
+              src="/logo-icon.png"
               alt="Logo EntreUS"
-              width={220}
-              height={180}
-              className="mx-auto block h-auto w-full max-w-[185px] object-contain"
+              width={40}
+              height={40}
+              className="h-10 w-10 shrink-0 rounded-2xl object-contain"
               priority
             />
+            <span className={`${navTextClass} min-w-0`}>
+              <span className="block text-lg font-black leading-none tracking-tight text-white">
+                EntreUS
+              </span>
+              <span className="mt-1 block text-[11px] font-semibold text-blue-600 dark:text-blue-300">
+                S&oacute; Entre N&oacute;s
+              </span>
+            </span>
           </div>
         </Link>
 
-        <nav className="flex flex-col gap-2 pb-4">
-          <Link href="/feed" className={navLinkClass('/feed')}>
+        <nav className="flex flex-col gap-1.5 pb-4">
+          <Link href="/feed" className={`${navLinkClass('/feed')} ${collapsedCenterClass}`}>
             <Home className={navIconClass('/feed')} />
-            <span>{t('nav.home')}</span>
+            <span className={navTextClass}>{t('nav.home')}</span>
           </Link>
 
-          <Link href="/search" className={navLinkClass('/search')}>
+          <Link href="/search" className={`${navLinkClass('/search')} ${collapsedCenterClass}`}>
             <Compass className={navIconClass('/search')} />
-            <span>{t('nav.explore')}</span>
+            <span className={navTextClass}>{t('nav.explore')}</span>
           </Link>
 
-          <Link href="/notifications" className={`relative ${navLinkClass('/notifications')}`}>
+          <Link href="/notifications" className={`relative ${navLinkClass('/notifications')} ${collapsedCenterClass}`}>
             <div className="relative shrink-0">
               <Bell className={navIconClass('/notifications')} />
 
@@ -255,10 +269,10 @@ export default function AppSidebar({
               )}
             </div>
 
-            <span>{t('nav.notifications')}</span>
+            <span className={navTextClass}>{t('nav.notifications')}</span>
           </Link>
 
-          <Link href="/messages" className={`relative ${navLinkClass('/messages')}`}>
+          <Link href="/messages" className={`relative ${navLinkClass('/messages')} ${collapsedCenterClass}`}>
             <div className="relative shrink-0">
               <MessageCircle className={navIconClass('/messages')} />
 
@@ -269,22 +283,22 @@ export default function AppSidebar({
               )}
             </div>
 
-            <span>{t('nav.messages')}</span>
+            <span className={navTextClass}>{t('nav.messages')}</span>
           </Link>
 
-          <Link href="/meet" className={navLinkClass('/meet')}>
+          <Link href="/meet" className={`${navLinkClass('/meet')} ${collapsedCenterClass}`}>
             <Video className={navIconClass('/meet')} />
-            <span>Meet</span>
+            <span className={navTextClass}>Meet</span>
           </Link>
 
-          <Link href="/saved" className={navLinkClass('/saved')}>
+          <Link href="/saved" className={`${navLinkClass('/saved')} ${collapsedCenterClass}`}>
             <Bookmark className={navIconClass('/saved')} />
-            <span>{t('nav.saved')}</span>
+            <span className={navTextClass}>{t('nav.saved')}</span>
           </Link>
 
-          <Link href="/profile" className={navLinkClass('/profile')}>
+          <Link href="/profile" className={`${navLinkClass('/profile')} ${collapsedCenterClass}`}>
             <User className={navIconClass('/profile')} />
-            <span>{t('nav.profile')}</span>
+            <span className={navTextClass}>{t('nav.profile')}</span>
           </Link>
 
           <div className="relative">
@@ -294,14 +308,14 @@ export default function AppSidebar({
                 setMoreMenuAnchor((current) => (current === 'nav' ? null : 'nav'))
               }
               className={[
-                'flex w-full items-center gap-4 rounded-full px-4 py-3 text-lg font-medium transition',
+                `flex h-12 w-full items-center gap-0 rounded-2xl px-3 text-sm font-bold transition group-hover/sidebar:gap-3 ${collapsedCenterClass}`,
                 isMoreActive
-                  ? 'bg-zinc-900 text-white shadow-sm hover:bg-zinc-800 dark:bg-white dark:text-black dark:hover:bg-zinc-200'
-                  : 'text-zinc-900 hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-900',
+                  ? 'text-white drop-shadow-[0_0_10px_rgba(59,130,246,0.45)]'
+                  : 'text-zinc-500 hover:bg-white/5 hover:text-zinc-100 dark:text-zinc-400 dark:hover:bg-white/5 dark:hover:text-white',
               ].join(' ')}
             >
               <MoreHorizontal className={`h-6 w-6 shrink-0 ${isMoreActive ? 'stroke-[2.5]' : ''}`} />
-              <span>{t('nav.more')}</span>
+              <span className={navTextClass}>{t('nav.more')}</span>
             </button>
 
             {moreMenuAnchor === 'nav' && (
@@ -327,18 +341,18 @@ export default function AppSidebar({
           <button
             type="button"
             onClick={handlePostClick}
-            className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-zinc-900 px-6 py-3 text-base font-semibold text-white transition hover:opacity-90 dark:bg-white dark:text-black"
+            className={`mt-4 flex h-12 w-full items-center gap-0 rounded-2xl bg-white px-3 text-sm font-black text-blue-950 shadow-xl shadow-blue-500/20 ring-1 ring-blue-200/60 transition hover:bg-blue-50 hover:shadow-blue-400/30 group-hover/sidebar:gap-3 ${collapsedCenterClass}`}
           >
             <PenLine className="h-5 w-5 shrink-0" />
-            <span>{t('nav.post')}</span>
+            <span className={navTextClass}>{t('nav.post')}</span>
           </button>
         </nav>
 
         <div className="relative mt-auto">
-          <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/80 p-3 text-left shadow-sm shadow-black/10 ring-1 ring-white/10 transition hover:border-blue-400/40 hover:bg-blue-950/25 hover:shadow-blue-500/10">
+          <div className="flex h-16 items-center gap-3 rounded-2xl border border-blue-500/10 bg-zinc-950/95 p-2 text-left shadow-sm shadow-black/10 ring-1 ring-white/10 transition hover:border-blue-400/40 hover:bg-blue-950/35 hover:shadow-blue-500/10">
             <Link
               href="/profile"
-              className="flex min-w-0 flex-1 items-center gap-3"
+              className={`flex min-w-0 flex-1 items-center gap-0 transition-[gap] duration-200 group-hover/sidebar:gap-3 ${collapsedCenterClass}`}
               title="Conta"
             >
               {avatarUrl ? (
@@ -353,7 +367,7 @@ export default function AppSidebar({
                 </div>
               )}
 
-              <div className="min-w-0">
+              <div className={`${navTextClass} min-w-0 flex-1`}>
                 <p className="truncate text-sm font-black text-white">
                   {profileName}
                 </p>
@@ -371,7 +385,7 @@ export default function AppSidebar({
               onClick={() =>
                 setMoreMenuAnchor((current) => (current === 'profile' ? null : 'profile'))
               }
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-400 transition hover:bg-white/10 hover:text-white"
+              className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-400 opacity-0 transition hover:bg-white/10 hover:text-white group-hover/sidebar:flex group-hover/sidebar:opacity-100"
               aria-label="Conta"
               title="Conta"
             >

@@ -255,7 +255,7 @@ export default function SearchPage() {
         onPostClick={handlePostClick}
       />
 
-      <section className="w-full max-w-4xl overflow-x-hidden px-4 py-20 pb-24 sm:px-6 lg:ml-[calc(270px+((100vw-270px-56rem)/2))] lg:py-8">
+      <section className="w-full max-w-4xl overflow-x-hidden px-4 py-20 pb-24 sm:px-6 lg:ml-[calc(104px+((100vw-104px-56rem)/2))] lg:py-8">
         <BrandHeader
           subtitle="Explorar"
           description="Busque pessoas pelo nome ou @username e descubra novos perfis para seguir."

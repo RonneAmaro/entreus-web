@@ -571,7 +571,7 @@ export default function MessagesPage() {
         onPostClick={handlePostClick}
       />
 
-      <section className="w-full overflow-hidden px-3 py-20 pb-24 sm:px-6 lg:mx-auto lg:flex lg:h-screen lg:max-w-[1280px] lg:pl-[270px] lg:pr-0 lg:py-0">
+      <section className="w-full overflow-hidden px-3 py-20 pb-24 sm:px-6 lg:mx-auto lg:flex lg:h-screen lg:max-w-[1280px] lg:pl-[104px] lg:pr-0 lg:py-0">
         <aside className="flex min-h-[calc(100vh-8rem)] w-full flex-col overflow-hidden rounded-[2rem] border border-zinc-200/70 bg-white shadow-sm dark:border-zinc-800/70 dark:bg-black lg:h-screen lg:w-[390px] lg:shrink-0 lg:rounded-none lg:border-y-0 lg:border-l-0 lg:shadow-none">
           <div className="shrink-0 border-b border-zinc-200/70 bg-white/90 px-5 py-5 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-black/90">
             <div className="flex items-center justify-between gap-3">

@@ -719,7 +719,7 @@ export default function SavedPage() {
         onPostClick={handlePostClick}
       />
 
-      <section className="w-full max-w-2xl overflow-x-hidden px-4 py-20 pb-24 sm:px-6 lg:ml-[calc(270px+((100vw-270px-42rem)/2))] lg:py-8">
+      <section className="w-full max-w-2xl overflow-x-hidden px-4 py-20 pb-24 sm:px-6 lg:ml-[calc(104px+((100vw-104px-42rem)/2))] lg:py-8">
         <div className="mb-6 rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
           <div className="mb-2 flex items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center rounded-full bg-yellow-50 text-yellow-600 dark:bg-yellow-950/40 dark:text-yellow-300">

@@ -381,7 +381,7 @@ export default function NotificationsPage() {
         onPostClick={handlePostClick}
       />
 
-      <section className="w-full max-w-3xl overflow-x-hidden px-4 py-20 pb-24 sm:px-6 lg:ml-[calc(270px+((100vw-270px-48rem)/2))] lg:py-8">
+      <section className="w-full max-w-3xl overflow-x-hidden px-4 py-20 pb-24 sm:px-6 lg:ml-[calc(104px+((100vw-104px-48rem)/2))] lg:py-8">
         <BrandHeader
           subtitle="Notificações"
           description="Acompanhe curtidas, comentários, reposts e novos seguidores."
