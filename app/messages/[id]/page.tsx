@@ -74,6 +74,10 @@ type ConversationPreviewMessage = {
   conversation_id: string
   sender_id: string
   content: string | null
+  type?: 'text' | 'call'
+  call_type?: CallMode | null
+  call_status?: CallHistoryStatus | null
+  call_duration_seconds?: number | null
   created_at: string
   deleted_at: string | null
 }
@@ -116,6 +120,10 @@ type MessageRow = {
   conversation_id: string
   sender_id: string
   content: string | null
+  type?: 'text' | 'call'
+  call_type?: CallMode | null
+  call_status?: CallHistoryStatus | null
+  call_duration_seconds?: number | null
   created_at: string
   updated_at: string
   deleted_at: string | null
@@ -131,6 +139,7 @@ type SelectedMedia = {
 
 type CallMode = 'voice' | 'video'
 type CallStatus = 'idle' | 'calling' | 'ringing' | 'connecting' | 'connected' | 'ended' | 'error'
+type CallHistoryStatus = 'missed' | 'declined' | 'ended' | 'canceled'
 
 type IncomingCall = {
   fromUserId: string
@@ -183,11 +192,33 @@ function formatConversationDate(value: string) {
 function getMessagePreview(message: ConversationPreviewMessage | null, currentUserId: string) {
   if (!message) return 'Conversa iniciada.'
   if (message.deleted_at) return 'Mensagem apagada'
+  if (message.type === 'call') return getCallHistoryLabel(message)
 
   const prefix = message.sender_id === currentUserId ? 'Você: ' : ''
   const content = message.content?.trim()
 
   return `${prefix}${content || 'Mídia enviada'}`
+}
+
+function getCallHistoryLabel(message: Pick<MessageRow, 'call_type' | 'call_status'>) {
+  if (message.call_status === 'declined') return 'Chamada recusada'
+  if (message.call_status === 'canceled') return 'Chamada cancelada'
+
+  const kind = message.call_type === 'video' ? 'vídeo' : 'voz'
+
+  if (message.call_status === 'missed') return `Chamada de ${kind} não atendida`
+  if (message.call_status === 'ended') return `Chamada de ${kind} encerrada`
+
+  return 'Evento de chamada'
+}
+
+function formatCallDuration(seconds: number | null | undefined) {
+  if (!seconds) return ''
+
+  const minutes = Math.floor(seconds / 60)
+  const remainingSeconds = seconds % 60
+
+  return `${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`
 }
 
 function formatRecordingTime(seconds: number) {
@@ -575,6 +606,10 @@ export default function ConversationPage() {
   const pendingIceCandidatesRef = useRef<RTCIceCandidateInit[]>([])
   const remoteDescriptionReadyRef = useRef(false)
   const autoAcceptStoredCallRef = useRef(false)
+  const callConnectedRef = useRef(false)
+  const callConnectedAtRef = useRef<number | null>(null)
+  const callNoAnswerTimerRef = useRef<number | null>(null)
+  const callHistoryEventRecordedRef = useRef(false)
   const localVideoRef = useRef<HTMLVideoElement | null>(null)
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null)
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null)
@@ -1042,6 +1077,7 @@ export default function ConversationPage() {
             await peerConnectionRef.current.setRemoteDescription(payload.answer)
             remoteDescriptionReadyRef.current = true
             await flushPendingIceCandidates()
+            clearCallNoAnswerTimer()
             setCallStatus('connecting')
           }
         } catch {
@@ -1193,7 +1229,7 @@ export default function ConversationPage() {
 
     const { data: messagesData, error: messagesError } = await supabase
       .from('messages')
-      .select('id, conversation_id, sender_id, content, created_at, deleted_at')
+      .select('id, conversation_id, sender_id, content, type, call_type, call_status, call_duration_seconds, created_at, deleted_at')
       .in('conversation_id', conversationIds)
       .order('created_at', { ascending: false })
       .limit(300)
@@ -1377,7 +1413,7 @@ export default function ConversationPage() {
   async function loadMessagesWithAttachments(currentUserId: string) {
     const { data, error } = await supabase
       .from('messages')
-      .select('id, conversation_id, sender_id, content, created_at, updated_at, deleted_at')
+      .select('id, conversation_id, sender_id, content, type, call_type, call_status, call_duration_seconds, created_at, updated_at, deleted_at')
       .eq('conversation_id', conversationId)
       .order('created_at', { ascending: true })
 
@@ -2089,9 +2125,10 @@ export default function ConversationPage() {
       .insert({
         conversation_id: conversationId,
         sender_id: userId,
+        type: 'text',
         content: content || null,
       })
-      .select('id, conversation_id, sender_id, content, created_at, updated_at, deleted_at')
+      .select('id, conversation_id, sender_id, content, type, call_type, call_status, call_duration_seconds, created_at, updated_at, deleted_at')
       .single()
 
     if (error || !data) {
@@ -2225,6 +2262,102 @@ export default function ConversationPage() {
     console.log(message, details)
   }
 
+  function clearCallNoAnswerTimer() {
+    if (!callNoAnswerTimerRef.current) return
+
+    window.clearTimeout(callNoAnswerTimerRef.current)
+    callNoAnswerTimerRef.current = null
+  }
+
+  function markCallConnected() {
+    clearCallNoAnswerTimer()
+
+    if (!callConnectedRef.current) {
+      callConnectedAtRef.current = Date.now()
+    }
+
+    callConnectedRef.current = true
+    setCallStatus('connected')
+  }
+
+  function getCurrentCallDurationSeconds() {
+    if (!callConnectedAtRef.current) return null
+
+    return Math.max(0, Math.round((Date.now() - callConnectedAtRef.current) / 1000))
+  }
+
+  async function recordCallHistoryEvent(
+    status: CallHistoryStatus,
+    mode: CallMode,
+    durationSeconds: number | null = null
+  ) {
+    if (!userId || !conversationId || callHistoryEventRecordedRef.current) return
+
+    callHistoryEventRecordedRef.current = true
+
+    const content = getCallHistoryLabel({
+      call_type: mode,
+      call_status: status,
+    })
+
+    const { data, error } = await supabase
+      .from('messages')
+      .insert({
+        conversation_id: conversationId,
+        sender_id: userId,
+        content,
+        type: 'call',
+        call_type: mode,
+        call_status: status,
+        call_duration_seconds: durationSeconds,
+      })
+      .select('id, conversation_id, sender_id, content, type, call_type, call_status, call_duration_seconds, created_at, updated_at, deleted_at')
+      .single()
+
+    if (error || !data) {
+      callHistoryEventRecordedRef.current = false
+      console.error('Erro ao registrar evento de chamada:', error?.message || 'sem retorno')
+      return
+    }
+
+    setMessages((current) => {
+      const exists = current.some((item) => item.id === data.id)
+      if (exists) return current
+
+      return [
+        ...current,
+        {
+          ...(data as MessageRow),
+          attachments: [],
+          reactions: [],
+        },
+      ]
+    })
+
+    await supabase
+      .from('conversations')
+      .update({
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', conversationId)
+
+    await loadConversationList(userId)
+  }
+
+  function scheduleNoAnswerCallEvent(mode: CallMode) {
+    clearCallNoAnswerTimer()
+
+    callNoAnswerTimerRef.current = window.setTimeout(() => {
+      if (callConnectedRef.current || callHistoryEventRecordedRef.current) return
+
+      void recordCallHistoryEvent('missed', mode)
+      sendCallSignal('call-ended', {
+        reason: 'missed',
+      })
+      endCall(false)
+    }, 45000)
+  }
+
   function attachRemoteMediaStream(stream: MediaStream | null = remoteCallStreamRef.current) {
     if (remoteVideoRef.current) {
       remoteVideoRef.current.srcObject = stream
@@ -2331,14 +2464,14 @@ export default function ConversationPage() {
       remoteCallStreamRef.current = remoteStream
       setRemoteCallStream(remoteStream)
       attachRemoteMediaStream(remoteStream)
-      setCallStatus('connected')
+      markCallConnected()
     }
 
     peerConnection.onconnectionstatechange = () => {
       logCallDebug('call: connection state', peerConnection.connectionState)
 
       if (peerConnection.connectionState === 'connected') {
-        setCallStatus('connected')
+        markCallConnected()
       }
 
       if (
@@ -2454,6 +2587,10 @@ export default function ConversationPage() {
     setIncomingCall(null)
     setCallError('')
     pendingIceCandidatesRef.current = []
+    callConnectedRef.current = false
+    callConnectedAtRef.current = null
+    callHistoryEventRecordedRef.current = false
+    clearCallNoAnswerTimer()
 
     const stream = await getCallStream(mode)
     if (!stream) return
@@ -2473,6 +2610,7 @@ export default function ConversationPage() {
     })
 
     sendGlobalIncomingCall(mode, localOffer)
+    scheduleNoAnswerCallEvent(mode)
   }
 
   async function acceptCall() {
@@ -2481,6 +2619,10 @@ export default function ConversationPage() {
     setCallMode(incomingCall.mode)
     setCallStatus('connecting')
     setCallError('')
+    callConnectedRef.current = false
+    callConnectedAtRef.current = null
+    callHistoryEventRecordedRef.current = false
+    clearCallNoAnswerTimer()
 
     const stream = await getCallStream(incomingCall.mode)
     if (!stream) return
@@ -2506,6 +2648,14 @@ export default function ConversationPage() {
     playRemoteAudio()
   }
 
+  function rejectCall() {
+    const mode = incomingCall?.mode || callMode
+
+    void recordCallHistoryEvent('declined', mode)
+    sendCallSignal('call-rejected', {})
+    endCall(false)
+  }
+
   function toggleMicrophone() {
     const audioTrack = localCallStreamRef.current?.getAudioTracks()[0]
     if (!audioTrack) return
@@ -2523,9 +2673,28 @@ export default function ConversationPage() {
   }
 
   function endCall(notifyPeer: boolean = true) {
-    if (notifyPeer && userId) {
-      sendCallSignal('call-ended', {})
+    const wasConnected = callConnectedRef.current || callStatus === 'connected'
+    const durationSeconds = wasConnected ? getCurrentCallDurationSeconds() : null
+    const shouldRecord =
+      notifyPeer &&
+      !callHistoryEventRecordedRef.current &&
+      (callStatus === 'calling' || callStatus === 'connecting' || callStatus === 'connected')
+
+    if (shouldRecord) {
+      void recordCallHistoryEvent(
+        wasConnected ? 'ended' : 'canceled',
+        callMode,
+        durationSeconds
+      )
     }
+
+    if (notifyPeer && userId) {
+      sendCallSignal('call-ended', {
+        reason: wasConnected ? 'ended' : 'canceled',
+      })
+    }
+
+    clearCallNoAnswerTimer()
 
     localCallStreamRef.current?.getTracks().forEach((track) => track.stop())
     remoteCallStreamRef.current?.getTracks().forEach((track) => track.stop())
@@ -2536,6 +2705,8 @@ export default function ConversationPage() {
     peerConnectionRef.current = null
     pendingIceCandidatesRef.current = []
     remoteDescriptionReadyRef.current = false
+    callConnectedRef.current = false
+    callConnectedAtRef.current = null
 
     if (typeof window !== 'undefined') {
       sessionStorage.removeItem(`entreus:incoming-call:${conversationId}`)
@@ -2636,7 +2807,14 @@ export default function ConversationPage() {
 
               <button
                 type="button"
-                onClick={() => endCall()}
+                onClick={() => {
+                  if (incomingCall && callStatus === 'ringing') {
+                    rejectCall()
+                    return
+                  }
+
+                  endCall()
+                }}
                 className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
                 aria-label="Fechar chamada"
                 title="Fechar chamada"
@@ -2731,7 +2909,7 @@ export default function ConversationPage() {
 
                   <button
                     type="button"
-                    onClick={() => endCall()}
+                    onClick={rejectCall}
                     className="flex flex-1 items-center justify-center gap-2 rounded-full bg-red-600 px-5 py-3 text-sm font-black text-white transition hover:bg-red-500"
                   >
                     <PhoneOff className="h-4 w-4" />
@@ -3024,6 +3202,28 @@ export default function ConversationPage() {
                 const hasText = !!item.content?.trim()
                 const hasMedia = attachments.length > 0
                 const isMediaFocused = hasMedia && !hasText && !item.deleted_at && !isEditingThisMessage
+                const isCallEvent = item.type === 'call'
+
+                if (isCallEvent) {
+                  const callLabel = getCallHistoryLabel(item)
+                  const duration = formatCallDuration(item.call_duration_seconds)
+                  const CallIcon = item.call_type === 'video' ? Video : Phone
+
+                  return (
+                    <div key={item.id} className="flex w-full justify-center py-1.5">
+                      <div className="inline-flex max-w-[92%] items-center gap-2 rounded-full border border-blue-400/20 bg-zinc-950/80 px-3.5 py-2 text-xs text-zinc-200 shadow-lg shadow-blue-950/10 ring-1 ring-white/10 backdrop-blur-xl dark:bg-blue-950/20">
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-500/15 text-blue-200 ring-1 ring-blue-300/20">
+                          <CallIcon className="h-3.5 w-3.5" />
+                        </span>
+                        <span className="font-bold">{callLabel}</span>
+                        {duration && (
+                          <span className="text-zinc-400">· {duration}</span>
+                        )}
+                        <span className="text-zinc-500">· {formatMessageTime(item.created_at)}</span>
+                      </div>
+                    </div>
+                  )
+                }
 
                 return (
                   <div

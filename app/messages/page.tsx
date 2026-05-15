@@ -43,6 +43,10 @@ type MessageRow = {
   conversation_id: string
   sender_id: string
   content: string | null
+  type?: 'text' | 'call'
+  call_type?: 'voice' | 'video' | null
+  call_status?: 'missed' | 'declined' | 'ended' | 'canceled' | null
+  call_duration_seconds?: number | null
   created_at: string
   deleted_at: string | null
 }
@@ -98,6 +102,16 @@ function formatDate(value: string) {
 function getMessagePreview(message: MessageRow | null, currentUserId: string) {
   if (!message) return 'Conversa iniciada.'
   if (message.deleted_at) return 'Mensagem apagada'
+  if (message.type === 'call') {
+    if (message.call_status === 'declined') return 'Chamada recusada'
+    if (message.call_status === 'canceled') return 'Chamada cancelada'
+
+    const kind = message.call_type === 'video' ? 'vídeo' : 'voz'
+    if (message.call_status === 'missed') return `Chamada de ${kind} não atendida`
+    if (message.call_status === 'ended') return `Chamada de ${kind} encerrada`
+
+    return 'Evento de chamada'
+  }
 
   const prefix = message.sender_id === currentUserId ? 'Você: ' : ''
   const content = message.content?.trim()
@@ -337,7 +351,7 @@ export default function MessagesPage() {
 
     const { data: messagesData, error: messagesError } = await supabase
       .from('messages')
-      .select('id, conversation_id, sender_id, content, created_at, deleted_at')
+      .select('id, conversation_id, sender_id, content, type, call_type, call_status, call_duration_seconds, created_at, deleted_at')
       .in('conversation_id', conversationIds)
       .order('created_at', { ascending: false })
       .limit(300)
