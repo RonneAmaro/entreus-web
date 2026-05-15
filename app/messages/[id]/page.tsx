@@ -13,6 +13,7 @@ import {
   Archive,
   ArrowLeft,
   Ban,
+  ChevronDown,
   Check,
   Inbox,
   Loader2,
@@ -81,6 +82,9 @@ type ConversationPreviewMessage = {
   call_type?: CallMode | null
   call_status?: CallHistoryStatus | null
   call_duration_seconds?: number | null
+  reply_to_message_id?: string | null
+  edited_at?: string | null
+  deleted_by?: string | null
   created_at: string
   deleted_at: string | null
 }
@@ -136,11 +140,23 @@ type MessageRow = {
   call_type?: CallMode | null
   call_status?: CallHistoryStatus | null
   call_duration_seconds?: number | null
+  reply_to_message_id?: string | null
+  edited_at?: string | null
+  deleted_by?: string | null
   created_at: string
   updated_at: string
   deleted_at: string | null
   attachments?: MessageAttachment[]
   reactions?: MessageReaction[]
+  replyTo?: MessageReplyPreview | null
+}
+
+type MessageReplyPreview = {
+  id: string
+  sender_id: string
+  authorName: string
+  preview: string
+  unavailable?: boolean
 }
 
 type SelectedMedia = {
@@ -222,6 +238,18 @@ function getCallHistoryLabel(message: Pick<MessageRow, 'call_type' | 'call_statu
   if (message.call_status === 'ended') return `Chamada de ${kind} encerrada`
 
   return 'Evento de chamada'
+}
+
+function getMessageReplyPreviewText(message: Pick<MessageRow, 'content' | 'type' | 'deleted_at' | 'attachments'>) {
+  if (message.deleted_at) return 'Mensagem apagada'
+  if (message.type === 'call') return 'Evento de chamada'
+
+  const content = message.content?.trim()
+  if (content) return content.length > 90 ? `${content.slice(0, 90)}...` : content
+
+  if ((message.attachments || []).length > 0) return 'Midia'
+
+  return 'Mensagem'
 }
 
 function formatCallDuration(seconds: number | null | undefined) {
@@ -590,6 +618,7 @@ function groupMessageReactions(reactions: MessageReaction[], currentUserId: stri
 }
 
 function isMessageEdited(message: MessageRow) {
+  if (message.edited_at && !message.deleted_at) return true
   if (!message.updated_at || message.deleted_at) return false
 
   const createdAt = new Date(message.created_at).getTime()
@@ -604,6 +633,7 @@ export default function ConversationPage() {
   const searchParams = useSearchParams()
   const { theme, setTheme } = useTheme()
   const bottomRef = useRef<HTMLDivElement | null>(null)
+  const messageRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const recordingChunksRef = useRef<BlobPart[]>([])
@@ -643,6 +673,7 @@ export default function ConversationPage() {
   const [otherProfile, setOtherProfile] = useState<ProfileSummary | null>(null)
   const [participants, setParticipants] = useState<ParticipantRow[]>([])
   const [messages, setMessages] = useState<MessageRow[]>([])
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null)
   const [newMessage, setNewMessage] = useState('')
   const [openMessageEmojiPicker, setOpenMessageEmojiPicker] = useState(false)
   const [messageEmojiSearch, setMessageEmojiSearch] = useState('')
@@ -652,6 +683,7 @@ export default function ConversationPage() {
   const [selectedMedia, setSelectedMedia] = useState<SelectedMedia[]>([])
   const [openReactionMessageId, setOpenReactionMessageId] = useState<string | null>(null)
   const [openMessageMenuId, setOpenMessageMenuId] = useState<string | null>(null)
+  const [messageMenuPosition, setMessageMenuPosition] = useState({ left: 0, top: 0 })
   const [openConversationMenu, setOpenConversationMenu] = useState(false)
   const [conversationMenuPosition, setConversationMenuPosition] = useState({ left: 0, top: 0 })
   const [conversationState, setConversationState] = useState<ConversationUserState | null>(null)
@@ -659,6 +691,7 @@ export default function ConversationPage() {
   const [blockedForConversation, setBlockedForConversation] = useState(false)
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
   const [editingMessageContent, setEditingMessageContent] = useState('')
+  const [replyingToMessage, setReplyingToMessage] = useState<MessageRow | null>(null)
   const [savingMessageEdit, setSavingMessageEdit] = useState(false)
   const [deletingMessageId, setDeletingMessageId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
@@ -725,6 +758,28 @@ export default function ConversationPage() {
     setConversationMenuPosition({ left, top })
   }
 
+  function updateMessageMenuPosition(button: HTMLButtonElement) {
+    if (typeof window === 'undefined') return
+
+    const rect = button.getBoundingClientRect()
+    const menuWidth = 256
+    const estimatedMenuHeight = 250
+    const viewportPadding = 8
+
+    const left = Math.min(
+      Math.max(viewportPadding, rect.right - menuWidth),
+      window.innerWidth - menuWidth - viewportPadding
+    )
+
+    const preferredTop = rect.bottom + viewportPadding
+    const top =
+      preferredTop + estimatedMenuHeight > window.innerHeight
+        ? Math.max(viewportPadding, rect.top - estimatedMenuHeight - viewportPadding)
+        : preferredTop
+
+    setMessageMenuPosition({ left, top })
+  }
+
   useEffect(() => {
     setMounted(true)
 
@@ -763,6 +818,22 @@ export default function ConversationPage() {
       window.removeEventListener('keydown', handleKeyDown)
     }
   }, [openConversationMenu])
+
+  useEffect(() => {
+    if (!openMessageMenuId) return
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setOpenMessageMenuId(null)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [openMessageMenuId])
 
   useEffect(() => {
     async function loadPage() {
@@ -903,7 +974,33 @@ export default function ConversationPage() {
               const exists = current.some((item) => item.id === receivedMessage.id)
               if (exists) return current
 
-              return [...current, { ...receivedMessage, attachments: [] }]
+              const replyTo = receivedMessage.reply_to_message_id
+                ? current.find((item) => item.id === receivedMessage.reply_to_message_id)
+                : null
+
+              return [
+                ...current,
+                {
+                  ...receivedMessage,
+                  attachments: [],
+                  replyTo: receivedMessage.reply_to_message_id
+                    ? replyTo
+                      ? {
+                          id: replyTo.id,
+                          sender_id: replyTo.sender_id,
+                          authorName: replyTo.sender_id === userId ? 'Voce' : otherName,
+                          preview: getMessageReplyPreviewText(replyTo),
+                        }
+                      : {
+                          id: receivedMessage.reply_to_message_id,
+                          sender_id: '',
+                          authorName: 'Mensagem',
+                          preview: 'Mensagem original indisponivel',
+                          unavailable: true,
+                        }
+                    : null,
+                },
+              ]
             })
 
             markConversationAsRead(userId)
@@ -1086,6 +1183,28 @@ export default function ConversationPage() {
         block: 'end',
       })
     })
+  }
+
+  function handleJumpToReply(messageId: string | null | undefined) {
+    if (!messageId) {
+      setMessage('Mensagem original nÃ£o estÃ¡ disponÃ­vel.')
+      return
+    }
+
+    const target = messageRefs.current[messageId]
+
+    if (!target) {
+      setMessage('Mensagem original nÃ£o estÃ¡ disponÃ­vel.')
+      return
+    }
+
+    setMessage('')
+    target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    setHighlightedMessageId(messageId)
+
+    window.setTimeout(() => {
+      setHighlightedMessageId((current) => (current === messageId ? null : current))
+    }, 2600)
   }
 
   useEffect(() => {
@@ -1352,7 +1471,7 @@ export default function ConversationPage() {
 
     const { data: messagesData, error: messagesError } = await supabase
       .from('messages')
-      .select('id, conversation_id, sender_id, content, type, call_type, call_status, call_duration_seconds, created_at, deleted_at')
+      .select('id, conversation_id, sender_id, content, type, call_type, call_status, call_duration_seconds, reply_to_message_id, edited_at, deleted_by, created_at, deleted_at')
       .in('conversation_id', conversationIds)
       .order('created_at', { ascending: false })
       .limit(300)
@@ -1587,7 +1706,7 @@ export default function ConversationPage() {
   async function loadMessagesWithAttachments(currentUserId: string) {
     const { data, error } = await supabase
       .from('messages')
-      .select('id, conversation_id, sender_id, content, type, call_type, call_status, call_duration_seconds, created_at, updated_at, deleted_at')
+      .select('id, conversation_id, sender_id, content, type, call_type, call_status, call_duration_seconds, reply_to_message_id, edited_at, deleted_by, created_at, updated_at, deleted_at')
       .eq('conversation_id', conversationId)
       .order('created_at', { ascending: true })
 
@@ -1647,12 +1766,46 @@ export default function ConversationPage() {
       loadReactionsForMessages(visibleMessageIds),
     ])
 
+    const messagesWithAttachments = visibleMessages.map((item) => ({
+      ...item,
+      attachments: attachmentMap[item.id] || [],
+      reactions: reactionMap[item.id] || [],
+    }))
+
+    const messagesById = messagesWithAttachments.reduce(
+      (acc, item) => {
+        acc[item.id] = item
+        return acc
+      },
+      {} as Record<string, MessageRow>
+    )
+
     setMessages(
-      visibleMessages.map((item) => ({
-        ...item,
-        attachments: attachmentMap[item.id] || [],
-        reactions: reactionMap[item.id] || [],
-      }))
+      messagesWithAttachments.map((item) => {
+        const replyTo = item.reply_to_message_id
+          ? messagesById[item.reply_to_message_id]
+          : null
+
+        return {
+          ...item,
+          replyTo: item.reply_to_message_id
+            ? replyTo
+              ? {
+                  id: replyTo.id,
+                  sender_id: replyTo.sender_id,
+                  authorName: replyTo.sender_id === currentUserId ? 'Voce' : otherName,
+                  preview: getMessageReplyPreviewText(replyTo),
+                }
+              : {
+                  id: item.reply_to_message_id,
+                  sender_id: '',
+                  authorName: 'Mensagem',
+                  preview: 'Mensagem original indisponivel',
+                  unavailable: true,
+                }
+            : null,
+        }
+      })
     )
   }
 
@@ -2145,7 +2298,7 @@ export default function ConversationPage() {
   }
 
   function handleStartEditMessage(item: MessageRow) {
-    if (!userId || item.sender_id !== userId || item.deleted_at) return
+    if (!userId || item.sender_id !== userId || item.deleted_at || item.type === 'call') return
 
     if (!item.content?.trim()) {
       setMessage('Esta mensagem não tem texto para editar.')
@@ -2154,6 +2307,8 @@ export default function ConversationPage() {
 
     setEditingMessageId(item.id)
     setEditingMessageContent(item.content)
+    setNewMessage(item.content)
+    setReplyingToMessage(null)
     setOpenMessageMenuId(null)
     setOpenReactionMessageId(null)
     setMessage('')
@@ -2162,13 +2317,14 @@ export default function ConversationPage() {
   function handleCancelEditMessage() {
     setEditingMessageId(null)
     setEditingMessageContent('')
+    setNewMessage('')
     setSavingMessageEdit(false)
   }
 
-  async function handleSaveEditedMessage(messageId: string) {
+  async function handleSaveEditedMessage(messageId: string, nextContent?: string) {
     if (!userId || !conversationId) return
 
-    const content = editingMessageContent.trim()
+    const content = (nextContent ?? editingMessageContent).trim()
 
     if (!content) {
       setMessage('A mensagem não pode ficar vazia. Para remover, use “apagar para todos”.')
@@ -2191,6 +2347,7 @@ export default function ConversationPage() {
       .from('messages')
       .update({
         content,
+        edited_at: updatedAt,
         updated_at: updatedAt,
       })
       .eq('id', messageId)
@@ -2210,6 +2367,7 @@ export default function ConversationPage() {
           ? {
               ...item,
               content,
+              edited_at: updatedAt,
               updated_at: updatedAt,
             }
           : item
@@ -2227,7 +2385,23 @@ export default function ConversationPage() {
 
     setEditingMessageId(null)
     setEditingMessageContent('')
+    setNewMessage('')
     setSavingMessageEdit(false)
+  }
+
+  function handleStartReplyMessage(item: MessageRow) {
+    if (item.deleted_at) return
+
+    setReplyingToMessage(item)
+    setEditingMessageId(null)
+    setEditingMessageContent('')
+    setOpenMessageMenuId(null)
+    setOpenReactionMessageId(null)
+    setMessage('')
+  }
+
+  function handleCancelReplyMessage() {
+    setReplyingToMessage(null)
   }
 
   async function handleHideMessageForMe(messageId: string) {
@@ -2295,7 +2469,7 @@ export default function ConversationPage() {
     const deletedAt = new Date().toISOString()
     const attachmentsToDelete = targetMessage.attachments || []
 
-    if (attachmentsToDelete.length > 0) {
+    if (false && attachmentsToDelete.length > 0) {
       const storagePaths = attachmentsToDelete
         .map((attachment) => attachment.storage_path)
         .filter(Boolean)
@@ -2306,7 +2480,7 @@ export default function ConversationPage() {
           .remove(storagePaths)
 
         if (storageError) {
-          console.error('Erro ao remover mídias da mensagem:', storageError.message)
+          console.error('Erro ao remover mídias da mensagem:', storageError)
         }
       }
 
@@ -2317,7 +2491,7 @@ export default function ConversationPage() {
         .eq('sender_id', userId)
 
       if (attachmentsError) {
-        console.error('Erro ao apagar anexos da mensagem:', attachmentsError.message)
+        console.error('Erro ao apagar anexos da mensagem:', attachmentsError)
       }
     }
 
@@ -2335,6 +2509,7 @@ export default function ConversationPage() {
       .update({
         content: null,
         deleted_at: deletedAt,
+        deleted_by: userId,
         updated_at: deletedAt,
       })
       .eq('id', messageId)
@@ -2354,6 +2529,7 @@ export default function ConversationPage() {
               ...item,
               content: null,
               deleted_at: deletedAt,
+              deleted_by: userId,
               updated_at: deletedAt,
               attachments: [],
               reactions: [],
@@ -2526,6 +2702,11 @@ export default function ConversationPage() {
 
     if ((!content && !hasMedia) || !userId || !conversationId || recordingAudio) return
 
+    if (editingMessageId) {
+      await handleSaveEditedMessage(editingMessageId, content)
+      return
+    }
+
     const blocked = await hasBlockBetweenUsers(userId, otherUserId)
 
     if (blocked) {
@@ -2543,8 +2724,9 @@ export default function ConversationPage() {
         sender_id: userId,
         type: 'text',
         content: content || null,
+        reply_to_message_id: replyingToMessage?.id || null,
       })
-      .select('id, conversation_id, sender_id, content, type, call_type, call_status, call_duration_seconds, created_at, updated_at, deleted_at')
+      .select('id, conversation_id, sender_id, content, type, call_type, call_status, call_duration_seconds, reply_to_message_id, edited_at, deleted_by, created_at, updated_at, deleted_at')
       .single()
 
     if (error || !data) {
@@ -2582,6 +2764,14 @@ export default function ConversationPage() {
         {
           ...(data as MessageRow),
           attachments: uploadedAttachments,
+          replyTo: replyingToMessage
+            ? {
+                id: replyingToMessage.id,
+                sender_id: replyingToMessage.sender_id,
+                authorName: replyingToMessage.sender_id === userId ? 'Voce' : otherName,
+                preview: getMessageReplyPreviewText(replyingToMessage),
+              }
+            : null,
         },
       ]
     })
@@ -2601,6 +2791,7 @@ export default function ConversationPage() {
     }
 
     setNewMessage('')
+    setReplyingToMessage(null)
     setOpenMessageEmojiPicker(false)
     setSelectedMedia([])
     setSending(false)
@@ -2727,7 +2918,7 @@ export default function ConversationPage() {
         call_status: status,
         call_duration_seconds: durationSeconds,
       })
-      .select('id, conversation_id, sender_id, content, type, call_type, call_status, call_duration_seconds, created_at, updated_at, deleted_at')
+      .select('id, conversation_id, sender_id, content, type, call_type, call_status, call_duration_seconds, reply_to_message_id, edited_at, deleted_by, created_at, updated_at, deleted_at')
       .single()
 
     if (error || !data) {
@@ -3245,6 +3436,87 @@ export default function ConversationPage() {
         )
       : null
 
+  const activeMessageMenuItem = openMessageMenuId
+    ? messages.find((item) => item.id === openMessageMenuId) || null
+    : null
+
+  const messageMenuPortal =
+    mounted && activeMessageMenuItem && typeof document !== 'undefined'
+      ? createPortal(
+          <>
+            <button
+              type="button"
+              className="fixed inset-0 z-[9998] cursor-default bg-transparent"
+              aria-label="Fechar opcoes da mensagem"
+              onClick={() => setOpenMessageMenuId(null)}
+            />
+
+            <div
+              className="fixed z-[9999] w-64 overflow-hidden rounded-2xl border border-zinc-800/80 bg-zinc-950 p-1.5 text-sm text-zinc-100 shadow-2xl shadow-black/30 ring-1 ring-white/10"
+              style={{
+                left: messageMenuPosition.left,
+                top: messageMenuPosition.top,
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => handleStartReplyMessage(activeMessageMenuItem)}
+                className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left font-semibold transition hover:bg-white/10"
+              >
+                Responder
+              </button>
+
+              {activeMessageMenuItem.sender_id === userId && activeMessageMenuItem.content?.trim() && activeMessageMenuItem.type !== 'call' && (
+                <button
+                  type="button"
+                  onClick={() => handleStartEditMessage(activeMessageMenuItem)}
+                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left font-semibold transition hover:bg-white/10"
+                >
+                  <Pencil className="h-4 w-4" />
+                  Editar mensagem
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => handleHideMessageForMe(activeMessageMenuItem.id)}
+                className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left font-semibold transition hover:bg-white/10"
+              >
+                <Trash2 className="h-4 w-4" />
+                Excluir mensagem para mim
+              </button>
+
+              {activeMessageMenuItem.sender_id === userId && (
+                <button
+                  type="button"
+                  onClick={() => handleDeleteMessageForEveryone(activeMessageMenuItem.id)}
+                  disabled={deletingMessageId === activeMessageMenuItem.id}
+                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left font-semibold text-red-300 transition hover:bg-red-500/10 hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {deletingMessageId === activeMessageMenuItem.id ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-4 w-4" />
+                  )}
+                  Excluir mensagem para todos
+                </button>
+              )}
+
+              <div className="my-1 h-px bg-white/10" />
+
+              <button
+                type="button"
+                onClick={() => setOpenMessageMenuId(null)}
+                className="flex w-full items-center justify-center rounded-xl px-3 py-2.5 font-bold text-zinc-300 transition hover:bg-white/10 hover:text-white"
+              >
+                Cancelar
+              </button>
+            </div>
+          </>,
+          document.body
+        )
+      : null
+
   return (
     <main className="min-h-screen overflow-x-hidden bg-zinc-50 text-black transition-colors dark:bg-black dark:text-white">
       <AppSidebar
@@ -3268,6 +3540,7 @@ export default function ConversationPage() {
       />
 
       {conversationMenuPortal}
+      {messageMenuPortal}
 
       {callModalOpen && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/75 px-3 py-6 backdrop-blur-sm">
@@ -3719,12 +3992,13 @@ export default function ConversationPage() {
                 const reactions = item.reactions || []
                 const reactionGroups = groupMessageReactions(reactions, userId)
                 const messageIsEdited = isMessageEdited(item)
-                const isEditingThisMessage = editingMessageId === item.id
+                const isEditingThisMessage = false
                 const isDeletingThisMessage = deletingMessageId === item.id
                 const hasText = !!item.content?.trim()
                 const hasMedia = attachments.length > 0
                 const isMediaFocused = hasMedia && !hasText && !item.deleted_at && !isEditingThisMessage
                 const isCallEvent = item.type === 'call'
+                const isHighlighted = highlightedMessageId === item.id
 
                 if (isCallEvent) {
                   const callLabel = getCallHistoryLabel(item)
@@ -3732,8 +4006,21 @@ export default function ConversationPage() {
                   const CallIcon = item.call_type === 'video' ? Video : Phone
 
                   return (
-                    <div key={item.id} className="flex w-full justify-center py-1.5">
-                      <div className="inline-flex max-w-[92%] items-center gap-2 rounded-full border border-blue-400/20 bg-zinc-950/80 px-3.5 py-2 text-xs text-zinc-200 shadow-lg shadow-blue-950/10 ring-1 ring-white/10 backdrop-blur-xl dark:bg-blue-950/20">
+                    <div
+                      key={item.id}
+                      ref={(node) => {
+                        messageRefs.current[item.id] = node
+                      }}
+                      data-message-id={item.id}
+                      className="flex w-full justify-center py-1.5"
+                    >
+                      <div
+                        className={`inline-flex max-w-[92%] items-center gap-2 rounded-full border px-3.5 py-2 text-xs text-zinc-200 shadow-lg backdrop-blur-xl transition-all duration-500 ${
+                          isHighlighted
+                            ? 'border-blue-300 bg-blue-950/80 shadow-blue-500/40 ring-2 ring-blue-400/70'
+                            : 'border-blue-400/20 bg-zinc-950/80 shadow-blue-950/10 ring-1 ring-white/10 dark:bg-blue-950/20'
+                        }`}
+                      >
                         <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-500/15 text-blue-200 ring-1 ring-blue-300/20">
                           <CallIcon className="h-3.5 w-3.5" />
                         </span>
@@ -3750,7 +4037,11 @@ export default function ConversationPage() {
                 return (
                   <div
                     key={item.id}
-                    className={`group flex w-full items-end gap-2 ${
+                    ref={(node) => {
+                      messageRefs.current[item.id] = node
+                    }}
+                    data-message-id={item.id}
+                    className={`group flex w-full items-end gap-2 scroll-mt-24 transition-all duration-500 ${
                       isMine ? 'justify-end' : 'justify-start'
                     }`}
                   >
@@ -3760,14 +4051,37 @@ export default function ConversationPage() {
                       }`}
                     >
                       <div
-                        className={`relative overflow-visible rounded-[1.45rem] text-sm transition-all duration-200 ${
+                        className={`relative overflow-visible rounded-[1.45rem] text-sm transition-all duration-500 ${
                           isMediaFocused ? 'p-1.5' : 'px-4 py-2.5'
+                        } ${
+                          isHighlighted
+                            ? 'border border-blue-300/80 shadow-xl shadow-blue-500/30 ring-2 ring-blue-400/70'
+                            : ''
                         } ${
                           isMine
                             ? 'rounded-br-md bg-blue-600 text-white shadow-sm shadow-blue-600/10 dark:bg-blue-500 dark:text-white'
                             : 'rounded-bl-md bg-zinc-100 text-zinc-900 shadow-none dark:bg-zinc-900 dark:text-zinc-100'
                         }`}
                       >
+                        {item.replyTo && (
+                          <button
+                            type="button"
+                            onClick={() => handleJumpToReply(item.reply_to_message_id)}
+                            className={`mb-2 block w-full rounded-2xl border-l-4 border-blue-300/80 px-3 py-2 text-left text-xs transition hover:scale-[1.01] hover:border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-300/70 ${
+                              isMine
+                                ? 'bg-white/10 text-white/85 dark:bg-black/10'
+                                : 'bg-blue-500/10 text-zinc-700 dark:bg-blue-950/30 dark:text-zinc-200'
+                            }`}
+                          >
+                            <p className="font-black text-blue-200 dark:text-blue-200">
+                              {item.replyTo.authorName}
+                            </p>
+                            <p className="mt-0.5 line-clamp-2 break-words opacity-80">
+                              {item.replyTo.preview}
+                            </p>
+                          </button>
+                        )}
+
                         {attachments.length > 0 && (
                           <div className={`${hasText || isEditingThisMessage ? 'mb-3' : ''} grid grid-cols-1 gap-2`}>
                             {attachments.map((attachment) => {
@@ -3993,7 +4307,8 @@ export default function ConversationPage() {
 
                               <button
                                 type="button"
-                                onClick={() => {
+                                onClick={(event) => {
+                                  updateMessageMenuPosition(event.currentTarget)
                                   setOpenReactionMessageId(null)
                                   setOpenMessageMenuId((current) =>
                                     current === item.id ? null : item.id
@@ -4010,13 +4325,13 @@ export default function ConversationPage() {
                                 {isDeletingThisMessage ? (
                                   <Loader2 className="h-4 w-4 animate-spin" />
                                 ) : (
-                                  <MoreHorizontal className="h-4 w-4" />
+                                  <ChevronDown className="h-4 w-4" />
                                 )}
                               </button>
                             </div>
                           )}
 
-                          {openMessageMenuId === item.id && !item.deleted_at && !isEditingThisMessage && (
+                          {false && openMessageMenuId === item.id && !item.deleted_at && !isEditingThisMessage && (
                             <div
                               className={`absolute bottom-9 z-40 w-60 overflow-hidden rounded-3xl border border-zinc-200/80 bg-white/95 p-1 text-sm text-zinc-900 shadow-2xl shadow-black/15 backdrop-blur-xl dark:border-zinc-700/80 dark:bg-zinc-950/95 dark:text-white ${
                                 isMine ? 'right-0' : 'left-0'
@@ -4206,6 +4521,35 @@ export default function ConversationPage() {
           {recordingAudio && (
             <div className="mx-3 mb-2 shrink-0 rounded-full bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 shadow-sm dark:bg-red-950/40 dark:text-red-300 sm:mx-4">
               Gravando áudio... {formatRecordingTime(recordingSeconds)}
+            </div>
+          )}
+
+          {(replyingToMessage || editingMessageId) && (
+            <div className="shrink-0 border-t border-zinc-200/70 bg-white/95 px-3 py-2 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-black/95 sm:px-4">
+              <div className="flex items-center gap-3 rounded-2xl border border-blue-500/20 bg-blue-50/80 px-3 py-2 text-sm dark:bg-blue-950/20">
+                <div className="min-w-0 flex-1 border-l-4 border-blue-500/70 pl-3">
+                  <p className="font-black text-blue-700 dark:text-blue-200">
+                    {editingMessageId ? 'Editando mensagem' : `Respondendo ${replyingToMessage?.sender_id === userId ? 'voce' : otherName}`}
+                  </p>
+                  <p className="mt-0.5 truncate text-xs text-zinc-600 dark:text-zinc-300">
+                    {editingMessageId
+                      ? messages.find((item) => item.id === editingMessageId)?.content || 'Mensagem'
+                      : replyingToMessage
+                        ? getMessageReplyPreviewText(replyingToMessage)
+                        : ''}
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={editingMessageId ? handleCancelEditMessage : handleCancelReplyMessage}
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-zinc-500 transition hover:bg-white hover:text-zinc-950 dark:hover:bg-zinc-900 dark:hover:text-white"
+                  aria-label="Cancelar"
+                  title="Cancelar"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
             </div>
           )}
 
