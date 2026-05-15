@@ -22,6 +22,7 @@ import {
   MicOff,
   MoreHorizontal,
   Paperclip,
+  Palette,
   Pencil,
   Phone,
   PhoneOff,
@@ -104,6 +105,10 @@ type ConversationUserState = {
   cleared_at: string | null
   archived_at: string | null
   deleted_at: string | null
+  chat_theme_color: string | null
+  chat_background_preset: string | null
+  chat_background_url: string | null
+  chat_background_opacity: number | null
 }
 
 type MessageAttachment = {
@@ -546,6 +551,27 @@ const MESSAGE_EMOJIS = MESSAGE_EMOJI_INDEX.map((item) => item.emoji)
 
 const MESSAGE_QUICK_EMOJIS = ['❤️', '😂', '🔥', '😍', '👀', '✨', '😏', '💙']
 
+const CHAT_THEME_OPTIONS = [
+  { id: 'entreus-blue', label: 'Azul EntreUS', swatchClass: 'bg-blue-600', bubbleClass: 'bg-blue-600 text-white shadow-sm shadow-blue-600/10 dark:bg-blue-500 dark:text-white', buttonClass: 'bg-blue-600 text-white shadow-lg shadow-blue-600/20 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-400', softClass: 'border-blue-500/20 bg-blue-50/80 dark:bg-blue-950/20', accentTextClass: 'text-blue-700 dark:text-blue-200', ringClass: 'focus:ring-blue-500/20' },
+  { id: 'purple', label: 'Roxo', swatchClass: 'bg-violet-600', bubbleClass: 'bg-violet-600 text-white shadow-sm shadow-violet-600/10 dark:bg-violet-500 dark:text-white', buttonClass: 'bg-violet-600 text-white shadow-lg shadow-violet-600/20 hover:bg-violet-700 dark:bg-violet-500 dark:hover:bg-violet-400', softClass: 'border-violet-500/20 bg-violet-50/80 dark:bg-violet-950/20', accentTextClass: 'text-violet-700 dark:text-violet-200', ringClass: 'focus:ring-violet-500/20' },
+  { id: 'pink', label: 'Rosa', swatchClass: 'bg-pink-600', bubbleClass: 'bg-pink-600 text-white shadow-sm shadow-pink-600/10 dark:bg-pink-500 dark:text-white', buttonClass: 'bg-pink-600 text-white shadow-lg shadow-pink-600/20 hover:bg-pink-700 dark:bg-pink-500 dark:hover:bg-pink-400', softClass: 'border-pink-500/20 bg-pink-50/80 dark:bg-pink-950/20', accentTextClass: 'text-pink-700 dark:text-pink-200', ringClass: 'focus:ring-pink-500/20' },
+  { id: 'green', label: 'Verde', swatchClass: 'bg-emerald-600', bubbleClass: 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/10 dark:bg-emerald-500 dark:text-white', buttonClass: 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/20 hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-400', softClass: 'border-emerald-500/20 bg-emerald-50/80 dark:bg-emerald-950/20', accentTextClass: 'text-emerald-700 dark:text-emerald-200', ringClass: 'focus:ring-emerald-500/20' },
+  { id: 'gold', label: 'Dourado', swatchClass: 'bg-amber-500', bubbleClass: 'bg-amber-500 text-zinc-950 shadow-sm shadow-amber-500/10 dark:bg-amber-400 dark:text-zinc-950', buttonClass: 'bg-amber-500 text-zinc-950 shadow-lg shadow-amber-500/20 hover:bg-amber-400 dark:bg-amber-400 dark:hover:bg-amber-300', softClass: 'border-amber-500/20 bg-amber-50/80 dark:bg-amber-950/20', accentTextClass: 'text-amber-700 dark:text-amber-200', ringClass: 'focus:ring-amber-500/20' },
+  { id: 'red', label: 'Vermelho', swatchClass: 'bg-red-600', bubbleClass: 'bg-red-600 text-white shadow-sm shadow-red-600/10 dark:bg-red-500 dark:text-white', buttonClass: 'bg-red-600 text-white shadow-lg shadow-red-600/20 hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-400', softClass: 'border-red-500/20 bg-red-50/80 dark:bg-red-950/20', accentTextClass: 'text-red-700 dark:text-red-200', ringClass: 'focus:ring-red-500/20' },
+  { id: 'dark-gray', label: 'Cinza escuro', swatchClass: 'bg-zinc-700', bubbleClass: 'bg-zinc-800 text-white shadow-sm shadow-zinc-800/10 dark:bg-zinc-700 dark:text-white', buttonClass: 'bg-zinc-800 text-white shadow-lg shadow-zinc-800/20 hover:bg-zinc-900 dark:bg-zinc-700 dark:hover:bg-zinc-600', softClass: 'border-zinc-500/20 bg-zinc-100/80 dark:bg-zinc-900/70', accentTextClass: 'text-zinc-800 dark:text-zinc-200', ringClass: 'focus:ring-zinc-500/20' },
+]
+
+const DEFAULT_CHAT_THEME = CHAT_THEME_OPTIONS[0]
+
+const CHAT_BACKGROUND_PRESETS = [
+  { id: 'tech-blue', label: 'Azul tecnologico', previewClass: 'bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.42),transparent_34%),linear-gradient(135deg,#020617,#0f172a_52%,#1d4ed8)]', background: 'radial-gradient(circle at top left, rgba(59,130,246,0.28), transparent 34%), linear-gradient(135deg, #020617, #0f172a 52%, #1d4ed8)' },
+  { id: 'neon-night', label: 'Noite neon', previewClass: 'bg-[radial-gradient(circle_at_20%_20%,rgba(236,72,153,0.34),transparent_30%),radial-gradient(circle_at_80%_10%,rgba(34,211,238,0.34),transparent_30%),linear-gradient(135deg,#020617,#111827)]', background: 'radial-gradient(circle at 20% 20%, rgba(236,72,153,0.24), transparent 30%), radial-gradient(circle at 80% 10%, rgba(34,211,238,0.24), transparent 30%), linear-gradient(135deg, #020617, #111827)' },
+  { id: 'entreus-universe', label: 'Universo EntreUS', previewClass: 'bg-[radial-gradient(circle_at_50%_0%,rgba(37,99,235,0.40),transparent_32%),radial-gradient(circle_at_85%_70%,rgba(168,85,247,0.34),transparent_34%),linear-gradient(135deg,#030712,#0b1120)]', background: 'radial-gradient(circle at 50% 0%, rgba(37,99,235,0.30), transparent 32%), radial-gradient(circle at 85% 70%, rgba(168,85,247,0.22), transparent 34%), linear-gradient(135deg, #030712, #0b1120)' },
+  { id: 'premium-black', label: 'Preto premium', previewClass: 'bg-[linear-gradient(135deg,#000000,#18181b_55%,#27272a)]', background: 'linear-gradient(135deg, #000000, #18181b 55%, #27272a)' },
+  { id: 'digital-purple', label: 'Roxo digital', previewClass: 'bg-[radial-gradient(circle_at_top_right,rgba(147,51,234,0.42),transparent_36%),linear-gradient(135deg,#0f071a,#1e1b4b_58%,#4c1d95)]', background: 'radial-gradient(circle at top right, rgba(147,51,234,0.30), transparent 36%), linear-gradient(135deg, #0f071a, #1e1b4b 58%, #4c1d95)' },
+  { id: 'deep-blue', label: 'Azul profundo', previewClass: 'bg-[linear-gradient(135deg,#020617,#0c4a6e_54%,#082f49)]', background: 'linear-gradient(135deg, #020617, #0c4a6e 54%, #082f49)' },
+]
+
 function normalizeMessageEmojiText(value: string) {
   return value
     .normalize('NFD')
@@ -688,6 +714,10 @@ export default function ConversationPage() {
   const [conversationMenuPosition, setConversationMenuPosition] = useState({ left: 0, top: 0 })
   const [conversationState, setConversationState] = useState<ConversationUserState | null>(null)
   const [conversationActionLoading, setConversationActionLoading] = useState(false)
+  const [customizeModalOpen, setCustomizeModalOpen] = useState(false)
+  const [savingCustomization, setSavingCustomization] = useState(false)
+  const [draftThemeColor, setDraftThemeColor] = useState<string | null>(null)
+  const [draftBackgroundPreset, setDraftBackgroundPreset] = useState<string | null>(null)
   const [blockedForConversation, setBlockedForConversation] = useState(false)
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
   const [editingMessageContent, setEditingMessageContent] = useState('')
@@ -732,6 +762,23 @@ export default function ConversationPage() {
       return name.includes(query) || username.includes(query) || preview.includes(query)
     })
   }, [searchQuery, sortedConversations, userId])
+
+  const selectedChatTheme = useMemo(() => {
+    return (
+      CHAT_THEME_OPTIONS.find((item) => item.id === conversationState?.chat_theme_color) ||
+      DEFAULT_CHAT_THEME
+    )
+  }, [conversationState?.chat_theme_color])
+
+  const selectedChatBackground = useMemo(() => {
+    return CHAT_BACKGROUND_PRESETS.find(
+      (item) => item.id === conversationState?.chat_background_preset
+    ) || null
+  }, [conversationState?.chat_background_preset])
+
+  const conversationBackgroundStyle = selectedChatBackground
+    ? { backgroundImage: selectedChatBackground.background }
+    : undefined
 
   function updateConversationMenuPosition() {
     if (typeof window === 'undefined') return
@@ -1399,7 +1446,7 @@ export default function ConversationPage() {
 
     const { data: conversationStatesData, error: conversationStatesError } = await supabase
       .from('conversation_user_state')
-      .select('conversation_id, user_id, cleared_at, archived_at, deleted_at')
+      .select('conversation_id, user_id, cleared_at, archived_at, deleted_at, chat_theme_color, chat_background_preset, chat_background_url, chat_background_opacity')
       .eq('user_id', currentUserId)
       .in('conversation_id', conversationIds)
 
@@ -1615,7 +1662,7 @@ export default function ConversationPage() {
 
     const { data: stateData, error: stateError } = await supabase
       .from('conversation_user_state')
-      .select('conversation_id, user_id, cleared_at, archived_at, deleted_at')
+      .select('conversation_id, user_id, cleared_at, archived_at, deleted_at, chat_theme_color, chat_background_preset, chat_background_url, chat_background_opacity')
       .eq('conversation_id', conversationId)
       .eq('user_id', currentUserId)
       .maybeSingle()
@@ -1734,7 +1781,7 @@ export default function ConversationPage() {
 
     const { data: stateData, error: stateError } = await supabase
       .from('conversation_user_state')
-      .select('conversation_id, user_id, cleared_at, archived_at, deleted_at')
+      .select('conversation_id, user_id, cleared_at, archived_at, deleted_at, chat_theme_color, chat_background_preset, chat_background_url, chat_background_opacity')
       .eq('conversation_id', conversationId)
       .eq('user_id', currentUserId)
       .maybeSingle()
@@ -1867,7 +1914,7 @@ export default function ConversationPage() {
           onConflict: 'conversation_id,user_id',
         }
       )
-      .select('conversation_id, user_id, cleared_at, archived_at, deleted_at')
+      .select('conversation_id, user_id, cleared_at, archived_at, deleted_at, chat_theme_color, chat_background_preset, chat_background_url, chat_background_opacity')
       .single()
 
     if (error) {
@@ -1961,7 +2008,7 @@ export default function ConversationPage() {
           onConflict: 'conversation_id,user_id',
         }
       )
-      .select('conversation_id, user_id, cleared_at, archived_at, deleted_at')
+      .select('conversation_id, user_id, cleared_at, archived_at, deleted_at, chat_theme_color, chat_background_preset, chat_background_url, chat_background_opacity')
       .single()
 
     if (error) {
@@ -2004,7 +2051,7 @@ export default function ConversationPage() {
           onConflict: 'conversation_id,user_id',
         }
       )
-      .select('conversation_id, user_id, cleared_at, archived_at, deleted_at')
+      .select('conversation_id, user_id, cleared_at, archived_at, deleted_at, chat_theme_color, chat_background_preset, chat_background_url, chat_background_opacity')
       .single()
 
     if (error) {
@@ -2020,6 +2067,93 @@ export default function ConversationPage() {
     setMessage('Conversa excluida apenas para voce.')
     await loadConversationList(userId)
     router.push('/messages')
+  }
+
+  function handleOpenCustomizeModal() {
+    setDraftThemeColor(conversationState?.chat_theme_color || null)
+    setDraftBackgroundPreset(conversationState?.chat_background_preset || null)
+    setOpenConversationMenu(false)
+    setCustomizeModalOpen(true)
+  }
+
+  async function handleSaveCustomization() {
+    if (!userId || !conversationId || savingCustomization) return
+
+    const now = new Date().toISOString()
+
+    setSavingCustomization(true)
+    setMessage('')
+
+    const { data, error } = await supabase
+      .from('conversation_user_state')
+      .upsert(
+        {
+          conversation_id: conversationId,
+          user_id: userId,
+          chat_theme_color: draftThemeColor,
+          chat_background_preset: draftBackgroundPreset,
+          chat_background_url: null,
+          chat_background_opacity: draftBackgroundPreset ? 0.9 : null,
+          updated_at: now,
+        },
+        {
+          onConflict: 'conversation_id,user_id',
+        }
+      )
+      .select('conversation_id, user_id, cleared_at, archived_at, deleted_at, chat_theme_color, chat_background_preset, chat_background_url, chat_background_opacity')
+      .single()
+
+    if (error) {
+      setMessage('Erro ao salvar personalizacao: ' + error.message)
+      setSavingCustomization(false)
+      return
+    }
+
+    setConversationState(data as ConversationUserState)
+    setCustomizeModalOpen(false)
+    setSavingCustomization(false)
+    setMessage('Personalizacao da conversa salva.')
+  }
+
+  async function handleRestoreDefaultCustomization() {
+    if (!userId || !conversationId || savingCustomization) return
+
+    const now = new Date().toISOString()
+
+    setSavingCustomization(true)
+    setMessage('')
+
+    const { data, error } = await supabase
+      .from('conversation_user_state')
+      .upsert(
+        {
+          conversation_id: conversationId,
+          user_id: userId,
+          chat_theme_color: null,
+          chat_background_preset: null,
+          chat_background_url: null,
+          chat_background_opacity: null,
+          updated_at: now,
+        },
+        {
+          onConflict: 'conversation_id,user_id',
+        }
+      )
+      .select('conversation_id, user_id, cleared_at, archived_at, deleted_at, chat_theme_color, chat_background_preset, chat_background_url, chat_background_opacity')
+      .single()
+
+    if (error) {
+      setMessage('Erro ao restaurar padrao: ' + error.message)
+      setSavingCustomization(false)
+      return
+    }
+
+    setConversationState(data as ConversationUserState)
+    setDraftThemeColor(null)
+    setDraftBackgroundPreset(null)
+    setCustomizeModalOpen(false)
+    setSavingCustomization(false)
+    setMessage('Visual padrao restaurado.')
   }
 
   async function handleBlockUser() {
@@ -3413,6 +3547,16 @@ export default function ConversationPage() {
 
               <button
                 type="button"
+                onClick={handleOpenCustomizeModal}
+                disabled={conversationActionLoading}
+                className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left font-semibold transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Palette className="h-4 w-4" />
+                Personalizar conversa
+              </button>
+
+              <button
+                type="button"
                 onClick={handleBlockUser}
                 disabled={conversationActionLoading || blockedForConversation}
                 className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left font-semibold text-red-300 transition hover:bg-red-500/10 hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-50"
@@ -3541,6 +3685,119 @@ export default function ConversationPage() {
 
       {conversationMenuPortal}
       {messageMenuPortal}
+
+      {customizeModalOpen && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/75 px-3 py-6 backdrop-blur-sm">
+          <button
+            type="button"
+            className="absolute inset-0 cursor-default"
+            aria-label="Cancelar personalizacao"
+            onClick={() => setCustomizeModalOpen(false)}
+          />
+
+          <div className="relative z-[10000] flex max-h-[92dvh] w-full max-w-2xl flex-col overflow-hidden rounded-[2rem] border border-blue-400/20 bg-zinc-950 text-white shadow-2xl shadow-black/40 ring-1 ring-white/10">
+            <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
+              <div>
+                <h2 className="text-lg font-black">Personalizar conversa</h2>
+                <p className="mt-1 text-sm text-zinc-400">Escolha uma cor e um fundo para este bate-papo.</p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setCustomizeModalOpen(false)}
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
+                aria-label="Cancelar"
+                title="Cancelar"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto p-5">
+              <section>
+                <h3 className="text-sm font-black text-zinc-100">Cor do chat</h3>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {CHAT_THEME_OPTIONS.map((themeOption) => {
+                    const active = draftThemeColor === themeOption.id || (!draftThemeColor && themeOption.id === DEFAULT_CHAT_THEME.id)
+
+                    return (
+                      <button
+                        key={themeOption.id}
+                        type="button"
+                        onClick={() => setDraftThemeColor(themeOption.id)}
+                        className={`flex items-center gap-3 rounded-2xl border px-3 py-3 text-left transition ${
+                          active
+                            ? 'border-blue-300 bg-blue-500/15 ring-2 ring-blue-400/40'
+                            : 'border-white/10 bg-white/5 hover:bg-white/10'
+                        }`}
+                      >
+                        <span className={`h-7 w-7 rounded-full ${themeOption.swatchClass}`} />
+                        <span className="font-bold">{themeOption.label}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </section>
+
+              <section className="mt-6">
+                <h3 className="text-sm font-black text-zinc-100">Fundo sugerido</h3>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  {CHAT_BACKGROUND_PRESETS.map((backgroundOption) => {
+                    const active = draftBackgroundPreset === backgroundOption.id
+
+                    return (
+                      <button
+                        key={backgroundOption.id}
+                        type="button"
+                        onClick={() => setDraftBackgroundPreset(backgroundOption.id)}
+                        className={`overflow-hidden rounded-2xl border text-left transition ${
+                          active
+                            ? 'border-blue-300 ring-2 ring-blue-400/40'
+                            : 'border-white/10 hover:border-white/25'
+                        }`}
+                      >
+                        <span className={`block h-24 ${backgroundOption.previewClass}`} />
+                        <span className="block bg-white/5 px-3 py-2 text-sm font-bold">
+                          {backgroundOption.label}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </section>
+            </div>
+
+            <div className="flex flex-col gap-2 border-t border-white/10 px-5 py-4 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={handleRestoreDefaultCustomization}
+                disabled={savingCustomization}
+                className="rounded-full border border-white/15 px-5 py-2.5 text-sm font-black text-zinc-200 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Restaurar padrao
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setCustomizeModalOpen(false)}
+                disabled={savingCustomization}
+                className="rounded-full border border-white/15 px-5 py-2.5 text-sm font-black text-zinc-200 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSaveCustomization}
+                disabled={savingCustomization}
+                className={`${selectedChatTheme.buttonClass} rounded-full px-5 py-2.5 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-50`}
+              >
+                {savingCustomization ? 'Salvando...' : 'Salvar visual'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {callModalOpen && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/75 px-3 py-6 backdrop-blur-sm">
@@ -3968,7 +4225,12 @@ export default function ConversationPage() {
             </div>
           )}
 
-          <div className="min-h-0 flex flex-1 flex-col gap-2.5 overflow-y-auto bg-white p-3 dark:bg-black sm:p-5">
+          <div
+            className={`min-h-0 flex flex-1 flex-col gap-2.5 overflow-y-auto bg-white bg-cover bg-center p-3 transition-colors dark:bg-black sm:p-5 ${
+              selectedChatBackground ? 'text-white' : ''
+            }`}
+            style={conversationBackgroundStyle}
+          >
             {messages.length === 0 ? (
               <div className="flex flex-1 items-center justify-center text-center">
                 <div>
@@ -4059,7 +4321,7 @@ export default function ConversationPage() {
                             : ''
                         } ${
                           isMine
-                            ? 'rounded-br-md bg-blue-600 text-white shadow-sm shadow-blue-600/10 dark:bg-blue-500 dark:text-white'
+                            ? `rounded-br-md ${selectedChatTheme.bubbleClass}`
                             : 'rounded-bl-md bg-zinc-100 text-zinc-900 shadow-none dark:bg-zinc-900 dark:text-zinc-100'
                         }`}
                       >
@@ -4526,9 +4788,9 @@ export default function ConversationPage() {
 
           {(replyingToMessage || editingMessageId) && (
             <div className="shrink-0 border-t border-zinc-200/70 bg-white/95 px-3 py-2 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-black/95 sm:px-4">
-              <div className="flex items-center gap-3 rounded-2xl border border-blue-500/20 bg-blue-50/80 px-3 py-2 text-sm dark:bg-blue-950/20">
+              <div className={`flex items-center gap-3 rounded-2xl border px-3 py-2 text-sm ${selectedChatTheme.softClass}`}>
                 <div className="min-w-0 flex-1 border-l-4 border-blue-500/70 pl-3">
-                  <p className="font-black text-blue-700 dark:text-blue-200">
+                  <p className={`font-black ${selectedChatTheme.accentTextClass}`}>
                     {editingMessageId ? 'Editando mensagem' : `Respondendo ${replyingToMessage?.sender_id === userId ? 'voce' : otherName}`}
                   </p>
                   <p className="mt-0.5 truncate text-xs text-zinc-600 dark:text-zinc-300">
@@ -4730,9 +4992,9 @@ export default function ConversationPage() {
               type="button"
               onClick={() => setOpenMessageEmojiPicker((current) => !current)}
               disabled={sending || uploadingMedia || recordingAudio}
-              className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition sm:h-11 sm:w-11 ${
+                className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition sm:h-11 sm:w-11 ${
                 openMessageEmojiPicker
-                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20 dark:bg-blue-500'
+                  ? selectedChatTheme.buttonClass
                   : 'text-zinc-600 hover:scale-105 hover:bg-zinc-100 hover:text-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-900 dark:hover:text-white'
               } disabled:cursor-not-allowed disabled:opacity-45`}
               aria-label="Abrir emojis"
@@ -4783,7 +5045,7 @@ export default function ConversationPage() {
                 recordingAudio ||
                 (!newMessage.trim() && selectedMedia.length === 0)
                   ? 'cursor-not-allowed bg-zinc-200 text-zinc-400 dark:bg-zinc-900 dark:text-zinc-600'
-                  : 'bg-blue-600 text-white shadow-lg shadow-blue-600/20 hover:scale-105 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-400'
+                  : `${selectedChatTheme.buttonClass} hover:scale-105`
               }`}
               aria-label="Enviar mensagem"
               title="Enviar"
