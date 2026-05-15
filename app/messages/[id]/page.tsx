@@ -6,10 +6,13 @@ import UserBadges from '../../components/UserBadges'
 import LinkPreview from '../../components/LinkPreview'
 import Link from 'next/link'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import {
+  Archive,
   ArrowLeft,
+  Ban,
   Check,
   Inbox,
   Loader2,
@@ -88,6 +91,13 @@ type ConversationItem = {
   otherUser: ProfileSummary | null
   lastMessage: ConversationPreviewMessage | null
   isUnread: boolean
+}
+
+type ConversationUserState = {
+  conversation_id: string
+  user_id: string
+  cleared_at: string | null
+  archived_at: string | null
 }
 
 type MessageAttachment = {
@@ -613,6 +623,7 @@ export default function ConversationPage() {
   const localVideoRef = useRef<HTMLVideoElement | null>(null)
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null)
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null)
+  const conversationMenuButtonRef = useRef<HTMLButtonElement | null>(null)
 
   const conversationId = typeof params.id === 'string' ? params.id : ''
 
@@ -639,6 +650,11 @@ export default function ConversationPage() {
   const [selectedMedia, setSelectedMedia] = useState<SelectedMedia[]>([])
   const [openReactionMessageId, setOpenReactionMessageId] = useState<string | null>(null)
   const [openMessageMenuId, setOpenMessageMenuId] = useState<string | null>(null)
+  const [openConversationMenu, setOpenConversationMenu] = useState(false)
+  const [conversationMenuPosition, setConversationMenuPosition] = useState({ left: 0, top: 0 })
+  const [conversationState, setConversationState] = useState<ConversationUserState | null>(null)
+  const [conversationActionLoading, setConversationActionLoading] = useState(false)
+  const [blockedForConversation, setBlockedForConversation] = useState(false)
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
   const [editingMessageContent, setEditingMessageContent] = useState('')
   const [savingMessageEdit, setSavingMessageEdit] = useState(false)
@@ -682,6 +698,31 @@ export default function ConversationPage() {
     })
   }, [searchQuery, sortedConversations, userId])
 
+  function updateConversationMenuPosition() {
+    if (typeof window === 'undefined') return
+
+    const button = conversationMenuButtonRef.current
+    if (!button) return
+
+    const rect = button.getBoundingClientRect()
+    const menuWidth = 256
+    const estimatedMenuHeight = 210
+    const viewportPadding = 8
+
+    const left = Math.min(
+      Math.max(viewportPadding, rect.right - menuWidth),
+      window.innerWidth - menuWidth - viewportPadding
+    )
+
+    const preferredTop = rect.bottom + viewportPadding
+    const top =
+      preferredTop + estimatedMenuHeight > window.innerHeight
+        ? Math.max(viewportPadding, rect.top - estimatedMenuHeight - viewportPadding)
+        : preferredTop
+
+    setConversationMenuPosition({ left, top })
+  }
+
   useEffect(() => {
     setMounted(true)
 
@@ -694,6 +735,32 @@ export default function ConversationPage() {
       }
     }
   }, [])
+
+  useEffect(() => {
+    if (!openConversationMenu) return
+
+    updateConversationMenuPosition()
+
+    function handleViewportChange() {
+      updateConversationMenuPosition()
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setOpenConversationMenu(false)
+      }
+    }
+
+    window.addEventListener('resize', handleViewportChange)
+    window.addEventListener('scroll', handleViewportChange, true)
+    window.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      window.removeEventListener('resize', handleViewportChange)
+      window.removeEventListener('scroll', handleViewportChange, true)
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [openConversationMenu])
 
   useEffect(() => {
     async function loadPage() {
@@ -786,6 +853,22 @@ export default function ConversationPage() {
       )
       .subscribe()
 
+    const conversationListStateChannel = supabase
+      .channel(`conversation-list-state-${userId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'conversation_user_state',
+          filter: `user_id=eq.${userId}`,
+        },
+        () => {
+          scheduleConversationListRefresh()
+        }
+      )
+      .subscribe()
+
     return () => {
       if (refreshTimer) {
         window.clearTimeout(refreshTimer)
@@ -793,6 +876,7 @@ export default function ConversationPage() {
 
       supabase.removeChannel(conversationListMessagesChannel)
       supabase.removeChannel(conversationListParticipantsChannel)
+      supabase.removeChannel(conversationListStateChannel)
     }
   }, [userId])
 
@@ -968,10 +1052,28 @@ export default function ConversationPage() {
       )
       .subscribe()
 
+    const conversationStateChannel = supabase
+      .channel(`conversation-user-state-${conversationId}-${userId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'conversation_user_state',
+          filter: `user_id=eq.${userId}`,
+        },
+        () => {
+          loadMessagesWithAttachments(userId)
+          loadConversationList(userId)
+        }
+      )
+      .subscribe()
+
     return () => {
       supabase.removeChannel(messagesChannel)
       supabase.removeChannel(attachmentsChannel)
       supabase.removeChannel(reactionsChannel)
+      supabase.removeChannel(conversationStateChannel)
     }
   }, [conversationId, userId])
 
@@ -1174,6 +1276,25 @@ export default function ConversationPage() {
       {} as Record<string, ConversationParticipantRow>
     )
 
+    const { data: conversationStatesData, error: conversationStatesError } = await supabase
+      .from('conversation_user_state')
+      .select('conversation_id, user_id, cleared_at, archived_at')
+      .eq('user_id', currentUserId)
+      .in('conversation_id', conversationIds)
+
+    if (conversationStatesError) {
+      setMessage('Erro ao carregar estado das conversas: ' + conversationStatesError.message)
+      return
+    }
+
+    const stateByConversation = ((conversationStatesData || []) as ConversationUserState[]).reduce(
+      (acc, item) => {
+        acc[item.conversation_id] = item
+        return acc
+      },
+      {} as Record<string, ConversationUserState>
+    )
+
     const { data: conversationsData, error: conversationsError } = await supabase
       .from('conversations')
       .select('id, type, direct_key, created_by, created_at, updated_at')
@@ -1242,12 +1363,21 @@ export default function ConversationPage() {
     const lastMessageByConversation: Record<string, ConversationPreviewMessage> = {}
 
     for (const item of (messagesData || []) as ConversationPreviewMessage[]) {
+      const currentState = stateByConversation[item.conversation_id]
+      const clearedAt = currentState?.cleared_at
+
+      if (clearedAt && new Date(item.created_at).getTime() <= new Date(clearedAt).getTime()) {
+        continue
+      }
+
       if (!lastMessageByConversation[item.conversation_id]) {
         lastMessageByConversation[item.conversation_id] = item
       }
     }
 
-    const items: ConversationItem[] = ((conversationsData || []) as ConversationRow[]).map(
+    const items: ConversationItem[] = ((conversationsData || []) as ConversationRow[])
+      .filter((conversation) => !stateByConversation[conversation.id]?.archived_at)
+      .map(
       (conversation) => {
         const conversationParticipants = participantRows.filter(
           (participant) => participant.conversation_id === conversation.id
@@ -1259,14 +1389,19 @@ export default function ConversationPage() {
 
         const lastMessage = lastMessageByConversation[conversation.id] || null
         const myParticipant = myParticipantByConversation[conversation.id]
+        const currentState = stateByConversation[conversation.id]
         const lastReadAt = myParticipant?.last_read_at
           ? new Date(myParticipant.last_read_at).getTime()
+          : 0
+        const clearedAt = currentState?.cleared_at
+          ? new Date(currentState.cleared_at).getTime()
           : 0
 
         const isUnread = !!(
           lastMessage &&
           !lastMessage.deleted_at &&
           lastMessage.sender_id !== currentUserId &&
+          new Date(lastMessage.created_at).getTime() > clearedAt &&
           new Date(lastMessage.created_at).getTime() > lastReadAt
         )
 
@@ -1332,7 +1467,26 @@ export default function ConversationPage() {
       const profiles = (profilesData || []) as ProfileSummary[]
       const other = profiles.find((profile) => profile.id !== currentUserId) || null
       setOtherProfile(other)
+
+      if (other?.id) {
+        const blocked = await hasBlockBetweenUsers(currentUserId, other.id)
+        setBlockedForConversation(blocked)
+      }
     }
+
+    const { data: stateData, error: stateError } = await supabase
+      .from('conversation_user_state')
+      .select('conversation_id, user_id, cleared_at, archived_at')
+      .eq('conversation_id', conversationId)
+      .eq('user_id', currentUserId)
+      .maybeSingle()
+
+    if (stateError) {
+      setMessage('Erro ao carregar preferÃªncias da conversa: ' + stateError.message)
+      return
+    }
+
+    setConversationState((stateData as ConversationUserState | null) || null)
 
     await loadMessagesWithAttachments(currentUserId)
     await markConversationAsRead(currentUserId)
@@ -1439,8 +1593,27 @@ export default function ConversationPage() {
       ((hiddenData || []) as { message_id: string }[]).map((item) => item.message_id)
     )
 
+    const { data: stateData, error: stateError } = await supabase
+      .from('conversation_user_state')
+      .select('conversation_id, user_id, cleared_at, archived_at')
+      .eq('conversation_id', conversationId)
+      .eq('user_id', currentUserId)
+      .maybeSingle()
+
+    if (stateError) {
+      setMessage('Erro ao carregar preferÃªncias da conversa: ' + stateError.message)
+      return
+    }
+
+    const currentState = (stateData as ConversationUserState | null) || null
+    const clearedAt = currentState?.cleared_at
+      ? new Date(currentState.cleared_at).getTime()
+      : 0
+
+    setConversationState(currentState)
+
     const visibleMessages = loadedMessages.filter(
-      (item) => !hiddenMessageIds.has(item.id)
+      (item) => !hiddenMessageIds.has(item.id) && new Date(item.created_at).getTime() > clearedAt
     )
 
     const visibleMessageIds = visibleMessages.map((item) => item.id)
@@ -1487,6 +1660,132 @@ export default function ConversationPage() {
       .maybeSingle()
 
     return !!blockedByMe || !!blockedMe
+  }
+
+  async function handleClearConversationForMe() {
+    if (!userId || !conversationId || conversationActionLoading) return
+
+    const confirmed = window.confirm(
+      'Limpar esta conversa somente para vocÃª? As mensagens antigas continuarÃ£o visÃ­veis para a outra pessoa.'
+    )
+
+    if (!confirmed) return
+
+    const clearedAt = new Date().toISOString()
+
+    setConversationActionLoading(true)
+    setMessage('')
+
+    const { data, error } = await supabase
+      .from('conversation_user_state')
+      .upsert(
+        {
+          conversation_id: conversationId,
+          user_id: userId,
+          cleared_at: clearedAt,
+          updated_at: clearedAt,
+        },
+        {
+          onConflict: 'conversation_id,user_id',
+        }
+      )
+      .select('conversation_id, user_id, cleared_at, archived_at')
+      .single()
+
+    if (error) {
+      setMessage('Erro ao limpar conversa para vocÃª: ' + error.message)
+      setConversationActionLoading(false)
+      return
+    }
+
+    setConversationState(data as ConversationUserState)
+    setMessages((current) =>
+      current.filter((item) => new Date(item.created_at).getTime() > new Date(clearedAt).getTime())
+    )
+    setOpenConversationMenu(false)
+    setConversationActionLoading(false)
+    setMessage('Conversa limpa somente para vocÃª.')
+    await loadConversationList(userId)
+  }
+
+  async function handleArchiveConversationForMe() {
+    if (!userId || !conversationId || conversationActionLoading) return
+
+    const confirmed = window.confirm(
+      'Ocultar esta conversa da sua lista principal? VocÃª ainda poderÃ¡ voltar a ela se abrir o link da conversa.'
+    )
+
+    if (!confirmed) return
+
+    const archivedAt = new Date().toISOString()
+
+    setConversationActionLoading(true)
+    setMessage('')
+
+    const { data, error } = await supabase
+      .from('conversation_user_state')
+      .upsert(
+        {
+          conversation_id: conversationId,
+          user_id: userId,
+          archived_at: archivedAt,
+          updated_at: archivedAt,
+        },
+        {
+          onConflict: 'conversation_id,user_id',
+        }
+      )
+      .select('conversation_id, user_id, cleared_at, archived_at')
+      .single()
+
+    if (error) {
+      setMessage('Erro ao ocultar conversa: ' + error.message)
+      setConversationActionLoading(false)
+      return
+    }
+
+    setConversationState(data as ConversationUserState)
+    setOpenConversationMenu(false)
+    setConversationActionLoading(false)
+    setMessage('Conversa ocultada da sua lista principal.')
+    await loadConversationList(userId)
+    router.push('/messages')
+  }
+
+  async function handleBlockUser() {
+    if (!userId || !otherUserId || conversationActionLoading) return
+
+    const confirmed = window.confirm(
+      `Bloquear ${otherName}? VocÃªs nÃ£o poderÃ£o trocar mensagens enquanto o bloqueio existir.`
+    )
+
+    if (!confirmed) return
+
+    setConversationActionLoading(true)
+    setMessage('')
+
+    const { error } = await supabase
+      .from('blocks')
+      .upsert(
+        {
+          blocker_id: userId,
+          blocked_id: otherUserId,
+        },
+        {
+          onConflict: 'blocker_id,blocked_id',
+        }
+      )
+
+    if (error) {
+      setMessage('Erro ao bloquear usuÃ¡rio: ' + error.message)
+      setConversationActionLoading(false)
+      return
+    }
+
+    setBlockedForConversation(true)
+    setOpenConversationMenu(false)
+    setConversationActionLoading(false)
+    setMessage('UsuÃ¡rio bloqueado. O envio de mensagens e novas chamadas foram bloqueados.')
   }
 
   function handleSelectMedia(files: FileList | null) {
@@ -2581,6 +2880,14 @@ export default function ConversationPage() {
   async function startCall(mode: CallMode) {
     if (!userId || !conversationId) return
 
+    const blocked = await hasBlockBetweenUsers(userId, otherUserId)
+
+    if (blocked) {
+      setBlockedForConversation(true)
+      setMessage('NÃ£o Ã© possÃ­vel iniciar chamada enquanto houver bloqueio entre vocÃªs.')
+      return
+    }
+
     setCallMode(mode)
     setCallStatus('calling')
     setCallModalOpen(true)
@@ -2748,6 +3055,69 @@ export default function ConversationPage() {
     )
   }
 
+  const conversationMenuPortal =
+    mounted && openConversationMenu && typeof document !== 'undefined'
+      ? createPortal(
+          <>
+            <button
+              type="button"
+              className="fixed inset-0 z-[9998] cursor-default bg-transparent"
+              aria-label="Fechar opcoes da conversa"
+              onClick={() => setOpenConversationMenu(false)}
+            />
+
+            <div
+              className="fixed z-[9999] w-64 overflow-hidden rounded-2xl border border-zinc-800/80 bg-zinc-950 p-1.5 text-sm text-zinc-100 shadow-2xl shadow-black/30 ring-1 ring-white/10"
+              style={{
+                left: conversationMenuPosition.left,
+                top: conversationMenuPosition.top,
+              }}
+            >
+              <button
+                type="button"
+                onClick={handleClearConversationForMe}
+                disabled={conversationActionLoading}
+                className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left font-semibold transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Trash2 className="h-4 w-4" />
+                Limpar conversa para mim
+              </button>
+
+              <button
+                type="button"
+                onClick={handleArchiveConversationForMe}
+                disabled={conversationActionLoading}
+                className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left font-semibold transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Archive className="h-4 w-4" />
+                Ocultar/arquivar conversa
+              </button>
+
+              <button
+                type="button"
+                onClick={handleBlockUser}
+                disabled={conversationActionLoading || blockedForConversation}
+                className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left font-semibold text-red-300 transition hover:bg-red-500/10 hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Ban className="h-4 w-4" />
+                Bloquear usuario
+              </button>
+
+              <div className="my-1 h-px bg-white/10" />
+
+              <button
+                type="button"
+                onClick={() => setOpenConversationMenu(false)}
+                className="flex w-full items-center justify-center rounded-xl px-3 py-2.5 font-bold text-zinc-300 transition hover:bg-white/10 hover:text-white"
+              >
+                Cancelar
+              </button>
+            </div>
+          </>,
+          document.body
+        )
+      : null
+
   return (
     <main className="min-h-screen overflow-x-hidden bg-zinc-50 text-black transition-colors dark:bg-black dark:text-white">
       <AppSidebar
@@ -2769,6 +3139,8 @@ export default function ConversationPage() {
         onLogout={handleLogout}
         onPostClick={handlePostClick}
       />
+
+      {conversationMenuPortal}
 
       {callModalOpen && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/75 px-3 py-6 backdrop-blur-sm">
@@ -3139,6 +3511,7 @@ export default function ConversationPage() {
               <button
                 type="button"
                 onClick={() => startCall('voice')}
+                disabled={blockedForConversation}
                 className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-100 text-zinc-700 transition hover:bg-blue-50 hover:text-blue-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-blue-950/40 dark:hover:text-blue-300"
                 aria-label="Iniciar chamada de voz"
                 title="Iniciar chamada de voz"
@@ -3149,12 +3522,34 @@ export default function ConversationPage() {
               <button
                 type="button"
                 onClick={() => startCall('video')}
+                disabled={blockedForConversation}
                 className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-100 text-zinc-700 transition hover:bg-blue-50 hover:text-blue-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-blue-950/40 dark:hover:text-blue-300"
                 aria-label="Iniciar chamada de vídeo"
                 title="Iniciar chamada de vídeo"
               >
                 <Video className="h-5 w-5" />
               </button>
+
+              <div className="relative">
+                <button
+                  ref={conversationMenuButtonRef}
+                  type="button"
+                  onClick={() => {
+                    updateConversationMenuPosition()
+                    setOpenConversationMenu((current) => !current)
+                  }}
+                  className={`flex h-10 w-10 items-center justify-center rounded-full transition ${
+                    openConversationMenu
+                      ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
+                      : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800'
+                  }`}
+                  aria-label="Opcoes da conversa"
+                  title="Opcoes da conversa"
+                  aria-expanded={openConversationMenu}
+                >
+                  <MoreHorizontal className="h-5 w-5" />
+                </button>
+              </div>
             </div>
 
             {otherProfile?.username && (

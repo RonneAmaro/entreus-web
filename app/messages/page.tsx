@@ -66,6 +66,13 @@ type ConversationItem = {
   isUnread: boolean
 }
 
+type ConversationUserState = {
+  conversation_id: string
+  user_id: string
+  cleared_at: string | null
+  archived_at: string | null
+}
+
 function getDisplayName(profile: ProfileSummary | CurrentProfile | null) {
   if (!profile) return 'Usuário EntreUS'
   return profile.display_name || profile.username || 'Usuário EntreUS'
@@ -242,6 +249,22 @@ export default function MessagesPage() {
       )
       .subscribe()
 
+    const conversationStateChannel = supabase
+      .channel(`messages-page-state-${userId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'conversation_user_state',
+          filter: `user_id=eq.${userId}`,
+        },
+        () => {
+          scheduleMessagesRefresh()
+        }
+      )
+      .subscribe()
+
     return () => {
       if (refreshTimer) {
         window.clearTimeout(refreshTimer)
@@ -249,6 +272,7 @@ export default function MessagesPage() {
 
       supabase.removeChannel(messagesChannel)
       supabase.removeChannel(participantsChannel)
+      supabase.removeChannel(conversationStateChannel)
     }
   }, [userId])
 
@@ -294,6 +318,25 @@ export default function MessagesPage() {
         return acc
       },
       {} as Record<string, ParticipantRow>
+    )
+
+    const { data: conversationStatesData, error: conversationStatesError } = await supabase
+      .from('conversation_user_state')
+      .select('conversation_id, user_id, cleared_at, archived_at')
+      .eq('user_id', currentUserId)
+      .in('conversation_id', conversationIds)
+
+    if (conversationStatesError) {
+      setMessage('Erro ao carregar estado das conversas: ' + conversationStatesError.message)
+      return
+    }
+
+    const stateByConversation = ((conversationStatesData || []) as ConversationUserState[]).reduce(
+      (acc, item) => {
+        acc[item.conversation_id] = item
+        return acc
+      },
+      {} as Record<string, ConversationUserState>
     )
 
     const { data: conversationsData, error: conversationsError } = await supabase
@@ -364,12 +407,21 @@ export default function MessagesPage() {
     const lastMessageByConversation: Record<string, MessageRow> = {}
 
     for (const item of (messagesData || []) as MessageRow[]) {
+      const currentState = stateByConversation[item.conversation_id]
+      const clearedAt = currentState?.cleared_at
+
+      if (clearedAt && new Date(item.created_at).getTime() <= new Date(clearedAt).getTime()) {
+        continue
+      }
+
       if (!lastMessageByConversation[item.conversation_id]) {
         lastMessageByConversation[item.conversation_id] = item
       }
     }
 
-    const items: ConversationItem[] = ((conversationsData || []) as ConversationRow[]).map(
+    const items: ConversationItem[] = ((conversationsData || []) as ConversationRow[])
+      .filter((conversation) => !stateByConversation[conversation.id]?.archived_at)
+      .map(
       (conversation) => {
         const participants = participantRows.filter(
           (participant) => participant.conversation_id === conversation.id
@@ -381,14 +433,19 @@ export default function MessagesPage() {
 
         const lastMessage = lastMessageByConversation[conversation.id] || null
         const myParticipant = myParticipantByConversation[conversation.id]
+        const currentState = stateByConversation[conversation.id]
         const lastReadAt = myParticipant?.last_read_at
           ? new Date(myParticipant.last_read_at).getTime()
+          : 0
+        const clearedAt = currentState?.cleared_at
+          ? new Date(currentState.cleared_at).getTime()
           : 0
 
         const isUnread = !!(
           lastMessage &&
           !lastMessage.deleted_at &&
           lastMessage.sender_id !== currentUserId &&
+          new Date(lastMessage.created_at).getTime() > clearedAt &&
           new Date(lastMessage.created_at).getTime() > lastReadAt
         )
 

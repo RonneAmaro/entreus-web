@@ -1198,11 +1198,13 @@ export default function ProfilePage() {
                     </div>
                   </div>
 
-                  <div className="min-w-0 pt-3 text-center sm:pt-16 sm:text-left">
-                    <h2 className="inline-flex max-w-full items-center justify-center gap-2 break-words text-2xl font-black tracking-tight text-black dark:text-white sm:justify-start sm:text-4xl">
-                      <UserBadges userId={userId} size="md" max={1} />
+                  <div className="min-w-0 max-w-full pt-3 text-center sm:pt-16 sm:text-left">
+                    <h2 className="flex max-w-full flex-wrap items-center justify-center gap-2 text-2xl font-black leading-tight tracking-tight text-black dark:text-white sm:justify-start sm:text-4xl">
+                      <span className="shrink-0">
+                        <UserBadges userId={userId} size="md" max={1} />
+                      </span>
 
-                      <span className="min-w-0 break-words">
+                      <span className="min-w-0 max-w-full break-words leading-tight [overflow-wrap:anywhere]">
                         {profileName}
                       </span>
                     </h2>
