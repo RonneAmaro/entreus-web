@@ -47,8 +47,8 @@ export default function MoreMenu({
     return [
       'flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition',
       active
-        ? 'bg-zinc-900 text-white dark:bg-white dark:text-black'
-        : 'text-zinc-800 hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-900',
+        ? 'bg-blue-500/15 text-blue-50 ring-1 ring-blue-300/20'
+        : 'text-zinc-200 hover:bg-white/10 hover:text-white',
     ].join(' ')
   }
 
@@ -58,8 +58,8 @@ export default function MoreMenu({
   }
 
   return (
-    <div className="absolute bottom-full left-0 z-[999] mb-3 w-72 rounded-3xl border border-zinc-200 bg-white p-2 shadow-2xl dark:border-zinc-800 dark:bg-black">
-      <div className="px-3 py-3">
+    <div className="absolute bottom-full left-0 z-[1000] mb-3 max-h-[calc(100vh-120px)] w-72 overflow-y-auto overscroll-contain rounded-3xl border border-blue-400/15 bg-zinc-950/98 p-2 text-white shadow-2xl shadow-black/40 ring-1 ring-white/10 [scrollbar-color:rgba(96,165,250,0.45)_transparent] [scrollbar-width:thin]">
+      <div className="sticky top-0 z-10 rounded-2xl bg-zinc-950/95 px-3 py-3 backdrop-blur-xl">
         <p className="text-xs font-bold uppercase tracking-[0.25em] text-zinc-400">
           {t('more.title')}
         </p>
@@ -100,7 +100,7 @@ export default function MoreMenu({
           <span>Reportar bug</span>
         </Link>
 
-        <div className="rounded-2xl px-4 py-3 text-sm text-zinc-800 dark:text-zinc-100">
+        <div className="rounded-2xl px-4 py-3 text-sm text-zinc-200">
           <div className="mb-2 flex items-center gap-3 font-semibold">
             <Languages className="h-5 w-5 shrink-0" />
             <span>{t('language.label')}</span>
@@ -109,7 +109,7 @@ export default function MoreMenu({
           <select
             value={language}
             onChange={(event) => setLanguage(event.target.value as LanguageCode)}
-            className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-blue-400 dark:border-zinc-800 dark:bg-zinc-950"
+            className="w-full rounded-xl border border-white/10 bg-black px-3 py-2 text-sm text-white outline-none transition focus:border-blue-400"
           >
             {languages.map((item) => (
               <option key={item.code} value={item.code}>
@@ -157,7 +157,7 @@ export default function MoreMenu({
           </button>
         )}
 
-        <div className="my-2 border-t border-zinc-200 dark:border-zinc-800" />
+        <div className="my-2 border-t border-white/10" />
 
         <button
           type="button"
@@ -165,7 +165,7 @@ export default function MoreMenu({
             onClose()
             onLogout()
           }}
-          className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold text-red-600 transition hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30"
+          className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold text-red-300 transition hover:bg-red-500/10 hover:text-red-200"
         >
           <LogOut className="h-5 w-5 shrink-0" />
           <span>{t('auth.logout')}</span>
