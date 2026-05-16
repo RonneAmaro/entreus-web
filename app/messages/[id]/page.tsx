@@ -4598,7 +4598,7 @@ export default function ConversationPage() {
                         ) : null}
 
                         <div
-                          className={`relative mt-2 flex items-center gap-1.5 ${
+                          className={`relative mt-2 flex items-center gap-1 ${
                             isMine ? 'justify-end' : 'justify-start'
                           }`}
                         >
@@ -4618,7 +4618,7 @@ export default function ConversationPage() {
                               className={`inline-flex items-center ${
                                 deliveryStatus === 'read'
                                   ? 'text-sky-200 dark:text-sky-200'
-                                  : 'text-white/70'
+                                  : 'text-white/55'
                               }`}
                               aria-label={
                                 deliveryStatus === 'read'
@@ -4644,7 +4644,7 @@ export default function ConversationPage() {
                           )}
 
                           {!item.deleted_at && !isEditingThisMessage && (
-                            <div className="flex items-center gap-1 opacity-100 transition sm:opacity-0 sm:group-hover:opacity-100">
+                            <div className="ml-1 flex items-center gap-0.5 opacity-70 transition sm:opacity-0 sm:group-hover:opacity-100">
                               <button
                                 type="button"
                                 onClick={() => {
@@ -4653,7 +4653,7 @@ export default function ConversationPage() {
                                     current === item.id ? null : item.id
                                   )
                                 }}
-                                className={`flex h-7 w-7 items-center justify-center rounded-full transition hover:scale-105 ${
+                                className={`flex h-6 w-6 items-center justify-center rounded-full transition hover:scale-105 ${
                                   isMine
                                     ? 'bg-white/10 text-white/80 hover:bg-white/20 hover:text-white'
                                     : 'bg-white/70 text-zinc-500 hover:bg-white hover:text-zinc-900 dark:bg-zinc-800/70 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white'
@@ -4661,7 +4661,7 @@ export default function ConversationPage() {
                                 aria-label="Reagir à mensagem"
                                 title="Reagir"
                               >
-                                <SmilePlus className="h-4 w-4" />
+                                <SmilePlus className="h-3.5 w-3.5" />
                               </button>
 
                               <button
@@ -4673,7 +4673,7 @@ export default function ConversationPage() {
                                     current === item.id ? null : item.id
                                   )
                                 }}
-                                className={`flex h-7 w-7 items-center justify-center rounded-full transition hover:scale-105 ${
+                                className={`flex h-6 w-6 items-center justify-center rounded-full transition hover:scale-105 ${
                                   isMine
                                     ? 'bg-white/10 text-white/80 hover:bg-white/20 hover:text-white'
                                     : 'bg-white/70 text-zinc-500 hover:bg-white hover:text-zinc-900 dark:bg-zinc-800/70 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white'
@@ -4682,9 +4682,9 @@ export default function ConversationPage() {
                                 title="Opções"
                               >
                                 {isDeletingThisMessage ? (
-                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
                                 ) : (
-                                  <ChevronDown className="h-4 w-4" />
+                                  <ChevronDown className="h-3.5 w-3.5" />
                                 )}
                               </button>
                             </div>

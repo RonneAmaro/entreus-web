@@ -177,9 +177,9 @@ export default function AppSidebar({
     const active = isActive(path)
 
     return [
-      'group/item relative flex h-12 min-h-12 items-center gap-0 rounded-2xl px-3 text-sm font-bold transition group-hover/sidebar:gap-3',
+      'group/item relative flex h-12 min-h-12 items-center gap-0 rounded-xl px-3 text-sm font-bold transition group-hover/sidebar:gap-3',
       active
-        ? 'text-white drop-shadow-[0_0_10px_rgba(59,130,246,0.45)]'
+        ? 'bg-blue-500/10 text-blue-100 ring-1 ring-blue-400/10'
         : 'text-zinc-500 hover:bg-white/5 hover:text-zinc-100 dark:text-zinc-400 dark:hover:bg-white/5 dark:hover:text-white',
     ].join(' ')
   }
@@ -308,9 +308,9 @@ export default function AppSidebar({
                 setMoreMenuAnchor((current) => (current === 'nav' ? null : 'nav'))
               }
               className={[
-                `flex h-12 w-full items-center gap-0 rounded-2xl px-3 text-sm font-bold transition group-hover/sidebar:gap-3 ${collapsedCenterClass}`,
+                `flex h-12 w-full items-center gap-0 rounded-xl px-3 text-sm font-bold transition group-hover/sidebar:gap-3 ${collapsedCenterClass}`,
                 isMoreActive
-                  ? 'text-white drop-shadow-[0_0_10px_rgba(59,130,246,0.45)]'
+                  ? 'bg-blue-500/10 text-blue-100 ring-1 ring-blue-400/10'
                   : 'text-zinc-500 hover:bg-white/5 hover:text-zinc-100 dark:text-zinc-400 dark:hover:bg-white/5 dark:hover:text-white',
               ].join(' ')}
             >
