@@ -213,6 +213,7 @@ export default function AppSidebar({
     pathname === '/blocked' ||
     pathname === '/settings' ||
     pathname === '/help' ||
+    pathname === '/suggestions' ||
     pathname === '/feedback' ||
     pathname === '/lab' ||
     pathname.startsWith('/lab/')

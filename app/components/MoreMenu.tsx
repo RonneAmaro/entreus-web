@@ -7,6 +7,7 @@ import {
   FlaskConical,
   HelpCircle,
   Languages,
+  Lightbulb,
   LogOut,
   Moon,
   Settings,
@@ -81,6 +82,11 @@ export default function MoreMenu({
         <Link href="/help" onClick={onClose} className={itemClass('/help')}>
           <HelpCircle className={iconClass('/help')} />
           <span>Ajuda</span>
+        </Link>
+
+        <Link href="/suggestions" onClick={onClose} className={itemClass('/suggestions')}>
+          <Lightbulb className={iconClass('/suggestions')} />
+          <span>Sugestoes</span>
         </Link>
 
         <Link href="/feedback" onClick={onClose} className={itemClass('/feedback')}>

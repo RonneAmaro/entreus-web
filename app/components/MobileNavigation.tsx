@@ -13,6 +13,7 @@ import {
   FlaskConical,
   HelpCircle,
   ImagePlus,
+  Lightbulb,
   LogOut,
   Menu,
   MessageCircle,
@@ -334,6 +335,15 @@ export default function MobileNavigation({
               </Link>
 
               <Link
+                href="/suggestions"
+                onClick={closeMoreOptions}
+                className={drawerLinkClass('/suggestions')}
+              >
+                <Lightbulb className={drawerIconClass('/suggestions')} />
+                Sugestoes
+              </Link>
+
+              <Link
                 href="/feedback"
                 onClick={closeMoreOptions}
                 className={drawerLinkClass('/feedback')}
@@ -567,6 +577,15 @@ export default function MobileNavigation({
               >
                 <HelpCircle className={drawerIconClass('/help')} />
                 Ajuda
+              </Link>
+
+              <Link
+                href="/suggestions"
+                onClick={closeMenu}
+                className={drawerLinkClass('/suggestions')}
+              >
+                <Lightbulb className={drawerIconClass('/suggestions')} />
+                Sugestoes
               </Link>
 
               <Link
