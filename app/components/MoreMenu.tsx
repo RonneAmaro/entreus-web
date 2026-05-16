@@ -22,6 +22,10 @@ import type { LanguageCode } from '@/lib/translations'
 type MoreMenuProps = {
   mounted: boolean
   theme?: string
+  position?: {
+    left: number
+    top: number
+  }
   onToggleTheme: () => void
   onLogout: () => void
   onClose: () => void
@@ -30,6 +34,7 @@ type MoreMenuProps = {
 export default function MoreMenu({
   mounted,
   theme,
+  position,
   onToggleTheme,
   onLogout,
   onClose,
@@ -58,7 +63,10 @@ export default function MoreMenu({
   }
 
   return (
-    <div className="absolute bottom-full left-0 z-[1000] mb-3 max-h-[calc(100vh-120px)] w-72 overflow-y-auto overscroll-contain rounded-3xl border border-blue-400/15 bg-zinc-950/98 p-2 text-white shadow-2xl shadow-black/40 ring-1 ring-white/10 [scrollbar-color:rgba(96,165,250,0.45)_transparent] [scrollbar-width:thin]">
+    <div
+      className={`${position ? 'fixed' : 'absolute bottom-full left-0 mb-3'} z-[10000] max-h-[calc(100vh-24px)] w-72 overflow-y-auto overscroll-contain rounded-3xl border border-blue-400/15 bg-zinc-950/98 p-2 text-white shadow-2xl shadow-black/40 ring-1 ring-white/10 [scrollbar-color:rgba(96,165,250,0.45)_transparent] [scrollbar-width:thin]`}
+      style={position}
+    >
       <div className="sticky top-0 z-10 rounded-2xl bg-zinc-950/95 px-3 py-3 backdrop-blur-xl">
         <p className="text-xs font-bold uppercase tracking-[0.25em] text-zinc-400">
           {t('more.title')}

@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -60,7 +61,10 @@ export default function AppSidebar({
 }: AppSidebarProps) {
   const pathname = usePathname()
   const { t } = useLanguage()
+  const navMoreButtonRef = useRef<HTMLButtonElement | null>(null)
+  const profileMoreButtonRef = useRef<HTMLButtonElement | null>(null)
   const [moreMenuAnchor, setMoreMenuAnchor] = useState<'nav' | 'profile' | null>(null)
+  const [moreMenuPosition, setMoreMenuPosition] = useState({ left: 96, top: 12 })
   const [internalUnreadMessagesCount, setInternalUnreadMessagesCount] = useState(0)
 
   const visibleUnreadMessagesCount =
@@ -177,7 +181,7 @@ export default function AppSidebar({
     const active = isActive(path)
 
     return [
-      'group/item relative flex h-12 min-h-12 items-center gap-0 rounded-xl px-3 text-sm font-bold transition group-hover/sidebar:gap-3',
+      'group/item relative flex h-11 min-h-11 items-center gap-0 rounded-full px-3 text-sm font-bold transition group-hover/sidebar:gap-3',
       active
         ? 'bg-blue-500/10 text-blue-100 ring-1 ring-blue-400/10'
         : 'text-zinc-500 hover:bg-white/5 hover:text-zinc-100 dark:text-zinc-400 dark:hover:bg-white/5 dark:hover:text-white',
@@ -185,7 +189,7 @@ export default function AppSidebar({
   }
 
   function navIconClass(path: string) {
-    return `h-6 w-6 shrink-0 ${isActive(path) ? 'stroke-[2.5]' : ''}`
+    return `h-5 w-5 shrink-0 ${isActive(path) ? 'stroke-[2.45]' : ''}`
   }
 
   const navTextClass =
@@ -208,6 +212,56 @@ export default function AppSidebar({
     return value.split('@')[0] || value
   }
 
+  function updateMoreMenuPosition(anchor: 'nav' | 'profile') {
+    if (typeof window === 'undefined') return
+
+    const button =
+      anchor === 'nav' ? navMoreButtonRef.current : profileMoreButtonRef.current
+
+    if (!button) return
+
+    const rect = button.getBoundingClientRect()
+    const menuWidth = 288
+    const estimatedMenuHeight = Math.min(620, window.innerHeight - 24)
+    const padding = 12
+
+    const left = Math.min(
+      Math.max(padding, rect.right + padding),
+      window.innerWidth - menuWidth - padding
+    )
+    const top = Math.min(
+      Math.max(padding, rect.bottom - estimatedMenuHeight),
+      window.innerHeight - estimatedMenuHeight - padding
+    )
+
+    setMoreMenuPosition({ left, top })
+  }
+
+  useEffect(() => {
+    if (!moreMenuAnchor) return
+
+    updateMoreMenuPosition(moreMenuAnchor)
+    const activeAnchor = moreMenuAnchor
+
+    function handleViewportChange() {
+      updateMoreMenuPosition(activeAnchor)
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') setMoreMenuAnchor(null)
+    }
+
+    window.addEventListener('resize', handleViewportChange)
+    window.addEventListener('scroll', handleViewportChange, true)
+    window.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      window.removeEventListener('resize', handleViewportChange)
+      window.removeEventListener('scroll', handleViewportChange, true)
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [moreMenuAnchor])
+
   const isMoreActive =
     pathname === '/privacy' ||
     pathname === '/blocked' ||
@@ -225,11 +279,11 @@ export default function AppSidebar({
   const profileHandle = username ? `@${username}` : getEmailPrefix(email)
 
   return (
-    <aside className="group/sidebar fixed left-0 top-0 z-40 hidden h-screen w-[84px] flex-col border-r border-blue-400/10 bg-black/95 shadow-2xl shadow-black/30 backdrop-blur-2xl transition-[width,box-shadow] duration-300 hover:w-[252px] hover:shadow-blue-950/20 lg:flex">
-      <div className="flex h-full flex-col overflow-x-visible overflow-y-auto px-3.5 py-4">
+    <aside className="group/sidebar fixed left-0 top-0 z-40 hidden h-screen w-[76px] flex-col overflow-hidden border-r border-blue-400/10 bg-black/95 shadow-2xl shadow-black/30 backdrop-blur-2xl transition-[width,box-shadow] duration-300 hover:w-[252px] hover:shadow-blue-950/20 lg:flex">
+      <div className="flex h-full flex-col overflow-x-hidden overflow-y-auto px-3 py-4 [scrollbar-width:none]">
         <Link
           href="/feed"
-          className="mb-5 flex h-14 w-full shrink-0 items-center justify-center rounded-2xl px-2 transition hover:bg-white/5 group-hover/sidebar:justify-start"
+          className="mb-5 flex h-12 w-full shrink-0 items-center justify-center rounded-full px-0 transition hover:bg-white/5 group-hover/sidebar:justify-start group-hover/sidebar:px-2"
           aria-label={t('mobile.goHome')}
         >
           <div className="flex min-w-0 items-center gap-0 transition-[gap] duration-200 group-hover/sidebar:gap-3">
@@ -238,7 +292,7 @@ export default function AppSidebar({
               alt="Logo EntreUS"
               width={40}
               height={40}
-              className="h-10 w-10 shrink-0 rounded-2xl object-contain"
+              className="h-9 w-9 shrink-0 rounded-full object-contain"
               priority
             />
             <span className={`${navTextClass} min-w-0`}>
@@ -308,22 +362,24 @@ export default function AppSidebar({
 
           <div className="relative">
             <button
+              ref={navMoreButtonRef}
               type="button"
-              onClick={() =>
+              onClick={() => {
+                updateMoreMenuPosition('nav')
                 setMoreMenuAnchor((current) => (current === 'nav' ? null : 'nav'))
-              }
+              }}
               className={[
-                `flex h-12 w-full items-center gap-0 rounded-xl px-3 text-sm font-bold transition group-hover/sidebar:gap-3 ${collapsedCenterClass}`,
+                `flex h-11 w-full items-center gap-0 rounded-full px-3 text-sm font-bold transition group-hover/sidebar:gap-3 ${collapsedCenterClass}`,
                 isMoreActive
                   ? 'bg-blue-500/10 text-blue-100 ring-1 ring-blue-400/10'
                   : 'text-zinc-500 hover:bg-white/5 hover:text-zinc-100 dark:text-zinc-400 dark:hover:bg-white/5 dark:hover:text-white',
               ].join(' ')}
             >
-              <MoreHorizontal className={`h-6 w-6 shrink-0 ${isMoreActive ? 'stroke-[2.5]' : ''}`} />
+              <MoreHorizontal className={`h-5 w-5 shrink-0 ${isMoreActive ? 'stroke-[2.45]' : ''}`} />
               <span className={navTextClass}>{t('nav.more')}</span>
             </button>
 
-            {moreMenuAnchor === 'nav' && (
+            {moreMenuAnchor === 'nav' && mounted && typeof document !== 'undefined' && createPortal(
               <>
                 <button
                   type="button"
@@ -335,18 +391,20 @@ export default function AppSidebar({
                 <MoreMenu
                   mounted={mounted}
                   theme={theme}
+                  position={moreMenuPosition}
                   onToggleTheme={onToggleTheme}
                   onLogout={onLogout}
                   onClose={() => setMoreMenuAnchor(null)}
                 />
-              </>
+              </>,
+              document.body
             )}
           </div>
 
           <button
             type="button"
             onClick={handlePostClick}
-            className={`mt-4 flex h-12 w-full items-center gap-0 rounded-2xl bg-white px-3 text-sm font-black text-blue-950 shadow-xl shadow-blue-500/20 ring-1 ring-blue-200/60 transition hover:bg-blue-50 hover:shadow-blue-400/30 group-hover/sidebar:gap-3 ${collapsedCenterClass}`}
+            className={`mt-4 flex h-11 w-full items-center gap-0 rounded-full bg-white px-3 text-sm font-black text-blue-950 shadow-xl shadow-blue-500/20 ring-1 ring-blue-200/60 transition hover:bg-blue-50 hover:shadow-blue-400/30 group-hover/sidebar:gap-3 ${collapsedCenterClass}`}
           >
             <PenLine className="h-5 w-5 shrink-0" />
             <span className={navTextClass}>{t('nav.post')}</span>
@@ -354,7 +412,7 @@ export default function AppSidebar({
         </nav>
 
         <div className="relative mt-auto">
-          <div className="flex h-16 items-center gap-3 rounded-2xl border border-blue-500/10 bg-zinc-950/95 p-2 text-left shadow-sm shadow-black/10 ring-1 ring-white/10 transition hover:border-blue-400/40 hover:bg-blue-950/35 hover:shadow-blue-500/10">
+          <div className="flex h-14 items-center gap-3 rounded-full border border-blue-500/10 bg-zinc-950/95 p-1.5 text-left shadow-sm shadow-black/10 ring-1 ring-white/10 transition hover:border-blue-400/40 hover:bg-blue-950/35 hover:shadow-blue-500/10 group-hover/sidebar:rounded-2xl group-hover/sidebar:p-2">
             <Link
               href="/profile"
               className={`flex min-w-0 flex-1 items-center gap-0 transition-[gap] duration-200 group-hover/sidebar:gap-3 ${collapsedCenterClass}`}
@@ -364,10 +422,10 @@ export default function AppSidebar({
                 <img
                   src={avatarUrl}
                   alt={profileName}
-                  className="h-11 w-11 shrink-0 rounded-full border border-blue-400/30 object-cover"
+                  className="aspect-square h-10 w-10 shrink-0 rounded-full border border-blue-400/30 object-cover"
                 />
               ) : (
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-blue-400/30 bg-blue-950/30 text-sm font-black text-blue-100">
+                <div className="flex aspect-square h-10 w-10 shrink-0 items-center justify-center rounded-full border border-blue-400/30 bg-blue-950/30 text-sm font-black text-blue-100">
                   {getInitial(profileName)}
                 </div>
               )}
@@ -386,10 +444,12 @@ export default function AppSidebar({
             </Link>
 
             <button
+              ref={profileMoreButtonRef}
               type="button"
-              onClick={() =>
+              onClick={() => {
+                updateMoreMenuPosition('profile')
                 setMoreMenuAnchor((current) => (current === 'profile' ? null : 'profile'))
-              }
+              }}
               className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-400 opacity-0 transition hover:bg-white/10 hover:text-white group-hover/sidebar:flex group-hover/sidebar:opacity-100"
               aria-label="Conta"
               title="Conta"
@@ -398,7 +458,7 @@ export default function AppSidebar({
             </button>
           </div>
 
-          {moreMenuAnchor === 'profile' && (
+          {moreMenuAnchor === 'profile' && mounted && typeof document !== 'undefined' && createPortal(
             <>
               <button
                 type="button"
@@ -410,11 +470,13 @@ export default function AppSidebar({
               <MoreMenu
                 mounted={mounted}
                 theme={theme}
+                position={moreMenuPosition}
                 onToggleTheme={onToggleTheme}
                 onLogout={onLogout}
                 onClose={() => setMoreMenuAnchor(null)}
               />
-            </>
+            </>,
+            document.body
           )}
         </div>
       </div>
