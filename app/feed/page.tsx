@@ -27,6 +27,7 @@ import {
   Search,
   SmilePlus,
   Sparkles,
+  Trophy,
   Trash2,
 } from 'lucide-react'
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
@@ -80,6 +81,43 @@ type Post = {
   is_sensitive: boolean | null
   profiles: ProfileSummary | null
   media?: PostMedia[]
+}
+
+type FeedHighlight = {
+  id: string
+  post_id: string | null
+  challenge_id: string | null
+  title: string | null
+  description: string | null
+  position: number | null
+  posts?: {
+    id: string
+    content: string | null
+  } | null
+  community_challenges?: {
+    slug: string
+    title: string
+  } | null
+}
+
+type FeedHighlightResponse = Omit<FeedHighlight, 'posts' | 'community_challenges'> & {
+  posts?: FeedHighlight['posts'] | NonNullable<FeedHighlight['posts']>[] | null
+  community_challenges?:
+    | FeedHighlight['community_challenges']
+    | NonNullable<FeedHighlight['community_challenges']>[]
+    | null
+}
+
+function normalizeFeedHighlight(highlight: FeedHighlightResponse): FeedHighlight {
+  return {
+    ...highlight,
+    posts: Array.isArray(highlight.posts)
+      ? highlight.posts[0] || null
+      : highlight.posts || null,
+    community_challenges: Array.isArray(highlight.community_challenges)
+      ? highlight.community_challenges[0] || null
+      : highlight.community_challenges || null,
+  }
 }
 
 type Comment = {
@@ -438,6 +476,7 @@ function FeedContent() {
   const [commentLikes, setCommentLikes] = useState<CommentLike[]>([])
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([])
   const [reposts, setReposts] = useState<Repost[]>([])
+  const [feedHighlights, setFeedHighlights] = useState<FeedHighlight[]>([])
   const [feedSearch, setFeedSearch] = useState('')
 
   const likeActionInProgressRef = useRef<Set<string>>(new Set())
@@ -524,6 +563,7 @@ function FeedContent() {
         loadBookmarks(user.id),
         loadReposts(blockedIds),
         loadUnreadNotificationsCount(user.id),
+        loadFeedHighlights(),
       ])
 
       setLoading(false)
@@ -561,6 +601,28 @@ function FeedContent() {
     }
 
     setUnreadNotificationsCount(count || 0)
+  }
+
+  async function loadFeedHighlights() {
+    const now = new Date().toISOString()
+
+    const { data, error } = await supabase
+      .from('feed_highlights')
+      .select('id, post_id, challenge_id, title, description, position, posts(id, content), community_challenges(slug, title)')
+      .eq('is_active', true)
+      .lte('starts_at', now)
+      .or(`ends_at.is.null,ends_at.gte.${now}`)
+      .order('position', { ascending: true })
+      .order('created_at', { ascending: false })
+      .limit(5)
+
+    if (error) {
+      console.error('Erro ao carregar destaques da comunidade:', error.message)
+      setFeedHighlights([])
+      return
+    }
+
+    setFeedHighlights(((data || []) as FeedHighlightResponse[]).map(normalizeFeedHighlight))
   }
 
   async function loadBlockedUserIds(currentUserId: string) {
@@ -3023,6 +3085,53 @@ function FeedContent() {
 
               <div className="overflow-hidden rounded-[2rem] border border-white/10 bg-slate-950/80 shadow-sm shadow-black/10 ring-1 ring-white/10 backdrop-blur-xl transition-all duration-300 hover:border-blue-400/35 hover:shadow-xl hover:shadow-blue-500/10">
                 <div className="space-y-4 p-5">
+                  {feedHighlights.length > 0 && (
+                    <div className="rounded-[1.5rem] border border-blue-400/20 bg-blue-950/20 p-4 ring-1 ring-white/10">
+                      <div className="mb-3 flex items-center gap-2 text-blue-200">
+                        <Trophy className="h-5 w-5" />
+                        <h3 className="font-bold">Destaques da Comunidade</h3>
+                      </div>
+
+                      <div className="space-y-3">
+                        {feedHighlights.map((highlight) => {
+                          const href = highlight.post_id
+                            ? `/post/${highlight.post_id}`
+                            : highlight.community_challenges?.slug
+                              ? `/challenges/${highlight.community_challenges.slug}`
+                              : '/challenges'
+                          const title =
+                            highlight.title ||
+                            highlight.community_challenges?.title ||
+                            'Post em destaque'
+                          const description =
+                            highlight.description ||
+                            highlight.posts?.content ||
+                            'Selecionado pelos desafios da comunidade.'
+
+                          return (
+                            <Link
+                              key={highlight.id}
+                              href={href}
+                              className="block rounded-[1.25rem] border border-white/10 bg-black/30 p-3 transition hover:-translate-y-0.5 hover:border-blue-300/35 hover:bg-blue-950/30"
+                            >
+                              <p className="font-bold text-blue-50">{title}</p>
+                              <p className="mt-1 line-clamp-2 text-sm leading-5 text-blue-100/70">
+                                {description}
+                              </p>
+                            </Link>
+                          )
+                        })}
+                      </div>
+
+                      <Link
+                        href="/challenges"
+                        className="mt-4 inline-flex rounded-full bg-blue-500 px-4 py-2 text-sm font-bold text-white shadow-sm shadow-blue-500/25 transition hover:bg-blue-400"
+                      >
+                        Ver desafios
+                      </Link>
+                    </div>
+                  )}
+
                   <Link
                     href="/lab"
                     className="group relative block overflow-hidden rounded-[1.5rem] border border-blue-400/20 bg-blue-950/20 p-4 ring-1 ring-white/10 transition-all duration-300 before:pointer-events-none before:absolute before:inset-0 before:bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.26),transparent_48%)] before:opacity-70 before:transition-opacity hover:-translate-y-1 hover:border-blue-400/50 hover:bg-blue-950/35 hover:shadow-xl hover:shadow-blue-500/20 hover:before:opacity-100"

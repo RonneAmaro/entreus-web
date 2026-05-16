@@ -24,6 +24,7 @@ import {
   Settings,
   Shield,
   Sun,
+  Trophy,
   User,
   UserX,
   Video,
@@ -344,6 +345,15 @@ export default function MobileNavigation({
               </Link>
 
               <Link
+                href="/challenges"
+                onClick={closeMoreOptions}
+                className={drawerLinkClass('/challenges')}
+              >
+                <Trophy className={drawerIconClass('/challenges')} />
+                Desafios
+              </Link>
+
+              <Link
                 href="/feedback"
                 onClick={closeMoreOptions}
                 className={drawerLinkClass('/feedback')}
@@ -586,6 +596,15 @@ export default function MobileNavigation({
               >
                 <Lightbulb className={drawerIconClass('/suggestions')} />
                 Sugestoes
+              </Link>
+
+              <Link
+                href="/challenges"
+                onClick={closeMenu}
+                className={drawerLinkClass('/challenges')}
+              >
+                <Trophy className={drawerIconClass('/challenges')} />
+                Desafios
               </Link>
 
               <Link

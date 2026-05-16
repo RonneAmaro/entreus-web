@@ -214,6 +214,8 @@ export default function AppSidebar({
     pathname === '/settings' ||
     pathname === '/help' ||
     pathname === '/suggestions' ||
+    pathname === '/challenges' ||
+    pathname.startsWith('/challenges/') ||
     pathname === '/feedback' ||
     pathname === '/lab' ||
     pathname.startsWith('/lab/')

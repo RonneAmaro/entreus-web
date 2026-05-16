@@ -13,6 +13,7 @@ import {
   Settings,
   Shield,
   Sun,
+  Trophy,
   UserX,
 } from 'lucide-react'
 import { useLanguage } from './LanguageProvider'
@@ -87,6 +88,11 @@ export default function MoreMenu({
         <Link href="/suggestions" onClick={onClose} className={itemClass('/suggestions')}>
           <Lightbulb className={iconClass('/suggestions')} />
           <span>Sugestoes</span>
+        </Link>
+
+        <Link href="/challenges" onClick={onClose} className={itemClass('/challenges')}>
+          <Trophy className={iconClass('/challenges')} />
+          <span>Desafios</span>
         </Link>
 
         <Link href="/feedback" onClick={onClose} className={itemClass('/feedback')}>
