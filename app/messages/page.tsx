@@ -555,6 +555,10 @@ export default function MessagesPage() {
         unreadNotificationsCount={unreadNotificationsCount}
         mounted={mounted}
         theme={theme}
+        displayName={currentProfile?.display_name || undefined}
+        username={currentProfile?.username || null}
+        email={email}
+        avatarUrl={currentProfile?.avatar_url || null}
         onToggleTheme={handleToggleTheme}
         onLogout={handleLogout}
       />

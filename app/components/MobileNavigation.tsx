@@ -53,6 +53,7 @@ type LastMessage = {
   conversation_id: string
   sender_id: string
   created_at: string
+  read_at?: string | null
   deleted_at: string | null
 }
 
@@ -130,10 +131,10 @@ export default function MobileNavigation({
 
     const { data: messagesData, error: messagesError } = await supabase
       .from('messages')
-      .select('id, conversation_id, sender_id, created_at, deleted_at')
+      .select('id, conversation_id, sender_id, created_at, read_at, deleted_at')
       .in('conversation_id', conversationIds)
       .order('created_at', { ascending: false })
-      .limit(300)
+      .limit(1000)
 
     if (messagesError) {
       console.error('Erro ao carregar últimas mensagens:', messagesError.message)
@@ -141,29 +142,28 @@ export default function MobileNavigation({
       return
     }
 
-    const lastMessageByConversation: Record<string, LastMessage> = {}
-
-    for (const message of (messagesData || []) as LastMessage[]) {
-      if (!lastMessageByConversation[message.conversation_id]) {
-        lastMessageByConversation[message.conversation_id] = message
-      }
-    }
+    const participantByConversation = participants.reduce(
+      (acc, participant) => {
+        acc[participant.conversation_id] = participant
+        return acc
+      },
+      {} as Record<string, MyConversationParticipant>
+    )
 
     let count = 0
 
-    for (const participant of participants) {
-      const lastMessage = lastMessageByConversation[participant.conversation_id]
+    for (const message of (messagesData || []) as LastMessage[]) {
+      if (message.deleted_at) continue
+      if (message.sender_id === user.id) continue
+      if (message.read_at) continue
 
-      if (!lastMessage) continue
-      if (lastMessage.deleted_at) continue
-      if (lastMessage.sender_id === user.id) continue
-
-      const lastMessageTime = new Date(lastMessage.created_at).getTime()
-      const lastReadTime = participant.last_read_at
+      const participant = participantByConversation[message.conversation_id]
+      const messageTime = new Date(message.created_at).getTime()
+      const lastReadTime = participant?.last_read_at
         ? new Date(participant.last_read_at).getTime()
         : 0
 
-      if (lastMessageTime > lastReadTime) {
+      if (messageTime > lastReadTime) {
         count += 1
       }
     }

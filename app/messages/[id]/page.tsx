@@ -658,8 +658,22 @@ function isMessageEdited(message: MessageRow) {
   return Math.abs(updatedAt - createdAt) > 3000
 }
 
-function getMessageDeliveryStatus(message: MessageRow) {
+function getMessageDeliveryStatus(
+  message: MessageRow,
+  conversationParticipants: ParticipantRow[],
+  currentUserId: string
+) {
   if (message.read_at) return 'read'
+
+  const otherParticipant = conversationParticipants.find(
+    (participant) => participant.user_id !== currentUserId
+  )
+  const otherLastReadTime = otherParticipant?.last_read_at
+    ? new Date(otherParticipant.last_read_at).getTime()
+    : 0
+  const messageTime = new Date(message.created_at).getTime()
+
+  if (otherLastReadTime && otherLastReadTime >= messageTime) return 'read'
   if (message.delivered_at) return 'delivered'
   return 'sent'
 }
@@ -3733,6 +3747,10 @@ export default function ConversationPage() {
         unreadNotificationsCount={unreadNotificationsCount}
         mounted={mounted}
         theme={theme}
+        displayName={currentProfile?.display_name || undefined}
+        username={currentProfile?.username || null}
+        email={email}
+        avatarUrl={currentProfile?.avatar_url || null}
         onToggleTheme={handleToggleTheme}
         onLogout={handleLogout}
       />
@@ -4327,7 +4345,7 @@ export default function ConversationPage() {
                 const isMediaFocused = hasMedia && !hasText && !item.deleted_at && !isEditingThisMessage
                 const isCallEvent = item.type === 'call'
                 const isHighlighted = highlightedMessageId === item.id
-                const deliveryStatus = getMessageDeliveryStatus(item)
+                const deliveryStatus = getMessageDeliveryStatus(item, participants, userId)
 
                 if (isCallEvent) {
                   const callLabel = getCallHistoryLabel(item)

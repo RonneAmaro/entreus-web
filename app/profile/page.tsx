@@ -1036,6 +1036,10 @@ export default function ProfilePage() {
         unreadNotificationsCount={unreadNotificationsCount}
         mounted={mounted}
         theme={theme}
+        displayName={displayName || username || undefined}
+        username={username || null}
+        email={email}
+        avatarUrl={avatarPreview || avatarUrl || null}
         onToggleTheme={handleToggleTheme}
         onLogout={handleLogout}
       />
