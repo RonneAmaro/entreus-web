@@ -7,9 +7,11 @@ import { usePathname } from 'next/navigation'
 import {
   Bell,
   Bookmark,
+  Bug,
   Compass,
   Home,
   FlaskConical,
+  HelpCircle,
   ImagePlus,
   LogOut,
   Menu,
@@ -323,6 +325,24 @@ export default function MobileNavigation({
               </Link>
 
               <Link
+                href="/help"
+                onClick={closeMoreOptions}
+                className={drawerLinkClass('/help')}
+              >
+                <HelpCircle className={drawerIconClass('/help')} />
+                Ajuda
+              </Link>
+
+              <Link
+                href="/feedback"
+                onClick={closeMoreOptions}
+                className={drawerLinkClass('/feedback')}
+              >
+                <Bug className={drawerIconClass('/feedback')} />
+                Reportar bug
+              </Link>
+
+              <Link
                 href="/privacy"
                 onClick={closeMoreOptions}
                 className={drawerLinkClass('/privacy')}
@@ -538,6 +558,24 @@ export default function MobileNavigation({
               >
                 <FlaskConical className={drawerIconClass('/lab')} />
                 {t('lab.name')}
+              </Link>
+
+              <Link
+                href="/help"
+                onClick={closeMenu}
+                className={drawerLinkClass('/help')}
+              >
+                <HelpCircle className={drawerIconClass('/help')} />
+                Ajuda
+              </Link>
+
+              <Link
+                href="/feedback"
+                onClick={closeMenu}
+                className={drawerLinkClass('/feedback')}
+              >
+                <Bug className={drawerIconClass('/feedback')} />
+                Reportar bug
               </Link>
 
               <div className="my-4 border-t border-zinc-200 dark:border-zinc-800" />

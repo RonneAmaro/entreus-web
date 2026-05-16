@@ -3,7 +3,9 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
+  Bug,
   FlaskConical,
+  HelpCircle,
   Languages,
   LogOut,
   Moon,
@@ -74,6 +76,16 @@ export default function MoreMenu({
               {t('lab.subtitle')}
             </p>
           </div>
+        </Link>
+
+        <Link href="/help" onClick={onClose} className={itemClass('/help')}>
+          <HelpCircle className={iconClass('/help')} />
+          <span>Ajuda</span>
+        </Link>
+
+        <Link href="/feedback" onClick={onClose} className={itemClass('/feedback')}>
+          <Bug className={iconClass('/feedback')} />
+          <span>Reportar bug</span>
         </Link>
 
         <div className="rounded-2xl px-4 py-3 text-sm text-zinc-800 dark:text-zinc-100">
