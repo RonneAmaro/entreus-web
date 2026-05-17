@@ -94,6 +94,17 @@ type Repost = {
   profiles: ProfileSummary | null
 }
 
+type ParentalConsentRequest = {
+  id: string
+  child_user_id: string
+  guardian_email: string
+  token: string
+  status: string
+  child_birth_date: string | null
+  expires_at: string | null
+  created_at: string
+}
+
 
 function getDateLocale(language: string) {
   const locales: Record<string, string> = {
@@ -128,6 +139,14 @@ function getAgeVerificationLabel(status: string) {
   if (status === 'approved') return 'Verificacao aprovada'
   if (status === 'rejected') return 'Verificacao recusada'
   return 'Verificacao 18+ ainda nao iniciada'
+}
+
+function getParentalConsentLabel(status: string, hasRequest: boolean) {
+  if (!hasRequest && status !== 'approved' && status !== 'rejected') return 'Nao solicitado'
+  if (status === 'approved') return 'Aprovado'
+  if (status === 'rejected') return 'Recusado'
+  if (status === 'expired') return 'Expirado'
+  return 'Pendente'
 }
 
 type FeedItem =
@@ -173,6 +192,10 @@ export default function ProfilePage() {
   const [birthDate, setBirthDate] = useState('')
   const [isMinor, setIsMinor] = useState(false)
   const [parentalConsentStatus, setParentalConsentStatus] = useState('not_required')
+  const [guardianEmail, setGuardianEmail] = useState('')
+  const [latestConsentRequest, setLatestConsentRequest] = useState<ParentalConsentRequest | null>(null)
+  const [consentRequestLink, setConsentRequestLink] = useState('')
+  const [creatingConsentRequest, setCreatingConsentRequest] = useState(false)
   const [wants18Plus, setWants18Plus] = useState(false)
   const [ageVerificationStatus, setAgeVerificationStatus] = useState('not_started')
   const [avatarUrl, setAvatarUrl] = useState('')
@@ -267,6 +290,10 @@ export default function ProfilePage() {
         Boolean(loadedProfile.wants_18_plus && loadedProfile.age_verification_status === 'approved')
       )
 
+      if (loadedProfile.is_minor) {
+        await loadLatestParentalConsentRequest(user.id)
+      }
+
       await Promise.all([
         loadProfileActivity(user.id, loadedProfile),
         loadLikes(),
@@ -295,6 +322,77 @@ export default function ProfilePage() {
     }
 
     setUnreadNotificationsCount(count || 0)
+  }
+
+  async function loadLatestParentalConsentRequest(currentUserId: string) {
+    const { data, error } = await supabase
+      .from('parental_consent_requests')
+      .select('id, child_user_id, guardian_email, token, status, child_birth_date, expires_at, created_at')
+      .eq('child_user_id', currentUserId)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (error) {
+      console.error('Erro ao carregar autorizacao parental:', error.message)
+      return
+    }
+
+    const request = data as ParentalConsentRequest | null
+    setLatestConsentRequest(request)
+    setGuardianEmail(request?.guardian_email || '')
+    setConsentRequestLink(request?.token ? `/parental-consent/${request.token}` : '')
+  }
+
+  async function handleCreateParentalConsentRequest() {
+    if (!userId) return
+
+    const normalizedGuardianEmail = guardianEmail.trim().toLowerCase()
+
+    if (!normalizedGuardianEmail || !normalizedGuardianEmail.includes('@')) {
+      setMessage('Informe um e-mail valido do responsavel.')
+      return
+    }
+
+    setCreatingConsentRequest(true)
+    setMessage('')
+
+    const consentText =
+      'Voce esta autorizando o uso geral da plataforma EntreUS por um menor. Conteudos 18+ permanecem bloqueados para menores.'
+
+    const { data, error } = await supabase
+      .from('parental_consent_requests')
+      .insert({
+        child_user_id: userId,
+        guardian_email: normalizedGuardianEmail,
+        child_birth_date: birthDate || null,
+        consent_text: consentText,
+        status: 'pending',
+      })
+      .select('id, child_user_id, guardian_email, token, status, child_birth_date, expires_at, created_at')
+      .single()
+
+    if (error) {
+      setCreatingConsentRequest(false)
+      setMessage('Nao foi possivel criar solicitacao de autorizacao: ' + error.message)
+      return
+    }
+
+    const request = data as ParentalConsentRequest
+
+    await supabase
+      .from('profiles')
+      .update({
+        parental_consent_status: 'pending',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', userId)
+
+    setLatestConsentRequest(request)
+    setParentalConsentStatus('pending')
+    setConsentRequestLink(`/parental-consent/${request.token}`)
+    setCreatingConsentRequest(false)
+    setMessage('Solicitacao criada. Envie o link gerado para seu responsavel.')
   }
 
   function sanitizeUsername(value: string) {
@@ -686,7 +784,11 @@ export default function ProfilePage() {
     const calculatedAge = calculateAge(birthDate)
     const nextIsMinor = calculatedAge !== null ? calculatedAge < 18 : false
     const nextWants18Plus = nextIsMinor ? false : wants18Plus
-    const nextParentalConsentStatus = nextIsMinor ? 'pending' : 'not_required'
+    const nextParentalConsentStatus = nextIsMinor
+      ? parentalConsentStatus === 'not_required'
+        ? 'pending'
+        : parentalConsentStatus
+      : 'not_required'
     const nextAgeVerificationStatus =
       nextWants18Plus && ageVerificationStatus === 'not_started'
         ? 'pending'
@@ -1104,6 +1206,11 @@ export default function ProfilePage() {
   const profileAge = calculateAge(birthDate)
   const canRequest18Plus = profileAge !== null && profileAge >= 18 && !isMinor
   const canView18Plus = wants18Plus && ageVerificationStatus === 'approved'
+  const parentalConsentDisplayStatus = latestConsentRequest?.status || parentalConsentStatus
+  const parentalConsentLabel = getParentalConsentLabel(
+    parentalConsentDisplayStatus,
+    Boolean(latestConsentRequest)
+  )
   const profileName = displayName || username || 'Usuário'
 
   return (
@@ -1571,6 +1678,85 @@ export default function ProfilePage() {
                       </label>
                     </div>
                   </div>
+
+                  {isMinor && (
+                    <div className="rounded-3xl border border-cyan-200/70 bg-cyan-50/70 p-4 ring-1 ring-cyan-100/70 dark:border-cyan-900/50 dark:bg-cyan-950/10 dark:ring-cyan-900/20">
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="flex gap-3">
+                          <div className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-cyan-100 text-cyan-700 dark:bg-cyan-950 dark:text-cyan-300">
+                            <ShieldAlert className="h-5 w-5" />
+                          </div>
+
+                          <div>
+                            <p className="text-xs font-black uppercase tracking-[0.18em] text-cyan-700 dark:text-cyan-300">
+                              Autorizacao do responsavel
+                            </p>
+                            <h3 className="mt-1 font-semibold text-zinc-900 dark:text-white">
+                              Status: {parentalConsentLabel}
+                            </h3>
+
+                            {parentalConsentDisplayStatus === 'approved' ? (
+                              <p className="mt-2 text-sm text-zinc-700 dark:text-zinc-300">
+                                Autorizacao do responsavel aprovada.
+                              </p>
+                            ) : parentalConsentDisplayStatus === 'rejected' ? (
+                              <p className="mt-2 text-sm text-zinc-700 dark:text-zinc-300">
+                                Autorizacao recusada pelo responsavel.
+                              </p>
+                            ) : (
+                              <p className="mt-2 text-sm text-zinc-700 dark:text-zinc-300">
+                                Informe o e-mail do responsavel para gerar um link de autorizacao de teste.
+                              </p>
+                            )}
+
+                            <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-500">
+                              Consentimento parental nao libera conteudo 18+. Esse conteudo continua bloqueado para menores.
+                            </p>
+                          </div>
+                        </div>
+
+                        {parentalConsentDisplayStatus !== 'approved' && (
+                          <div className="w-full space-y-3 lg:max-w-sm">
+                            <label className="block">
+                              <span className="mb-2 block text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+                                E-mail do responsavel
+                              </span>
+                              <input
+                                type="email"
+                                value={guardianEmail}
+                                onChange={(e) => setGuardianEmail(e.target.value)}
+                                placeholder="responsavel@email.com"
+                                className="w-full rounded-2xl border border-zinc-200/80 bg-white/80 px-4 py-3 text-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800/80 dark:bg-zinc-950/80 dark:focus:border-blue-500/70"
+                              />
+                            </label>
+
+                            <button
+                              type="button"
+                              onClick={handleCreateParentalConsentRequest}
+                              disabled={creatingConsentRequest}
+                              className="w-full rounded-full bg-cyan-600 px-5 py-3 text-sm font-black text-white shadow-sm shadow-cyan-600/20 transition hover:bg-cyan-500 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {creatingConsentRequest ? 'Gerando...' : 'Solicitar autorizacao'}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      {consentRequestLink && parentalConsentDisplayStatus !== 'approved' && (
+                        <div className="mt-4 rounded-2xl border border-cyan-300/30 bg-white/70 p-4 text-sm text-zinc-700 dark:bg-zinc-950/70 dark:text-zinc-300">
+                          <p className="font-bold">
+                            Envie este link para seu responsavel aprovar sua autorizacao.
+                          </p>
+                          <Link
+                            href={consentRequestLink}
+                            className="mt-2 block break-all font-semibold text-cyan-700 underline-offset-4 hover:underline dark:text-cyan-300"
+                          >
+                            {consentRequestLink}
+                          </Link>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex flex-col gap-3 sm:flex-row">
