@@ -302,8 +302,8 @@ export default function MobileNavigation({
             aria-label={t('more.close')}
           />
 
-          <div className="absolute right-4 top-16 w-[min(320px,calc(100vw-2rem))] overflow-hidden rounded-3xl border border-zinc-200 bg-white p-2 shadow-2xl dark:border-zinc-800 dark:bg-black">
-            <div className="px-3 py-3">
+          <div className="absolute right-4 top-16 max-h-[calc(100dvh-5rem)] w-[min(320px,calc(100vw-2rem))] overflow-y-auto overscroll-contain rounded-3xl border border-zinc-200 bg-white p-2 shadow-2xl [scrollbar-color:rgba(96,165,250,0.45)_transparent] [scrollbar-width:thin] dark:border-blue-400/15 dark:bg-zinc-950 dark:ring-1 dark:ring-white/10">
+            <div className="sticky top-0 z-10 rounded-2xl bg-white/95 px-3 py-3 backdrop-blur-xl dark:bg-zinc-950/95">
               <p className="text-xs font-bold uppercase tracking-[0.25em] text-zinc-400">
                 {t('more.title')}
               </p>

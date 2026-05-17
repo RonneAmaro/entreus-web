@@ -10,6 +10,7 @@ import {
   Search,
   Send,
   Sparkles,
+  Wallet,
   X,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
@@ -33,15 +34,29 @@ type ProfileResult = {
   avatar_url: string | null
 }
 
-const giftEmojiBySlug: Record<string, string> = {
-  'rosa-digital': '🌹',
-  'cafe-virtual': '☕',
-  'coracao-entreus': '💙',
-  aplausos: '👏',
-  'foguete-de-apoio': '🚀',
-  'trofeu-destaque': '🏆',
-  'diamante-premium': '💎',
-  'coroa-elite': '👑',
+const giftMarkBySlug: Record<string, string> = {
+  'rosa-digital': 'RO',
+  'cafe-virtual': 'CA',
+  'coracao-entreus': 'US',
+  aplausos: 'AP',
+  'foguete-de-apoio': 'FO',
+  'trofeu-destaque': 'TR',
+  'diamante-premium': 'DI',
+  'coroa-elite': 'EL',
+}
+
+function BrandWordmark() {
+  return (
+    <span className="inline-flex items-center font-black tracking-tight text-white">
+      Entre<span className="text-blue-300">US</span>
+    </span>
+  )
+}
+
+function categoryLabel(value: string) {
+  if (value === 'premium') return 'Premium'
+  if (value === 'elite') return 'Elite'
+  return 'Standard'
 }
 
 export default function GiftsPage() {
@@ -55,11 +70,31 @@ export default function GiftsPage() {
   const [giftMessage, setGiftMessage] = useState('')
   const [visibility, setVisibility] = useState<'public' | 'private'>('public')
   const [receiver, setReceiver] = useState<ProfileResult | null>(null)
+  const [receiverResults, setReceiverResults] = useState<ProfileResult[]>([])
   const [searchingUser, setSearchingUser] = useState(false)
 
   useEffect(() => {
     loadGifts()
   }, [])
+
+  useEffect(() => {
+    if (!selectedGift) return
+
+    const normalizedQuery = normalizeProfileQuery(username)
+
+    if (!normalizedQuery) {
+      setReceiverResults([])
+      setReceiver(null)
+      setSearchingUser(false)
+      return
+    }
+
+    const timer = window.setTimeout(() => {
+      findReceivers(normalizedQuery)
+    }, 280)
+
+    return () => window.clearTimeout(timer)
+  }, [username, selectedGift])
 
   const groupedGifts = useMemo(() => {
     return gifts.reduce(
@@ -100,15 +135,21 @@ export default function GiftsPage() {
     setGiftMessage('')
     setVisibility('public')
     setReceiver(null)
+    setReceiverResults([])
     setMessage('')
     setSuccessMessage('')
   }
 
-  async function findReceiver() {
-    const normalizedUsername = username.trim().replace(/^@/, '').toLowerCase()
+  function normalizeProfileQuery(value: string) {
+    return value.trim().replace(/^@/, '').replace(/[%,]/g, '').toLowerCase()
+  }
 
-    if (!normalizedUsername) {
-      setMessage('Digite um username para buscar.')
+  async function findReceivers(query = normalizeProfileQuery(username)) {
+    const normalizedQuery = normalizeProfileQuery(query)
+
+    if (!normalizedQuery) {
+      setMessage('Digite parte do nome ou username para buscar.')
+      setReceiverResults([])
       return
     }
 
@@ -119,24 +160,39 @@ export default function GiftsPage() {
     const { data, error } = await supabase
       .from('profiles')
       .select('id, username, display_name, avatar_url')
-      .eq('username', normalizedUsername)
-      .maybeSingle()
+      .or(`username.ilike.%${normalizedQuery}%,display_name.ilike.%${normalizedQuery}%`)
+      .order('display_name', { ascending: true, nullsFirst: false })
+      .limit(8)
 
     setSearchingUser(false)
 
-    if (error || !data) {
-      setMessage('Usuario nao encontrado.')
+    if (error) {
+      setMessage('Nao foi possivel buscar usuarios: ' + error.message)
+      setReceiverResults([])
       return
     }
 
-    setReceiver(data as ProfileResult)
+    const results = (data || []) as ProfileResult[]
+    setReceiverResults(results)
+
+    if (results.length === 0) {
+      setMessage('Nenhum usuario encontrado para essa busca.')
+    }
+  }
+
+  function selectReceiver(profile: ProfileResult) {
+    setReceiver(profile)
+    setUsername(profile.username ? `@${profile.username}` : profile.display_name || '')
+    setReceiverResults([])
+    setMessage('')
   }
 
   async function sendGift() {
     if (!selectedGift) return
 
     if (!receiver) {
-      await findReceiver()
+      await findReceivers()
+      setMessage('Selecione um usuario da lista antes de confirmar.')
       return
     }
 
@@ -163,9 +219,11 @@ export default function GiftsPage() {
   }
 
   return (
-    <main className="min-h-screen bg-black text-white">
-      <section className="mx-auto min-h-screen w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        <header className="flex items-center justify-between gap-4">
+    <main className="min-h-screen overflow-hidden bg-black text-white">
+      <section className="relative mx-auto min-h-screen w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+        <div className="pointer-events-none absolute -left-24 top-28 h-72 w-72 rounded-full bg-blue-500/15 blur-3xl" />
+
+        <header className="relative z-10 flex items-center justify-between gap-4">
           <Link
             href="/feed"
             className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-black transition hover:bg-white/10"
@@ -176,26 +234,66 @@ export default function GiftsPage() {
 
           <Link
             href="/wallet"
-            className="rounded-full bg-white px-4 py-2 text-sm font-black text-black transition hover:bg-blue-50"
+            className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-black text-black transition hover:bg-blue-50"
           >
+            <Wallet className="h-4 w-4" />
             Carteira
           </Link>
         </header>
 
-        <div className="py-10">
-          <p className="text-sm font-black uppercase tracking-[0.28em] text-blue-300">
-            Presentes digitais
-          </p>
-          <h1 className="mt-4 max-w-4xl text-4xl font-black tracking-tight sm:text-6xl">
-            Envie reconhecimento com ItaCash.
-          </h1>
-          <p className="mt-5 max-w-2xl text-lg leading-8 text-zinc-300">
-            Escolha um presente, encontre um usuario e envie. Neste MVP, 100% do valor e creditado ao destinatario.
-          </p>
-        </div>
+        <section className="relative z-10 grid items-center gap-8 py-10 lg:grid-cols-[minmax(0,1fr)_24rem]">
+          <div>
+            <div className="inline-flex items-center gap-3 rounded-full border border-blue-300/20 bg-blue-500/10 px-4 py-2">
+              <img src="/logo-icon.png" alt="EntreUS" className="h-8 w-8 rounded-full object-contain" />
+              <span className="text-sm font-black">
+                <BrandWordmark /> Gifts
+              </span>
+            </div>
+
+            <h1 className="mt-6 max-w-4xl text-4xl font-black tracking-tight sm:text-6xl">
+              Presentes digitais para celebrar pessoas na <BrandWordmark />.
+            </h1>
+            <p className="mt-5 max-w-2xl text-lg leading-8 text-zinc-300">
+              Escolha um presente, encontre um usuario e envie reconhecimento usando ItaCash. Neste MVP, 100% do valor vai para quem recebe.
+            </p>
+
+            <div className="mt-8 grid gap-3 sm:grid-cols-3">
+              <div className="rounded-3xl border border-blue-300/20 bg-blue-500/10 p-5">
+                <p className="text-2xl font-black">{gifts.length}</p>
+                <p className="text-sm font-bold text-blue-100/70">presentes ativos</p>
+              </div>
+              <div className="rounded-3xl border border-white/10 bg-zinc-950/80 p-5">
+                <p className="text-2xl font-black">10 = R$ 1</p>
+                <p className="text-sm text-zinc-400">referencia ItaCash</p>
+              </div>
+              <div className="rounded-3xl border border-white/10 bg-zinc-950/80 p-5">
+                <p className="text-2xl font-black">100%</p>
+                <p className="text-sm text-zinc-400">creditado ao destinatario</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="relative">
+            <div className="absolute inset-8 rounded-full bg-blue-500/20 blur-3xl" />
+            <div className="relative rounded-[2rem] border border-blue-300/20 bg-zinc-950/80 p-5 shadow-2xl shadow-blue-950/30 ring-1 ring-white/10">
+              <img
+                src="/itacash.png"
+                alt="ItaCash"
+                className="mx-auto aspect-square max-h-72 w-full object-contain drop-shadow-[0_22px_50px_rgba(59,130,246,0.28)]"
+              />
+              <div className="mt-4 rounded-3xl border border-white/10 bg-black/45 p-5">
+                <p className="text-sm font-bold text-blue-100/80">Catalogo ItaCash</p>
+                <p className="mt-2 text-3xl font-black">Presentes digitais</p>
+                <p className="mt-3 text-sm leading-6 text-zinc-300">
+                  Uma camada simples para incentivar reconhecimento sem compra real neste pacote.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
 
         {(message || successMessage) && (
-          <div className={`mb-5 flex items-start gap-2 rounded-2xl border px-4 py-3 text-sm font-semibold ${
+          <div className={`relative z-10 mb-5 flex items-start gap-2 rounded-2xl border px-4 py-3 text-sm font-semibold ${
             successMessage
               ? 'border-emerald-300/20 bg-emerald-500/10 text-emerald-100'
               : 'border-amber-300/20 bg-amber-500/10 text-amber-100'
@@ -206,47 +304,69 @@ export default function GiftsPage() {
         )}
 
         {loading ? (
-          <div className="flex min-h-72 items-center justify-center rounded-3xl border border-white/10 bg-zinc-950 text-zinc-400">
+          <div className="relative z-10 flex min-h-72 items-center justify-center rounded-3xl border border-white/10 bg-zinc-950 text-zinc-400">
             <Loader2 className="mr-2 h-5 w-5 animate-spin" />
             Carregando presentes...
           </div>
         ) : gifts.length === 0 ? (
-          <div className="flex min-h-72 items-center justify-center rounded-3xl border border-dashed border-white/15 bg-zinc-950 p-8 text-center">
+          <div className="relative z-10 flex min-h-72 items-center justify-center rounded-3xl border border-dashed border-white/15 bg-zinc-950 p-8 text-center">
             <div>
               <Sparkles className="mx-auto h-10 w-10 text-blue-200" />
               <h2 className="mt-4 text-xl font-black">Nenhum presente ativo ainda.</h2>
             </div>
           </div>
         ) : (
-          <div className="space-y-8 pb-10">
+          <div className="relative z-10 space-y-10 pb-10">
             {Object.entries(groupedGifts).map(([category, categoryGifts]) => (
               <section key={category}>
-                <h2 className="mb-4 text-lg font-black capitalize text-white">{category}</h2>
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-[0.24em] text-blue-300">
+                      {categoryLabel(category)}
+                    </p>
+                    <h2 className="mt-1 text-2xl font-black text-white">Presentes {categoryLabel(category)}</h2>
+                  </div>
+                </div>
+
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                   {categoryGifts.map((gift) => (
-                    <article key={gift.id} className="rounded-3xl border border-white/10 bg-zinc-950 p-5 shadow-xl shadow-black/20 transition hover:-translate-y-0.5 hover:border-blue-300/25">
-                      <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-blue-500/15 text-4xl ring-1 ring-blue-300/20">
-                        {gift.media_url ? (
-                          <img src={gift.media_url} alt={gift.name} className="h-full w-full rounded-3xl object-cover" />
-                        ) : (
-                          giftEmojiBySlug[gift.slug] || '🎁'
-                        )}
+                    <article key={gift.id} className="group relative overflow-hidden rounded-[2rem] border border-white/10 bg-zinc-950 p-5 shadow-xl shadow-black/20 transition hover:-translate-y-1 hover:border-blue-300/30 hover:shadow-blue-500/10">
+                      <div className="pointer-events-none absolute -right-10 -top-10 h-28 w-28 rounded-full bg-blue-500/10 blur-2xl transition group-hover:bg-blue-500/20" />
+                      <div className="relative">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex h-20 w-20 items-center justify-center rounded-3xl border border-blue-300/20 bg-blue-500/15 text-2xl font-black text-blue-100 ring-1 ring-blue-300/20">
+                            {gift.media_url ? (
+                              <img src={gift.media_url} alt={gift.name} className="h-full w-full rounded-3xl object-cover" />
+                            ) : (
+                              giftMarkBySlug[gift.slug] || 'US'
+                            )}
+                          </div>
+                          <span className="rounded-full border border-white/10 bg-black/30 px-3 py-1 text-xs font-black text-zinc-300">
+                            {categoryLabel(gift.category)}
+                          </span>
+                        </div>
+
+                        <h3 className="mt-5 text-xl font-black">{gift.name}</h3>
+                        <p className="mt-2 min-h-16 text-sm leading-6 text-zinc-400">
+                          {gift.description || 'Presente digital EntreUS.'}
+                        </p>
+
+                        <div className="mt-5 rounded-2xl border border-blue-300/15 bg-blue-500/10 p-4">
+                          <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-200/70">Preco</p>
+                          <p className="mt-1 text-3xl font-black text-blue-100">
+                            {gift.price_itacash} <span className="text-base text-blue-200/70">ItaCash</span>
+                          </p>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => openGiftModal(gift)}
+                          className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-full bg-white px-4 py-3 text-sm font-black text-black transition hover:bg-blue-50"
+                        >
+                          <Send className="h-4 w-4" />
+                          Enviar presente
+                        </button>
                       </div>
-                      <h3 className="mt-4 text-xl font-black">{gift.name}</h3>
-                      <p className="mt-2 min-h-12 text-sm leading-6 text-zinc-400">
-                        {gift.description || 'Presente digital EntreUS.'}
-                      </p>
-                      <p className="mt-4 text-2xl font-black text-blue-200">
-                        {gift.price_itacash} ItaCash
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => openGiftModal(gift)}
-                        className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-full bg-white px-4 py-2.5 text-sm font-black text-black transition hover:bg-blue-50"
-                      >
-                        <Send className="h-4 w-4" />
-                        Enviar presente
-                      </button>
                     </article>
                   ))}
                 </div>
@@ -264,9 +384,9 @@ export default function GiftsPage() {
               onClick={() => setSelectedGift(null)}
             />
 
-            <div className="relative z-10 w-full max-w-xl rounded-3xl border border-white/10 bg-zinc-950 p-5 text-white shadow-2xl shadow-black/40 ring-1 ring-white/10">
+            <div className="relative z-10 max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-3xl border border-white/10 bg-zinc-950 p-5 text-white shadow-2xl shadow-black/40 ring-1 ring-white/10">
               <div className="flex items-start justify-between gap-4">
-                <div>
+                <div className="min-w-0">
                   <p className="text-sm font-black uppercase tracking-[0.22em] text-blue-300">Enviar presente</p>
                   <h2 className="mt-2 text-2xl font-black">{selectedGift.name}</h2>
                   <p className="mt-1 text-sm text-zinc-400">{selectedGift.price_itacash} ItaCash</p>
@@ -274,7 +394,7 @@ export default function GiftsPage() {
                 <button
                   type="button"
                   onClick={() => setSelectedGift(null)}
-                  className="flex h-10 w-10 items-center justify-center rounded-full bg-white/5 transition hover:bg-white/10"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/5 transition hover:bg-white/10"
                   aria-label="Fechar"
                 >
                   <X className="h-5 w-5" />
@@ -282,7 +402,7 @@ export default function GiftsPage() {
               </div>
 
               <label className="mt-5 block">
-                <span className="text-sm font-black">Username do destinatario</span>
+                <span className="text-sm font-black">Buscar destinatario</span>
                 <div className="mt-2 flex gap-2">
                   <input
                     type="text"
@@ -291,12 +411,12 @@ export default function GiftsPage() {
                       setUsername(event.target.value)
                       setReceiver(null)
                     }}
-                    placeholder="@usuario"
+                    placeholder="Nome ou username"
                     className="min-w-0 flex-1 rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm font-semibold text-white outline-none transition placeholder:text-zinc-500 focus:border-blue-300"
                   />
                   <button
                     type="button"
-                    onClick={findReceiver}
+                    onClick={() => findReceivers()}
                     disabled={searchingUser}
                     className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white text-black transition hover:bg-blue-50 disabled:opacity-60"
                     aria-label="Buscar usuario"
@@ -305,6 +425,38 @@ export default function GiftsPage() {
                   </button>
                 </div>
               </label>
+
+              {receiverResults.length > 0 && (
+                <div className="mt-3 max-h-56 space-y-2 overflow-y-auto rounded-2xl border border-white/10 bg-black/55 p-2 [scrollbar-color:rgba(96,165,250,0.45)_transparent] [scrollbar-width:thin]">
+                  {receiverResults.map((profile) => {
+                    const profileName = profile.display_name || profile.username || 'Usuario'
+
+                    return (
+                      <button
+                        key={profile.id}
+                        type="button"
+                        onClick={() => selectReceiver(profile)}
+                        className="flex w-full items-center gap-3 rounded-2xl p-2 text-left transition hover:bg-blue-500/10"
+                      >
+                        {profile.avatar_url ? (
+                          <img src={profile.avatar_url} alt={profileName} className="h-11 w-11 rounded-full object-cover" />
+                        ) : (
+                          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-blue-500/20 text-sm font-black text-blue-100">
+                            {profileName.charAt(0).toUpperCase()}
+                          </span>
+                        )}
+
+                        <span className="min-w-0">
+                          <span className="block truncate font-black text-white">{profileName}</span>
+                          <span className="block truncate text-sm text-blue-100/70">
+                            {profile.username ? `@${profile.username}` : 'sem username'}
+                          </span>
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
 
               {receiver && (
                 <div className="mt-3 flex items-center gap-3 rounded-2xl border border-blue-300/20 bg-blue-500/10 p-3">
