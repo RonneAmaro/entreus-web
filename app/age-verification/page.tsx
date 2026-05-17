@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, CheckCircle2, Loader2, ShieldAlert } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, FileText, Loader2, ShieldAlert, Upload } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 
@@ -18,7 +18,24 @@ type AgeVerificationRequest = {
   id: string
   status: string
   created_at: string
+  document_front_path: string | null
+  document_back_path: string | null
+  selfie_path: string | null
+  submitted_at: string | null
+  document_type: string | null
 }
+
+type DocumentType = 'rg' | 'cnh' | 'passport' | 'other'
+
+const MAX_FILE_SIZE = 5 * 1024 * 1024
+const DOCUMENT_TYPES: { value: DocumentType; label: string }[] = [
+  { value: 'rg', label: 'RG' },
+  { value: 'cnh', label: 'CNH' },
+  { value: 'passport', label: 'Passaporte' },
+  { value: 'other', label: 'Outro documento' },
+]
+const DOCUMENT_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
+const SELFIE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 
 function calculateAge(birthDateValue: string | null) {
   if (!birthDateValue) return null
@@ -48,7 +65,12 @@ export default function AgeVerificationPage() {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [acceptedStatement, setAcceptedStatement] = useState(false)
+  const [privacyAccepted, setPrivacyAccepted] = useState(false)
   const [statement, setStatement] = useState('')
+  const [documentType, setDocumentType] = useState<DocumentType>('rg')
+  const [documentFrontFile, setDocumentFrontFile] = useState<File | null>(null)
+  const [documentBackFile, setDocumentBackFile] = useState<File | null>(null)
+  const [selfieFile, setSelfieFile] = useState<File | null>(null)
   const [message, setMessage] = useState('')
   const [profile, setProfile] = useState<Profile | null>(null)
   const [latestRequest, setLatestRequest] = useState<AgeVerificationRequest | null>(null)
@@ -62,8 +84,14 @@ export default function AgeVerificationPage() {
   const isMinor = Boolean(profile?.is_minor || (age !== null && age < 18))
   const status = profile?.age_verification_status || 'not_started'
   const hasPendingRequest = latestRequest?.status === 'pending' || status === 'pending'
+  const pendingHasDocuments = Boolean(
+    latestRequest?.status === 'pending' &&
+    latestRequest.document_front_path &&
+    latestRequest.selfie_path &&
+    latestRequest.submitted_at
+  )
   const isApproved = status === 'approved'
-  const canSubmit = hasBirthDate && !isMinor && !hasPendingRequest && !isApproved
+  const canSubmit = hasBirthDate && !isMinor && !pendingHasDocuments && !isApproved
 
   async function loadPage() {
     setLoading(true)
@@ -102,7 +130,7 @@ export default function AgeVerificationPage() {
 
     const { data: requestData, error: requestError } = await supabase
       .from('age_verification_requests')
-      .select('id, status, created_at')
+      .select('id, status, created_at, document_front_path, document_back_path, selfie_path, submitted_at, document_type')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
       .limit(1)
@@ -117,11 +145,73 @@ export default function AgeVerificationPage() {
     setLoading(false)
   }
 
+  function validateFile(file: File | null, allowedTypes: string[], label: string, required = true) {
+    if (!file) return required ? `${label} e obrigatorio.` : ''
+    if (!allowedTypes.includes(file.type)) return `${label} deve ser JPG, PNG, WEBP${allowedTypes.includes('application/pdf') ? ' ou PDF' : ''}.`
+    if (file.size > MAX_FILE_SIZE) return `${label} deve ter no maximo 5 MB.`
+    return ''
+  }
+
+  function getFileExtension(file: File) {
+    const extension = file.name.split('.').pop()?.toLowerCase()
+    if (extension) return extension
+    if (file.type === 'application/pdf') return 'pdf'
+    if (file.type === 'image/png') return 'png'
+    if (file.type === 'image/webp') return 'webp'
+    return 'jpg'
+  }
+
+  async function uploadPrivateFile(file: File, requestId: string, kind: string) {
+    if (!profile) throw new Error('Perfil nao carregado.')
+
+    const path = `${profile.id}/${requestId}/${kind}-${Date.now()}.${getFileExtension(file)}`
+    const { error } = await supabase.storage
+      .from('age-verifications')
+      .upload(path, file, {
+        cacheControl: '3600',
+        contentType: file.type,
+        upsert: true,
+      })
+
+    if (error) {
+      throw new Error(error.message)
+    }
+
+    return path
+  }
+
+  async function getOrCreatePendingRequest() {
+    if (!profile) throw new Error('Perfil nao carregado.')
+
+    if (latestRequest?.status === 'pending') {
+      return latestRequest
+    }
+
+    const { data, error } = await supabase
+      .from('age_verification_requests')
+      .insert({
+        user_id: profile.id,
+        status: 'pending',
+        birth_date: profile.birth_date || null,
+        user_statement: statement.trim() || null,
+      })
+      .select('id, status, created_at, document_front_path, document_back_path, selfie_path, submitted_at, document_type')
+      .single()
+
+    if (error) throw new Error(error.message)
+    return data as AgeVerificationRequest
+  }
+
   async function handleSubmit() {
     if (!profile) return
 
     if (!acceptedStatement) {
       setMessage('Confirme a declaracao para enviar a solicitacao.')
+      return
+    }
+
+    if (!privacyAccepted) {
+      setMessage('Aceite a declaracao de responsabilidade dos documentos.')
       return
     }
 
@@ -135,8 +225,8 @@ export default function AgeVerificationPage() {
       return
     }
 
-    if (hasPendingRequest) {
-      setMessage('Ja existe uma solicitacao pendente.')
+    if (pendingHasDocuments) {
+      setMessage('Ja existe uma solicitacao com documentos em analise.')
       return
     }
 
@@ -145,21 +235,47 @@ export default function AgeVerificationPage() {
       return
     }
 
+    const validationError =
+      validateFile(documentFrontFile, DOCUMENT_MIME_TYPES, 'A frente do documento') ||
+      validateFile(documentBackFile, DOCUMENT_MIME_TYPES, 'O verso do documento', false) ||
+      validateFile(selfieFile, SELFIE_MIME_TYPES, 'A selfie')
+
+    if (validationError) {
+      setMessage(validationError)
+      return
+    }
+
     setSubmitting(true)
     setMessage('')
 
-    const { error: insertError } = await supabase
-      .from('age_verification_requests')
-      .insert({
-        user_id: profile.id,
-        status: 'pending',
-        birth_date: profile.birth_date || null,
-        user_statement: statement.trim() || null,
-      })
+    try {
+      const request = await getOrCreatePendingRequest()
+      const documentFrontPath = await uploadPrivateFile(documentFrontFile as File, request.id, 'document-front')
+      const documentBackPath = documentBackFile
+        ? await uploadPrivateFile(documentBackFile, request.id, 'document-back')
+        : null
+      const selfiePath = await uploadPrivateFile(selfieFile as File, request.id, 'selfie')
 
-    if (insertError) {
+      const { error: updateRequestError } = await supabase
+        .from('age_verification_requests')
+        .update({
+          birth_date: profile.birth_date || null,
+          user_statement: statement.trim() || null,
+          document_type: documentType,
+          document_front_path: documentFrontPath,
+          document_back_path: documentBackPath,
+          selfie_path: selfiePath,
+          submitted_at: new Date().toISOString(),
+          privacy_accepted_at: new Date().toISOString(),
+          status: 'pending',
+        })
+        .eq('id', request.id)
+        .eq('user_id', profile.id)
+
+      if (updateRequestError) throw new Error(updateRequestError.message)
+    } catch (error) {
       setSubmitting(false)
-      setMessage('Nao foi possivel enviar a solicitacao: ' + insertError.message)
+      setMessage('Nao foi possivel enviar os documentos: ' + (error instanceof Error ? error.message : 'tente novamente.'))
       return
     }
 
@@ -182,8 +298,12 @@ export default function AgeVerificationPage() {
 
     setSubmitting(false)
     setAcceptedStatement(false)
+    setPrivacyAccepted(false)
     setStatement('')
-    setMessage('Solicitacao enviada. Sua verificacao esta em analise.')
+    setDocumentFrontFile(null)
+    setDocumentBackFile(null)
+    setSelfieFile(null)
+    setMessage('Sua solicitacao foi enviada para analise.')
     await loadPage()
   }
 
@@ -262,7 +382,7 @@ export default function AgeVerificationPage() {
                 </div>
               )}
 
-              {!isMinor && hasPendingRequest && (
+              {!isMinor && pendingHasDocuments && (
                 <div className="rounded-3xl border border-blue-300/20 bg-blue-500/10 p-5 text-blue-100">
                   Sua verificacao esta em analise.
                 </div>
@@ -285,7 +405,78 @@ export default function AgeVerificationPage() {
 
               {canSubmit && (
                 <div className="rounded-3xl border border-white/10 bg-black/35 p-5">
-                  <label className="flex gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm leading-6 text-zinc-200">
+                  <div className="mb-5 rounded-2xl border border-blue-300/15 bg-blue-500/10 p-4 text-sm leading-6 text-blue-100">
+                    A analise e manual. Envie somente arquivos seus. Os documentos serao salvos como caminhos privados no bucket <span className="font-black">age-verifications</span>.
+                  </div>
+
+                  <label className="block">
+                    <span className="mb-2 block text-sm font-black text-zinc-200">
+                      Tipo de documento
+                    </span>
+                    <select
+                      value={documentType}
+                      onChange={(event) => setDocumentType(event.target.value as DocumentType)}
+                      className="w-full rounded-2xl border border-white/10 bg-zinc-950 px-4 py-3 text-sm text-white outline-none transition focus:border-blue-300"
+                    >
+                      {DOCUMENT_TYPES.map((item) => (
+                        <option key={item.value} value={item.value}>
+                          {item.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <div className="mt-5 grid gap-4 lg:grid-cols-3">
+                    <label className="rounded-2xl border border-white/10 bg-zinc-950 p-4 transition hover:border-blue-300/30">
+                      <span className="flex items-center gap-2 text-sm font-black text-zinc-100">
+                        <FileText className="h-4 w-4 text-blue-300" />
+                        Frente do documento
+                      </span>
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,application/pdf"
+                        onChange={(event) => setDocumentFrontFile(event.target.files?.[0] || null)}
+                        className="mt-3 block w-full text-xs text-zinc-400 file:mr-3 file:rounded-full file:border-0 file:bg-white file:px-3 file:py-2 file:text-xs file:font-black file:text-black"
+                      />
+                      <span className="mt-3 block min-h-5 truncate text-xs text-zinc-500">
+                        {documentFrontFile ? documentFrontFile.name : 'JPG, PNG, WEBP ou PDF ate 5 MB'}
+                      </span>
+                    </label>
+
+                    <label className="rounded-2xl border border-white/10 bg-zinc-950 p-4 transition hover:border-blue-300/30">
+                      <span className="flex items-center gap-2 text-sm font-black text-zinc-100">
+                        <FileText className="h-4 w-4 text-blue-300" />
+                        Verso do documento
+                      </span>
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,application/pdf"
+                        onChange={(event) => setDocumentBackFile(event.target.files?.[0] || null)}
+                        className="mt-3 block w-full text-xs text-zinc-400 file:mr-3 file:rounded-full file:border-0 file:bg-white file:px-3 file:py-2 file:text-xs file:font-black file:text-black"
+                      />
+                      <span className="mt-3 block min-h-5 truncate text-xs text-zinc-500">
+                        {documentBackFile ? documentBackFile.name : 'Opcional'}
+                      </span>
+                    </label>
+
+                    <label className="rounded-2xl border border-white/10 bg-zinc-950 p-4 transition hover:border-blue-300/30">
+                      <span className="flex items-center gap-2 text-sm font-black text-zinc-100">
+                        <Upload className="h-4 w-4 text-blue-300" />
+                        Selfie
+                      </span>
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        onChange={(event) => setSelfieFile(event.target.files?.[0] || null)}
+                        className="mt-3 block w-full text-xs text-zinc-400 file:mr-3 file:rounded-full file:border-0 file:bg-white file:px-3 file:py-2 file:text-xs file:font-black file:text-black"
+                      />
+                      <span className="mt-3 block min-h-5 truncate text-xs text-zinc-500">
+                        {selfieFile ? selfieFile.name : 'JPG, PNG ou WEBP ate 5 MB'}
+                      </span>
+                    </label>
+                  </div>
+
+                  <label className="mt-5 flex gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm leading-6 text-zinc-200">
                     <input
                       type="checkbox"
                       checked={acceptedStatement}
@@ -294,6 +485,18 @@ export default function AgeVerificationPage() {
                     />
                     <span>
                       Declaro que tenho 18 anos ou mais e que as informacoes da minha conta sao verdadeiras.
+                    </span>
+                  </label>
+
+                  <label className="mt-3 flex gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm leading-6 text-zinc-200">
+                    <input
+                      type="checkbox"
+                      checked={privacyAccepted}
+                      onChange={(event) => setPrivacyAccepted(event.target.checked)}
+                      className="mt-1 h-4 w-4 shrink-0 rounded border-zinc-600 bg-zinc-950 accent-blue-500"
+                    />
+                    <span>
+                      Declaro que os documentos enviados sao meus, verdadeiros e autorizo a analise para verificacao de idade na EntreUS.
                     </span>
                   </label>
 
@@ -317,7 +520,7 @@ export default function AgeVerificationPage() {
                     className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-black text-black transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
                   >
                     {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldAlert className="h-4 w-4" />}
-                    Enviar solicitacao
+                    Enviar para analise
                   </button>
                 </div>
               )}
