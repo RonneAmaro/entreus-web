@@ -22,7 +22,19 @@ export default function SafetyPage() {
         },
         {
           title: 'Condutas proibidas',
-          body: 'Nao permitimos ameacas, assedio, discurso de odio, exploracao, exposicao de dados privados, golpes, spam, impersonificacao, conteudo ilegal ou incentivo a violencia.',
+          body: 'Nao permitimos ameacas, assedio, discurso de odio, exploracao, exposicao de dados privados, golpes, spam, impersonificacao, conteudo ilegal, exposicao sem consentimento ou incentivo a violencia.',
+        },
+        {
+          title: 'Conteudo 18+',
+          body: 'Conteudo 18+ fica bloqueado para quem nao tem verificacao aprovada. Menores de 18 anos nao podem acessar conteudo 18+, mesmo com autorizacao de responsavel.',
+        },
+        {
+          title: 'Consentimento parental',
+          body: 'O responsavel pode autorizar o uso geral da plataforma por um menor quando solicitado. Essa autorizacao nao libera recursos 18+ e nao substitui verificacao de idade.',
+        },
+        {
+          title: 'Verificacao 18+',
+          body: 'A verificacao 18+ passa por analise manual. A plataforma pode solicitar documento e selfie, sempre com cuidado por se tratar de dados sensiveis. Esses arquivos nao devem ser compartilhados publicamente.',
         },
         {
           title: 'Moderacao',
@@ -31,6 +43,10 @@ export default function SafetyPage() {
         {
           title: 'Abuso, spam e golpes',
           body: 'Perfis usados para fraude, phishing, promessas enganosas, links maliciosos, publicidade abusiva ou manipulacao de interacoes podem ser removidos da plataforma.',
+        },
+        {
+          title: 'Denuncias sensiveis',
+          body: 'Denuncie abuso, fraude, conteudo ilegal, exposicao sem consentimento, suspeita de exploracao ou qualquer publicacao que coloque pessoas em risco. As denuncias serao analisadas pela moderacao.',
         },
         {
           title: 'Boas praticas',

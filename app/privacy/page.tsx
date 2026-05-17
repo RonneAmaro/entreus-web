@@ -14,7 +14,15 @@ export default function PrivacyPage() {
       sections={[
         {
           title: 'Dados coletados',
-          body: 'Podemos tratar nome, e-mail, username, avatar, posts, comentarios, mensagens, midias, interacoes, preferencias e informacoes tecnicas necessarias para manter sua conta e sua experiencia.',
+          body: 'Podemos tratar nome, e-mail, username, avatar, data de nascimento, posts, comentarios, mensagens, midias, interacoes, preferencias e informacoes tecnicas necessarias para manter sua conta e sua experiencia.',
+        },
+        {
+          title: 'Dados de menores e responsaveis',
+          body: 'Quando o usuario for menor de 18 anos, podemos tratar informacoes relacionadas a idade e, quando necessario, e-mail do responsavel para fluxo de consentimento parental. Esse consentimento nao libera conteudo 18+.',
+        },
+        {
+          title: 'Documentos e selfie para 18+',
+          body: 'Para verificacao 18+, podemos solicitar foto do documento, verso do documento quando aplicavel, selfie e declaracao de responsabilidade. Esses dados sao sensiveis e usados apenas para analise de idade e seguranca da plataforma.',
         },
         {
           title: 'Finalidades',
@@ -23,6 +31,10 @@ export default function PrivacyPage() {
         {
           title: 'Armazenamento tecnico',
           body: 'A infraestrutura pode usar servicos como Supabase, Cloudflare R2 e Vercel para autenticar usuarios, armazenar dados, hospedar midias e disponibilizar a aplicacao com estabilidade.',
+        },
+        {
+          title: 'Armazenamento privado de documentos',
+          body: 'Documentos e selfies de verificacao devem ficar em storage privado. A plataforma nao deve usar URL publica permanente para esses arquivos. O acesso deve ser restrito a equipe/admin autorizados e, quando necessario, por links temporarios.',
         },
         {
           title: 'Midias e gravacoes',
@@ -34,7 +46,7 @@ export default function PrivacyPage() {
         },
         {
           title: 'Direitos do usuario',
-          body: 'O usuario podera solicitar informacoes, correcao, exclusao ou orientacoes sobre seus dados pelos canais oficiais. Algumas solicitacoes podem depender de verificacao de identidade.',
+          body: 'O usuario podera solicitar informacoes, correcao, exclusao ou orientacoes sobre seus dados pelos canais oficiais. Algumas solicitacoes podem depender de verificacao de identidade e certas informacoes podem ser mantidas pelo tempo necessario para seguranca, prevencao de fraude e obrigacoes legais.',
         },
         {
           title: 'Seguranca',

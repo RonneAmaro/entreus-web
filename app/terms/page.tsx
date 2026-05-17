@@ -14,7 +14,11 @@ export default function TermsPage() {
       sections={[
         {
           title: 'Cadastro e conta',
-          body: 'Ao criar uma conta, o usuario deve informar dados verdadeiros, proteger suas credenciais e responder pelas atividades feitas em seu perfil. Contas falsas, automatizadas ou usadas para abuso podem ser limitadas ou removidas.',
+          body: 'Ao criar uma conta, o usuario deve informar dados verdadeiros, incluindo data de nascimento real, proteger suas credenciais e responder pelas atividades feitas em seu perfil. Informacoes falsas, especialmente sobre idade, podem gerar bloqueio de recursos, suspensao ou remocao da conta.',
+        },
+        {
+          title: 'Idade minima e menores',
+          body: 'Usuarios menores de 18 anos podem precisar de autorizacao de responsavel para usar recursos gerais da plataforma. A autorizacao do responsavel organiza o uso geral da conta, mas nao libera acesso a conteudo 18+.',
         },
         {
           title: 'Conduta dos usuarios',
@@ -22,7 +26,19 @@ export default function TermsPage() {
         },
         {
           title: 'Publicacoes e midias',
-          body: 'Posts, comentarios, imagens, videos, links e GIFs devem respeitar direitos de terceiros e as regras da plataforma. Conteudos ilegais, enganosos, abusivos ou que violem privacidade podem ser moderados.',
+          body: 'Posts, comentarios, imagens, videos, links e GIFs devem respeitar direitos de terceiros e as regras da plataforma. Conteudos ilegais, enganosos, abusivos, sem consentimento, com exposicao indevida de terceiros ou que violem privacidade podem ser moderados.',
+        },
+        {
+          title: 'Conteudo 18+',
+          body: 'Conteudo adulto, sensual ou equivalente e tratado como 18+. Esse tipo de conteudo e restrito a usuarios maiores de 18 anos e aprovados em verificacao de idade. O EntreUS pode bloquear, recusar, limitar ou remover acesso a conteudo 18+ conforme criterios de seguranca.',
+        },
+        {
+          title: 'Verificacao de idade',
+          body: 'Para liberar visualizacao de conteudo 18+, a plataforma pode solicitar documento e selfie para analise manual. O envio de materiais falsos, adulterados ou de terceiros pode gerar recusa, restricao de recursos ou bloqueio da conta.',
+        },
+        {
+          title: 'Conteudo proibido',
+          body: 'E proibido publicar ou compartilhar conteudo ilegal, exploracao, abuso, violencia sexual, exposicao de terceiros sem consentimento, material envolvendo menores, fraude, ameacas ou qualquer conteudo que coloque pessoas em risco.',
         },
         {
           title: 'Mensagens privadas',
@@ -58,7 +74,7 @@ export default function TermsPage() {
         },
         {
           title: 'Alteracoes e contato',
-          body: 'Estes termos podem ser atualizados para refletir novos recursos, regras legais ou mudancas da plataforma. Duvidas e solicitacoes devem ser enviadas pelos canais oficiais do EntreUS quando disponibilizados.',
+          body: 'Estes termos podem ser atualizados para refletir novos recursos, regras legais ou mudancas da plataforma, incluindo regras de idade, seguranca e verificacao. Duvidas e solicitacoes devem ser enviadas pelos canais oficiais do EntreUS quando disponibilizados.',
         },
       ]}
     />
