@@ -6,6 +6,7 @@ import MobileNavigation from '../components/MobileNavigation'
 import PostMoreMenu from '../components/PostMoreMenu'
 import PostMediaGallery from '../components/PostMediaGallery'
 import PostActions from '../components/PostActions'
+import GiftModal from '../components/GiftModal'
 import LinkPreview, { LinkedPostText } from '../components/LinkPreview'
 import SensitiveContent from '../components/SensitiveContent'
 import UserBadges from '../components/UserBadges'
@@ -492,6 +493,12 @@ function FeedContent() {
 
   const [reportingPostId, setReportingPostId] = useState<string | null>(null)
   const [reportedPostIds, setReportedPostIds] = useState<string[]>([])
+  const [giftRecipient, setGiftRecipient] = useState<{
+    id: string
+    name: string
+    username?: string | null
+    avatarUrl?: string | null
+  } | null>(null)
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0)
   const [copiedPostId, setCopiedPostId] = useState<string | null>(null)
 
@@ -2514,6 +2521,13 @@ function FeedContent() {
         </div>
       )}
 
+      <GiftModal
+        open={Boolean(giftRecipient)}
+        recipient={giftRecipient}
+        currentUserId={userId}
+        onClose={() => setGiftRecipient(null)}
+      />
+
       <section className="w-full overflow-x-hidden px-3 py-16 pb-24 sm:px-6 sm:py-20 lg:mx-auto lg:max-w-[1280px] lg:px-0 lg:py-8 lg:pl-[104px]">
         <div className="mx-auto grid w-full grid-cols-1 gap-4 sm:gap-6 xl:grid-cols-[minmax(0,40rem)_20rem]">
           <div className="min-w-0">
@@ -2817,10 +2831,19 @@ function FeedContent() {
                       reposted={postReposted}
                       saved={postSaved}
                       copied={copiedPostId === post.id}
+                      showGift={post.user_id !== userId}
                       onLike={() => handleToggleLike(post.id)}
                       onCommentClick={() => handleOpenReplyModal(post.id)}
                       onRepost={() => handleToggleRepost(post.id)}
                       onSave={() => handleToggleBookmark(post.id)}
+                      onGift={() =>
+                        setGiftRecipient({
+                          id: post.user_id,
+                          name: authorName,
+                          username: post.profiles?.username,
+                          avatarUrl: authorAvatar,
+                        })
+                      }
                       onShare={() => handleCopyPostLink(post.id)}
                     />
 

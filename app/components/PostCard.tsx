@@ -1,8 +1,10 @@
 'use client'
 
 import Link from 'next/link'
+import { useState } from 'react'
 import { Repeat2 } from 'lucide-react'
 import PostActions from './PostActions'
+import GiftModal from './GiftModal'
 import PostMediaGallery from './PostMediaGallery'
 import LinkPreview, { LinkedPostText } from './LinkPreview'
 import SensitiveContent from './SensitiveContent'
@@ -198,6 +200,7 @@ export default function PostCard({
   onReport,
 }: PostCardProps) {
   const { t, language } = useLanguage()
+  const [giftModalOpen, setGiftModalOpen] = useState(false)
 
   const authorName =
     post.profiles?.display_name || post.profiles?.username || t('feed.post.user')
@@ -205,6 +208,7 @@ export default function PostCard({
   const authorUsername = post.profiles?.username || t('feed.post.username')
   const authorAvatar = post.profiles?.avatar_url || ''
   const isOwnPost = post.user_id === currentUserId
+  const canGiftAuthor = Boolean(currentUserId && post.user_id !== currentUserId)
   const postMedia = getPostMedia(post)
   const sensitive = isSensitivePost(post)
   const shouldProtectSensitive = sensitive && !showSensitiveContent
@@ -397,11 +401,25 @@ export default function PostCard({
         reposted={reposted}
         saved={saved}
         copied={copied}
+        showGift={canGiftAuthor}
         onLike={onLike}
         onCommentClick={onCommentClick}
         onRepost={onRepost}
         onSave={onSave}
+        onGift={() => setGiftModalOpen(true)}
         onShare={onShare}
+      />
+
+      <GiftModal
+        open={giftModalOpen}
+        currentUserId={currentUserId}
+        recipient={{
+          id: post.user_id,
+          name: authorName,
+          username: post.profiles?.username,
+          avatarUrl: authorAvatar,
+        }}
+        onClose={() => setGiftModalOpen(false)}
       />
 
       {footerLabel ? (

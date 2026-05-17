@@ -12,7 +12,8 @@ import PostCard from "../../components/PostCard";
 import UserBadges from "../../components/UserBadges";
 import UserBadgesPanel from "../../components/UserBadgesPanel";
 import StartConversationButton from "../../components/StartConversationButton";
-import { ExternalLink, Flag, MapPin, Maximize2, Search, UserCheck, UserPlus, UserX, X } from "lucide-react";
+import GiftModal from "../../components/GiftModal";
+import { ExternalLink, Flag, Gift, MapPin, Maximize2, Search, UserCheck, UserPlus, UserX, X } from "lucide-react";
 
 type VisibilityType = "public" | "followers" | "private";
 type ProfileTab = "posts" | "replies" | "media";
@@ -159,6 +160,7 @@ export default function PublicProfilePage() {
   const [loadingFollowing, setLoadingFollowing] = useState(false);
   const [selectedAvatarUrl, setSelectedAvatarUrl] = useState<string | null>(null);
   const [activeProfileTab, setActiveProfileTab] = useState<ProfileTab>("posts");
+  const [giftModalOpen, setGiftModalOpen] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -1489,6 +1491,18 @@ export default function PublicProfilePage() {
         onPostClick={handlePostClick}
       />
 
+      <GiftModal
+        open={giftModalOpen}
+        currentUserId={loggedUserId}
+        recipient={profile ? {
+          id: profile.id,
+          name: profile.display_name || profile.username,
+          username: profile.username,
+          avatarUrl: profile.avatar_url,
+        } : null}
+        onClose={() => setGiftModalOpen(false)}
+      />
+
       <section className="w-full overflow-x-hidden px-3 py-16 pb-24 sm:px-6 sm:py-20 lg:mx-auto lg:max-w-[1280px] lg:px-0 lg:py-8 lg:pl-[104px]">
         <BrandHeader
           subtitle="Perfil público"
@@ -1708,6 +1722,22 @@ export default function PublicProfilePage() {
                         : "border-blue-300 text-blue-600 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400 dark:hover:bg-blue-950"
                       }`}
                   />
+
+                  <button
+                    type="button"
+                    onClick={() => setGiftModalOpen(true)}
+                    disabled={isOwnProfile || hasBlockedMe || isBlockedByMe}
+                    title="Presentear"
+                    aria-label="Presentear"
+                    className={`inline-flex h-11 items-center justify-center gap-2 rounded-full border px-4 text-sm font-bold transition ${
+                      isOwnProfile || hasBlockedMe || isBlockedByMe
+                        ? "cursor-not-allowed border-zinc-300 bg-zinc-100 text-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-600"
+                        : "border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:border-blue-700 dark:bg-blue-950/30 dark:text-blue-300 dark:hover:bg-blue-950"
+                    }`}
+                  >
+                    <Gift className="h-5 w-5" />
+                    <span className="hidden sm:inline">Presentear</span>
+                  </button>
 
                   <button
                     type="button"
