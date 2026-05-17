@@ -30,6 +30,11 @@ type Profile = {
   website_title: string | null
   birth_date: string | null
   show_sensitive_content: boolean
+  is_minor: boolean
+  parental_consent_status: string
+  wants_18_plus: boolean
+  age_verification_status: string
+  age_verified_at: string | null
 }
 
 type ProfileSummary = {
@@ -103,6 +108,28 @@ function getDateLocale(language: string) {
   return locales[language] || 'pt-BR'
 }
 
+function calculateAge(birthDateValue: string | null) {
+  if (!birthDateValue) return null
+
+  const birthDate = new Date(`${birthDateValue}T00:00:00`)
+  const today = new Date()
+  let age = today.getFullYear() - birthDate.getFullYear()
+  const monthDiff = today.getMonth() - birthDate.getMonth()
+
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+    age -= 1
+  }
+
+  return age
+}
+
+function getAgeVerificationLabel(status: string) {
+  if (status === 'pending') return 'Verificacao pendente'
+  if (status === 'approved') return 'Verificacao aprovada'
+  if (status === 'rejected') return 'Verificacao recusada'
+  return 'Verificacao 18+ ainda nao iniciada'
+}
+
 type FeedItem =
   | {
     type: 'post'
@@ -144,6 +171,10 @@ export default function ProfilePage() {
   const [websiteUrl, setWebsiteUrl] = useState('')
   const [websiteTitle, setWebsiteTitle] = useState('')
   const [birthDate, setBirthDate] = useState('')
+  const [isMinor, setIsMinor] = useState(false)
+  const [parentalConsentStatus, setParentalConsentStatus] = useState('not_required')
+  const [wants18Plus, setWants18Plus] = useState(false)
+  const [ageVerificationStatus, setAgeVerificationStatus] = useState('not_started')
   const [avatarUrl, setAvatarUrl] = useState('')
   const [avatarPreview, setAvatarPreview] = useState('')
   const [bannerUrl, setBannerUrl] = useState('')
@@ -182,7 +213,7 @@ export default function ProfilePage() {
       const { data, error } = await supabase
         .from('profiles')
         .select(
-          'id, username, display_name, bio, avatar_url, banner_url, country, city, state, website_url, website_title, birth_date, show_sensitive_content'
+          'id, username, display_name, bio, avatar_url, banner_url, country, city, state, website_url, website_title, birth_date, show_sensitive_content, is_minor, parental_consent_status, wants_18_plus, age_verification_status, age_verified_at'
         )
         .eq('id', user.id)
         .maybeSingle()
@@ -207,6 +238,11 @@ export default function ProfilePage() {
         website_title: '',
         birth_date: '',
         show_sensitive_content: false,
+        is_minor: false,
+        parental_consent_status: 'not_required',
+        wants_18_plus: false,
+        age_verification_status: 'not_started',
+        age_verified_at: null,
       }
 
       setProfile(loadedProfile)
@@ -219,11 +255,17 @@ export default function ProfilePage() {
       setWebsiteUrl(loadedProfile.website_url || '')
       setWebsiteTitle(loadedProfile.website_title || '')
       setBirthDate(loadedProfile.birth_date || '')
+      setIsMinor(loadedProfile.is_minor || false)
+      setParentalConsentStatus(loadedProfile.parental_consent_status || 'not_required')
+      setWants18Plus(loadedProfile.wants_18_plus || false)
+      setAgeVerificationStatus(loadedProfile.age_verification_status || 'not_started')
       setAvatarUrl(loadedProfile.avatar_url || '')
       setAvatarPreview(loadedProfile.avatar_url || '')
       setBannerUrl(loadedProfile.banner_url || '')
       setBannerPreview(loadedProfile.banner_url || '')
-      setShowSensitiveContent(loadedProfile.show_sensitive_content || false)
+      setShowSensitiveContent(
+        Boolean(loadedProfile.wants_18_plus && loadedProfile.age_verification_status === 'approved')
+      )
 
       await Promise.all([
         loadProfileActivity(user.id, loadedProfile),
@@ -641,6 +683,23 @@ export default function ProfilePage() {
       return
     }
 
+    const calculatedAge = calculateAge(birthDate)
+    const nextIsMinor = calculatedAge !== null ? calculatedAge < 18 : false
+    const nextWants18Plus = nextIsMinor ? false : wants18Plus
+    const nextParentalConsentStatus = nextIsMinor ? 'pending' : 'not_required'
+    const nextAgeVerificationStatus =
+      nextWants18Plus && ageVerificationStatus === 'not_started'
+        ? 'pending'
+        : ageVerificationStatus
+    const nextShowSensitiveContent =
+      nextWants18Plus && nextAgeVerificationStatus === 'approved'
+
+    if (nextIsMinor && wants18Plus) {
+      setMessage('Menores de 18 anos nao podem ativar conteudo 18+.')
+      setSaving(false)
+      return
+    }
+
     const payload = {
       id: userId,
       username: normalizedUsername,
@@ -654,7 +713,11 @@ export default function ProfilePage() {
       website_url: websiteUrl.trim() || null,
       website_title: websiteTitle.trim() || null,
       birth_date: birthDate || null,
-      show_sensitive_content: showSensitiveContent,
+      is_minor: nextIsMinor,
+      parental_consent_status: nextParentalConsentStatus,
+      wants_18_plus: nextWants18Plus,
+      age_verification_status: nextAgeVerificationStatus,
+      show_sensitive_content: nextShowSensitiveContent,
       updated_at: new Date().toISOString(),
     }
 
@@ -679,10 +742,20 @@ export default function ProfilePage() {
       website_url: websiteUrl.trim() || null,
       website_title: websiteTitle.trim() || null,
       birth_date: birthDate || null,
-      show_sensitive_content: showSensitiveContent,
+      is_minor: nextIsMinor,
+      parental_consent_status: nextParentalConsentStatus,
+      wants_18_plus: nextWants18Plus,
+      age_verification_status: nextAgeVerificationStatus,
+      age_verified_at: profile?.age_verified_at || null,
+      show_sensitive_content: nextShowSensitiveContent,
     }
 
     setUsername(normalizedUsername)
+    setIsMinor(nextIsMinor)
+    setParentalConsentStatus(nextParentalConsentStatus)
+    setWants18Plus(nextWants18Plus)
+    setAgeVerificationStatus(nextAgeVerificationStatus)
+    setShowSensitiveContent(nextShowSensitiveContent)
     setProfile(updatedProfile)
 
     setMessage(t('profile.messages.profileSaved'))
@@ -1028,6 +1101,9 @@ export default function ProfilePage() {
   }
 
   const publicProfileUrl = username ? `/u/${username}` : '#'
+  const profileAge = calculateAge(birthDate)
+  const canRequest18Plus = profileAge !== null && profileAge >= 18 && !isMinor
+  const canView18Plus = wants18Plus && ageVerificationStatus === 'approved'
   const profileName = displayName || username || 'Usuário'
 
   return (
@@ -1425,19 +1501,30 @@ export default function ProfilePage() {
                         type="date"
                         value={birthDate}
                         onChange={(e) => setBirthDate(e.target.value)}
+                        disabled={Boolean(profile?.birth_date)}
+                        max={new Date().toISOString().slice(0, 10)}
                         className="w-full rounded-2xl border border-zinc-200/80 bg-zinc-100/70 px-4 py-3 text-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800/80 dark:bg-zinc-900/80 dark:focus:border-blue-500/70 dark:focus:bg-zinc-950 sm:text-base"
                       />
+                      <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-500">
+                        {profileAge !== null
+                          ? `${profileAge} anos. ${isMinor ? 'Perfil marcado como menor de 18.' : 'Perfil maior de 18.'}`
+                          : 'Informe sua data de nascimento.'}
+                        {profile?.birth_date ? ' A data ja registrada nao pode ser alterada por aqui.' : ''}
+                      </p>
                     </div>
                   </div>
 
-                  <div className="rounded-3xl border border-yellow-200/70 bg-yellow-50/70 p-4 ring-1 ring-yellow-100/70 dark:border-yellow-900/50 dark:bg-yellow-950/10 dark:ring-yellow-900/20">
+                  <div className="rounded-3xl border border-blue-200/70 bg-blue-50/70 p-4 ring-1 ring-blue-100/70 dark:border-blue-900/50 dark:bg-blue-950/10 dark:ring-blue-900/20">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                       <div className="flex gap-3">
-                        <div className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-yellow-100 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-300">
+                        <div className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
                           <ShieldAlert className="h-5 w-5" />
                         </div>
 
                         <div>
+                          <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-700 dark:text-blue-300">
+                            Quero visualizar conteudo 18+
+                          </p>
                           <h3 className="font-semibold text-zinc-900 dark:text-white">
                             Preferência de conteúdo 18+
                           </h3>
@@ -1452,15 +1539,35 @@ export default function ProfilePage() {
                         </div>
                       </div>
 
-                      <label className="flex cursor-pointer items-center gap-3 rounded-full border border-yellow-300/70 bg-white/80 px-4 py-3 text-sm font-bold text-zinc-900 shadow-sm transition hover:bg-white dark:border-yellow-800/70 dark:bg-zinc-950/80 dark:text-white dark:hover:bg-zinc-950">
+                      <div className="rounded-2xl border border-blue-300/20 bg-white/60 px-4 py-3 text-sm text-zinc-700 dark:bg-zinc-950/60 dark:text-zinc-300 sm:max-w-xs">
+                        <p className="font-bold">{getAgeVerificationLabel(ageVerificationStatus)}</p>
+                        <p className="mt-1 text-xs text-zinc-500">
+                          {wants18Plus && !canView18Plus
+                            ? 'Preferencia registrada. A liberacao depende de verificacao futura.'
+                            : isMinor
+                              ? `Consentimento parental: ${parentalConsentStatus}.`
+                              : 'Apenas perfis com verificacao aprovada visualizam 18+.'}
+                        </p>
+                      </div>
+
+                      <label className={`flex items-center gap-3 rounded-full border px-4 py-3 text-sm font-bold shadow-sm transition ${
+                        canRequest18Plus
+                          ? 'cursor-pointer border-blue-300/70 bg-white/80 text-zinc-900 hover:bg-white dark:border-blue-800/70 dark:bg-zinc-950/80 dark:text-white dark:hover:bg-zinc-950'
+                          : 'cursor-not-allowed border-zinc-200/70 bg-zinc-100/80 text-zinc-400 dark:border-zinc-800/70 dark:bg-zinc-900/80 dark:text-zinc-500'
+                      }`}>
                         <input
                           type="checkbox"
-                          checked={showSensitiveContent}
-                          onChange={(e) => setShowSensitiveContent(e.target.checked)}
-                          className="h-5 w-5 accent-yellow-600"
+                          checked={wants18Plus}
+                          disabled={!canRequest18Plus}
+                          onChange={(e) => {
+                            const checked = e.target.checked
+                            setWants18Plus(checked)
+                            setShowSensitiveContent(checked && ageVerificationStatus === 'approved')
+                          }}
+                          className="h-5 w-5 accent-blue-600"
                         />
 
-                        Permitir 18+
+                        Solicitar 18+
                       </label>
                     </div>
                   </div>
@@ -1568,7 +1675,7 @@ export default function ProfilePage() {
                   copied={copiedPostId === post.id}
                   reported={reportedPostIds.includes(post.id)}
                   reporting={reportingPostId === post.id}
-                  showSensitiveContent={showSensitiveContent}
+                  showSensitiveContent={canView18Plus}
                   repostInfo={item.type === 'repost' ? item.repost : null}
                   footerLabel={
                     item.type === 'post'

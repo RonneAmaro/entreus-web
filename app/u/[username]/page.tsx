@@ -30,6 +30,8 @@ type Profile = {
   website_url: string | null;
   website_title: string | null;
   show_sensitive_content?: boolean | null;
+  wants_18_plus?: boolean | null;
+  age_verification_status?: string | null;
 };
 
 type ProfileSummary = {
@@ -182,12 +184,22 @@ export default function PublicProfilePage() {
       const { data: loggedProfileData } = await supabase
         .from("profiles")
         .select(
-          "id, username, display_name, bio, avatar_url, banner_url, country, city, state, website_url, website_title, show_sensitive_content",
+          "id, username, display_name, bio, avatar_url, banner_url, country, city, state, website_url, website_title, show_sensitive_content, wants_18_plus, age_verification_status",
         )
         .eq("id", user.id)
         .maybeSingle();
 
-      setLoggedProfile(loggedProfileData || null);
+      const normalizedLoggedProfile = loggedProfileData
+        ? {
+            ...loggedProfileData,
+            show_sensitive_content: Boolean(
+              loggedProfileData.wants_18_plus &&
+                loggedProfileData.age_verification_status === "approved",
+            ),
+          }
+        : null;
+
+      setLoggedProfile(normalizedLoggedProfile);
 
       if (!username) {
         setMessage("Usuário inválido.");
@@ -198,7 +210,7 @@ export default function PublicProfilePage() {
       const { data: profileData, error: profileError } = await supabase
         .from("profiles")
         .select(
-          "id, username, display_name, bio, avatar_url, banner_url, country, city, state, website_url, website_title, show_sensitive_content",
+          "id, username, display_name, bio, avatar_url, banner_url, country, city, state, website_url, website_title, show_sensitive_content, wants_18_plus, age_verification_status",
         )
         .eq("username", username)
         .maybeSingle();
@@ -280,7 +292,7 @@ export default function PublicProfilePage() {
             user.id,
             isOwn,
             !!currentFollowData,
-            loggedProfileData?.show_sensitive_content || false,
+            normalizedLoggedProfile?.show_sensitive_content || false,
           ),
           loadCounts(profileData.id),
           loadLikes(),
@@ -562,12 +574,7 @@ export default function PublicProfilePage() {
             currentIsFollowing,
           ),
         )
-        .filter((post: Post) => {
-          if (post.user_id === currentUserId) return true;
-          if (allowSensitiveContent) return true;
-
-          return !isSensitivePost(post);
-        });
+        .filter((post: Post) => canSeePost(post, currentUserId, false, currentIsFollowing));
     }
 
     const allPostsMap = new Map<string, Post>();
@@ -648,7 +655,8 @@ export default function PublicProfilePage() {
     return (
       post.is_sensitive ||
       post.category === "adulto" ||
-      post.category === "sensual"
+      post.category === "sensual" ||
+      post.category === "18plus"
     );
   }
 

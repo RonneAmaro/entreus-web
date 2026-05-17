@@ -51,6 +51,8 @@ type CurrentProfile = {
   display_name: string | null
   avatar_url: string | null
   show_sensitive_content: boolean
+  wants_18_plus?: boolean | null
+  age_verification_status?: string | null
 }
 
 type ProfileSummary = {
@@ -377,6 +379,9 @@ function getDateLocale(language: string) {
 
 function getCategoryKey(value: string | null) {
   if (!value) return 'categories.uncategorized'
+  if (value === 'adulto' || value === 'sensual' || value === '18plus') {
+    return 'categories.sensitive'
+  }
   return `categories.${value}`
 }
 
@@ -528,7 +533,7 @@ function FeedContent() {
 
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select('username, display_name, avatar_url, show_sensitive_content')
+        .select('username, display_name, avatar_url, show_sensitive_content, wants_18_plus, age_verification_status')
         .eq('id', user.id)
         .single()
 
@@ -538,7 +543,10 @@ function FeedContent() {
             username: profileData.username,
             display_name: profileData.display_name,
             avatar_url: profileData.avatar_url,
-            show_sensitive_content: profileData.show_sensitive_content || false,
+            wants_18_plus: profileData.wants_18_plus || false,
+            age_verification_status: profileData.age_verification_status || 'not_started',
+            show_sensitive_content:
+              Boolean(profileData.wants_18_plus && profileData.age_verification_status === 'approved'),
           }
           : null
 
@@ -762,7 +770,8 @@ function FeedContent() {
     return (
       post.is_sensitive ||
       post.category === 'adulto' ||
-      post.category === 'sensual'
+      post.category === 'sensual' ||
+      post.category === '18plus'
     )
   }
 
@@ -838,12 +847,6 @@ function FeedContent() {
       }))
       .filter((post) => !currentBlockedIds.includes(post.user_id))
       .filter((post) => canSeePost(post, currentUserId, currentFollows))
-      .filter((post) => {
-        if (post.user_id === currentUserId) return true
-        if (allowSensitiveContent) return true
-
-        return !isSensitivePost(post)
-      })
 
     setPosts(normalizedPosts)
   }
@@ -1481,7 +1484,7 @@ function FeedContent() {
         image_url: firstImage,
         video_url: firstVideo,
         visibility,
-        is_sensitive: category === 'sensual' || category === 'adulto',
+        is_sensitive: category === '18plus',
       })
       .select('id')
       .single()

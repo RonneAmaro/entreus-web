@@ -21,10 +21,26 @@ function validatePassword(password: string) {
   return ''
 }
 
+function calculateAge(birthDateValue: string) {
+  if (!birthDateValue) return 0
+
+  const birthDate = new Date(`${birthDateValue}T00:00:00`)
+  const today = new Date()
+  let age = today.getFullYear() - birthDate.getFullYear()
+  const monthDiff = today.getMonth() - birthDate.getMonth()
+
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+    age -= 1
+  }
+
+  return age
+}
+
 export default function SignupPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [birthDate, setBirthDate] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [acceptedTerms, setAcceptedTerms] = useState(false)
@@ -52,12 +68,42 @@ export default function SignupPage() {
       return
     }
 
+    if (!birthDate) {
+      setMessage('Informe sua data de nascimento para criar a conta.')
+      return
+    }
+
+    const age = calculateAge(birthDate)
+    const isMinor = age < 18
+
     setLoading(true)
 
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email: email.trim(),
       password,
+      options: {
+        data: {
+          birth_date: birthDate,
+          is_minor: isMinor,
+          parental_consent_status: isMinor ? 'pending' : 'not_required',
+          wants_18_plus: false,
+          age_verification_status: 'not_started',
+        },
+      },
     })
+
+    if (!error && data.user) {
+      await supabase.from('profiles').upsert({
+        id: data.user.id,
+        birth_date: birthDate,
+        is_minor: isMinor,
+        parental_consent_status: isMinor ? 'pending' : 'not_required',
+        wants_18_plus: false,
+        show_sensitive_content: false,
+        age_verification_status: 'not_started',
+        updated_at: new Date().toISOString(),
+      })
+    }
 
     setLoading(false)
 
@@ -69,6 +115,7 @@ export default function SignupPage() {
     setEmail('')
     setPassword('')
     setConfirmPassword('')
+    setBirthDate('')
     setAcceptedTerms(false)
     setMessage('Conta criada com sucesso! Agora você já pode entrar.')
   }
@@ -162,6 +209,27 @@ export default function SignupPage() {
                 )}
               </button>
             </div>
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm text-zinc-300">
+              Data de nascimento
+            </label>
+
+            <input
+              type="date"
+              value={birthDate}
+              onChange={(e) => setBirthDate(e.target.value)}
+              max={new Date().toISOString().slice(0, 10)}
+              className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 outline-none transition focus:border-zinc-500"
+              required
+            />
+
+            {birthDate && calculateAge(birthDate) < 18 && (
+              <p className="mt-2 rounded-xl border border-yellow-800 bg-yellow-950/30 px-3 py-2 text-xs leading-5 text-yellow-200">
+                Usuarios menores de 18 anos precisam de autorizacao de responsavel para usar recursos completos da plataforma.
+              </p>
+            )}
           </div>
 
           <label className="flex gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/70 p-4 text-sm leading-6 text-zinc-300">

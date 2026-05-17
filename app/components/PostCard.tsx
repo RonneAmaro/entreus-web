@@ -99,8 +99,9 @@ function getCategoryLabel(value: string | null, t: (key: string) => string) {
     comida: t('feed.categories.food'),
     pensamentos: t('feed.categories.thoughts'),
     lifestyle: t('feed.categories.lifestyle'),
-    sensual: t('feed.categories.sensual'),
-    adulto: t('feed.categories.adult'),
+    sensual: '18+',
+    adulto: '18+',
+    '18plus': '18+',
   }
 
   return labels[key] || value
@@ -155,7 +156,8 @@ function isSensitivePost(post: PostCardPost) {
   return (
     post.is_sensitive ||
     post.category === 'adulto' ||
-    post.category === 'sensual'
+    post.category === 'sensual' ||
+    post.category === '18plus'
   )
 }
 

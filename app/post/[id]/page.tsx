@@ -20,6 +20,8 @@ type CurrentProfile = {
   display_name: string | null
   avatar_url: string | null
   show_sensitive_content: boolean
+  wants_18_plus?: boolean | null
+  age_verification_status?: string | null
 }
 
 type PostMedia = {
@@ -120,7 +122,7 @@ export default function PostPage() {
       if (currentUserId) {
         const { data: profileData } = await supabase
           .from('profiles')
-          .select('username, display_name, avatar_url, show_sensitive_content')
+          .select('username, display_name, avatar_url, show_sensitive_content, wants_18_plus, age_verification_status')
           .eq('id', currentUserId)
           .maybeSingle()
 
@@ -129,7 +131,10 @@ export default function PostPage() {
             username: profileData.username,
             display_name: profileData.display_name,
             avatar_url: profileData.avatar_url,
-            show_sensitive_content: profileData.show_sensitive_content || false,
+            wants_18_plus: profileData.wants_18_plus || false,
+            age_verification_status: profileData.age_verification_status || 'not_started',
+            show_sensitive_content:
+              Boolean(profileData.wants_18_plus && profileData.age_verification_status === 'approved'),
           })
         }
       }

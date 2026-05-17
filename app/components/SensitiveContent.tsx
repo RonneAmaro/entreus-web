@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { Eye, ShieldAlert } from 'lucide-react'
+import Link from 'next/link'
+import { ShieldAlert } from 'lucide-react'
 import { useLanguage } from './LanguageProvider'
 
 type SensitiveContentProps = {
@@ -14,12 +14,7 @@ export default function SensitiveContent({
   label,
 }: SensitiveContentProps) {
   const { t } = useLanguage()
-  const [revealed, setRevealed] = useState(false)
   const displayLabel = label || t('sensitiveContent.label')
-
-  if (revealed) {
-    return <>{children}</>
-  }
 
   return (
     <div className="relative mb-4 overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-950 dark:border-zinc-800">
@@ -35,17 +30,15 @@ export default function SensitiveContent({
         <h3 className="text-lg font-bold">{displayLabel}</h3>
 
         <p className="mt-2 max-w-sm text-sm text-zinc-300">
-          {t('sensitiveContent.description')}
+          Conteudo 18+. Para visualizar, e necessario confirmar maioridade.
         </p>
 
-        <button
-          type="button"
-          onClick={() => setRevealed(true)}
+        <Link
+          href="/profile"
           className="mt-4 inline-flex items-center gap-2 rounded-full bg-white px-5 py-2 text-sm font-semibold text-black transition hover:opacity-90"
         >
-          <Eye className="h-4 w-4" />
-          {t('sensitiveContent.show')}
-        </button>
+          Verificar idade
+        </Link>
       </div>
     </div>
   )

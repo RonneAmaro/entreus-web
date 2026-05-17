@@ -46,8 +46,7 @@ const CATEGORY_OPTIONS = [
   { value: 'comida', labelKey: 'categories.comida' },
   { value: 'pensamentos', labelKey: 'categories.pensamentos' },
   { value: 'lifestyle', labelKey: 'categories.lifestyle' },
-  { value: 'sensual', labelKey: 'categories.sensual' },
-  { value: 'adulto', labelKey: 'categories.adulto' },
+  { value: '18plus', labelKey: 'categories.sensitive' },
 ]
 
 const VISIBILITY_OPTIONS: {
