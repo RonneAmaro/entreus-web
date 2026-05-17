@@ -1657,25 +1657,26 @@ export default function ProfilePage() {
                         </p>
                       </div>
 
-                      <label className={`flex items-center gap-3 rounded-full border px-4 py-3 text-sm font-bold shadow-sm transition ${
-                        canRequest18Plus
-                          ? 'cursor-pointer border-blue-300/70 bg-white/80 text-zinc-900 hover:bg-white dark:border-blue-800/70 dark:bg-zinc-950/80 dark:text-white dark:hover:bg-zinc-950'
-                          : 'cursor-not-allowed border-zinc-200/70 bg-zinc-100/80 text-zinc-400 dark:border-zinc-800/70 dark:bg-zinc-900/80 dark:text-zinc-500'
-                      }`}>
-                        <input
-                          type="checkbox"
-                          checked={wants18Plus}
-                          disabled={!canRequest18Plus}
-                          onChange={(e) => {
-                            const checked = e.target.checked
-                            setWants18Plus(checked)
-                            setShowSensitiveContent(checked && ageVerificationStatus === 'approved')
-                          }}
-                          className="h-5 w-5 accent-blue-600"
-                        />
-
-                        Solicitar 18+
-                      </label>
+                      {isMinor ? (
+                        <span className="rounded-full border border-zinc-200/70 bg-zinc-100/80 px-4 py-3 text-sm font-bold text-zinc-500 dark:border-zinc-800/70 dark:bg-zinc-900/80 dark:text-zinc-500">
+                          18+ bloqueado
+                        </span>
+                      ) : ageVerificationStatus === 'approved' ? (
+                        <span className="rounded-full border border-emerald-300/30 bg-emerald-500/10 px-4 py-3 text-sm font-bold text-emerald-700 dark:text-emerald-300">
+                          Verificacao aprovada
+                        </span>
+                      ) : ageVerificationStatus === 'pending' ? (
+                        <span className="rounded-full border border-blue-300/30 bg-blue-500/10 px-4 py-3 text-sm font-bold text-blue-700 dark:text-blue-300">
+                          Em analise
+                        </span>
+                      ) : (
+                        <Link
+                          href="/age-verification"
+                          className="rounded-full border border-blue-300/70 bg-white/80 px-4 py-3 text-sm font-bold text-zinc-900 shadow-sm transition hover:bg-white dark:border-blue-800/70 dark:bg-zinc-950/80 dark:text-white dark:hover:bg-zinc-950"
+                        >
+                          Solicitar verificacao 18+
+                        </Link>
+                      )}
                     </div>
                   </div>
 
