@@ -9,6 +9,7 @@ import {
   Bookmark,
   Bug,
   Compass,
+  Gift,
   Home,
   FlaskConical,
   HelpCircle,
@@ -28,6 +29,7 @@ import {
   User,
   UserX,
   Video,
+  Wallet,
   X,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
@@ -354,6 +356,24 @@ export default function MobileNavigation({
               </Link>
 
               <Link
+                href="/wallet"
+                onClick={closeMoreOptions}
+                className={drawerLinkClass('/wallet')}
+              >
+                <Wallet className={drawerIconClass('/wallet')} />
+                Carteira
+              </Link>
+
+              <Link
+                href="/gifts"
+                onClick={closeMoreOptions}
+                className={drawerLinkClass('/gifts')}
+              >
+                <Gift className={drawerIconClass('/gifts')} />
+                Presentes
+              </Link>
+
+              <Link
                 href="/feedback"
                 onClick={closeMoreOptions}
                 className={drawerLinkClass('/feedback')}
@@ -605,6 +625,24 @@ export default function MobileNavigation({
               >
                 <Trophy className={drawerIconClass('/challenges')} />
                 Desafios
+              </Link>
+
+              <Link
+                href="/wallet"
+                onClick={closeMenu}
+                className={drawerLinkClass('/wallet')}
+              >
+                <Wallet className={drawerIconClass('/wallet')} />
+                Carteira
+              </Link>
+
+              <Link
+                href="/gifts"
+                onClick={closeMenu}
+                className={drawerLinkClass('/gifts')}
+              >
+                <Gift className={drawerIconClass('/gifts')} />
+                Presentes
               </Link>
 
               <Link

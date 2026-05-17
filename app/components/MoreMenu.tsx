@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import {
   Bug,
   FlaskConical,
+  Gift,
   HelpCircle,
   Languages,
   Lightbulb,
@@ -15,6 +16,7 @@ import {
   Sun,
   Trophy,
   UserX,
+  Wallet,
 } from 'lucide-react'
 import { useLanguage } from './LanguageProvider'
 import type { LanguageCode } from '@/lib/translations'
@@ -101,6 +103,16 @@ export default function MoreMenu({
         <Link href="/challenges" onClick={onClose} className={itemClass('/challenges')}>
           <Trophy className={iconClass('/challenges')} />
           <span>Desafios</span>
+        </Link>
+
+        <Link href="/wallet" onClick={onClose} className={itemClass('/wallet')}>
+          <Wallet className={iconClass('/wallet')} />
+          <span>Carteira</span>
+        </Link>
+
+        <Link href="/gifts" onClick={onClose} className={itemClass('/gifts')}>
+          <Gift className={iconClass('/gifts')} />
+          <span>Presentes</span>
         </Link>
 
         <Link href="/feedback" onClick={onClose} className={itemClass('/feedback')}>

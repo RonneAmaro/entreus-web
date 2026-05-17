@@ -270,6 +270,8 @@ export default function AppSidebar({
     pathname === '/suggestions' ||
     pathname === '/challenges' ||
     pathname.startsWith('/challenges/') ||
+    pathname === '/wallet' ||
+    pathname === '/gifts' ||
     pathname === '/feedback' ||
     pathname === '/lab' ||
     pathname.startsWith('/lab/')
