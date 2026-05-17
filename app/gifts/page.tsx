@@ -5,13 +5,21 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   ArrowLeft,
   CheckCircle2,
+  Coffee,
+  Crown,
+  Flower2,
   Gift,
+  Gem,
+  Heart,
   Loader2,
+  Rocket,
   Search,
   Send,
   Sparkles,
+  Trophy,
   Wallet,
   X,
+  type LucideIcon,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
@@ -34,15 +42,15 @@ type ProfileResult = {
   avatar_url: string | null
 }
 
-const giftMarkBySlug: Record<string, string> = {
-  'rosa-digital': 'RO',
-  'cafe-virtual': 'CA',
-  'coracao-entreus': 'US',
-  aplausos: 'AP',
-  'foguete-de-apoio': 'FO',
-  'trofeu-destaque': 'TR',
-  'diamante-premium': 'DI',
-  'coroa-elite': 'EL',
+const giftIconBySlug: Record<string, LucideIcon> = {
+  'rosa-digital': Flower2,
+  'cafe-virtual': Coffee,
+  'coracao-entreus': Heart,
+  aplausos: Sparkles,
+  'foguete-de-apoio': Rocket,
+  'trofeu-destaque': Trophy,
+  'diamante-premium': Gem,
+  'coroa-elite': Crown,
 }
 
 function BrandWordmark() {
@@ -57,6 +65,39 @@ function categoryLabel(value: string) {
   if (value === 'premium') return 'Premium'
   if (value === 'elite') return 'Elite'
   return 'Standard'
+}
+
+function giftInitials(name: string) {
+  return name
+    .split(' ')
+    .map((part) => part.charAt(0))
+    .join('')
+    .slice(0, 2)
+    .toUpperCase()
+}
+
+function GiftCardVisual({ gift }: { gift: DigitalGift }) {
+  const GiftIcon = giftIconBySlug[gift.slug]
+
+  return (
+    <div className="relative flex h-24 w-24 items-center justify-center overflow-hidden rounded-3xl border border-blue-300/20 bg-gradient-to-br from-blue-500/20 via-zinc-950 to-black text-blue-100 shadow-inner shadow-blue-950/40 ring-1 ring-blue-300/20">
+      <div className="pointer-events-none absolute inset-2 rounded-[1.35rem] bg-blue-400/10 blur-xl" />
+
+      {gift.media_url ? (
+        <img
+          src={gift.media_url}
+          alt={gift.name}
+          className="relative h-full w-full rounded-3xl object-cover"
+        />
+      ) : GiftIcon ? (
+        <GiftIcon className="relative h-11 w-11 stroke-[1.8] drop-shadow-[0_8px_24px_rgba(96,165,250,0.35)]" />
+      ) : (
+        <span className="relative text-2xl font-black tracking-wide">
+          {giftInitials(gift.name)}
+        </span>
+      )}
+    </div>
+  )
 }
 
 export default function GiftsPage() {
@@ -334,13 +375,7 @@ export default function GiftsPage() {
                       <div className="pointer-events-none absolute -right-10 -top-10 h-28 w-28 rounded-full bg-blue-500/10 blur-2xl transition group-hover:bg-blue-500/20" />
                       <div className="relative">
                         <div className="flex items-start justify-between gap-3">
-                          <div className="flex h-20 w-20 items-center justify-center rounded-3xl border border-blue-300/20 bg-blue-500/15 text-2xl font-black text-blue-100 ring-1 ring-blue-300/20">
-                            {gift.media_url ? (
-                              <img src={gift.media_url} alt={gift.name} className="h-full w-full rounded-3xl object-cover" />
-                            ) : (
-                              giftMarkBySlug[gift.slug] || 'US'
-                            )}
-                          </div>
+                          <GiftCardVisual gift={gift} />
                           <span className="rounded-full border border-white/10 bg-black/30 px-3 py-1 text-xs font-black text-zinc-300">
                             {categoryLabel(gift.category)}
                           </span>
