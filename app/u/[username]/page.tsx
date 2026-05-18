@@ -163,6 +163,7 @@ export default function PublicProfilePage() {
   const [activeProfileTab, setActiveProfileTab] = useState<ProfileTab>("posts");
   const [giftModalOpen, setGiftModalOpen] = useState(false);
   const [receivedGifts, setReceivedGifts] = useState<GiftShowcaseItem[]>([]);
+  const [sharingGiftId, setSharingGiftId] = useState<string | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -1370,6 +1371,64 @@ export default function PublicProfilePage() {
     router.push("/feed");
   }
 
+  async function handleShareGiftToFeed(item: GiftShowcaseItem) {
+    if (!loggedUserId || !profile || loggedUserId !== profile.id) return;
+
+    const giftName = item.gift?.name || "um presente";
+    const senderUsername = item.sender?.username
+      ? `@${item.sender.username}`
+      : "alguem especial";
+    const content = [
+      "Ganhei um presente na EntreUS!",
+      `Recebi ${giftName} de ${senderUsername}.`,
+      "Obrigado pelo carinho!",
+    ].join("\n");
+
+    setSharingGiftId(item.id);
+    setMessage("");
+
+    const { data, error } = await supabase
+      .from("posts")
+      .insert({
+        user_id: loggedUserId,
+        content,
+        category: "cotidiano",
+        image_url: null,
+        video_url: null,
+        visibility: "public",
+        is_sensitive: false,
+      })
+      .select(
+        "id, content, category, created_at, user_id, image_url, video_url, visibility, is_sensitive",
+      )
+      .single();
+
+    setSharingGiftId(null);
+
+    if (error) {
+      setMessage("Erro ao compartilhar presente no feed: " + error.message);
+      return;
+    }
+
+    if (data) {
+      setPosts((current) => [
+        {
+          ...(data as Post),
+          profiles: {
+            username: profile.username,
+            display_name: profile.display_name,
+            avatar_url: profile.avatar_url,
+          },
+          media: [],
+        },
+        ...current,
+      ]);
+    }
+
+    setActiveProfileTab("posts");
+    setMessage("Presente compartilhado no feed.");
+  }
+
   const feedItems = useMemo<FeedItem[]>(() => {
     if (!profile) return [];
 
@@ -1978,6 +2037,9 @@ export default function PublicProfilePage() {
               gifts={receivedGifts}
               canGift={!isOwnProfile}
               onGiftClick={() => setGiftModalOpen(true)}
+              canShare={isOwnProfile}
+              sharingGiftId={sharingGiftId}
+              onShareGift={handleShareGiftToFeed}
             />
           </div>
         )}

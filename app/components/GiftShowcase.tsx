@@ -8,8 +8,10 @@ import {
   Gem,
   Gift,
   Heart,
+  Loader2,
   Rocket,
   Send,
+  Share2,
   Sparkles,
   Trophy,
   type LucideIcon,
@@ -39,6 +41,9 @@ type GiftShowcaseProps = {
   gifts: GiftShowcaseItem[]
   canGift?: boolean
   onGiftClick?: () => void
+  canShare?: boolean
+  sharingGiftId?: string | null
+  onShareGift?: (gift: GiftShowcaseItem) => void
 }
 
 const giftIconBySlug: Record<string, LucideIcon> = {
@@ -83,33 +88,37 @@ function GiftMedia({ item }: { item: GiftShowcaseItem }) {
 
   if (gift?.media_url && gift.media_type === 'video' && !mediaFailed) {
     return (
-      <video
-        src={gift.media_url}
-        poster={getGiftPoster(gift.media_url)}
-        autoPlay
-        muted
-        loop
-        playsInline
-        preload="metadata"
-        onError={() => setMediaFailed(true)}
-        className="h-28 w-full rounded-2xl bg-black object-cover"
-      />
+      <div className="flex aspect-square w-full items-center justify-center overflow-hidden rounded-2xl border border-blue-300/10 bg-gradient-to-br from-blue-500/10 via-black to-zinc-950 p-2">
+        <video
+          src={gift.media_url}
+          poster={getGiftPoster(gift.media_url)}
+          autoPlay
+          muted
+          loop
+          playsInline
+          preload="metadata"
+          onError={() => setMediaFailed(true)}
+          className="h-full w-full rounded-xl object-contain"
+        />
+      </div>
     )
   }
 
   if (gift?.media_url && !mediaFailed) {
     return (
-      <img
-        src={gift.media_url}
-        alt={gift.name}
-        onError={() => setMediaFailed(true)}
-        className="h-28 w-full rounded-2xl object-cover"
-      />
+      <div className="flex aspect-square w-full items-center justify-center overflow-hidden rounded-2xl border border-blue-300/10 bg-gradient-to-br from-blue-500/10 via-black to-zinc-950 p-2">
+        <img
+          src={gift.media_url}
+          alt={gift.name}
+          onError={() => setMediaFailed(true)}
+          className="h-full w-full rounded-xl object-contain"
+        />
+      </div>
     )
   }
 
   return (
-    <div className="flex h-28 w-full items-center justify-center rounded-2xl border border-blue-300/20 bg-gradient-to-br from-blue-500/20 via-zinc-950 to-black text-blue-100">
+    <div className="flex aspect-square w-full items-center justify-center rounded-2xl border border-blue-300/20 bg-gradient-to-br from-blue-500/20 via-zinc-950 to-black text-blue-100">
       {GiftIcon ? (
         <GiftIcon className="h-10 w-10 stroke-[1.8]" />
       ) : (
@@ -151,6 +160,9 @@ export default function GiftShowcase({
   gifts,
   canGift = false,
   onGiftClick,
+  canShare = false,
+  sharingGiftId = null,
+  onShareGift,
 }: GiftShowcaseProps) {
   return (
     <section className="overflow-hidden rounded-[2rem] border border-blue-400/20 bg-zinc-950 p-4 text-white shadow-2xl shadow-blue-950/10 ring-1 ring-white/10 sm:p-5">
@@ -229,6 +241,22 @@ export default function GiftShowcase({
               <p className="mt-3 text-xs font-semibold text-zinc-500">
                 {formatDate(item.created_at)}
               </p>
+
+              {canShare && onShareGift && (
+                <button
+                  type="button"
+                  onClick={() => onShareGift(item)}
+                  disabled={sharingGiftId === item.id}
+                  className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full border border-blue-300/25 bg-blue-500/10 px-4 py-2 text-sm font-black text-blue-100 transition hover:bg-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {sharingGiftId === item.id ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Share2 className="h-4 w-4" />
+                  )}
+                  Compartilhar no feed
+                </button>
+              )}
             </article>
           ))}
         </div>

@@ -5,7 +5,7 @@ import MobileNavigation from '../components/MobileNavigation'
 import BrandHeader from '../components/BrandHeader'
 import UserBadges from '../components/UserBadges'
 import Link from 'next/link'
-import { Bell, CheckCheck, Heart, MessageCircle, Repeat2, UserPlus } from 'lucide-react'
+import { Bell, CheckCheck, Gift, Heart, MessageCircle, Repeat2, UserPlus } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
@@ -25,6 +25,7 @@ type Notification = {
   type: string
   post_id: string | null
   comment_id: string | null
+  user_gift_id: string | null
   read: boolean | null
   created_at: string
 }
@@ -46,10 +47,32 @@ type CommentSummary = {
   content: string | null
 }
 
+type GiftSummary = {
+  id: string
+  price_paid_itacash: number
+  gift: {
+    name: string
+  } | null
+}
+
+type GiftSummaryRow = {
+  id: string
+  price_paid_itacash: number
+  gift:
+    | {
+        name: string
+      }
+    | {
+        name: string
+      }[]
+    | null
+}
+
 type NotificationView = Notification & {
   actor: ProfileSummary | null
   post: PostSummary | null
   comment: CommentSummary | null
+  gift: GiftSummary | null
 }
 
 function getInitial(text: string) {
@@ -62,6 +85,7 @@ function getNotificationIcon(type: string) {
   if (type === 'comment') return <MessageCircle className="h-5 w-5 text-blue-500" />
   if (type === 'repost') return <Repeat2 className="h-5 w-5 text-green-500" />
   if (type === 'follow') return <UserPlus className="h-5 w-5 text-green-500" />
+  if (type === 'gift_received') return <Gift className="h-5 w-5 text-blue-500" />
 
   return <Bell className="h-5 w-5 text-zinc-500" />
 }
@@ -73,6 +97,15 @@ function getNotificationActionText(type: string) {
   if (type === 'follow') return 'começou a seguir você.'
 
   return 'interagiu com você.'
+}
+
+function getNotificationActionTextView(notification: NotificationView) {
+  if (notification.type === 'gift_received') {
+    const giftName = notification.gift?.gift?.name || 'um presente'
+    return `enviou ${giftName} para voce.`
+  }
+
+  return getNotificationActionText(notification.type)
 }
 
 function getPostPreview(content: string | null) {
@@ -88,6 +121,10 @@ function getPostPreview(content: string | null) {
 function getNotificationHref(notification: NotificationView) {
   if (notification.type === 'follow' && notification.actor?.username) {
     return `/u/${notification.actor.username}`
+  }
+
+  if (notification.type === 'gift_received') {
+    return '/wallet'
   }
 
   if (notification.post_id) {
@@ -182,7 +219,7 @@ export default function NotificationsPage() {
 
     const { data, error } = await supabase
       .from('notifications')
-      .select('id, user_id, actor_id, type, post_id, comment_id, read, created_at')
+      .select('id, user_id, actor_id, type, post_id, comment_id, user_gift_id, read, created_at')
       .eq('user_id', currentUserId)
       .order('created_at', { ascending: false })
       .limit(80)
@@ -206,9 +243,14 @@ export default function NotificationsPage() {
       new Set(rawNotifications.map((item) => item.comment_id).filter(Boolean))
     ) as string[]
 
+    const userGiftIds = Array.from(
+      new Set(rawNotifications.map((item) => item.user_gift_id).filter(Boolean))
+    ) as string[]
+
     let profilesById: Record<string, ProfileSummary> = {}
     let postsById: Record<string, PostSummary> = {}
     let commentsById: Record<string, CommentSummary> = {}
+    let giftsById: Record<string, GiftSummary> = {}
 
     if (actorIds.length > 0) {
       const { data: profilesData, error: profilesError } = await supabase
@@ -267,11 +309,39 @@ export default function NotificationsPage() {
       )
     }
 
+    if (userGiftIds.length > 0) {
+      const { data: giftsData, error: giftsError } = await supabase
+        .from('user_gifts')
+        .select('id, price_paid_itacash, gift:digital_gifts(name)')
+        .in('id', userGiftIds)
+
+      if (giftsError) {
+        console.error('Erro ao carregar presentes das notificacoes:', giftsError.message)
+      }
+
+      giftsById = ((giftsData || []) as GiftSummaryRow[]).reduce(
+        (acc, gift) => {
+          const giftInfo = Array.isArray(gift.gift)
+            ? gift.gift[0] || null
+            : gift.gift
+
+          acc[gift.id] = {
+            id: gift.id,
+            price_paid_itacash: gift.price_paid_itacash,
+            gift: giftInfo,
+          }
+          return acc
+        },
+        {} as Record<string, GiftSummary>
+      )
+    }
+
     const normalizedNotifications: NotificationView[] = rawNotifications.map((item) => ({
       ...item,
       actor: item.actor_id ? profilesById[item.actor_id] || null : null,
       post: item.post_id ? postsById[item.post_id] || null : null,
       comment: item.comment_id ? commentsById[item.comment_id] || null : null,
+      gift: item.user_gift_id ? giftsById[item.user_gift_id] || null : null,
     }))
 
     setNotifications(normalizedNotifications)
@@ -479,7 +549,7 @@ export default function NotificationsPage() {
                           )}
 
                           <span className="min-w-0 break-words">
-                            {actorName} {getNotificationActionText(notification.type)}
+                            {actorName} {getNotificationActionTextView(notification)}
                           </span>
                         </p>
 
@@ -506,6 +576,12 @@ export default function NotificationsPage() {
                     {notification.post && (
                       <p className="mt-3 text-sm text-zinc-500 dark:text-zinc-400">
                         No post: “{getPostPreview(notification.post.content)}”
+                      </p>
+                    )}
+
+                    {notification.type === 'gift_received' && notification.gift && (
+                      <p className="mt-3 rounded-xl bg-blue-100 px-3 py-2 text-sm font-semibold text-blue-800 dark:bg-blue-950/40 dark:text-blue-100">
+                        Voce ganhou um presente! {notification.gift.price_paid_itacash} ItaCash recebidos.
                       </p>
                     )}
 
