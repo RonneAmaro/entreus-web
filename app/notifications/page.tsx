@@ -5,7 +5,7 @@ import MobileNavigation from '../components/MobileNavigation'
 import BrandHeader from '../components/BrandHeader'
 import UserBadges from '../components/UserBadges'
 import Link from 'next/link'
-import { Bell, CheckCheck, Gift, Heart, MessageCircle, Repeat2, UserPlus } from 'lucide-react'
+import { Bell, CheckCheck, Coins, Gift, Heart, MessageCircle, Repeat2, UserPlus } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
@@ -26,6 +26,7 @@ type Notification = {
   post_id: string | null
   comment_id: string | null
   user_gift_id: string | null
+  amount: number | null
   read: boolean | null
   created_at: string
 }
@@ -86,6 +87,7 @@ function getNotificationIcon(type: string) {
   if (type === 'repost') return <Repeat2 className="h-5 w-5 text-green-500" />
   if (type === 'follow') return <UserPlus className="h-5 w-5 text-green-500" />
   if (type === 'gift_received') return <Gift className="h-5 w-5 text-blue-500" />
+  if (type === 'tip_received') return <Coins className="h-5 w-5 text-emerald-500" />
 
   return <Bell className="h-5 w-5 text-zinc-500" />
 }
@@ -103,6 +105,9 @@ function getNotificationActionTextView(notification: NotificationView) {
   if (notification.type === 'gift_received') {
     const giftName = notification.gift?.gift?.name || 'um presente'
     return `enviou ${giftName} para voce.`
+  }
+  if (notification.type === 'tip_received') {
+    return `enviou apoio em ItaCash para voce.`
   }
 
   return getNotificationActionText(notification.type)
@@ -219,7 +224,7 @@ export default function NotificationsPage() {
 
     const { data, error } = await supabase
       .from('notifications')
-      .select('id, user_id, actor_id, type, post_id, comment_id, user_gift_id, read, created_at')
+      .select('id, user_id, actor_id, type, post_id, comment_id, user_gift_id, amount, read, created_at')
       .eq('user_id', currentUserId)
       .order('created_at', { ascending: false })
       .limit(80)
@@ -582,6 +587,12 @@ export default function NotificationsPage() {
                     {notification.type === 'gift_received' && notification.gift && (
                       <p className="mt-3 rounded-xl bg-blue-100 px-3 py-2 text-sm font-semibold text-blue-800 dark:bg-blue-950/40 dark:text-blue-100">
                         Voce ganhou um presente! {notification.gift.price_paid_itacash} ItaCash recebidos.
+                      </p>
+                    )}
+
+                    {notification.type === 'tip_received' && (
+                      <p className="mt-3 rounded-xl bg-emerald-100 px-3 py-2 text-sm font-semibold text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100">
+                        Voce recebeu apoio em ItaCash! {notification.amount || 0} ItaCash recebidos.
                       </p>
                     )}
 

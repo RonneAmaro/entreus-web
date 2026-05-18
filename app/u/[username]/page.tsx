@@ -13,8 +13,9 @@ import UserBadges from "../../components/UserBadges";
 import UserBadgesPanel from "../../components/UserBadgesPanel";
 import StartConversationButton from "../../components/StartConversationButton";
 import GiftModal from "../../components/GiftModal";
+import TipModal from "../../components/TipModal";
 import GiftShowcase, { type GiftShowcaseItem } from "../../components/GiftShowcase";
-import { ExternalLink, Flag, Gift, Loader2, MapPin, Maximize2, Search, UserCheck, UserPlus, UserX, X } from "lucide-react";
+import { Coins, ExternalLink, Flag, Gift, Loader2, MapPin, Maximize2, Search, UserCheck, UserPlus, UserX, X } from "lucide-react";
 
 type VisibilityType = "public" | "followers" | "private";
 type ProfileTab = "posts" | "replies" | "media";
@@ -162,6 +163,7 @@ export default function PublicProfilePage() {
   const [selectedAvatarUrl, setSelectedAvatarUrl] = useState<string | null>(null);
   const [activeProfileTab, setActiveProfileTab] = useState<ProfileTab>("posts");
   const [giftModalOpen, setGiftModalOpen] = useState(false);
+  const [tipModalOpen, setTipModalOpen] = useState(false);
   const [receivedGifts, setReceivedGifts] = useState<GiftShowcaseItem[]>([]);
   const [sharingGiftId, setSharingGiftId] = useState<string | null>(null);
   const [giftToShare, setGiftToShare] = useState<GiftShowcaseItem | null>(null);
@@ -1712,6 +1714,18 @@ export default function PublicProfilePage() {
         onSent={() => profile && loadPublicReceivedGifts(profile.id)}
       />
 
+      <TipModal
+        open={tipModalOpen}
+        currentUserId={loggedUserId}
+        recipient={profile ? {
+          id: profile.id,
+          name: profile.display_name || profile.username,
+          username: profile.username,
+          avatarUrl: profile.avatar_url,
+        } : null}
+        onClose={() => setTipModalOpen(false)}
+      />
+
       {giftToShare && (
         <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/75 px-4 py-6 text-white backdrop-blur-sm">
           <button
@@ -2062,6 +2076,22 @@ export default function PublicProfilePage() {
                   >
                     <Gift className="h-5 w-5" />
                     <span className="hidden sm:inline">Presentear</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setTipModalOpen(true)}
+                    disabled={isOwnProfile || hasBlockedMe || isBlockedByMe}
+                    title="Apoiar"
+                    aria-label="Apoiar"
+                    className={`inline-flex h-11 items-center justify-center gap-2 rounded-full border px-4 text-sm font-bold transition ${
+                      isOwnProfile || hasBlockedMe || isBlockedByMe
+                        ? "cursor-not-allowed border-zinc-300 bg-zinc-100 text-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-600"
+                        : "border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300 dark:hover:bg-emerald-950"
+                    }`}
+                  >
+                    <Coins className="h-5 w-5" />
+                    <span className="hidden sm:inline">Apoiar</span>
                   </button>
 
                   <button

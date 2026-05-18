@@ -1,6 +1,6 @@
 'use client'
 
-import { Bookmark, Gift, Heart, MessageCircle, Repeat2, Share2 } from 'lucide-react'
+import { Bookmark, Coins, Gift, Heart, MessageCircle, Repeat2, Share2 } from 'lucide-react'
 import { useLanguage } from './LanguageProvider'
 
 type PostActionsProps = {
@@ -12,11 +12,13 @@ type PostActionsProps = {
   saved?: boolean
   copied?: boolean
   showGift?: boolean
+  showTip?: boolean
   onLike: () => void
   onCommentClick: () => void
   onRepost?: () => void
   onSave?: () => void
   onGift?: () => void
+  onTip?: () => void
   onShare: () => void
 }
 
@@ -29,18 +31,21 @@ export default function PostActions({
   saved = false,
   copied = false,
   showGift = false,
+  showTip = false,
   onLike,
   onCommentClick,
   onRepost,
   onSave,
   onGift,
+  onTip,
   onShare,
 }: PostActionsProps) {
   const { t } = useLanguage()
+  const actionColumns = 5 + (showGift ? 1 : 0) + (showTip ? 1 : 0)
 
   return (
     <div className="mt-4 border-t border-zinc-100 pt-3 text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
-      <div className={`${showGift ? 'grid-cols-6' : 'grid-cols-5'} grid items-center gap-1 sm:flex sm:justify-between sm:gap-2`}>
+      <div className={`${actionColumns === 7 ? 'grid-cols-7' : actionColumns === 6 ? 'grid-cols-6' : 'grid-cols-5'} grid items-center gap-1 sm:flex sm:justify-between sm:gap-2`}>
         <button
           type="button"
           onClick={onLike}
@@ -116,6 +121,21 @@ export default function PostActions({
             <Gift className="h-5 w-5 shrink-0" />
             <span className="hidden font-medium sm:inline">
               Presentear
+            </span>
+          </button>
+        )}
+
+        {showTip && (
+          <button
+            type="button"
+            onClick={onTip}
+            className="group flex min-w-0 items-center justify-center gap-1.5 rounded-full px-2 py-2 text-sm text-emerald-500 transition hover:bg-emerald-50 hover:text-emerald-600 dark:hover:bg-emerald-950/30 sm:justify-start sm:gap-2 sm:px-3"
+            title="Apoiar"
+            aria-label="Apoiar"
+          >
+            <Coins className="h-5 w-5 shrink-0" />
+            <span className="hidden font-medium sm:inline">
+              Apoiar
             </span>
           </button>
         )}

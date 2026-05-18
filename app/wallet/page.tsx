@@ -38,6 +38,14 @@ type ItaCashTransaction = {
   created_at: string
 }
 
+type PurchaseRequest = {
+  id: string
+  amount_itacash: number
+  amount_brl: number
+  status: string
+  created_at: string
+}
+
 type UserGiftContext = {
   id: string
   sender_id: string
@@ -75,9 +83,19 @@ const transactionLabels: Record<string, string> = {
   reward: 'Recompensa',
   gift_sent: 'Presente enviado',
   gift_received: 'Presente recebido',
+  tip_sent: 'Apoio enviado',
+  tip_received: 'Apoio recebido',
   refund: 'Reembolso',
   adjustment: 'Ajuste',
 }
+
+const purchasePackages = [
+  { itacash: 50, brl: 5 },
+  { itacash: 100, brl: 10 },
+  { itacash: 250, brl: 25 },
+  { itacash: 500, brl: 50 },
+  { itacash: 1000, brl: 100 },
+]
 
 function BrandWordmark() {
   return (
@@ -115,6 +133,8 @@ export default function WalletPage() {
   const [wallet, setWallet] = useState<ItaCashWallet | null>(null)
   const [transactions, setTransactions] = useState<ItaCashTransaction[]>([])
   const [giftContexts, setGiftContexts] = useState<Record<string, UserGiftContext>>({})
+  const [purchaseRequests, setPurchaseRequests] = useState<PurchaseRequest[]>([])
+  const [requestingPurchase, setRequestingPurchase] = useState<number | null>(null)
 
   useEffect(() => {
     loadWallet()
@@ -218,6 +238,8 @@ export default function WalletPage() {
       return
     }
 
+    await loadPurchaseRequests(user.id)
+
     const { data: walletData, error: walletError } = await supabase
       .rpc('ensure_itacash_wallet')
 
@@ -278,11 +300,75 @@ export default function WalletPage() {
       }
     }
 
+    if (transaction.type === 'tip_sent') {
+      return {
+        title: 'Voce enviou apoio em ItaCash',
+        detail: transaction.description || 'Apoio enviado para criador',
+        tone: 'out',
+      }
+    }
+
+    if (transaction.type === 'tip_received') {
+      return {
+        title: 'Voce recebeu apoio em ItaCash',
+        detail: transaction.description || 'Apoio recebido na carteira',
+        tone: 'in',
+      }
+    }
+
     return {
       title: transactionLabels[transaction.type] || transaction.type,
       detail: transaction.description || 'Movimentacao ItaCash',
       tone: transaction.amount >= 0 ? 'in' : 'out',
     }
+  }
+
+  async function loadPurchaseRequests(currentUserId: string) {
+    const { data, error } = await supabase
+      .from('itacash_purchase_requests')
+      .select('id, amount_itacash, amount_brl, status, created_at')
+      .eq('user_id', currentUserId)
+      .order('created_at', { ascending: false })
+      .limit(8)
+
+    if (error) {
+      setPurchaseRequests([])
+      return
+    }
+
+    setPurchaseRequests((data || []) as PurchaseRequest[])
+  }
+
+  async function requestPurchase(amountItacash: number, amountBrl: number) {
+    setRequestingPurchase(amountItacash)
+    setMessage('')
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      setMessage('Entre na sua conta para solicitar compra.')
+      setRequestingPurchase(null)
+      return
+    }
+
+    const { error } = await supabase.from('itacash_purchase_requests').insert({
+      user_id: user.id,
+      amount_itacash: amountItacash,
+      amount_brl: amountBrl,
+      payment_method: 'manual_test',
+    })
+
+    setRequestingPurchase(null)
+
+    if (error) {
+      setMessage('Nao foi possivel criar solicitacao de compra: ' + error.message)
+      return
+    }
+
+    setMessage('Solicitacao de compra criada como pendente para testes.')
+    await loadPurchaseRequests(user.id)
   }
 
   return (
@@ -376,6 +462,69 @@ export default function WalletPage() {
               Aviso importante
             </div>
             ItaCash e credito interno da plataforma, nao e moeda oficial, nao e investimento financeiro e nao possui saque ou compra real neste pacote.
+          </div>
+
+          <div className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
+            <div className="rounded-[2rem] border border-blue-300/20 bg-blue-500/10 p-5 ring-1 ring-blue-300/10">
+              <div className="flex items-start gap-3">
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-blue-500/20 text-blue-100">
+                  <Coins className="h-5 w-5" />
+                </span>
+                <div>
+                  <h2 className="text-xl font-black">Comprar ItaCash</h2>
+                  <p className="mt-2 text-sm leading-6 text-blue-50/80">
+                    Compra real ainda nao esta ativa. Esta solicitacao ficara pendente para testes.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                {purchasePackages.map((item) => (
+                  <button
+                    key={item.itacash}
+                    type="button"
+                    onClick={() => requestPurchase(item.itacash, item.brl)}
+                    disabled={requestingPurchase === item.itacash}
+                    className="rounded-3xl border border-white/10 bg-black/35 p-4 text-left transition hover:border-blue-300/30 hover:bg-blue-950/20 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <p className="text-2xl font-black">{item.itacash}</p>
+                    <p className="text-sm font-bold text-blue-100/70">ItaCash</p>
+                    <p className="mt-3 text-sm text-zinc-300">
+                      {item.brl.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    </p>
+                    <span className="mt-3 inline-flex rounded-full bg-white px-3 py-1 text-xs font-black text-black">
+                      {requestingPurchase === item.itacash ? 'Criando...' : 'Solicitar compra'}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-[2rem] border border-white/10 bg-zinc-950/90 p-5 ring-1 ring-white/10">
+              <h3 className="text-lg font-black">Presentes x Apoios</h3>
+              <div className="mt-4 space-y-3 text-sm leading-6 text-zinc-300">
+                <p><span className="font-black text-blue-100">Presentear</span> envia um presente visual para a vitrine. Presentes nao aumentam saldo.</p>
+                <p><span className="font-black text-emerald-100">Apoiar</span> transfere ItaCash diretamente para a carteira do criador.</p>
+              </div>
+
+              {purchaseRequests.length > 0 && (
+                <div className="mt-5 border-t border-white/10 pt-4">
+                  <p className="mb-3 text-sm font-black text-zinc-200">Solicitacoes recentes</p>
+                  <div className="space-y-2">
+                    {purchaseRequests.map((request) => (
+                      <div key={request.id} className="rounded-2xl bg-black/35 px-3 py-2 text-sm text-zinc-300">
+                        <span className="font-black text-white">{request.amount_itacash} ItaCash</span>
+                        {' - '}
+                        {Number(request.amount_brl).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        <span className="ml-2 rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-black text-amber-100">
+                          {request.status}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="mt-8 rounded-[2rem] border border-white/10 bg-zinc-950/90 p-4 shadow-2xl shadow-black/20 ring-1 ring-white/10 sm:p-6">

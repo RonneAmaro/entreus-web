@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { Gift, Repeat2 } from 'lucide-react'
 import PostActions from './PostActions'
 import GiftModal from './GiftModal'
+import TipModal from './TipModal'
 import PostMediaGallery from './PostMediaGallery'
 import LinkPreview, { LinkedPostText } from './LinkPreview'
 import SensitiveContent from './SensitiveContent'
@@ -309,6 +310,7 @@ export default function PostCard({
 }: PostCardProps) {
   const { t, language } = useLanguage()
   const [giftModalOpen, setGiftModalOpen] = useState(false)
+  const [tipModalOpen, setTipModalOpen] = useState(false)
 
   const authorName =
     post.profiles?.display_name || post.profiles?.username || t('feed.post.user')
@@ -515,11 +517,13 @@ export default function PostCard({
         saved={saved}
         copied={copied}
         showGift={canGiftAuthor}
+        showTip={canGiftAuthor}
         onLike={onLike}
         onCommentClick={onCommentClick}
         onRepost={onRepost}
         onSave={onSave}
         onGift={() => setGiftModalOpen(true)}
+        onTip={() => setTipModalOpen(true)}
         onShare={onShare}
       />
 
@@ -533,6 +537,18 @@ export default function PostCard({
           avatarUrl: authorAvatar,
         }}
         onClose={() => setGiftModalOpen(false)}
+      />
+
+      <TipModal
+        open={tipModalOpen}
+        currentUserId={currentUserId}
+        recipient={{
+          id: post.user_id,
+          name: authorName,
+          username: post.profiles?.username,
+          avatarUrl: authorAvatar,
+        }}
+        onClose={() => setTipModalOpen(false)}
       />
 
       {footerLabel ? (
