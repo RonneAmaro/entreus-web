@@ -17,6 +17,7 @@ import {
   CreditCard,
   Edit3,
   FlaskConical,
+  Gift,
   Heart,
   ImageIcon,
   Landmark,
@@ -380,10 +381,119 @@ function getDateLocale(language: string) {
 
 function getCategoryKey(value: string | null) {
   if (!value) return 'categories.uncategorized'
+  if (value === 'gift_received') return 'Presente recebido'
   if (value === 'adulto' || value === 'sensual' || value === '18plus') {
     return 'categories.sensitive'
   }
   return `categories.${value}`
+}
+
+function getGiftPoster(mediaUrl: string | null) {
+  if (!mediaUrl) return undefined
+
+  const fileName = mediaUrl.split('/').pop()?.replace(/\.[^.]+$/, '')
+  return fileName ? `/gifts/images/${fileName}.png` : undefined
+}
+
+function parseGiftSharedContent(content: string | null) {
+  if (!content) {
+    return {
+      message: '',
+      giftName: 'Presente EntreUS',
+      sender: '',
+      receiver: '',
+    }
+  }
+
+  const lines = content.split('\n')
+  const markerIndex = lines.findIndex((line) => line.trim() === 'Presente recebido')
+  const messageLines = markerIndex >= 0 ? lines.slice(0, markerIndex) : lines
+  const metadataLines = markerIndex >= 0 ? lines.slice(markerIndex + 1) : []
+
+  const findValue = (label: string) => {
+    const row = metadataLines.find((line) => line.startsWith(`${label}:`))
+    return row?.replace(`${label}:`, '').trim() || ''
+  }
+
+  return {
+    message: messageLines.join('\n').trim(),
+    giftName: findValue('Presente') || 'Presente EntreUS',
+    sender: findValue('De'),
+    receiver: findValue('Para'),
+  }
+}
+
+function SharedGiftFeedCard({ post }: { post: Post }) {
+  const [mediaFailed, setMediaFailed] = useState(false)
+  const details = parseGiftSharedContent(post.content)
+  const mediaUrl = post.video_url || post.image_url
+  const isVideo = Boolean(post.video_url)
+
+  return (
+    <div className="mb-4 overflow-hidden rounded-[1.75rem] border border-blue-300/20 bg-zinc-950 p-4 text-white shadow-xl shadow-blue-950/10 ring-1 ring-white/10">
+      {details.message && (
+        <LinkedPostText
+          content={details.message}
+          className="mb-4 whitespace-pre-wrap break-words text-sm leading-6 text-zinc-100 sm:text-base"
+        />
+      )}
+
+      <div className="grid gap-4 sm:grid-cols-[13rem_minmax(0,1fr)] sm:items-center">
+        <div className="flex aspect-square items-center justify-center overflow-hidden rounded-3xl border border-blue-300/15 bg-gradient-to-br from-blue-500/15 via-black to-zinc-950 p-3">
+          {mediaUrl && isVideo && !mediaFailed ? (
+            <video
+              src={mediaUrl}
+              poster={getGiftPoster(mediaUrl)}
+              autoPlay
+              muted
+              loop
+              playsInline
+              preload="metadata"
+              onError={() => setMediaFailed(true)}
+              className="h-full w-full rounded-2xl object-contain"
+            />
+          ) : mediaUrl && !mediaFailed ? (
+            <img
+              src={mediaUrl}
+              alt={details.giftName}
+              onError={() => setMediaFailed(true)}
+              className="h-full w-full rounded-2xl object-contain"
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center rounded-2xl bg-blue-500/10 text-blue-100">
+              <Gift className="h-16 w-16 stroke-[1.5]" />
+            </div>
+          )}
+        </div>
+
+        <div className="min-w-0">
+          <span className="inline-flex items-center gap-2 rounded-full bg-blue-500/15 px-3 py-1 text-xs font-black uppercase tracking-[0.16em] text-blue-100 ring-1 ring-blue-300/20">
+            <Gift className="h-3.5 w-3.5" />
+            Presente recebido
+          </span>
+
+          <h3 className="mt-3 text-2xl font-black leading-tight text-white">
+            {details.giftName}
+          </h3>
+
+          <div className="mt-4 grid gap-2 text-sm text-zinc-300">
+            {details.sender && (
+              <p>
+                <span className="font-black text-blue-100">Enviado por:</span>{' '}
+                {details.sender}
+              </p>
+            )}
+            {details.receiver && (
+              <p>
+                <span className="font-black text-blue-100">Recebido por:</span>{' '}
+                {details.receiver}
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 const COMMENT_EMOJI_GROUPS = [
@@ -2597,6 +2707,7 @@ function FeedContent() {
                 const isFollowingAuthor = followStateMap.get(post.user_id) || false
                 const isHighlighted = highlightedPostId === post.id
                 const postMedia = getPostMedia(post)
+                const isSharedGiftPost = post.category === 'gift_received'
 
                 const isSensitivePostItem = isSensitivePost(post)
 
@@ -2727,7 +2838,9 @@ function FeedContent() {
 
                     <div className="mb-3 flex flex-wrap items-center gap-2">
                       <p className="text-sm text-zinc-500">
-                        {t(getCategoryKey(post.category))}
+                        {post.category === 'gift_received'
+                          ? 'Presente recebido'
+                          : t(getCategoryKey(post.category))}
                       </p>
 
                       <span className="rounded-full bg-zinc-100/80 px-2.5 py-1 text-xs font-semibold text-zinc-600 ring-1 ring-zinc-200/70 dark:bg-zinc-900/80 dark:text-zinc-300 dark:ring-zinc-800/70">
@@ -2791,7 +2904,9 @@ function FeedContent() {
                       <>
                         {shouldShowSensitiveWarning ? (
                           <SensitiveContent>
-                            {post.content && (
+                            {isSharedGiftPost ? (
+                              <SharedGiftFeedCard post={post} />
+                            ) : post.content && (
                               <LinkedPostText
                                 content={post.content}
                                 className="mb-3 whitespace-pre-wrap break-words text-sm text-zinc-800 dark:text-zinc-200 sm:text-base"
@@ -2802,11 +2917,13 @@ function FeedContent() {
 
                             <LinkPreview content={post.content} />
 
-                            <PostMediaGallery media={postMedia} />
+                            {!isSharedGiftPost && <PostMediaGallery media={postMedia} />}
                           </SensitiveContent>
                         ) : (
                           <>
-                            {post.content && (
+                            {isSharedGiftPost ? (
+                              <SharedGiftFeedCard post={post} />
+                            ) : post.content && (
                               <LinkedPostText
                                 content={post.content}
                                 className="mb-3 whitespace-pre-wrap break-words text-sm text-zinc-800 dark:text-zinc-200 sm:text-base"
@@ -2817,7 +2934,7 @@ function FeedContent() {
 
                             <LinkPreview content={post.content} />
 
-                            <PostMediaGallery media={postMedia} />
+                            {!isSharedGiftPost && <PostMediaGallery media={postMedia} />}
                           </>
                         )}
                       </>

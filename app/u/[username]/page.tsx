@@ -14,7 +14,7 @@ import UserBadgesPanel from "../../components/UserBadgesPanel";
 import StartConversationButton from "../../components/StartConversationButton";
 import GiftModal from "../../components/GiftModal";
 import GiftShowcase, { type GiftShowcaseItem } from "../../components/GiftShowcase";
-import { ExternalLink, Flag, Gift, MapPin, Maximize2, Search, UserCheck, UserPlus, UserX, X } from "lucide-react";
+import { ExternalLink, Flag, Gift, Loader2, MapPin, Maximize2, Search, UserCheck, UserPlus, UserX, X } from "lucide-react";
 
 type VisibilityType = "public" | "followers" | "private";
 type ProfileTab = "posts" | "replies" | "media";
@@ -164,6 +164,9 @@ export default function PublicProfilePage() {
   const [giftModalOpen, setGiftModalOpen] = useState(false);
   const [receivedGifts, setReceivedGifts] = useState<GiftShowcaseItem[]>([]);
   const [sharingGiftId, setSharingGiftId] = useState<string | null>(null);
+  const [giftToShare, setGiftToShare] = useState<GiftShowcaseItem | null>(null);
+  const [shareGiftText, setShareGiftText] = useState("");
+  const [shareGiftMediaFailed, setShareGiftMediaFailed] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -1371,17 +1374,47 @@ export default function PublicProfilePage() {
     router.push("/feed");
   }
 
-  async function handleShareGiftToFeed(item: GiftShowcaseItem) {
-    if (!loggedUserId || !profile || loggedUserId !== profile.id) return;
+  function getGiftPoster(mediaUrl: string | null | undefined) {
+    if (!mediaUrl) return undefined;
+    const fileName = mediaUrl.split("/").pop()?.replace(/\.[^.]+$/, "");
+    return fileName ? `/gifts/images/${fileName}.png` : undefined;
+  }
 
+  function openShareGiftModal(item: GiftShowcaseItem) {
     const giftName = item.gift?.name || "um presente";
     const senderUsername = item.sender?.username
       ? `@${item.sender.username}`
       : "alguem especial";
+
+    setGiftToShare(item);
+    setShareGiftText(
+      `Ganhei um presente na EntreUS! Recebi ${giftName} de ${senderUsername}.`,
+    );
+    setShareGiftMediaFailed(false);
+    setMessage("");
+  }
+
+  async function handleShareGiftToFeed() {
+    if (!loggedUserId || !profile || loggedUserId !== profile.id || !giftToShare) {
+      return;
+    }
+
+    const item = giftToShare;
+    const giftName = item.gift?.name || "Presente EntreUS";
+    const senderUsername = item.sender?.username
+      ? `@${item.sender.username}`
+      : "alguem especial";
+    const receiverUsername = `@${profile.username}`;
+    const mediaUrl = item.gift?.media_url || null;
+    const isVideo = item.gift?.media_type === "video";
     const content = [
-      "Ganhei um presente na EntreUS!",
-      `Recebi ${giftName} de ${senderUsername}.`,
-      "Obrigado pelo carinho!",
+      shareGiftText.trim() ||
+        `Ganhei um presente na EntreUS! Recebi ${giftName} de ${senderUsername}.`,
+      "",
+      "Presente recebido",
+      `Presente: ${giftName}`,
+      `De: ${senderUsername}`,
+      `Para: ${receiverUsername}`,
     ].join("\n");
 
     setSharingGiftId(item.id);
@@ -1392,9 +1425,9 @@ export default function PublicProfilePage() {
       .insert({
         user_id: loggedUserId,
         content,
-        category: "cotidiano",
-        image_url: null,
-        video_url: null,
+        category: "gift_received",
+        image_url: mediaUrl && !isVideo ? mediaUrl : null,
+        video_url: mediaUrl && isVideo ? mediaUrl : null,
         visibility: "public",
         is_sensitive: false,
       })
@@ -1419,12 +1452,25 @@ export default function PublicProfilePage() {
             display_name: profile.display_name,
             avatar_url: profile.avatar_url,
           },
-          media: [],
+          media: mediaUrl
+            ? [
+                {
+                  id: `${data.id}-shared-gift-media`,
+                  post_id: data.id,
+                  user_id: loggedUserId,
+                  media_url: mediaUrl,
+                  media_type: isVideo ? "video" : "image",
+                  position: 0,
+                },
+              ]
+            : [],
         },
         ...current,
       ]);
     }
 
+    setGiftToShare(null);
+    setShareGiftText("");
     setActiveProfileTab("posts");
     setMessage("Presente compartilhado no feed.");
   }
@@ -1665,6 +1711,122 @@ export default function PublicProfilePage() {
         onClose={() => setGiftModalOpen(false)}
         onSent={() => profile && loadPublicReceivedGifts(profile.id)}
       />
+
+      {giftToShare && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/75 px-4 py-6 text-white backdrop-blur-sm">
+          <button
+            type="button"
+            className="absolute inset-0 cursor-default"
+            aria-label="Fechar compartilhamento"
+            onClick={() => setGiftToShare(null)}
+          />
+
+          <div className="relative z-10 max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-[2rem] border border-white/10 bg-zinc-950 p-5 shadow-2xl shadow-black/50 ring-1 ring-white/10">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.22em] text-blue-300">
+                  Compartilhar presente
+                </p>
+                <h2 className="mt-2 text-2xl font-black">
+                  Personalize seu agradecimento
+                </h2>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setGiftToShare(null)}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/5 transition hover:bg-white/10"
+                aria-label="Fechar"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="mt-5 grid gap-5 sm:grid-cols-[15rem_minmax(0,1fr)] sm:items-start">
+              <div className="flex aspect-square items-center justify-center overflow-hidden rounded-[1.75rem] border border-blue-300/20 bg-gradient-to-br from-blue-500/15 via-black to-zinc-950 p-3">
+                {giftToShare.gift?.media_url &&
+                giftToShare.gift.media_type === "video" &&
+                !shareGiftMediaFailed ? (
+                  <video
+                    src={giftToShare.gift.media_url}
+                    poster={getGiftPoster(giftToShare.gift.media_url)}
+                    autoPlay
+                    muted
+                    loop
+                    playsInline
+                    preload="metadata"
+                    onError={() => setShareGiftMediaFailed(true)}
+                    className="h-full w-full rounded-2xl object-contain"
+                  />
+                ) : giftToShare.gift?.media_url && !shareGiftMediaFailed ? (
+                  <img
+                    src={giftToShare.gift.media_url}
+                    alt={giftToShare.gift.name}
+                    onError={() => setShareGiftMediaFailed(true)}
+                    className="h-full w-full rounded-2xl object-contain"
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center rounded-2xl bg-blue-500/10 text-blue-100">
+                    <Gift className="h-16 w-16 stroke-[1.5]" />
+                  </div>
+                )}
+              </div>
+
+              <div className="min-w-0">
+                <span className="inline-flex rounded-full bg-blue-500/10 px-3 py-1 text-xs font-black uppercase tracking-[0.16em] text-blue-100 ring-1 ring-blue-300/20">
+                  Presente recebido
+                </span>
+                <h3 className="mt-3 text-2xl font-black">
+                  {giftToShare.gift?.name || "Presente EntreUS"}
+                </h3>
+                <p className="mt-2 text-sm text-zinc-400">
+                  De{" "}
+                  {giftToShare.sender?.username
+                    ? `@${giftToShare.sender.username}`
+                    : "alguem especial"}{" "}
+                  para @{profile.username}
+                </p>
+              </div>
+            </div>
+
+            <label className="mt-5 block">
+              <span className="text-sm font-black">
+                Texto do post
+              </span>
+              <textarea
+                value={shareGiftText}
+                onChange={(event) => setShareGiftText(event.target.value)}
+                rows={5}
+                className="mt-2 w-full resize-none rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm font-semibold text-white outline-none transition placeholder:text-zinc-500 focus:border-blue-300"
+              />
+            </label>
+
+            <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setGiftToShare(null)}
+                className="inline-flex items-center justify-center rounded-full border border-white/10 px-5 py-3 text-sm font-black text-zinc-200 transition hover:bg-white/10"
+              >
+                Cancelar
+              </button>
+
+              <button
+                type="button"
+                onClick={handleShareGiftToFeed}
+                disabled={sharingGiftId === giftToShare.id}
+                className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-black text-black transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {sharingGiftId === giftToShare.id ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Gift className="h-4 w-4" />
+                )}
+                Publicar no feed
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <section className="w-full overflow-x-hidden px-3 py-16 pb-24 sm:px-6 sm:py-20 lg:mx-auto lg:max-w-[1280px] lg:px-0 lg:py-8 lg:pl-[104px]">
         <BrandHeader
@@ -2039,7 +2201,7 @@ export default function PublicProfilePage() {
               onGiftClick={() => setGiftModalOpen(true)}
               canShare={isOwnProfile}
               sharingGiftId={sharingGiftId}
-              onShareGift={handleShareGiftToFeed}
+              onShareGift={openShareGiftModal}
             />
           </div>
         )}

@@ -95,14 +95,14 @@ function GiftVisual({ gift }: { gift: DigitalGift }) {
           playsInline
           preload="metadata"
           onError={() => setMediaFailed(true)}
-          className="h-full w-full rounded-2xl bg-black object-cover"
+          className="h-full w-full rounded-2xl bg-black object-contain"
         />
       ) : gift.media_url && !mediaFailed ? (
         <img
           src={gift.media_url}
           alt={gift.name}
           onError={() => setMediaFailed(true)}
-          className="h-full w-full rounded-2xl object-cover"
+          className="h-full w-full rounded-2xl object-contain"
         />
       ) : GiftIcon ? (
         <GiftIcon className="h-8 w-8 stroke-[1.8]" />
@@ -132,14 +132,14 @@ function GiftFeaturedPreview({ gift }: { gift: DigitalGift }) {
             playsInline
             preload="metadata"
             onError={() => setMediaFailed(true)}
-            className="relative h-full w-full object-cover"
+            className="relative h-full w-full object-contain"
           />
         ) : gift.media_url && !mediaFailed ? (
           <img
             src={gift.media_url}
             alt={gift.name}
             onError={() => setMediaFailed(true)}
-            className="relative h-full w-full object-cover"
+            className="relative h-full w-full object-contain"
           />
         ) : GiftIcon ? (
           <div className="relative flex h-full w-full items-center justify-center text-blue-100">

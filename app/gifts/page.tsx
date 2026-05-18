@@ -101,14 +101,14 @@ function GiftCardVisual({ gift }: { gift: DigitalGift }) {
           playsInline
           preload="metadata"
           onError={() => setMediaFailed(true)}
-          className="relative h-full w-full rounded-3xl bg-black object-cover"
+          className="relative h-full w-full rounded-3xl bg-black object-contain"
         />
       ) : gift.media_url && !mediaFailed ? (
         <img
           src={gift.media_url}
           alt={gift.name}
           onError={() => setMediaFailed(true)}
-          className="relative h-full w-full rounded-3xl object-cover"
+          className="relative h-full w-full rounded-3xl object-contain"
         />
       ) : GiftIcon ? (
         <GiftIcon className="relative h-11 w-11 stroke-[1.8] drop-shadow-[0_8px_24px_rgba(96,165,250,0.35)]" />
@@ -140,14 +140,14 @@ function GiftModalPreview({ gift }: { gift: DigitalGift }) {
             playsInline
             preload="metadata"
             onError={() => setMediaFailed(true)}
-            className="relative h-full w-full object-cover"
+            className="relative h-full w-full object-contain"
           />
         ) : gift.media_url && !mediaFailed ? (
           <img
             src={gift.media_url}
             alt={gift.name}
             onError={() => setMediaFailed(true)}
-            className="relative h-full w-full object-cover"
+            className="relative h-full w-full object-contain"
           />
         ) : GiftIcon ? (
           <div className="relative flex h-full w-full items-center justify-center text-blue-100">
