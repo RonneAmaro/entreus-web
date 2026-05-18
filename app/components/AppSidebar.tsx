@@ -13,6 +13,7 @@ import {
   MessageCircle,
   MoreHorizontal,
   PenLine,
+  ShieldCheck,
   User,
   Video,
 } from 'lucide-react'
@@ -66,6 +67,7 @@ export default function AppSidebar({
   const [moreMenuAnchor, setMoreMenuAnchor] = useState<'nav' | 'profile' | null>(null)
   const [moreMenuPosition, setMoreMenuPosition] = useState({ left: 96, top: 12 })
   const [internalUnreadMessagesCount, setInternalUnreadMessagesCount] = useState(0)
+  const [isAdmin, setIsAdmin] = useState(false)
 
   const visibleUnreadMessagesCount =
     unreadMessagesCount ?? internalUnreadMessagesCount
@@ -83,6 +85,34 @@ export default function AppSidebar({
       window.clearInterval(interval)
     }
   }, [pathname, unreadMessagesCount])
+
+  useEffect(() => {
+    loadAdminStatus()
+  }, [])
+
+  async function loadAdminStatus() {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      setIsAdmin(false)
+      return
+    }
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    if (error) {
+      setIsAdmin(false)
+      return
+    }
+
+    setIsAdmin(data?.role === 'admin')
+  }
 
   async function loadUnreadMessagesCount() {
     const {
@@ -264,6 +294,8 @@ export default function AppSidebar({
 
   const isMoreActive =
     pathname === '/privacy' ||
+    pathname === '/admin' ||
+    pathname.startsWith('/admin/') ||
     pathname === '/blocked' ||
     pathname === '/settings' ||
     pathname === '/help' ||
@@ -363,6 +395,13 @@ export default function AppSidebar({
             <span className={navTextClass}>{t('nav.profile')}</span>
           </Link>
 
+          {isAdmin && (
+            <Link href="/admin" className={`${navLinkClass('/admin')} ${collapsedCenterClass}`}>
+              <ShieldCheck className={navIconClass('/admin')} />
+              <span className={navTextClass}>Admin</span>
+            </Link>
+          )}
+
           <div className="relative">
             <button
               ref={navMoreButtonRef}
@@ -398,6 +437,7 @@ export default function AppSidebar({
                   onToggleTheme={onToggleTheme}
                   onLogout={onLogout}
                   onClose={() => setMoreMenuAnchor(null)}
+                  isAdmin={isAdmin}
                 />
               </>,
               document.body
@@ -477,6 +517,7 @@ export default function AppSidebar({
                 onToggleTheme={onToggleTheme}
                 onLogout={onLogout}
                 onClose={() => setMoreMenuAnchor(null)}
+                isAdmin={isAdmin}
               />
             </>,
             document.body

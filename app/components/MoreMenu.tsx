@@ -14,6 +14,7 @@ import {
   Moon,
   Settings,
   Shield,
+  ShieldCheck,
   Sun,
   Trophy,
   UserX,
@@ -32,6 +33,7 @@ type MoreMenuProps = {
   onToggleTheme: () => void
   onLogout: () => void
   onClose: () => void
+  isAdmin?: boolean
 }
 
 export default function MoreMenu({
@@ -41,6 +43,7 @@ export default function MoreMenu({
   onToggleTheme,
   onLogout,
   onClose,
+  isAdmin = false,
 }: MoreMenuProps) {
   const pathname = usePathname()
   const { language, languages, setLanguage, t } = useLanguage()
@@ -77,6 +80,13 @@ export default function MoreMenu({
       </div>
 
       <div className="space-y-1">
+        {isAdmin && (
+          <Link href="/admin" onClick={onClose} className={itemClass('/admin')}>
+            <ShieldCheck className={iconClass('/admin')} />
+            <span>Admin</span>
+          </Link>
+        )}
+
         <Link
           href="/lab"
           onClick={onClose}

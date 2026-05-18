@@ -25,6 +25,7 @@ import {
   Plus,
   Settings,
   Shield,
+  ShieldCheck,
   Sun,
   Trophy,
   User,
@@ -87,6 +88,7 @@ export default function MobileNavigation({
   const [openMoreOptions, setOpenMoreOptions] = useState(false)
   const [openPostMenu, setOpenPostMenu] = useState(false)
   const [internalUnreadMessagesCount, setInternalUnreadMessagesCount] = useState(0)
+  const [isAdmin, setIsAdmin] = useState(false)
 
   const isMessagesPage = pathname === '/messages' || pathname.startsWith('/messages/')
 
@@ -106,6 +108,34 @@ export default function MobileNavigation({
       window.clearInterval(interval)
     }
   }, [pathname, unreadMessagesCount])
+
+  useEffect(() => {
+    loadAdminStatus()
+  }, [])
+
+  async function loadAdminStatus() {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      setIsAdmin(false)
+      return
+    }
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    if (error) {
+      setIsAdmin(false)
+      return
+    }
+
+    setIsAdmin(data?.role === 'admin')
+  }
 
   async function loadUnreadMessagesCount() {
     const {
@@ -311,6 +341,17 @@ export default function MobileNavigation({
             </div>
 
             <div className="space-y-1">
+              {isAdmin && (
+                <Link
+                  href="/admin"
+                  onClick={closeMoreOptions}
+                  className={drawerLinkClass('/admin')}
+                >
+                  <ShieldCheck className={drawerIconClass('/admin')} />
+                  Admin
+                </Link>
+              )}
+
               <Link
                 href="/lab"
                 onClick={closeMoreOptions}
@@ -530,6 +571,17 @@ export default function MobileNavigation({
                 <User className={drawerIconClass('/profile')} />
                 {t('nav.myProfile')}
               </Link>
+
+              {isAdmin && (
+                <Link
+                  href="/admin"
+                  onClick={closeMenu}
+                  className={drawerLinkClass('/admin')}
+                >
+                  <ShieldCheck className={drawerIconClass('/admin')} />
+                  Admin
+                </Link>
+              )}
 
               <Link
                 href="/feed"
