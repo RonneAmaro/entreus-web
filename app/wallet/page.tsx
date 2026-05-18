@@ -35,6 +35,12 @@ type ItaCashTransaction = {
   description: string | null
   reference_type: string | null
   reference_id: string | null
+  metadata: {
+    promotional?: boolean
+    withdrawable?: boolean
+    reason?: string | null
+    campaign?: string | null
+  } | null
   created_at: string
 }
 
@@ -254,7 +260,7 @@ export default function WalletPage() {
 
     const { data: transactionData, error: transactionError } = await supabase
       .from('itacash_transactions')
-      .select('id, wallet_id, user_id, type, amount, balance_after, description, reference_type, reference_id, created_at')
+      .select('id, wallet_id, user_id, type, amount, balance_after, description, reference_type, reference_id, metadata, created_at')
       .eq('wallet_id', loadedWallet.id)
       .order('created_at', { ascending: false })
       .limit(80)
@@ -321,6 +327,20 @@ export default function WalletPage() {
         title: 'Compra manual de ItaCash confirmada',
         detail: transaction.description || 'Credito aprovado pela equipe',
         tone: 'in',
+      }
+    }
+
+    if (transaction.type === 'admin_credit' && transaction.metadata?.promotional) {
+      const details = [
+        transaction.metadata.reason ? `Motivo: ${transaction.metadata.reason}` : '',
+        transaction.metadata.campaign ? `Campanha: ${transaction.metadata.campaign}` : '',
+      ].filter(Boolean)
+
+      return {
+        title: 'Credito promocional EntreUS',
+        detail: details.length > 0 ? details.join(' | ') : 'Credito promocional para uso na plataforma',
+        tone: 'in',
+        promotional: true,
       }
     }
 
@@ -571,6 +591,11 @@ export default function WalletPage() {
                                 </span>
                               </div>
                               <p className="mt-1 text-sm leading-6 text-zinc-300">{context.detail}</p>
+                              {context.promotional && (
+                                <p className="mt-2 inline-flex rounded-full bg-blue-500/10 px-3 py-1 text-xs font-black text-blue-200 ring-1 ring-blue-300/15">
+                                  Credito promocional para uso na plataforma
+                                </p>
+                              )}
                               <p className="mt-2 text-xs font-semibold text-zinc-500">{formatDate(transaction.created_at)}</p>
                             </div>
 

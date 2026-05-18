@@ -88,6 +88,7 @@ function getNotificationIcon(type: string) {
   if (type === 'follow') return <UserPlus className="h-5 w-5 text-green-500" />
   if (type === 'gift_received') return <Gift className="h-5 w-5 text-blue-500" />
   if (type === 'tip_received') return <Coins className="h-5 w-5 text-emerald-500" />
+  if (type === 'promotional_itacash') return <Coins className="h-5 w-5 text-blue-500" />
 
   return <Bell className="h-5 w-5 text-zinc-500" />
 }
@@ -109,6 +110,9 @@ function getNotificationActionTextView(notification: NotificationView) {
   if (notification.type === 'tip_received') {
     return `enviou apoio em ItaCash para voce.`
   }
+  if (notification.type === 'promotional_itacash') {
+    return `Voce recebeu ItaCash promocional.`
+  }
 
   return getNotificationActionText(notification.type)
 }
@@ -128,7 +132,7 @@ function getNotificationHref(notification: NotificationView) {
     return `/u/${notification.actor.username}`
   }
 
-  if (notification.type === 'gift_received') {
+  if (notification.type === 'gift_received' || notification.type === 'promotional_itacash') {
     return '/wallet'
   }
 
@@ -593,6 +597,12 @@ export default function NotificationsPage() {
                     {notification.type === 'tip_received' && (
                       <p className="mt-3 rounded-xl bg-emerald-100 px-3 py-2 text-sm font-semibold text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100">
                         Voce recebeu apoio em ItaCash! {notification.amount || 0} ItaCash recebidos.
+                      </p>
+                    )}
+
+                    {notification.type === 'promotional_itacash' && (
+                      <p className="mt-3 rounded-xl bg-blue-100 px-3 py-2 text-sm font-semibold text-blue-800 dark:bg-blue-950/40 dark:text-blue-100">
+                        Voce recebeu ItaCash promocional! {notification.amount || 0} ItaCash para usar na plataforma.
                       </p>
                     )}
 
