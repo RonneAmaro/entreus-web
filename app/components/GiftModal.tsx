@@ -72,13 +72,38 @@ function giftInitials(name: string) {
     .toUpperCase()
 }
 
+function getGiftPoster(mediaUrl: string | null) {
+  if (!mediaUrl) return undefined
+
+  const fileName = mediaUrl.split('/').pop()?.replace(/\.[^.]+$/, '')
+  return fileName ? `/gifts/images/${fileName}.png` : undefined
+}
+
 function GiftVisual({ gift }: { gift: DigitalGift }) {
   const GiftIcon = giftIconBySlug[gift.slug]
+  const [mediaFailed, setMediaFailed] = useState(false)
 
   return (
     <div className="relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-blue-300/20 bg-gradient-to-br from-blue-500/20 via-zinc-950 to-black text-blue-100 ring-1 ring-blue-300/20">
-      {gift.media_url ? (
-        <img src={gift.media_url} alt={gift.name} className="h-full w-full rounded-2xl object-cover" />
+      {gift.media_url && gift.media_type === 'video' && !mediaFailed ? (
+        <video
+          src={gift.media_url}
+          poster={getGiftPoster(gift.media_url)}
+          autoPlay
+          muted
+          loop
+          playsInline
+          preload="metadata"
+          onError={() => setMediaFailed(true)}
+          className="h-full w-full rounded-2xl bg-black object-cover"
+        />
+      ) : gift.media_url && !mediaFailed ? (
+        <img
+          src={gift.media_url}
+          alt={gift.name}
+          onError={() => setMediaFailed(true)}
+          className="h-full w-full rounded-2xl object-cover"
+        />
       ) : GiftIcon ? (
         <GiftIcon className="h-8 w-8 stroke-[1.8]" />
       ) : (

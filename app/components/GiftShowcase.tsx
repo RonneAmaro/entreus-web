@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import {
   Coffee,
   Crown,
@@ -68,29 +69,40 @@ function initials(text: string) {
     .toUpperCase()
 }
 
+function getGiftPoster(mediaUrl: string | null) {
+  if (!mediaUrl) return undefined
+
+  const fileName = mediaUrl.split('/').pop()?.replace(/\.[^.]+$/, '')
+  return fileName ? `/gifts/images/${fileName}.png` : undefined
+}
+
 function GiftMedia({ item }: { item: GiftShowcaseItem }) {
   const gift = item.gift
   const GiftIcon = gift?.slug ? giftIconBySlug[gift.slug] : Gift
+  const [mediaFailed, setMediaFailed] = useState(false)
 
-  if (gift?.media_url && gift.media_type === 'video') {
+  if (gift?.media_url && gift.media_type === 'video' && !mediaFailed) {
     return (
       <video
         src={gift.media_url}
+        poster={getGiftPoster(gift.media_url)}
         autoPlay
         muted
         loop
         playsInline
         preload="metadata"
+        onError={() => setMediaFailed(true)}
         className="h-28 w-full rounded-2xl bg-black object-cover"
       />
     )
   }
 
-  if (gift?.media_url) {
+  if (gift?.media_url && !mediaFailed) {
     return (
       <img
         src={gift.media_url}
         alt={gift.name}
+        onError={() => setMediaFailed(true)}
         className="h-28 w-full rounded-2xl object-cover"
       />
     )
