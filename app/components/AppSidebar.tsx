@@ -271,6 +271,7 @@ export default function AppSidebar({
     pathname === '/challenges' ||
     pathname.startsWith('/challenges/') ||
     pathname === '/wallet' ||
+    pathname === '/buy-itacash' ||
     pathname === '/gifts' ||
     pathname === '/feedback' ||
     pathname === '/lab' ||

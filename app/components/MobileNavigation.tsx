@@ -8,6 +8,7 @@ import {
   Bell,
   Bookmark,
   Bug,
+  Coins,
   Compass,
   Gift,
   Home,
@@ -365,6 +366,15 @@ export default function MobileNavigation({
               </Link>
 
               <Link
+                href="/buy-itacash"
+                onClick={closeMoreOptions}
+                className={drawerLinkClass('/buy-itacash')}
+              >
+                <Coins className={drawerIconClass('/buy-itacash')} />
+                Comprar ItaCash
+              </Link>
+
+              <Link
                 href="/gifts"
                 onClick={closeMoreOptions}
                 className={drawerLinkClass('/gifts')}
@@ -634,6 +644,15 @@ export default function MobileNavigation({
               >
                 <Wallet className={drawerIconClass('/wallet')} />
                 Carteira
+              </Link>
+
+              <Link
+                href="/buy-itacash"
+                onClick={closeMenu}
+                className={drawerLinkClass('/buy-itacash')}
+              >
+                <Coins className={drawerIconClass('/buy-itacash')} />
+                Comprar ItaCash
               </Link>
 
               <Link

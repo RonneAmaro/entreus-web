@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   Bug,
+  Coins,
   FlaskConical,
   Gift,
   HelpCircle,
@@ -108,6 +109,11 @@ export default function MoreMenu({
         <Link href="/wallet" onClick={onClose} className={itemClass('/wallet')}>
           <Wallet className={iconClass('/wallet')} />
           <span>Carteira</span>
+        </Link>
+
+        <Link href="/buy-itacash" onClick={onClose} className={itemClass('/buy-itacash')}>
+          <Coins className={iconClass('/buy-itacash')} />
+          <span>Comprar ItaCash</span>
         </Link>
 
         <Link href="/gifts" onClick={onClose} className={itemClass('/gifts')}>
