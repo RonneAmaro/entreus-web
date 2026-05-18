@@ -13,6 +13,7 @@ import UserBadges from "../../components/UserBadges";
 import UserBadgesPanel from "../../components/UserBadgesPanel";
 import StartConversationButton from "../../components/StartConversationButton";
 import GiftModal from "../../components/GiftModal";
+import GiftShowcase, { type GiftShowcaseItem } from "../../components/GiftShowcase";
 import { ExternalLink, Flag, Gift, MapPin, Maximize2, Search, UserCheck, UserPlus, UserX, X } from "lucide-react";
 
 type VisibilityType = "public" | "followers" | "private";
@@ -161,6 +162,7 @@ export default function PublicProfilePage() {
   const [selectedAvatarUrl, setSelectedAvatarUrl] = useState<string | null>(null);
   const [activeProfileTab, setActiveProfileTab] = useState<ProfileTab>("posts");
   const [giftModalOpen, setGiftModalOpen] = useState(false);
+  const [receivedGifts, setReceivedGifts] = useState<GiftShowcaseItem[]>([]);
 
   useEffect(() => {
     setMounted(true);
@@ -302,12 +304,14 @@ export default function PublicProfilePage() {
           loadBookmarks(user.id),
           loadAllReposts(profileData),
           loadUnreadNotificationsCount(user.id),
+          loadPublicReceivedGifts(profileData.id),
         ]);
       } else {
         setPosts([]);
         setFollowersCount(0);
         setFollowingCount(0);
         setIsFollowing(false);
+        setReceivedGifts([]);
       }
 
       await loadUnreadNotificationsCount(user.id);
@@ -357,6 +361,105 @@ export default function PublicProfilePage() {
     }
 
     setFollowingCount(followingData?.length || 0);
+  }
+
+  async function loadPublicReceivedGifts(profileId: string) {
+    type GiftRow = {
+      id: string;
+      gift_id: string;
+      sender_id: string;
+      message: string | null;
+      price_paid_itacash: number;
+      created_at: string;
+    };
+
+    type DigitalGiftRow = {
+      id: string;
+      name: string;
+      slug: string;
+      description: string | null;
+      media_url: string | null;
+      media_type: string | null;
+    };
+
+    type SenderProfileRow = {
+      id: string;
+      username: string | null;
+      display_name: string | null;
+      avatar_url: string | null;
+    };
+
+    const { data, error } = await supabase
+      .from("user_gifts")
+      .select("id, gift_id, sender_id, message, price_paid_itacash, created_at")
+      .eq("receiver_id", profileId)
+      .eq("visibility", "public")
+      .order("created_at", { ascending: false })
+      .limit(12);
+
+    if (error) {
+      console.error("Erro ao carregar presentes recebidos:", error.message);
+      setReceivedGifts([]);
+      return;
+    }
+
+    const giftRows = (data || []) as GiftRow[];
+
+    if (giftRows.length === 0) {
+      setReceivedGifts([]);
+      return;
+    }
+
+    const giftIds = Array.from(new Set(giftRows.map((item) => item.gift_id)));
+    const senderIds = Array.from(new Set(giftRows.map((item) => item.sender_id)));
+
+    const [giftsResult, sendersResult] = await Promise.all([
+      giftIds.length > 0
+        ? supabase
+            .from("digital_gifts")
+            .select("id, name, slug, description, media_url, media_type")
+            .in("id", giftIds)
+        : Promise.resolve({ data: [], error: null }),
+      senderIds.length > 0
+        ? supabase
+            .from("profiles")
+            .select("id, username, display_name, avatar_url")
+            .in("id", senderIds)
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+
+    if (giftsResult.error) {
+      console.error("Erro ao carregar catalogo de presentes:", giftsResult.error.message);
+    }
+
+    if (sendersResult.error) {
+      console.error("Erro ao carregar remetentes dos presentes:", sendersResult.error.message);
+    }
+
+    const giftsById = ((giftsResult.data || []) as DigitalGiftRow[]).reduce<
+      Record<string, DigitalGiftRow>
+    >((acc, item) => {
+      acc[item.id] = item;
+      return acc;
+    }, {});
+
+    const sendersById = ((sendersResult.data || []) as SenderProfileRow[]).reduce<
+      Record<string, SenderProfileRow>
+    >((acc, item) => {
+      acc[item.id] = item;
+      return acc;
+    }, {});
+
+    setReceivedGifts(
+      giftRows.map((item) => ({
+        id: item.id,
+        message: item.message,
+        price_paid_itacash: item.price_paid_itacash,
+        created_at: item.created_at,
+        gift: giftsById[item.gift_id] || null,
+        sender: sendersById[item.sender_id] || null,
+      })),
+    );
   }
 
   async function loadLikes() {
@@ -1501,6 +1604,7 @@ export default function PublicProfilePage() {
           avatarUrl: profile.avatar_url,
         } : null}
         onClose={() => setGiftModalOpen(false)}
+        onSent={() => profile && loadPublicReceivedGifts(profile.id)}
       />
 
       <section className="w-full overflow-x-hidden px-3 py-16 pb-24 sm:px-6 sm:py-20 lg:mx-auto lg:max-w-[1280px] lg:px-0 lg:py-8 lg:pl-[104px]">
@@ -1864,6 +1968,16 @@ export default function PublicProfilePage() {
               userId={profile.id}
               title="Selos conquistados"
               emptyMessage="Este usuário ainda não possui selos conquistados."
+            />
+          </div>
+        )}
+
+        {!hasBlockedMe && !isBlockedByMe && (
+          <div className="mb-6">
+            <GiftShowcase
+              gifts={receivedGifts}
+              canGift={!isOwnProfile}
+              onGiftClick={() => setGiftModalOpen(true)}
             />
           </div>
         )}
