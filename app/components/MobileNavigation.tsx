@@ -10,6 +10,7 @@ import {
   Bug,
   Coins,
   Compass,
+  Crown,
   Gift,
   Home,
   FlaskConical,
@@ -416,6 +417,15 @@ export default function MobileNavigation({
               </Link>
 
               <Link
+                href="/vip-plus"
+                onClick={closeMoreOptions}
+                className={drawerLinkClass('/vip-plus')}
+              >
+                <Crown className={drawerIconClass('/vip-plus')} />
+                VIP Plus
+              </Link>
+
+              <Link
                 href="/gifts"
                 onClick={closeMoreOptions}
                 className={drawerLinkClass('/gifts')}
@@ -705,6 +715,15 @@ export default function MobileNavigation({
               >
                 <Coins className={drawerIconClass('/buy-itacash')} />
                 Comprar ItaCash
+              </Link>
+
+              <Link
+                href="/vip-plus"
+                onClick={closeMenu}
+                className={drawerLinkClass('/vip-plus')}
+              >
+                <Crown className={drawerIconClass('/vip-plus')} />
+                VIP Plus
               </Link>
 
               <Link

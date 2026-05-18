@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import {
   Bug,
   Coins,
+  Crown,
   FlaskConical,
   Gift,
   HelpCircle,
@@ -124,6 +125,11 @@ export default function MoreMenu({
         <Link href="/buy-itacash" onClick={onClose} className={itemClass('/buy-itacash')}>
           <Coins className={iconClass('/buy-itacash')} />
           <span>Comprar ItaCash</span>
+        </Link>
+
+        <Link href="/vip-plus" onClick={onClose} className={itemClass('/vip-plus')}>
+          <Crown className={iconClass('/vip-plus')} />
+          <span>VIP Plus</span>
         </Link>
 
         <Link href="/gifts" onClick={onClose} className={itemClass('/gifts')}>

@@ -9,6 +9,7 @@ import {
   Bell,
   Bookmark,
   Compass,
+  Crown,
   Home,
   MessageCircle,
   MoreHorizontal,
@@ -304,6 +305,7 @@ export default function AppSidebar({
     pathname.startsWith('/challenges/') ||
     pathname === '/wallet' ||
     pathname === '/buy-itacash' ||
+    pathname === '/vip-plus' ||
     pathname === '/gifts' ||
     pathname === '/feedback' ||
     pathname === '/lab' ||
@@ -393,6 +395,11 @@ export default function AppSidebar({
           <Link href="/profile" className={`${navLinkClass('/profile')} ${collapsedCenterClass}`}>
             <User className={navIconClass('/profile')} />
             <span className={navTextClass}>{t('nav.profile')}</span>
+          </Link>
+
+          <Link href="/vip-plus" className={`${navLinkClass('/vip-plus')} ${collapsedCenterClass}`}>
+            <Crown className={navIconClass('/vip-plus')} />
+            <span className={navTextClass}>VIP Plus</span>
           </Link>
 
           {isAdmin && (
