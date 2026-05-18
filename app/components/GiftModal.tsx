@@ -113,6 +113,63 @@ function GiftVisual({ gift }: { gift: DigitalGift }) {
   )
 }
 
+function GiftFeaturedPreview({ gift }: { gift: DigitalGift }) {
+  const GiftIcon = giftIconBySlug[gift.slug]
+  const [mediaFailed, setMediaFailed] = useState(false)
+
+  return (
+    <div className="overflow-hidden rounded-[2rem] border border-blue-300/20 bg-black/60 p-3 shadow-2xl shadow-blue-950/20 ring-1 ring-white/10">
+      <div className="relative aspect-square overflow-hidden rounded-[1.5rem] bg-gradient-to-br from-blue-500/20 via-zinc-950 to-black">
+        <div className="pointer-events-none absolute inset-6 rounded-full bg-blue-400/15 blur-3xl" />
+
+        {gift.media_url && gift.media_type === 'video' && !mediaFailed ? (
+          <video
+            src={gift.media_url}
+            poster={getGiftPoster(gift.media_url)}
+            autoPlay
+            muted
+            loop
+            playsInline
+            preload="metadata"
+            onError={() => setMediaFailed(true)}
+            className="relative h-full w-full object-cover"
+          />
+        ) : gift.media_url && !mediaFailed ? (
+          <img
+            src={gift.media_url}
+            alt={gift.name}
+            onError={() => setMediaFailed(true)}
+            className="relative h-full w-full object-cover"
+          />
+        ) : GiftIcon ? (
+          <div className="relative flex h-full w-full items-center justify-center text-blue-100">
+            <GiftIcon className="h-24 w-24 stroke-[1.5] drop-shadow-[0_18px_40px_rgba(96,165,250,0.32)]" />
+          </div>
+        ) : (
+          <div className="relative flex h-full w-full items-center justify-center text-5xl font-black text-blue-100">
+            {giftInitials(gift.name)}
+          </div>
+        )}
+      </div>
+
+      <div className="mt-4 flex items-start justify-between gap-3 px-1">
+        <div className="min-w-0">
+          <h3 className="truncate text-xl font-black text-white">{gift.name}</h3>
+          {gift.description && (
+            <p className="mt-1 line-clamp-2 text-sm leading-6 text-zinc-400">
+              {gift.description}
+            </p>
+          )}
+        </div>
+
+        <span className="shrink-0 rounded-full bg-blue-500/10 px-3 py-1.5 text-sm font-black text-blue-100 ring-1 ring-blue-300/15">
+          {gift.price_itacash} ItaCash
+        </span>
+      </div>
+    </div>
+  )
+}
+
 function getInitial(text: string) {
   return (text || 'U').slice(0, 1).toUpperCase()
 }
@@ -271,6 +328,21 @@ export default function GiftModal({
           </div>
         ) : (
           <>
+            {selectedGift && (
+              <div className="mt-5">
+                <GiftFeaturedPreview gift={selectedGift} />
+              </div>
+            )}
+
+            <div className="mt-5 flex items-center justify-between gap-3">
+              <p className="text-sm font-black uppercase tracking-[0.18em] text-blue-300">
+                Escolha o presente
+              </p>
+              <p className="text-xs font-semibold text-zinc-500">
+                Videos sem audio em loop
+              </p>
+            </div>
+
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
               {gifts.map((gift) => (
                 <button
