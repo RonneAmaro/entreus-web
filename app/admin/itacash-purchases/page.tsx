@@ -7,6 +7,7 @@ import {
   ArrowLeft,
   CheckCircle2,
   Coins,
+  FileText,
   Loader2,
   ReceiptText,
   ShieldAlert,
@@ -45,6 +46,9 @@ type ItaCashPurchaseRequest = {
   reviewed_at: string | null
   admin_notes: string | null
   rejection_reason: string | null
+  proof_path: string | null
+  proof_uploaded_at: string | null
+  pix_total_brl_cents: number | null
   created_at: string
 }
 
@@ -83,6 +87,8 @@ function statusLabel(status: string) {
 
 function paymentMethodLabel(method: string) {
   if (method === 'mercadopago_manual') return 'Mercado Pago manual'
+  if (method === 'mercadopago_auto') return 'Mercado Pago automatico'
+  if (method === 'mercadopago_pix') return 'Mercado Pago Pix'
   return 'Pix manual'
 }
 
@@ -99,6 +105,7 @@ export default function AdminItaCashPurchasesPage() {
   const [rejectingRequest, setRejectingRequest] = useState<ItaCashPurchaseRequest | null>(null)
   const [rejectionReason, setRejectionReason] = useState('')
   const [adminNotes, setAdminNotes] = useState('')
+  const [proofLoadingId, setProofLoadingId] = useState<string | null>(null)
 
   useEffect(() => {
     loadPage()
@@ -171,6 +178,9 @@ export default function AdminItaCashPurchasesPage() {
         reviewed_at,
         admin_notes,
         rejection_reason,
+        proof_path,
+        proof_uploaded_at,
+        pix_total_brl_cents,
         created_at
       `)
       .order('created_at', { ascending: false })
@@ -261,6 +271,29 @@ export default function AdminItaCashPurchasesPage() {
     setRejectionReason('')
     setAdminNotes('')
     await loadRequests()
+  }
+
+  async function openProof(request: ItaCashPurchaseRequest) {
+    if (!request.proof_path) {
+      setMessage('Esta solicitacao nao possui comprovante enviado.')
+      return
+    }
+
+    setProofLoadingId(request.id)
+    setMessage('')
+
+    const { data, error } = await supabase.storage
+      .from('payment-proofs')
+      .createSignedUrl(request.proof_path, 300)
+
+    setProofLoadingId(null)
+
+    if (error || !data?.signedUrl) {
+      setMessage('Nao foi possivel abrir comprovante: ' + (error?.message || 'tente novamente.'))
+      return
+    }
+
+    window.open(data.signedUrl, '_blank', 'noopener,noreferrer')
   }
 
   if (loading) {
@@ -408,6 +441,17 @@ export default function AdminItaCashPurchasesPage() {
 
                       {isPending && (
                         <div className="flex gap-2">
+                          {request.proof_path && (
+                            <button
+                              type="button"
+                              onClick={() => openProof(request)}
+                              disabled={proofLoadingId === request.id}
+                              className="inline-flex items-center justify-center gap-1 rounded-full border border-blue-300/20 bg-blue-500/10 px-3 py-2 text-xs font-black text-blue-100 transition hover:bg-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {proofLoadingId === request.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
+                              Ver comprovante
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={() => approveRequest(request)}
@@ -433,9 +477,23 @@ export default function AdminItaCashPurchasesPage() {
                     </div>
                   </div>
 
-                  {(request.user_note || request.rejection_reason || request.admin_notes) && (
-                    <div className="mt-4 grid gap-3 border-t border-white/10 pt-4 text-sm text-zinc-300 md:grid-cols-3">
+                  {(request.user_note || request.rejection_reason || request.admin_notes || request.proof_path) && (
+                    <div className="mt-4 grid gap-3 border-t border-white/10 pt-4 text-sm text-zinc-300 md:grid-cols-4">
                       <p><span className="font-black text-zinc-100">Observacao:</span> {request.user_note || 'Sem observacao.'}</p>
+                      <p>
+                        <span className="font-black text-zinc-100">Comprovante:</span>{' '}
+                        {request.proof_path ? (
+                          <button
+                            type="button"
+                            onClick={() => openProof(request)}
+                            className="font-black text-blue-200 underline-offset-4 hover:underline"
+                          >
+                            Ver comprovante
+                          </button>
+                        ) : (
+                          'Nao enviado'
+                        )}
+                      </p>
                       <p><span className="font-black text-zinc-100">Recusa:</span> {request.rejection_reason || 'N/D'}</p>
                       <p><span className="font-black text-zinc-100">Revisao:</span> {formatDate(request.reviewed_at)}</p>
                     </div>
