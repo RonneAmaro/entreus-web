@@ -349,7 +349,7 @@ export default function ProfilePage() {
 
     const normalizedGuardianEmail = guardianEmail.trim().toLowerCase()
 
-    if (!normalizedGuardianEmail || !normalizedGuardianEmail.includes('@')) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedGuardianEmail)) {
       setMessage('Informe um e-mail valido do responsavel.')
       return
     }
@@ -357,42 +357,54 @@ export default function ProfilePage() {
     setCreatingConsentRequest(true)
     setMessage('')
 
-    const consentText =
-      'Voce esta autorizando o uso geral da plataforma EntreUS por um menor. Conteudos 18+ permanecem bloqueados para menores.'
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
 
-    const { data, error } = await supabase
-      .from('parental_consent_requests')
-      .insert({
-        child_user_id: userId,
-        guardian_email: normalizedGuardianEmail,
-        child_birth_date: birthDate || null,
-        consent_text: consentText,
-        status: 'pending',
-      })
-      .select('id, child_user_id, guardian_email, token, status, child_birth_date, expires_at, created_at')
-      .single()
-
-    if (error) {
+    if (!session?.access_token) {
       setCreatingConsentRequest(false)
-      setMessage('Nao foi possivel criar solicitacao de autorizacao: ' + error.message)
+      setMessage('Entre novamente para solicitar autorizacao.')
       return
     }
 
-    const request = data as ParentalConsentRequest
+    const response = await fetch('/api/parental-consent/send-email', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        guardian_email: normalizedGuardianEmail,
+      }),
+    })
 
-    await supabase
-      .from('profiles')
-      .update({
-        parental_consent_status: 'pending',
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', userId)
+    const result = await response.json().catch(() => null)
+
+    if (!response.ok || !result?.success) {
+      setCreatingConsentRequest(false)
+      setMessage(result?.error || 'Nao foi possivel criar solicitacao de autorizacao.')
+      return
+    }
+
+    const request = result.request as ParentalConsentRequest
 
     setLatestConsentRequest(request)
     setParentalConsentStatus('pending')
-    setConsentRequestLink(`/parental-consent/${request.token}`)
+    setGuardianEmail(request.guardian_email || normalizedGuardianEmail)
+    setConsentRequestLink(result.approval_url || `/parental-consent/${request.token}`)
     setCreatingConsentRequest(false)
-    setMessage('Solicitacao criada. Envie o link gerado para seu responsavel.')
+
+    if (result.email_sent) {
+      setMessage('Enviamos um e-mail para seu responsavel.')
+      return
+    }
+
+    if (result.email_configured === false) {
+      setMessage('Ainda nao foi possivel enviar automaticamente. Use o link abaixo para teste.')
+      return
+    }
+
+    setMessage(result.message || 'Nao foi possivel enviar automaticamente agora. Use o link abaixo para teste.')
   }
 
   function sanitizeUsername(value: string) {

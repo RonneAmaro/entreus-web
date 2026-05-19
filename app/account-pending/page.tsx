@@ -121,7 +121,7 @@ export default function AccountPendingPage() {
 
               {isPending && (
                 <p className="mt-4 rounded-2xl border border-blue-400/20 bg-blue-500/10 px-4 py-3 text-sm leading-6 text-blue-100">
-                  Aguarde seu responsavel aprovar pelo link enviado/gerado.
+                  Aguarde seu responsavel aprovar pelo link enviado.
                 </p>
               )}
 
