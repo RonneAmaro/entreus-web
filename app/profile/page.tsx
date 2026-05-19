@@ -1205,7 +1205,7 @@ export default function ProfilePage() {
   const publicProfileUrl = username ? `/u/${username}` : '#'
   const profileAge = calculateAge(birthDate)
   const canRequest18Plus = profileAge !== null && profileAge >= 18 && !isMinor
-  const canView18Plus = wants18Plus && ageVerificationStatus === 'approved'
+  const canView18Plus = !isMinor && wants18Plus && ageVerificationStatus === 'approved'
   const parentalConsentDisplayStatus = latestConsentRequest?.status || parentalConsentStatus
   const parentalConsentLabel = getParentalConsentLabel(
     parentalConsentDisplayStatus,
@@ -1270,6 +1270,12 @@ export default function ProfilePage() {
         {message && (
           <div className="mt-5 rounded-2xl border border-zinc-200 bg-white p-4 text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300">
             {message}
+          </div>
+        )}
+
+        {isMinor && parentalConsentDisplayStatus !== 'approved' && (
+          <div className="mt-5 rounded-3xl border border-red-300/50 bg-red-50 px-5 py-4 text-sm font-semibold leading-6 text-red-800 shadow-sm dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200">
+            Seu acesso completo esta bloqueado ate a autorizacao do responsavel.
           </div>
         )}
 
@@ -1698,15 +1704,15 @@ export default function ProfilePage() {
 
                             {parentalConsentDisplayStatus === 'approved' ? (
                               <p className="mt-2 text-sm text-zinc-700 dark:text-zinc-300">
-                                Autorizacao do responsavel aprovada.
+                                Autorizacao aprovada. Seu acesso geral foi liberado.
                               </p>
                             ) : parentalConsentDisplayStatus === 'rejected' ? (
                               <p className="mt-2 text-sm text-zinc-700 dark:text-zinc-300">
-                                Autorizacao recusada pelo responsavel.
+                                Autorizacao recusada. O acesso completo permanece bloqueado.
                               </p>
                             ) : (
                               <p className="mt-2 text-sm text-zinc-700 dark:text-zinc-300">
-                                Informe o e-mail do responsavel para gerar um link de autorizacao de teste.
+                                Seu acesso completo esta bloqueado ate a autorizacao do responsavel. Informe o e-mail do responsavel para gerar um link de autorizacao.
                               </p>
                             )}
 

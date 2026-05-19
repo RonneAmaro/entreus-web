@@ -3,6 +3,7 @@
 import { Eye, EyeOff } from 'lucide-react'
 import { useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
 function validatePassword(password: string) {
@@ -37,6 +38,7 @@ function calculateAge(birthDateValue: string) {
 }
 
 export default function SignupPage() {
+  const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -109,6 +111,12 @@ export default function SignupPage() {
 
     if (error) {
       setMessage('Erro ao criar conta: ' + error.message)
+      return
+    }
+
+    if (isMinor) {
+      setMessage('Conta criada. Para acessar os recursos gerais, solicite a autorizacao do responsavel.')
+      router.push('/account-pending')
       return
     }
 
