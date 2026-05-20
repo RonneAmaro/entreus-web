@@ -39,6 +39,7 @@ import { supabase } from '@/lib/supabase'
 import { useLanguage } from './LanguageProvider'
 import type { LanguageCode } from '@/lib/translations'
 import { usePendingItaCashPurchasesCount } from '../hooks/usePendingItaCashPurchasesCount'
+import { isAdminRole } from '@/lib/admin'
 
 type MobileNavigationProps = {
   email: string
@@ -139,7 +140,7 @@ export default function MobileNavigation({
       return
     }
 
-    setIsAdmin(data?.role === 'admin')
+    setIsAdmin(isAdminRole(data?.role))
   }
 
   async function loadUnreadMessagesCount() {

@@ -1,6 +1,7 @@
 export type PaymentMethodOption =
   | 'pix_manual'
   | 'mercadopago_pix'
+  | 'mercadopago_debit'
   | 'mercadopago_credit_30d'
   | 'mercadopago_credit_instant'
   | 'open_finance'
@@ -35,6 +36,14 @@ export const paymentMethodOptions: PaymentMethodConfig[] = [
     available: true,
     recommended: true,
     note: 'Recomendado: menor taxa da operadora.',
+  },
+  {
+    value: 'mercadopago_debit',
+    label: 'Cartao de debito',
+    operatorFeePercent: 3.98,
+    operatorFeeFixedCents: 0,
+    available: true,
+    note: 'Depende da disponibilidade do Mercado Pago para sua conta e cartao.',
   },
   {
     value: 'mercadopago_credit_30d',

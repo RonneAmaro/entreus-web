@@ -22,6 +22,7 @@ import { supabase } from '@/lib/supabase'
 import MoreMenu from './MoreMenu'
 import { useLanguage } from './LanguageProvider'
 import { usePendingItaCashPurchasesCount } from '../hooks/usePendingItaCashPurchasesCount'
+import { isAdminRole } from '@/lib/admin'
 
 type AppSidebarProps = {
   unreadNotificationsCount?: number
@@ -116,7 +117,7 @@ export default function AppSidebar({
       return
     }
 
-    setIsAdmin(data?.role === 'admin')
+    setIsAdmin(isAdminRole(data?.role))
   }
 
   async function loadUnreadMessagesCount() {

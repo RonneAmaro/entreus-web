@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { usePendingItaCashPurchasesCount } from '../hooks/usePendingItaCashPurchasesCount'
+import { isAdminRole } from '@/lib/admin'
 
 type AdminProfile = {
   id: string
@@ -84,7 +85,7 @@ export default function AdminPage() {
   const [message, setMessage] = useState('')
   const [adminProfile, setAdminProfile] = useState<AdminProfile | null>(null)
   const [newPendingAlert, setNewPendingAlert] = useState(false)
-  const isAdmin = adminProfile?.role === 'admin'
+  const isAdmin = isAdminRole(adminProfile?.role)
   const handleNewPendingPurchase = useCallback(() => {
     setNewPendingAlert(true)
   }, [])
@@ -142,7 +143,7 @@ export default function AdminPage() {
     )
   }
 
-  if (!adminProfile || adminProfile.role !== 'admin') {
+  if (!adminProfile || !isAdminRole(adminProfile.role)) {
     return (
       <main className="min-h-screen bg-black px-4 py-10 text-white">
         <section className="mx-auto max-w-xl rounded-[2rem] border border-red-300/20 bg-red-500/10 p-6 text-red-100">

@@ -93,7 +93,7 @@ export default function BuyItaCashPage() {
   }, [amount])
 
   const visiblePaymentMethods = paymentMethodOptions.filter((method) =>
-    ['pix_manual', 'mercadopago_pix', 'mercadopago_credit_30d', 'mercadopago_credit_instant', 'open_finance'].includes(method.value)
+    ['pix_manual', 'mercadopago_pix', 'mercadopago_debit', 'mercadopago_credit_30d', 'mercadopago_credit_instant', 'open_finance'].includes(method.value)
   )
 
   const totals = useMemo(() => {
@@ -275,7 +275,11 @@ export default function BuyItaCashPage() {
 
       setPaymentLink(data.provider_init_point)
       setSuccess(true)
-      setMessage('Pagamento criado. Siga para o Mercado Pago para concluir.')
+      setMessage(
+        paymentMethod === 'mercadopago_debit'
+          ? 'Pagamento criado. Cartão de débito depende da disponibilidade do Mercado Pago para sua conta e cartão.'
+          : 'Pagamento criado. Siga para o Mercado Pago para concluir.'
+      )
       return
     }
 
@@ -468,6 +472,12 @@ export default function BuyItaCashPage() {
             <div className="mt-5 rounded-3xl border border-emerald-300/20 bg-emerald-500/10 p-4 text-sm font-black text-emerald-100">
               Recomendado: Pix Mercado Pago, menor taxa da operadora.
             </div>
+
+            {paymentMethod === 'mercadopago_debit' && (
+              <div className="mt-5 rounded-3xl border border-blue-300/20 bg-blue-500/10 p-4 text-sm font-semibold leading-6 text-blue-50">
+                Cartão de débito depende da disponibilidade do Mercado Pago para sua conta e cartão.
+              </div>
+            )}
 
             <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {visiblePaymentMethods.map((method) => {

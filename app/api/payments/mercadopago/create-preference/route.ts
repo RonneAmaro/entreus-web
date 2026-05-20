@@ -147,6 +147,12 @@ export async function POST(request: Request) {
       body: JSON.stringify({
         external_reference: order.external_reference,
         notification_url: `${siteUrl.replace(/\/$/, '')}/api/payments/mercadopago/webhook`,
+        // Checkout Pro decide se debito aparece conforme conta/cartao do pagador.
+        // Mantemos debit_card sem exclusao para nao bloquear essa opcao quando disponivel.
+        payment_methods: {
+          excluded_payment_types: [],
+          excluded_payment_methods: [],
+        },
         back_urls: {
           success: `${siteUrl.replace(/\/$/, '')}/${productType === 'vip_plus' ? 'vip-plus' : 'wallet'}?payment=success`,
           pending: `${siteUrl.replace(/\/$/, '')}/${productType === 'vip_plus' ? 'vip-plus' : 'wallet'}?payment=pending`,

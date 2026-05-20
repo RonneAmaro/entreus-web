@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { usePendingItaCashPurchasesCount } from '../../hooks/usePendingItaCashPurchasesCount'
+import { isAdminRole } from '@/lib/admin'
 
 type FilterStatus = 'pending' | 'approved' | 'rejected' | 'all'
 
@@ -109,7 +110,7 @@ export default function AdminItaCashPurchasesPage() {
   const [adminNotes, setAdminNotes] = useState('')
   const [proofLoadingId, setProofLoadingId] = useState<string | null>(null)
   const [newPendingAlert, setNewPendingAlert] = useState(false)
-  const isAdmin = adminProfile?.role === 'admin'
+  const isAdmin = isAdminRole(adminProfile?.role)
 
   const handleNewPendingPurchase = useCallback(() => {
     setNewPendingAlert(true)
@@ -173,7 +174,7 @@ export default function AdminItaCashPurchasesPage() {
 
     setAdminProfile(loadedAdminProfile)
 
-    if (loadedAdminProfile.role !== 'admin') {
+    if (!isAdminRole(loadedAdminProfile.role)) {
       setLoading(false)
       return
     }
@@ -329,7 +330,7 @@ export default function AdminItaCashPurchasesPage() {
     )
   }
 
-  if (!adminProfile || adminProfile.role !== 'admin') {
+  if (!adminProfile || !isAdminRole(adminProfile.role)) {
     return (
       <main className="min-h-screen bg-black px-4 py-10 text-white">
         <section className="mx-auto max-w-xl rounded-[2rem] border border-red-300/20 bg-red-500/10 p-6 text-red-100">
