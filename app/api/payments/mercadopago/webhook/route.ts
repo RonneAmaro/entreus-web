@@ -6,6 +6,7 @@ type MercadoPagoPayment = {
   status?: string
   external_reference?: string
   payment_method_id?: string
+  payment_type_id?: string
   metadata?: {
     order_id?: string
     product_type?: string
@@ -143,6 +144,20 @@ function getProviderPreferenceId(payment: MercadoPagoPayment, merchantOrder: Mer
   return merchantOrder?.preference_id || (payment.order?.type === 'mercadopago' ? String(payment.order.id || '') : null) || null
 }
 
+function getRpcErrorLog(error: {
+  message?: string
+  code?: string
+  details?: string
+  hint?: string
+}) {
+  return {
+    message: error.message || null,
+    code: error.code || null,
+    details: error.details || null,
+    hint: error.hint || null,
+  }
+}
+
 function getFetchFailureResult(paymentId: string, status: number, message?: string | null) {
   console.info('Mercado Pago payment fetch failed', {
     paymentId,
@@ -213,38 +228,41 @@ async function processPaymentId(
   }
 
   const externalReference = payment.external_reference || merchantOrder?.external_reference || null
+  const paymentExternalReference = payment.external_reference ?? null
   const orderId = getSafeOrderId(payment.metadata?.order_id)
-  const providerPreferenceId = getProviderPreferenceId(payment, merchantOrder)
+  const preferenceId = getProviderPreferenceId(payment, merchantOrder)
   const providerStatus = payment.status || 'unknown'
+  const providerPaymentId = String(payment.id || paymentId)
+  const providerPaymentMethod = payment.payment_method_id ?? payment.payment_type_id ?? null
 
   console.info('Mercado Pago pagamento recebido', {
-    paymentId: String(payment.id),
+    paymentId: providerPaymentId,
     status: providerStatus,
     externalReference,
     orderId,
-    providerPreferenceId,
-    paymentMethod: payment.payment_method_id || null,
+    providerPreferenceId: preferenceId,
+    paymentMethod: providerPaymentMethod,
   })
 
   const supabase = getServiceSupabase()
   let { data, error } = await supabase.rpc('complete_mercadopago_payment_order_v2', {
-    p_provider_payment_id: String(payment.id || paymentId),
+    p_provider_payment_id: providerPaymentId,
     p_provider_status: providerStatus,
-    p_external_reference: externalReference,
-    p_order_id: orderId,
-    p_provider_preference_id: providerPreferenceId,
-    p_provider_payment_method: payment.payment_method_id || null,
+    p_external_reference: paymentExternalReference,
+    p_order_id: orderId ?? null,
+    p_provider_preference_id: preferenceId ?? null,
+    p_provider_payment_method: providerPaymentMethod,
   })
 
-  if (error && externalReference) {
+  if (error && paymentExternalReference) {
     console.info('Tentando fallback da RPC antiga de Mercado Pago.', {
-      paymentId: String(payment.id || paymentId),
-      externalReference,
+      paymentId: providerPaymentId,
+      externalReference: paymentExternalReference,
     })
 
     const fallbackResult = await supabase.rpc('complete_mercadopago_payment_order', {
-      p_external_reference: externalReference,
-      p_provider_payment_id: String(payment.id || paymentId),
+      p_external_reference: paymentExternalReference,
+      p_provider_payment_id: providerPaymentId,
       p_provider_status: providerStatus,
     })
 
@@ -254,23 +272,23 @@ async function processPaymentId(
 
   if (error) {
     console.error('Mercado Pago RPC error', {
-      paymentId: String(payment.id || paymentId),
+      ...getRpcErrorLog(error),
+      paymentId: providerPaymentId,
       status: providerStatus,
-      externalReference,
+      external_reference: paymentExternalReference,
       orderId,
-      providerPreferenceId,
-      error: error.message,
+      provider_preference_id: preferenceId,
     })
 
     return NextResponse.json(
-      { ok: false, error: 'Erro ao processar pagamento Mercado Pago.', paymentId: String(payment.id || paymentId) },
+      { ok: false, reason: 'rpc_error', paymentId: providerPaymentId },
       { status: 500 }
     )
   }
 
   if (providerStatus === 'approved') {
     console.info('Mercado Pago pagamento processado', {
-      paymentId: String(payment.id || paymentId),
+      paymentId: providerPaymentId,
       status: providerStatus,
       result: data,
     })
@@ -279,14 +297,14 @@ async function processPaymentId(
       ok: true,
       received: true,
       processed: true,
-      paymentId: String(payment.id || paymentId),
+      paymentId: providerPaymentId,
       result: data,
     })
   }
 
   if (PENDING_PAYMENT_STATUSES.has(providerStatus)) {
     console.info('Mercado Pago pagamento ainda nao aprovado', {
-      paymentId: String(payment.id || paymentId),
+      paymentId: providerPaymentId,
       status: providerStatus,
       result: data,
     })
@@ -295,7 +313,7 @@ async function processPaymentId(
       ok: true,
       received: true,
       pending: true,
-      paymentId: String(payment.id || paymentId),
+      paymentId: providerPaymentId,
       status: providerStatus,
       result: data,
     })
@@ -303,7 +321,7 @@ async function processPaymentId(
 
   if (FINAL_NOT_APPROVED_PAYMENT_STATUSES.has(providerStatus)) {
     console.info('Mercado Pago pagamento ainda nao aprovado', {
-      paymentId: String(payment.id || paymentId),
+      paymentId: providerPaymentId,
       status: providerStatus,
       result: data,
     })
@@ -313,14 +331,14 @@ async function processPaymentId(
       received: true,
       ignored: true,
       reason: 'payment_not_approved',
-      paymentId: String(payment.id || paymentId),
+      paymentId: providerPaymentId,
       status: providerStatus,
       result: data,
     })
   }
 
   console.info('Mercado Pago pagamento ainda nao aprovado', {
-    paymentId: String(payment.id || paymentId),
+    paymentId: providerPaymentId,
     status: providerStatus,
     result: data,
   })
@@ -330,7 +348,7 @@ async function processPaymentId(
     received: true,
     ignored: true,
     reason: 'payment_status_not_approved',
-    paymentId: String(payment.id || paymentId),
+    paymentId: providerPaymentId,
     status: providerStatus,
     result: data,
   })
