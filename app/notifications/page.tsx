@@ -5,7 +5,7 @@ import MobileNavigation from '../components/MobileNavigation'
 import BrandHeader from '../components/BrandHeader'
 import UserBadges from '../components/UserBadges'
 import Link from 'next/link'
-import { Bell, CheckCheck, Coins, Gift, Heart, MessageCircle, Repeat2, UserPlus } from 'lucide-react'
+import { Bell, CheckCheck, Coins, Gift, Heart, MessageCircle, Repeat2, UserPlus, WalletCards } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
@@ -26,6 +26,7 @@ type Notification = {
   post_id: string | null
   comment_id: string | null
   user_gift_id: string | null
+  itacash_purchase_request_id: string | null
   amount: number | null
   read: boolean | null
   created_at: string
@@ -69,11 +70,19 @@ type GiftSummaryRow = {
     | null
 }
 
+type PurchaseRequestSummary = {
+  id: string
+  amount_itacash: number
+  rejection_reason: string | null
+  status: string
+}
+
 type NotificationView = Notification & {
   actor: ProfileSummary | null
   post: PostSummary | null
   comment: CommentSummary | null
   gift: GiftSummary | null
+  purchaseRequest: PurchaseRequestSummary | null
 }
 
 function getInitial(text: string) {
@@ -89,6 +98,8 @@ function getNotificationIcon(type: string) {
   if (type === 'gift_received') return <Gift className="h-5 w-5 text-blue-500" />
   if (type === 'tip_received') return <Coins className="h-5 w-5 text-emerald-500" />
   if (type === 'promotional_itacash') return <Coins className="h-5 w-5 text-blue-500" />
+  if (type === 'itacash_purchase_approved') return <WalletCards className="h-5 w-5 text-emerald-500" />
+  if (type === 'itacash_purchase_rejected') return <WalletCards className="h-5 w-5 text-red-500" />
 
   return <Bell className="h-5 w-5 text-zinc-500" />
 }
@@ -113,6 +124,12 @@ function getNotificationActionTextView(notification: NotificationView) {
   if (notification.type === 'promotional_itacash') {
     return `Voce recebeu ItaCash promocional.`
   }
+  if (notification.type === 'itacash_purchase_approved') {
+    return `aprovou sua compra de ItaCash.`
+  }
+  if (notification.type === 'itacash_purchase_rejected') {
+    return `recusou sua compra de ItaCash.`
+  }
 
   return getNotificationActionText(notification.type)
 }
@@ -132,7 +149,12 @@ function getNotificationHref(notification: NotificationView) {
     return `/u/${notification.actor.username}`
   }
 
-  if (notification.type === 'gift_received' || notification.type === 'promotional_itacash') {
+  if (
+    notification.type === 'gift_received' ||
+    notification.type === 'promotional_itacash' ||
+    notification.type === 'itacash_purchase_approved' ||
+    notification.type === 'itacash_purchase_rejected'
+  ) {
     return '/wallet'
   }
 
@@ -228,7 +250,7 @@ export default function NotificationsPage() {
 
     const { data, error } = await supabase
       .from('notifications')
-      .select('id, user_id, actor_id, type, post_id, comment_id, user_gift_id, amount, read, created_at')
+      .select('id, user_id, actor_id, type, post_id, comment_id, user_gift_id, itacash_purchase_request_id, amount, read, created_at')
       .eq('user_id', currentUserId)
       .order('created_at', { ascending: false })
       .limit(80)
@@ -256,10 +278,15 @@ export default function NotificationsPage() {
       new Set(rawNotifications.map((item) => item.user_gift_id).filter(Boolean))
     ) as string[]
 
+    const purchaseRequestIds = Array.from(
+      new Set(rawNotifications.map((item) => item.itacash_purchase_request_id).filter(Boolean))
+    ) as string[]
+
     let profilesById: Record<string, ProfileSummary> = {}
     let postsById: Record<string, PostSummary> = {}
     let commentsById: Record<string, CommentSummary> = {}
     let giftsById: Record<string, GiftSummary> = {}
+    let purchaseRequestsById: Record<string, PurchaseRequestSummary> = {}
 
     if (actorIds.length > 0) {
       const { data: profilesData, error: profilesError } = await supabase
@@ -345,12 +372,34 @@ export default function NotificationsPage() {
       )
     }
 
+    if (purchaseRequestIds.length > 0) {
+      const { data: purchaseRequestsData, error: purchaseRequestsError } = await supabase
+        .from('itacash_purchase_requests')
+        .select('id, amount_itacash, rejection_reason, status')
+        .in('id', purchaseRequestIds)
+
+      if (purchaseRequestsError) {
+        console.error('Erro ao carregar compras ItaCash das notificacoes:', purchaseRequestsError.message)
+      }
+
+      purchaseRequestsById = ((purchaseRequestsData || []) as PurchaseRequestSummary[]).reduce(
+        (acc, request) => {
+          acc[request.id] = request
+          return acc
+        },
+        {} as Record<string, PurchaseRequestSummary>
+      )
+    }
+
     const normalizedNotifications: NotificationView[] = rawNotifications.map((item) => ({
       ...item,
       actor: item.actor_id ? profilesById[item.actor_id] || null : null,
       post: item.post_id ? postsById[item.post_id] || null : null,
       comment: item.comment_id ? commentsById[item.comment_id] || null : null,
       gift: item.user_gift_id ? giftsById[item.user_gift_id] || null : null,
+      purchaseRequest: item.itacash_purchase_request_id
+        ? purchaseRequestsById[item.itacash_purchase_request_id] || null
+        : null,
     }))
 
     setNotifications(normalizedNotifications)
@@ -603,6 +652,21 @@ export default function NotificationsPage() {
                     {notification.type === 'promotional_itacash' && (
                       <p className="mt-3 rounded-xl bg-blue-100 px-3 py-2 text-sm font-semibold text-blue-800 dark:bg-blue-950/40 dark:text-blue-100">
                         Voce recebeu ItaCash promocional! {notification.amount || 0} ItaCash para usar na plataforma.
+                      </p>
+                    )}
+
+                    {notification.type === 'itacash_purchase_approved' && (
+                      <p className="mt-3 rounded-xl bg-emerald-100 px-3 py-2 text-sm font-semibold text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100">
+                        Sua compra de {notification.purchaseRequest?.amount_itacash || notification.amount || 0} ItaCash foi aprovada e o saldo ja esta na sua carteira.
+                      </p>
+                    )}
+
+                    {notification.type === 'itacash_purchase_rejected' && (
+                      <p className="mt-3 rounded-xl bg-red-100 px-3 py-2 text-sm font-semibold text-red-800 dark:bg-red-950/40 dark:text-red-100">
+                        Sua compra de ItaCash foi recusada.
+                        {notification.purchaseRequest?.rejection_reason
+                          ? ` Motivo: ${notification.purchaseRequest.rejection_reason}`
+                          : ''}
                       </p>
                     )}
 
