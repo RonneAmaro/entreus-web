@@ -27,6 +27,8 @@ type MercadoPagoPixPayment = {
 }
 
 const PIX_EXPIRATION_MINUTES = 30
+const INVALID_NOTIFICATION_URL_ERROR =
+  'Configure uma URL pública HTTPS para receber notificações do Mercado Pago.'
 
 function getSupabaseForRequest(request: Request) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -48,14 +50,85 @@ function centsToBRL(value: number) {
   return Number((value / 100).toFixed(2))
 }
 
+function buildNotificationUrl() {
+  const explicitNotificationUrl = process.env.MERCADO_PAGO_NOTIFICATION_URL?.trim()
+
+  if (explicitNotificationUrl) {
+    return {
+      value: explicitNotificationUrl,
+      source: 'MERCADO_PAGO_NOTIFICATION_URL',
+    }
+  }
+
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim()
+
+  if (!siteUrl) {
+    return {
+      value: '',
+      source: 'NEXT_PUBLIC_SITE_URL',
+    }
+  }
+
+  return {
+    value: `${siteUrl.replace(/\/$/, '')}/api/payments/mercadopago/webhook`,
+    source: 'NEXT_PUBLIC_SITE_URL',
+  }
+}
+
+function isValidMercadoPagoNotificationUrl(value: string) {
+  if (!value) return false
+
+  try {
+    const url = new URL(value)
+    const hostname = url.hostname.toLowerCase()
+
+    return (
+      url.protocol === 'https:' &&
+      hostname !== 'localhost' &&
+      hostname !== '127.0.0.1' &&
+      !hostname.endsWith('.localhost')
+    )
+  } catch {
+    return false
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL
 
-    if (!accessToken || !siteUrl) {
+    if (!accessToken) {
+      console.error('Mercado Pago Pix configuracao ausente: MERCADO_PAGO_ACCESS_TOKEN.')
       return NextResponse.json(
         { error: 'Mercado Pago ainda nao esta configurado no servidor.' },
+        { status: 503 }
+      )
+    }
+
+    const notificationUrl = buildNotificationUrl()
+
+    if (!isValidMercadoPagoNotificationUrl(notificationUrl.value)) {
+      let safeHostname = ''
+
+      try {
+        safeHostname = new URL(notificationUrl.value).hostname
+      } catch {
+        safeHostname = 'invalid-url'
+      }
+
+      console.error('Mercado Pago Pix notification_url debug', {
+        source: notificationUrl.source,
+        value: notificationUrl.value,
+        startsWithHttps: notificationUrl.value.startsWith('https://'),
+        hostname: safeHostname,
+      })
+
+      console.error(
+        `Mercado Pago Pix notification_url invalida. Configure ${notificationUrl.source} com uma URL publica HTTPS.`
+      )
+
+      return NextResponse.json(
+        { error: INVALID_NOTIFICATION_URL_ERROR },
         { status: 503 }
       )
     }
@@ -123,7 +196,7 @@ export async function POST(request: Request) {
         description: `${amountItacash} ItaCash EntreUS`,
         payment_method_id: 'pix',
         external_reference: order.external_reference,
-        notification_url: `${siteUrl.replace(/\/$/, '')}/api/payments/mercadopago/webhook`,
+        notification_url: notificationUrl.value,
         date_of_expiration: expirationDate.toISOString(),
         payer: {
           email: user.email,

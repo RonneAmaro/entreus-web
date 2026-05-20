@@ -249,7 +249,7 @@ export default function BuyItaCashPage() {
 
       if (isMercadoPagoPix) {
         if (!response.ok || (!data?.qr_code && !data?.qr_code_base64)) {
-          setMessage(data?.error || 'Nao foi possivel gerar Pix Mercado Pago.')
+          setMessage('Não foi possível gerar o Pix pelo Mercado Pago. Verifique a URL de notificação e tente novamente.')
           return
         }
 
