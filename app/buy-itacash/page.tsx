@@ -31,6 +31,17 @@ type PixInfo = {
   configured: boolean
 }
 
+type MercadoPagoPixPayment = {
+  order_id: string
+  provider_payment_id: string
+  status: string
+  status_detail: string | null
+  qr_code: string | null
+  qr_code_base64: string | null
+  ticket_url: string | null
+  expires_at: string | null
+}
+
 const PROOF_BUCKET = 'payment-proofs'
 const ACCEPTED_PROOF_TYPES = ['image/png', 'image/jpeg', 'application/pdf']
 
@@ -55,6 +66,8 @@ export default function BuyItaCashPage() {
   const [proofFile, setProofFile] = useState<File | null>(null)
   const [copiedPixKey, setCopiedPixKey] = useState(false)
   const [copiedPixLink, setCopiedPixLink] = useState(false)
+  const [mercadoPagoPixPayment, setMercadoPagoPixPayment] = useState<MercadoPagoPixPayment | null>(null)
+  const [copiedMercadoPagoPix, setCopiedMercadoPagoPix] = useState(false)
 
   useEffect(() => {
     checkSession()
@@ -65,6 +78,14 @@ export default function BuyItaCashPage() {
       loadPixInfo()
     }
   }, [paymentMethod, pixInfo, pixInfoLoading])
+
+  useEffect(() => {
+    setSuccess(false)
+    setMessage('')
+    setPaymentLink('')
+    setMercadoPagoPixPayment(null)
+    setCopiedMercadoPagoPix(false)
+  }, [amount, paymentMethod])
 
   const amountItacash = useMemo(() => {
     const parsed = Number.parseInt(amount, 10)
@@ -137,6 +158,14 @@ export default function BuyItaCashPage() {
     window.setTimeout(() => setCopiedPixLink(false), 2000)
   }
 
+  async function copyMercadoPagoPixCode() {
+    if (!mercadoPagoPixPayment?.qr_code) return
+
+    await navigator.clipboard.writeText(mercadoPagoPixPayment.qr_code)
+    setCopiedMercadoPagoPix(true)
+    window.setTimeout(() => setCopiedMercadoPagoPix(false), 2000)
+  }
+
   function handleProofFileChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0] || null
     setProofFile(file)
@@ -161,6 +190,7 @@ export default function BuyItaCashPage() {
     setMessage('')
     setSuccess(false)
     setPaymentLink('')
+    setMercadoPagoPixPayment(null)
 
     const {
       data: { user },
@@ -195,7 +225,12 @@ export default function BuyItaCashPage() {
         return
       }
 
-      const response = await fetch('/api/payments/mercadopago/create-preference', {
+      const isMercadoPagoPix = paymentMethod === 'mercadopago_pix'
+      const response = await fetch(
+        isMercadoPagoPix
+          ? '/api/payments/mercadopago/create-pix'
+          : '/api/payments/mercadopago/create-preference',
+        {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${session.access_token}`,
@@ -206,10 +241,32 @@ export default function BuyItaCashPage() {
           amount_itacash: amountItacash,
           payment_method_option: paymentMethod,
         }),
-      })
+        }
+      )
 
       const data = await response.json().catch(() => null)
       setSubmitting(false)
+
+      if (isMercadoPagoPix) {
+        if (!response.ok || (!data?.qr_code && !data?.qr_code_base64)) {
+          setMessage(data?.error || 'Nao foi possivel gerar Pix Mercado Pago.')
+          return
+        }
+
+        setMercadoPagoPixPayment({
+          order_id: data.order_id,
+          provider_payment_id: data.provider_payment_id,
+          status: data.status,
+          status_detail: data.status_detail || null,
+          qr_code: data.qr_code || null,
+          qr_code_base64: data.qr_code_base64 || null,
+          ticket_url: data.ticket_url || null,
+          expires_at: data.expires_at || null,
+        })
+        setSuccess(true)
+        setMessage('Pix Mercado Pago gerado. Apos o pagamento, a confirmacao pode levar alguns instantes.')
+        return
+      }
 
       if (!response.ok || !data?.provider_init_point) {
         setMessage(data?.error || 'Nao foi possivel criar pagamento Mercado Pago.')
@@ -540,6 +597,82 @@ export default function BuyItaCashPage() {
               </div>
             )}
 
+            {paymentMethod === 'mercadopago_pix' && mercadoPagoPixPayment && (
+              <div className="mt-5 rounded-[2rem] border border-emerald-300/20 bg-emerald-500/10 p-5 text-emerald-50">
+                <div className="flex items-start gap-3">
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/20 text-emerald-100">
+                    <ReceiptText className="h-5 w-5" />
+                  </span>
+                  <div>
+                    <h2 className="text-lg font-black">Pix Mercado Pago gerado</h2>
+                    <p className="mt-2 text-sm leading-6 text-emerald-50/80">
+                      Escaneie o QR Code ou copie o codigo Pix. Apos o pagamento, a confirmacao pode levar alguns instantes.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-5 grid gap-4 lg:grid-cols-[14rem_minmax(0,1fr)]">
+                  {mercadoPagoPixPayment.qr_code_base64 ? (
+                    <div className="rounded-3xl border border-white/10 bg-white p-3">
+                      <img
+                        src={`data:image/png;base64,${mercadoPagoPixPayment.qr_code_base64}`}
+                        alt="QR Code Pix Mercado Pago"
+                        className="aspect-square w-full rounded-2xl object-contain"
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex min-h-56 items-center justify-center rounded-3xl border border-dashed border-emerald-200/30 bg-black/25 p-4 text-center text-sm text-emerald-100/80">
+                      QR Code indisponivel. Use o Pix Copia e Cola.
+                    </div>
+                  )}
+
+                  <div className="min-w-0 space-y-3">
+                    {mercadoPagoPixPayment.qr_code && (
+                      <div className="rounded-2xl bg-black/35 p-4">
+                        <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-200/70">Pix Copia e Cola</p>
+                        <code className="mt-2 block max-h-32 overflow-y-auto break-all rounded-xl bg-black px-3 py-2 text-xs text-emerald-100">
+                          {mercadoPagoPixPayment.qr_code}
+                        </code>
+                        <button
+                          type="button"
+                          onClick={copyMercadoPagoPixCode}
+                          className="mt-3 inline-flex items-center justify-center gap-2 rounded-full bg-white px-4 py-2 text-xs font-black text-black transition hover:bg-emerald-50"
+                        >
+                          <Copy className="h-3.5 w-3.5" />
+                          {copiedMercadoPagoPix ? 'Codigo copiado' : 'Copiar codigo Pix'}
+                        </button>
+                      </div>
+                    )}
+
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-2xl bg-black/35 px-4 py-3">
+                        <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-200/70">Status</p>
+                        <p className="mt-1 font-black">{mercadoPagoPixPayment.status}</p>
+                      </div>
+                      <div className="rounded-2xl bg-black/35 px-4 py-3">
+                        <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-200/70">Expira em</p>
+                        <p className="mt-1 font-black">
+                          {mercadoPagoPixPayment.expires_at
+                            ? new Date(mercadoPagoPixPayment.expires_at).toLocaleString('pt-BR')
+                            : 'Nao informado'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {mercadoPagoPixPayment.ticket_url && (
+                      <Link
+                        href={mercadoPagoPixPayment.ticket_url}
+                        target="_blank"
+                        className="inline-flex w-full items-center justify-center rounded-full border border-emerald-200/20 bg-emerald-500/10 px-4 py-2 text-xs font-black text-emerald-50 transition hover:bg-emerald-500/20"
+                      >
+                        Abrir pagina Pix Mercado Pago
+                      </Link>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
             <label className="mt-5 block">
               <span className="text-sm font-black text-zinc-200">Observacao opcional</span>
               <textarea
@@ -567,7 +700,11 @@ export default function BuyItaCashPage() {
               className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-black text-black transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-              {paymentMethod === 'pix_manual' ? 'Enviar comprovante e criar solicitacao' : 'Criar pagamento Mercado Pago'}
+              {paymentMethod === 'pix_manual'
+                ? 'Enviar comprovante e criar solicitacao'
+                : paymentMethod === 'mercadopago_pix'
+                  ? 'Gerar QR Code Pix'
+                  : 'Criar pagamento Mercado Pago'}
             </button>
 
             {paymentLink && (

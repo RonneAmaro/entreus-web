@@ -54,6 +54,18 @@ type PurchaseRequest = {
   created_at: string
 }
 
+type PaymentOrder = {
+  id: string
+  amount_itacash: number | null
+  total_brl_cents: number
+  provider_payment_method: string | null
+  provider_status: string | null
+  status: string
+  created_at: string
+  paid_at: string | null
+  expires_at: string | null
+}
+
 type UserGiftContext = {
   id: string
   sender_id: string
@@ -130,16 +142,22 @@ function formatBRLFromCents(value: number) {
 }
 
 function purchaseStatusLabel(status: string) {
+  if (status === 'paid') return 'Compra aprovada e saldo creditado'
   if (status === 'approved') return 'Compra aprovada e saldo creditado'
   if (status === 'rejected') return 'Compra recusada'
   if (status === 'canceled') return 'Cancelada'
+  if (status === 'failed') return 'Pagamento recusado'
+  if (status === 'expired') return 'Pagamento expirado'
   return 'Aguardando analise'
 }
 
 function purchaseStatusClass(status: string) {
+  if (status === 'paid') return 'bg-emerald-500/10 text-emerald-200 ring-emerald-300/15'
   if (status === 'approved') return 'bg-emerald-500/10 text-emerald-200 ring-emerald-300/15'
   if (status === 'rejected') return 'bg-red-500/10 text-red-200 ring-red-300/15'
   if (status === 'canceled') return 'bg-zinc-500/10 text-zinc-300 ring-white/10'
+  if (status === 'failed') return 'bg-red-500/10 text-red-200 ring-red-300/15'
+  if (status === 'expired') return 'bg-zinc-500/10 text-zinc-300 ring-white/10'
   return 'bg-amber-500/10 text-amber-100 ring-amber-300/15'
 }
 
@@ -166,6 +184,7 @@ export default function WalletPage() {
   const [transactions, setTransactions] = useState<ItaCashTransaction[]>([])
   const [giftContexts, setGiftContexts] = useState<Record<string, UserGiftContext>>({})
   const [purchaseRequests, setPurchaseRequests] = useState<PurchaseRequest[]>([])
+  const [paymentOrders, setPaymentOrders] = useState<PaymentOrder[]>([])
 
   useEffect(() => {
     loadWallet()
@@ -269,7 +288,10 @@ export default function WalletPage() {
       return
     }
 
-    await loadPurchaseRequests(user.id)
+    await Promise.all([
+      loadPurchaseRequests(user.id),
+      loadPaymentOrders(user.id),
+    ])
 
     const { data: walletData, error: walletError } = await supabase
       .rpc('ensure_itacash_wallet')
@@ -390,6 +412,23 @@ export default function WalletPage() {
     }
 
     setPurchaseRequests((data || []) as PurchaseRequest[])
+  }
+
+  async function loadPaymentOrders(currentUserId: string) {
+    const { data, error } = await supabase
+      .from('payment_orders')
+      .select('id, amount_itacash, total_brl_cents, provider_payment_method, provider_status, status, created_at, paid_at, expires_at')
+      .eq('user_id', currentUserId)
+      .eq('product_type', 'itacash')
+      .order('created_at', { ascending: false })
+      .limit(8)
+
+    if (error) {
+      setPaymentOrders([])
+      return
+    }
+
+    setPaymentOrders((data || []) as PaymentOrder[])
   }
 
   return (
@@ -559,6 +598,39 @@ export default function WalletPage() {
                             Motivo da recusa: {request.rejection_reason}
                           </p>
                         )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {paymentOrders.length > 0 && (
+                <div className="mt-5 border-t border-white/10 pt-4">
+                  <p className="mb-3 text-sm font-black text-zinc-200">Pagamentos Mercado Pago</p>
+                  <div className="space-y-3">
+                    {paymentOrders.map((order) => (
+                      <div key={order.id} className="rounded-2xl border border-white/10 bg-black/35 p-3 text-sm text-zinc-300">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                          <div>
+                            <p className="font-black text-white">{order.amount_itacash || 0} ItaCash</p>
+                            <p className="mt-1 text-xs font-semibold text-zinc-500">{formatDate(order.created_at)}</p>
+                          </div>
+
+                          <span className={`w-fit rounded-full px-2.5 py-1 text-[11px] font-black ring-1 ${purchaseStatusClass(order.status)}`}>
+                            {purchaseStatusLabel(order.status)}
+                          </span>
+                        </div>
+
+                        <div className="mt-3 grid gap-2 text-xs font-semibold text-zinc-400 sm:grid-cols-2">
+                          <p>Metodo: <span className="text-zinc-200">{order.provider_payment_method === 'pix' ? 'Mercado Pago Pix' : 'Mercado Pago'}</span></p>
+                          <p>Total pago: <span className="text-zinc-200">{formatBRLFromCents(order.total_brl_cents)}</span></p>
+                          {order.provider_status && (
+                            <p>Status MP: <span className="text-zinc-200">{order.provider_status}</span></p>
+                          )}
+                          {order.expires_at && order.status === 'pending' && (
+                            <p>Expira: <span className="text-zinc-200">{formatDate(order.expires_at)}</span></p>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>

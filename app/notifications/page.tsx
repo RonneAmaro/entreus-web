@@ -558,10 +558,13 @@ export default function NotificationsPage() {
           )}
 
           {notifications.map((notification) => {
+            const isItaCashPurchaseStatus =
+              notification.type === 'itacash_purchase_approved' ||
+              notification.type === 'itacash_purchase_rejected'
             const actorName =
               notification.actor?.display_name ||
               notification.actor?.username ||
-              'Usuário'
+              (isItaCashPurchaseStatus ? 'EntreUS' : 'Usuário')
 
             const actorUsername = notification.actor?.username || 'usuario'
             const actorAvatar = notification.actor?.avatar_url || ''
