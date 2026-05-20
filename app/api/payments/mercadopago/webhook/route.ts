@@ -30,6 +30,33 @@ type MercadoPagoMerchantOrder = {
   message?: string
 }
 
+type MercadoPagoWebhookPayload = {
+  action?: string
+  type?: string
+  topic?: string
+  live_mode?: boolean
+  data?: {
+    id?: number | string
+  } | null
+  id?: number | string
+}
+
+type ProcessPaymentResult = {
+  ok: boolean
+  paymentId: string
+  ignored?: boolean
+  pending?: boolean
+  processed?: boolean
+  reason?: string
+  status?: string
+  result?: unknown
+}
+
+const PAYMENT_EVENT_TYPES = new Set(['payment'])
+const MERCHANT_ORDER_EVENT_TYPES = new Set(['merchant_order'])
+const PENDING_PAYMENT_STATUSES = new Set(['pending', 'in_process', 'authorized'])
+const FINAL_NOT_APPROVED_PAYMENT_STATUSES = new Set(['rejected', 'cancelled', 'canceled', 'expired'])
+
 function getServiceSupabase() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -53,8 +80,9 @@ function getWebhookEvent(request: Request, body: unknown) {
   if (queryTopic) return queryTopic
 
   if (body && typeof body === 'object') {
-    const record = body as Record<string, unknown>
-    return String(record.type || record.topic || record.action || '')
+    const record = body as MercadoPagoWebhookPayload
+    const action = record.action || ''
+    return String(record.type || record.topic || action.split('.')[0] || '')
   }
 
   return ''
@@ -67,8 +95,8 @@ function getResourceId(request: Request, body: unknown) {
   if (queryId) return queryId
 
   if (body && typeof body === 'object') {
-    const record = body as Record<string, unknown>
-    const data = record.data as Record<string, unknown> | undefined
+    const record = body as MercadoPagoWebhookPayload
+    const data = record.data || undefined
     return String(data?.id || record.id || '')
   }
 
@@ -96,12 +124,292 @@ function getSafeOrderId(value: unknown) {
   return uuidPattern.test(value) ? value : null
 }
 
+function isPaymentEvent(eventType: string, body: unknown) {
+  if (PAYMENT_EVENT_TYPES.has(eventType)) return true
+
+  if (body && typeof body === 'object') {
+    const record = body as MercadoPagoWebhookPayload
+    return Boolean(record.action?.startsWith('payment.'))
+  }
+
+  return false
+}
+
+function isMerchantOrderEvent(eventType: string) {
+  return MERCHANT_ORDER_EVENT_TYPES.has(eventType)
+}
+
+function getProviderPreferenceId(payment: MercadoPagoPayment, merchantOrder: MercadoPagoMerchantOrder | null) {
+  return merchantOrder?.preference_id || (payment.order?.type === 'mercadopago' ? String(payment.order.id || '') : null) || null
+}
+
+function getFetchFailureResult(paymentId: string, status: number, message?: string | null) {
+  console.info('Mercado Pago payment fetch failed', {
+    paymentId,
+    status,
+    message: message || null,
+  })
+
+  if (status === 404) {
+    console.info('Mercado Pago pagamento nao encontrado', {
+      paymentId,
+      status,
+    })
+
+    return NextResponse.json(
+      { ok: false, ignored: true, reason: 'payment_not_found', paymentId },
+      { status: 200 }
+    )
+  }
+
+  if (status === 401 || status === 403) {
+    console.info('Mercado Pago credencial sem acesso ao pagamento', {
+      paymentId,
+      status,
+    })
+
+    return NextResponse.json(
+      { ok: false, ignored: true, reason: 'payment_access_denied', paymentId },
+      { status: 200 }
+    )
+  }
+
+  return NextResponse.json(
+    { ok: false, error: message || 'Falha ao buscar pagamento Mercado Pago.', paymentId, status },
+    { status: 500 }
+  )
+}
+
+async function processPaymentId(
+  paymentId: string,
+  accessToken: string,
+  merchantOrder: MercadoPagoMerchantOrder | null = null
+) {
+  const { response: paymentResponse, data: payment } =
+    await fetchMercadoPagoJson<MercadoPagoPayment>(
+      `https://api.mercadopago.com/v1/payments/${paymentId}`,
+      accessToken
+    )
+
+  if (!paymentResponse.ok || !payment?.id) {
+    return getFetchFailureResult(paymentId, paymentResponse.status, payment?.message)
+  }
+
+  if (!merchantOrder && !payment.external_reference && payment.order?.id) {
+    const merchantOrderResult = await fetchMercadoPagoJson<MercadoPagoMerchantOrder>(
+      `https://api.mercadopago.com/merchant_orders/${payment.order.id}`,
+      accessToken
+    )
+
+    if (merchantOrderResult.response.ok && merchantOrderResult.data) {
+      merchantOrder = merchantOrderResult.data
+    } else if ([401, 403, 404].includes(merchantOrderResult.response.status)) {
+      console.info('Mercado Pago merchant_order ignorada ao complementar pagamento.', {
+        paymentId: String(payment.id || paymentId),
+        merchantOrderId: String(payment.order.id),
+        status: merchantOrderResult.response.status,
+      })
+    }
+  }
+
+  const externalReference = payment.external_reference || merchantOrder?.external_reference || null
+  const orderId = getSafeOrderId(payment.metadata?.order_id)
+  const providerPreferenceId = getProviderPreferenceId(payment, merchantOrder)
+  const providerStatus = payment.status || 'unknown'
+
+  console.info('Mercado Pago pagamento recebido', {
+    paymentId: String(payment.id),
+    status: providerStatus,
+    externalReference,
+    orderId,
+    providerPreferenceId,
+    paymentMethod: payment.payment_method_id || null,
+  })
+
+  const supabase = getServiceSupabase()
+  let { data, error } = await supabase.rpc('complete_mercadopago_payment_order_v2', {
+    p_provider_payment_id: String(payment.id || paymentId),
+    p_provider_status: providerStatus,
+    p_external_reference: externalReference,
+    p_order_id: orderId,
+    p_provider_preference_id: providerPreferenceId,
+    p_provider_payment_method: payment.payment_method_id || null,
+  })
+
+  if (error && externalReference) {
+    console.info('Tentando fallback da RPC antiga de Mercado Pago.', {
+      paymentId: String(payment.id || paymentId),
+      externalReference,
+    })
+
+    const fallbackResult = await supabase.rpc('complete_mercadopago_payment_order', {
+      p_external_reference: externalReference,
+      p_provider_payment_id: String(payment.id || paymentId),
+      p_provider_status: providerStatus,
+    })
+
+    data = fallbackResult.data
+    error = fallbackResult.error
+  }
+
+  if (error) {
+    console.error('Mercado Pago RPC error', {
+      paymentId: String(payment.id || paymentId),
+      status: providerStatus,
+      externalReference,
+      orderId,
+      providerPreferenceId,
+      error: error.message,
+    })
+
+    return NextResponse.json(
+      { ok: false, error: 'Erro ao processar pagamento Mercado Pago.', paymentId: String(payment.id || paymentId) },
+      { status: 500 }
+    )
+  }
+
+  if (providerStatus === 'approved') {
+    console.info('Mercado Pago pagamento processado', {
+      paymentId: String(payment.id || paymentId),
+      status: providerStatus,
+      result: data,
+    })
+
+    return NextResponse.json({
+      ok: true,
+      received: true,
+      processed: true,
+      paymentId: String(payment.id || paymentId),
+      result: data,
+    })
+  }
+
+  if (PENDING_PAYMENT_STATUSES.has(providerStatus)) {
+    console.info('Mercado Pago pagamento ainda nao aprovado', {
+      paymentId: String(payment.id || paymentId),
+      status: providerStatus,
+      result: data,
+    })
+
+    return NextResponse.json({
+      ok: true,
+      received: true,
+      pending: true,
+      paymentId: String(payment.id || paymentId),
+      status: providerStatus,
+      result: data,
+    })
+  }
+
+  if (FINAL_NOT_APPROVED_PAYMENT_STATUSES.has(providerStatus)) {
+    console.info('Mercado Pago pagamento ainda nao aprovado', {
+      paymentId: String(payment.id || paymentId),
+      status: providerStatus,
+      result: data,
+    })
+
+    return NextResponse.json({
+      ok: true,
+      received: true,
+      ignored: true,
+      reason: 'payment_not_approved',
+      paymentId: String(payment.id || paymentId),
+      status: providerStatus,
+      result: data,
+    })
+  }
+
+  console.info('Mercado Pago pagamento ainda nao aprovado', {
+    paymentId: String(payment.id || paymentId),
+    status: providerStatus,
+    result: data,
+  })
+
+  return NextResponse.json({
+    ok: true,
+    received: true,
+    ignored: true,
+    reason: 'payment_status_not_approved',
+    paymentId: String(payment.id || paymentId),
+    status: providerStatus,
+    result: data,
+  })
+}
+
+async function processMerchantOrder(resourceId: string, accessToken: string) {
+  const merchantOrderResult = await fetchMercadoPagoJson<MercadoPagoMerchantOrder>(
+    `https://api.mercadopago.com/merchant_orders/${resourceId}`,
+    accessToken
+  )
+
+  const merchantOrder = merchantOrderResult.data
+
+  if (!merchantOrderResult.response.ok) {
+    const status = merchantOrderResult.response.status
+
+    console.info('Mercado Pago merchant_order fetch failed', {
+      resourceId,
+      status,
+      message: merchantOrder?.message || null,
+    })
+
+    if (status === 404) {
+      return NextResponse.json(
+        { ok: false, ignored: true, reason: 'merchant_order_not_found', resourceId },
+        { status: 200 }
+      )
+    }
+
+    if (status === 401 || status === 403) {
+      return NextResponse.json(
+        { ok: false, ignored: true, reason: 'merchant_order_access_denied', resourceId },
+        { status: 200 }
+      )
+    }
+
+    return NextResponse.json(
+      { ok: false, error: merchantOrder?.message || 'Falha ao buscar merchant_order Mercado Pago.', resourceId, status },
+      { status: 500 }
+    )
+  }
+
+  if (!merchantOrder?.payments?.length) {
+    console.info('Mercado Pago merchant_order ignorada: sem pagamentos.', {
+      resourceId,
+      status: merchantOrderResult.response.status,
+    })
+
+    return NextResponse.json({ ok: true, received: true, ignored: true, reason: 'merchant_order_without_payments' })
+  }
+
+  const results: ProcessPaymentResult[] = []
+
+  for (const item of merchantOrder.payments) {
+    const paymentId = String(item.id || '')
+
+    if (!paymentId) continue
+
+    const response = await processPaymentId(paymentId, accessToken, merchantOrder)
+    const result = (await response.json()) as ProcessPaymentResult
+    results.push(result)
+  }
+
+  return NextResponse.json({
+    ok: results.some((result) => result.ok),
+    received: true,
+    processed: results.some((result) => result.processed),
+    pending: results.some((result) => result.pending),
+    ignored: results.every((result) => result.ignored),
+    results,
+  })
+}
+
 export async function POST(request: Request) {
   try {
     const accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN
 
     if (!accessToken) {
-      return NextResponse.json({ error: 'Mercado Pago nao configurado.' }, { status: 503 })
+      return NextResponse.json({ ok: false, error: 'Mercado Pago nao configurado.' }, { status: 503 })
     }
 
     const body = await request.json().catch(() => null)
@@ -110,146 +418,36 @@ export async function POST(request: Request) {
 
     console.info('Mercado Pago webhook recebido', {
       eventType,
+      action: body && typeof body === 'object' ? (body as MercadoPagoWebhookPayload).action || null : null,
+      topic: body && typeof body === 'object' ? (body as MercadoPagoWebhookPayload).topic || null : null,
+      liveMode: body && typeof body === 'object' ? (body as MercadoPagoWebhookPayload).live_mode ?? null : null,
       resourceId,
     })
 
     if (!resourceId) {
       console.info('Mercado Pago webhook ignorado: sem resource id.')
-      return NextResponse.json({ received: true, ignored: true })
+      return NextResponse.json({ ok: true, received: true, ignored: true, reason: 'missing_resource_id' })
     }
 
-    let paymentId = resourceId
-    let merchantOrder: MercadoPagoMerchantOrder | null = null
-
-    if (eventType === 'merchant_order') {
-      const merchantOrderResult = await fetchMercadoPagoJson<MercadoPagoMerchantOrder>(
-        `https://api.mercadopago.com/merchant_orders/${resourceId}`,
-        accessToken
-      )
-
-      merchantOrder = merchantOrderResult.data
-
-      if (!merchantOrderResult.response.ok || !merchantOrder?.payments?.length) {
-        console.info('Mercado Pago merchant_order ignorada: sem pagamentos.', {
-          resourceId,
-          status: merchantOrderResult.response.status,
-        })
-
-        return NextResponse.json({ received: true, ignored: true })
-      }
-
-      const approvedOrLatestPayment =
-        merchantOrder.payments.find((item) => item.status === 'approved') ||
-        merchantOrder.payments[merchantOrder.payments.length - 1]
-
-      paymentId = String(approvedOrLatestPayment?.id || '')
+    if (isMerchantOrderEvent(eventType)) {
+      return await processMerchantOrder(resourceId, accessToken)
     }
 
-    if (!paymentId) {
-      console.info('Mercado Pago webhook ignorado: sem payment id.', {
-        eventType,
-        resourceId,
-      })
-
-      return NextResponse.json({ received: true, ignored: true })
+    if (isPaymentEvent(eventType, body)) {
+      return await processPaymentId(resourceId, accessToken)
     }
 
-    const { response: paymentResponse, data: payment } =
-      await fetchMercadoPagoJson<MercadoPagoPayment>(
-        `https://api.mercadopago.com/v1/payments/${paymentId}`,
-        accessToken
-      )
-
-    if (!paymentResponse.ok || !payment?.id) {
-      console.error('Mercado Pago pagamento nao confirmado ao buscar detalhes.', {
-        paymentId,
-        status: paymentResponse.status,
-        message: payment?.message,
-      })
-
-      return NextResponse.json(
-        { error: payment?.message || 'Pagamento Mercado Pago nao confirmado.' },
-        { status: 502 }
-      )
-    }
-
-    if (!merchantOrder && !payment.external_reference && payment.order?.id) {
-      const merchantOrderResult = await fetchMercadoPagoJson<MercadoPagoMerchantOrder>(
-        `https://api.mercadopago.com/merchant_orders/${payment.order.id}`,
-        accessToken
-      )
-
-      if (merchantOrderResult.response.ok && merchantOrderResult.data) {
-        merchantOrder = merchantOrderResult.data
-      }
-    }
-
-    const externalReference = payment.external_reference || merchantOrder?.external_reference || null
-    const orderId = getSafeOrderId(payment.metadata?.order_id)
-    const providerPreferenceId =
-      merchantOrder?.preference_id ||
-      null
-
-    console.info('Mercado Pago pagamento recebido', {
-      paymentId: String(payment.id),
-      status: payment.status || 'unknown',
-      externalReference,
-      orderId,
-      providerPreferenceId,
-      paymentMethod: payment.payment_method_id || null,
+    console.info('Mercado Pago webhook ignorado: evento nao suportado.', {
+      eventType,
+      resourceId,
     })
 
-    const supabase = getServiceSupabase()
-    let { data, error } = await supabase.rpc('complete_mercadopago_payment_order_v2', {
-      p_provider_payment_id: String(payment.id || paymentId),
-      p_provider_status: payment.status || 'unknown',
-      p_external_reference: externalReference,
-      p_order_id: orderId,
-      p_provider_preference_id: providerPreferenceId,
-      p_provider_payment_method: payment.payment_method_id || null,
-    })
-
-    if (error && externalReference) {
-      console.info('Tentando fallback da RPC antiga de Mercado Pago.', {
-        paymentId: String(payment.id || paymentId),
-        externalReference,
-      })
-
-      const fallbackResult = await supabase.rpc('complete_mercadopago_payment_order', {
-        p_external_reference: externalReference,
-        p_provider_payment_id: String(payment.id || paymentId),
-        p_provider_status: payment.status || 'unknown',
-      })
-
-      data = fallbackResult.data
-      error = fallbackResult.error
-    }
-
-    if (error) {
-      console.error('Erro ao processar pagamento Mercado Pago aprovado/pending.', {
-        paymentId: String(payment.id || paymentId),
-        status: payment.status || 'unknown',
-        externalReference,
-        orderId,
-        providerPreferenceId,
-        error: error.message,
-      })
-
-      return NextResponse.json({ error: error.message }, { status: 500 })
-    }
-
-    console.info('Mercado Pago pagamento processado', {
-      paymentId: String(payment.id || paymentId),
-      status: payment.status || 'unknown',
-      result: data,
-    })
-
-    return NextResponse.json({ received: true, result: data })
+    return NextResponse.json({ ok: true, received: true, ignored: true, reason: 'unsupported_event', eventType })
   } catch (error) {
     console.error('Erro no webhook Mercado Pago:', error)
 
     return NextResponse.json(
-      { error: 'Erro interno no webhook.' },
+      { ok: false, error: 'Erro interno controlado no webhook Mercado Pago.' },
       { status: 500 }
     )
   }
