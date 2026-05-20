@@ -2,10 +2,12 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
+  AlertTriangle,
   ArrowLeft,
   Bug,
+  CheckCircle2,
   Coins,
   Gift,
   Lightbulb,
@@ -17,6 +19,7 @@ import {
   Wallet,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { usePendingItaCashPurchasesCount } from '../hooks/usePendingItaCashPurchasesCount'
 
 type AdminProfile = {
   id: string
@@ -80,6 +83,18 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState('')
   const [adminProfile, setAdminProfile] = useState<AdminProfile | null>(null)
+  const [newPendingAlert, setNewPendingAlert] = useState(false)
+  const isAdmin = adminProfile?.role === 'admin'
+  const handleNewPendingPurchase = useCallback(() => {
+    setNewPendingAlert(true)
+  }, [])
+  const {
+    pendingCount: pendingItaCashPurchasesCount,
+    loading: pendingItaCashPurchasesLoading,
+  } = usePendingItaCashPurchasesCount({
+    enabled: isAdmin,
+    onNewPending: handleNewPendingPurchase,
+  })
 
   useEffect(() => {
     loadPage()
@@ -177,6 +192,66 @@ export default function AdminPage() {
           Area restrita para administradores da plataforma.
         </div>
 
+        {newPendingAlert && (
+          <div className="relative z-10 mb-5 flex flex-col gap-3 rounded-3xl border border-red-300/30 bg-red-500/15 p-4 text-red-50 ring-1 ring-red-300/15 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-200" />
+              <div>
+                <p className="font-black">Nova compra ItaCash aguardando analise.</p>
+                <p className="mt-1 text-sm text-red-100/80">Abra a fila de compras para conferir o comprovante.</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setNewPendingAlert(false)}
+              className="rounded-full border border-red-200/20 px-4 py-2 text-sm font-black text-red-50 transition hover:bg-red-500/20"
+            >
+              Dispensar
+            </button>
+          </div>
+        )}
+
+        <div className={`relative z-10 mb-6 rounded-[2rem] border p-5 shadow-xl ring-1 ${
+          pendingItaCashPurchasesCount > 0
+            ? 'border-red-300/30 bg-red-500/15 text-red-50 shadow-red-950/20 ring-red-300/15'
+            : 'border-emerald-300/20 bg-emerald-500/10 text-emerald-50 shadow-black/20 ring-emerald-300/10'
+        }`}>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${
+                pendingItaCashPurchasesCount > 0 ? 'bg-red-500/20 text-red-100' : 'bg-emerald-500/15 text-emerald-100'
+              }`}>
+                {pendingItaCashPurchasesCount > 0 ? <AlertTriangle className="h-5 w-5" /> : <CheckCircle2 className="h-5 w-5" />}
+              </span>
+              <div>
+                <p className="text-lg font-black">
+                  {pendingItaCashPurchasesLoading
+                    ? 'Verificando compras ItaCash...'
+                    : pendingItaCashPurchasesCount > 0
+                      ? `Voce tem ${pendingItaCashPurchasesCount} compras de ItaCash aguardando analise.`
+                      : 'Nenhuma compra ItaCash pendente no momento.'}
+                </p>
+                <p className="mt-1 text-sm opacity-80">
+                  {pendingItaCashPurchasesCount > 0
+                    ? 'Revise comprovantes e aprove ou recuse cada solicitacao.'
+                    : 'A fila de compras manuais esta tranquila agora.'}
+                </p>
+              </div>
+            </div>
+
+            <Link
+              href="/admin/itacash-purchases"
+              className={`inline-flex items-center justify-center rounded-full px-5 py-3 text-sm font-black transition ${
+                pendingItaCashPurchasesCount > 0
+                  ? 'bg-white text-red-950 hover:bg-red-50'
+                  : 'border border-emerald-200/20 bg-emerald-500/10 text-emerald-50 hover:bg-emerald-500/20'
+              }`}
+            >
+              Analisar compras
+            </Link>
+          </div>
+        </div>
+
         {message && (
           <div className="relative z-10 mb-5 rounded-2xl border border-amber-300/20 bg-amber-500/10 px-4 py-3 text-sm font-semibold text-amber-100">
             {message}
@@ -199,6 +274,11 @@ export default function AdminPage() {
 
                 <h2 className="mt-5 text-xl font-black text-white">
                   {card.title}
+                  {card.href === '/admin/itacash-purchases' && pendingItaCashPurchasesCount > 0 && (
+                    <span className="ml-2 inline-flex min-h-[22px] min-w-[22px] items-center justify-center rounded-full bg-red-600 px-1.5 align-middle text-[11px] font-black text-white">
+                      {pendingItaCashPurchasesCount > 99 ? '99+' : pendingItaCashPurchasesCount}
+                    </span>
+                  )}
                 </h2>
                 <p className="mt-3 min-h-16 text-sm leading-6 text-zinc-400">
                   {card.description}

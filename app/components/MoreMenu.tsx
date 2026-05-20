@@ -35,6 +35,7 @@ type MoreMenuProps = {
   onLogout: () => void
   onClose: () => void
   isAdmin?: boolean
+  pendingItaCashPurchasesCount?: number
 }
 
 export default function MoreMenu({
@@ -45,6 +46,7 @@ export default function MoreMenu({
   onLogout,
   onClose,
   isAdmin = false,
+  pendingItaCashPurchasesCount = 0,
 }: MoreMenuProps) {
   const pathname = usePathname()
   const { language, languages, setLanguage, t } = useLanguage()
@@ -69,6 +71,10 @@ export default function MoreMenu({
     return `h-5 w-5 shrink-0 ${active ? 'stroke-[2.5]' : ''}`
   }
 
+  function formatBadge(value: number) {
+    return value > 99 ? '99+' : value
+  }
+
   return (
     <div
       className={`${position ? 'fixed' : 'absolute bottom-full left-0 mb-3'} z-[10000] max-h-[calc(100vh-24px)] w-72 overflow-y-auto overscroll-contain rounded-3xl border border-blue-400/15 bg-zinc-950/98 p-2 text-white shadow-2xl shadow-black/40 ring-1 ring-white/10 [scrollbar-color:rgba(96,165,250,0.45)_transparent] [scrollbar-width:thin]`}
@@ -84,7 +90,12 @@ export default function MoreMenu({
         {isAdmin && (
           <Link href="/admin" onClick={onClose} className={itemClass('/admin')}>
             <ShieldCheck className={iconClass('/admin')} />
-            <span>Admin</span>
+            <span className="min-w-0 flex-1">Admin</span>
+            {pendingItaCashPurchasesCount > 0 && (
+              <span className="flex min-h-[20px] min-w-[20px] items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-black text-white ring-1 ring-red-300/30">
+                {formatBadge(pendingItaCashPurchasesCount)}
+              </span>
+            )}
           </Link>
         )}
 

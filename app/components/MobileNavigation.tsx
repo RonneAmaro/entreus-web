@@ -38,6 +38,7 @@ import {
 import { supabase } from '@/lib/supabase'
 import { useLanguage } from './LanguageProvider'
 import type { LanguageCode } from '@/lib/translations'
+import { usePendingItaCashPurchasesCount } from '../hooks/usePendingItaCashPurchasesCount'
 
 type MobileNavigationProps = {
   email: string
@@ -90,6 +91,9 @@ export default function MobileNavigation({
   const [openPostMenu, setOpenPostMenu] = useState(false)
   const [internalUnreadMessagesCount, setInternalUnreadMessagesCount] = useState(0)
   const [isAdmin, setIsAdmin] = useState(false)
+  const { pendingCount: pendingItaCashPurchasesCount } = usePendingItaCashPurchasesCount({
+    enabled: isAdmin,
+  })
 
   const isMessagesPage = pathname === '/messages' || pathname.startsWith('/messages/')
 
@@ -317,11 +321,17 @@ export default function MobileNavigation({
         <button
           type="button"
           onClick={() => setOpenMoreOptions((current) => !current)}
-          className="flex h-10 w-10 items-center justify-center rounded-full border border-zinc-200 bg-zinc-100 text-zinc-800 shadow-sm transition hover:bg-zinc-200 active:scale-95 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+          className="relative flex h-10 w-10 items-center justify-center rounded-full border border-zinc-200 bg-zinc-100 text-zinc-800 shadow-sm transition hover:bg-zinc-200 active:scale-95 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
           aria-label={t('more.open')}
           title={t('more.title')}
         >
           <MoreHorizontal className="h-6 w-6" />
+
+          {isAdmin && pendingItaCashPurchasesCount > 0 && (
+            <span className="absolute -right-1 -top-1 flex min-h-[17px] min-w-[17px] items-center justify-center rounded-full bg-red-600 px-1 text-[9px] font-black text-white ring-2 ring-white dark:ring-black">
+              {formatBadge(pendingItaCashPurchasesCount)}
+            </span>
+          )}
         </button>
       </header>
 
@@ -349,7 +359,12 @@ export default function MobileNavigation({
                   className={drawerLinkClass('/admin')}
                 >
                   <ShieldCheck className={drawerIconClass('/admin')} />
-                  Admin
+                  <span className="min-w-0 flex-1">Admin</span>
+                  {pendingItaCashPurchasesCount > 0 && (
+                    <span className="flex min-h-[20px] min-w-[20px] items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-black text-white">
+                      {formatBadge(pendingItaCashPurchasesCount)}
+                    </span>
+                  )}
                 </Link>
               )}
 
@@ -589,7 +604,12 @@ export default function MobileNavigation({
                   className={drawerLinkClass('/admin')}
                 >
                   <ShieldCheck className={drawerIconClass('/admin')} />
-                  Admin
+                  <span className="min-w-0 flex-1">Admin</span>
+                  {pendingItaCashPurchasesCount > 0 && (
+                    <span className="flex min-h-[20px] min-w-[20px] items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-black text-white">
+                      {formatBadge(pendingItaCashPurchasesCount)}
+                    </span>
+                  )}
                 </Link>
               )}
 

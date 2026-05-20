@@ -2,8 +2,9 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
+  AlertTriangle,
   ArrowLeft,
   CheckCircle2,
   Coins,
@@ -14,6 +15,7 @@ import {
   XCircle,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { usePendingItaCashPurchasesCount } from '../../hooks/usePendingItaCashPurchasesCount'
 
 type FilterStatus = 'pending' | 'approved' | 'rejected' | 'all'
 
@@ -106,6 +108,22 @@ export default function AdminItaCashPurchasesPage() {
   const [rejectionReason, setRejectionReason] = useState('')
   const [adminNotes, setAdminNotes] = useState('')
   const [proofLoadingId, setProofLoadingId] = useState<string | null>(null)
+  const [newPendingAlert, setNewPendingAlert] = useState(false)
+  const isAdmin = adminProfile?.role === 'admin'
+
+  const handleNewPendingPurchase = useCallback(() => {
+    setNewPendingAlert(true)
+  }, [])
+
+  const handlePurchaseRequestsChanged = useCallback(() => {
+    loadRequests()
+  }, [])
+
+  const { pendingCount: livePendingCount } = usePendingItaCashPurchasesCount({
+    enabled: isAdmin,
+    onNewPending: handleNewPendingPurchase,
+    onChanged: handlePurchaseRequestsChanged,
+  })
 
   useEffect(() => {
     loadPage()
@@ -115,6 +133,12 @@ export default function AdminItaCashPurchasesPage() {
     if (filter === 'all') return requests
     return requests.filter((request) => request.status === filter)
   }, [filter, requests])
+
+  const pendingRequestsCount = useMemo(() => {
+    return requests.filter((request) => request.status === 'pending').length
+  }, [requests])
+
+  const visiblePendingCount = Math.max(pendingRequestsCount, livePendingCount)
 
   async function loadPage() {
     setLoading(true)
@@ -348,6 +372,61 @@ export default function AdminItaCashPurchasesPage() {
           </div>
         </header>
 
+        <div className="mb-5 grid gap-3 md:grid-cols-[minmax(0,1fr)_16rem]">
+          <div className={`rounded-[2rem] border p-5 ring-1 ${
+            visiblePendingCount > 0
+              ? 'border-red-300/30 bg-red-500/15 text-red-50 ring-red-300/15'
+              : 'border-emerald-300/20 bg-emerald-500/10 text-emerald-50 ring-emerald-300/10'
+          }`}>
+            <div className="flex items-start gap-3">
+              <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${
+                visiblePendingCount > 0 ? 'bg-red-500/20 text-red-100' : 'bg-emerald-500/15 text-emerald-100'
+              }`}>
+                {visiblePendingCount > 0 ? <AlertTriangle className="h-5 w-5" /> : <CheckCircle2 className="h-5 w-5" />}
+              </span>
+              <div>
+                <p className="text-lg font-black">
+                  {visiblePendingCount > 0
+                    ? 'Existem solicitacoes aguardando analise.'
+                    : 'Nenhuma solicitacao pendente agora.'}
+                </p>
+                <p className="mt-1 text-sm opacity-80">
+                  {visiblePendingCount > 0
+                    ? 'Confira comprovantes e finalize a aprovacao ou recusa.'
+                    : 'A fila de compras ItaCash esta em dia.'}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-[2rem] border border-white/10 bg-zinc-950 p-5 ring-1 ring-white/5">
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-zinc-500">Pendentes</p>
+            <p className={`mt-2 text-4xl font-black ${visiblePendingCount > 0 ? 'text-red-200' : 'text-emerald-200'}`}>
+              {visiblePendingCount}
+            </p>
+            <p className="mt-1 text-sm text-zinc-400">compras ItaCash</p>
+          </div>
+        </div>
+
+        {newPendingAlert && (
+          <div className="mb-5 flex flex-col gap-3 rounded-3xl border border-red-300/30 bg-red-500/15 p-4 text-red-50 ring-1 ring-red-300/15 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-200" />
+              <div>
+                <p className="font-black">Nova compra ItaCash aguardando analise.</p>
+                <p className="mt-1 text-sm text-red-100/80">A lista foi atualizada para voce conferir a solicitacao.</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setNewPendingAlert(false)}
+              className="rounded-full border border-red-200/20 px-4 py-2 text-sm font-black text-red-50 transition hover:bg-red-500/20"
+            >
+              Dispensar
+            </button>
+          </div>
+        )}
+
         <div className="mb-5 flex flex-wrap gap-2">
           {FILTERS.map((item) => (
             <button
@@ -361,6 +440,11 @@ export default function AdminItaCashPurchasesPage() {
               }`}
             >
               {item.label}
+              {item.value === 'pending' && visiblePendingCount > 0 && (
+                <span className="ml-2 inline-flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-black text-white">
+                  {visiblePendingCount > 99 ? '99+' : visiblePendingCount}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -382,9 +466,21 @@ export default function AdminItaCashPurchasesPage() {
               const isPending = request.status === 'pending'
 
               return (
-                <article key={request.id} className="rounded-[2rem] border border-white/10 bg-zinc-950 p-4 shadow-xl shadow-black/20 ring-1 ring-white/5">
+                <article
+                  key={request.id}
+                  className={`rounded-[2rem] border p-4 shadow-xl ring-1 ${
+                    isPending
+                      ? 'border-red-300/30 bg-red-500/10 shadow-red-950/20 ring-red-300/15'
+                      : 'border-white/10 bg-zinc-950 shadow-black/20 ring-white/5'
+                  }`}
+                >
                   <div className="grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_repeat(7,minmax(0,1fr))_auto] xl:items-center">
                     <div className="min-w-0">
+                      {isPending && (
+                        <p className="mb-1 inline-flex rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.16em] text-white">
+                          Aguardando analise
+                        </p>
+                      )}
                       <p className="truncate font-black">
                         {profile?.display_name || profile?.username || 'Usuario'}
                       </p>
@@ -434,7 +530,7 @@ export default function AdminItaCashPurchasesPage() {
                           ? 'bg-emerald-500/10 text-emerald-300'
                           : request.status === 'rejected'
                             ? 'bg-red-500/10 text-red-300'
-                            : 'bg-blue-500/10 text-blue-300'
+                            : 'bg-red-500/15 text-red-100 ring-1 ring-red-300/20'
                       }`}>
                         {statusLabel(request.status)}
                       </span>
