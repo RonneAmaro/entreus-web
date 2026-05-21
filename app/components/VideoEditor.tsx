@@ -7,6 +7,7 @@ import {
   ArrowLeft,
   Captions,
   Check,
+  ImageIcon,
   Loader2,
   Mic,
   Move,
@@ -36,18 +37,63 @@ type TextOverlay = {
   endTime: number
 }
 
+type ImageOverlay = {
+  id: string
+  url: string
+  name: string
+  x: number
+  y: number
+  width: number
+  height: number
+  startTime: number
+  endTime: number
+}
+
 type CanvasSize = {
   width: number
   height: number
 }
 
-type EditorPanel = 'add' | 'text' | 'audio' | 'effects' | 'caption' | 'voice'
+type EditorPanel = 'add' | 'text' | 'image' | 'audio' | 'effects' | 'caption' | 'voice'
+type DraggingLayer = { type: 'text' | 'image'; id: string } | null
+
+type CompressionProfile = {
+  label: '720p' | '480p'
+  maxWidth: number
+  maxHeight: number
+  videoBitrate: string
+  audioBitrate: string
+}
+
+type CompressionStats = {
+  originalBytes: number
+  optimizedBytes: number
+  profile: CompressionProfile['label']
+}
 
 const DEFAULT_TEXT_COLOR = '#ffffff'
 const DEFAULT_FONT_SIZE = 42
 const DEFAULT_VIDEO_DURATION = 10
 const FFMPEG_CORE_VERSION = '0.12.10'
 const FFMPEG_CORE_BASE_URL = `https://unpkg.com/@ffmpeg/core@${FFMPEG_CORE_VERSION}/dist/umd`
+const HEAVY_VIDEO_SIZE_BYTES = 30 * 1024 * 1024
+
+const COMPRESSION_PROFILES: Record<CompressionProfile['label'], CompressionProfile> = {
+  '720p': {
+    label: '720p',
+    maxWidth: 1280,
+    maxHeight: 720,
+    videoBitrate: '1500k',
+    audioBitrate: '128k',
+  },
+  '480p': {
+    label: '480p',
+    maxWidth: 854,
+    maxHeight: 480,
+    videoBitrate: '850k',
+    audioBitrate: '96k',
+  },
+}
 
 const videoFilters: {
   value: VideoFilter
@@ -136,6 +182,15 @@ function formatEditorTime(value: number) {
   return `${minutes}:${String(seconds).padStart(2, '0')}`
 }
 
+function formatFileSize(bytes: number) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 MB'
+
+  const megabytes = bytes / (1024 * 1024)
+  if (megabytes >= 1) return `${megabytes.toFixed(1)} MB`
+
+  return `${(bytes / 1024).toFixed(0)} KB`
+}
+
 function getOverlayLabel(overlay: TextOverlay, index: number) {
   const normalizedText = overlay.text.trim()
   if (!normalizedText) return `Texto ${index + 1}`
@@ -145,14 +200,21 @@ function getOverlayLabel(overlay: TextOverlay, index: number) {
     : normalizedText
 }
 
+function getReductionPercent(originalBytes: number, optimizedBytes: number) {
+  if (originalBytes <= 0 || optimizedBytes <= 0) return 0
+
+  return clamp(Math.round((1 - optimizedBytes / originalBytes) * 100), 0, 99)
+}
+
 export default function VideoEditor() {
   const ffmpegRef = useRef<FFmpeg | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const imageElementsRef = useRef<Map<string, HTMLImageElement>>(new Map())
   const pointerMovedRef = useRef(false)
   const pointerStartedOnOverlayRef = useRef(false)
-  const draggingOverlayIdRef = useRef<string | null>(null)
+  const draggingLayerRef = useRef<DraggingLayer>(null)
   const renderStageRef = useRef('idle')
 
   const [videoFile, setVideoFile] = useState<File | null>(null)
@@ -167,6 +229,8 @@ export default function VideoEditor() {
   const [textColor, setTextColor] = useState(DEFAULT_TEXT_COLOR)
   const [overlays, setOverlays] = useState<TextOverlay[]>([])
   const [activeOverlayId, setActiveOverlayId] = useState<string | null>(null)
+  const [imageOverlays, setImageOverlays] = useState<ImageOverlay[]>([])
+  const [activeImageId, setActiveImageId] = useState<string | null>(null)
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
   const [isPlaying, setIsPlaying] = useState(false)
   const [duration, setDuration] = useState(DEFAULT_VIDEO_DURATION)
@@ -180,6 +244,7 @@ export default function VideoEditor() {
   const [isRendering, setIsRendering] = useState(false)
   const [renderProgress, setRenderProgress] = useState(0)
   const [renderMessage, setRenderMessage] = useState('')
+  const [compressionStats, setCompressionStats] = useState<CompressionStats | null>(null)
 
   function setRenderStage(stage: string, message?: string) {
     renderStageRef.current = stage
@@ -234,7 +299,24 @@ export default function VideoEditor() {
 
   useEffect(() => {
     drawCanvas()
-  }, [canvasSize, overlays, activeOverlayId, currentTime])
+  }, [canvasSize, overlays, imageOverlays, activeOverlayId, activeImageId, currentTime])
+
+  useEffect(() => {
+    imageOverlays.forEach((overlay) => {
+      if (imageElementsRef.current.has(overlay.id)) return
+
+      const image = new Image()
+      image.onload = drawCanvas
+      image.src = overlay.url
+      imageElementsRef.current.set(overlay.id, image)
+    })
+
+    Array.from(imageElementsRef.current.keys()).forEach((id) => {
+      if (!imageOverlays.some((overlay) => overlay.id === id)) {
+        imageElementsRef.current.delete(id)
+      }
+    })
+  }, [imageOverlays])
 
   useEffect(() => {
     if (!isPlaying) return
@@ -271,12 +353,17 @@ export default function VideoEditor() {
     if (!file) return
 
     if (videoUrl) URL.revokeObjectURL(videoUrl)
+    imageOverlays.forEach((overlay) => URL.revokeObjectURL(overlay.url))
+    imageElementsRef.current.clear()
 
     setVideoFile(file)
     setVideoUrl(URL.createObjectURL(file))
     setVideoName(file.name)
     setOverlays([])
     setActiveOverlayId(null)
+    setImageOverlays([])
+    setActiveImageId(null)
+    setCompressionStats(null)
     setIsPlaying(false)
     setCurrentTime(0)
     syncBackgroundMusic(0)
@@ -291,6 +378,51 @@ export default function VideoEditor() {
     setAudioFile(file)
     setAudioUrl(URL.createObjectURL(file))
     setAudioName(file.name)
+    event.target.value = ''
+  }
+
+  function handleImageChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    const imageUrl = URL.createObjectURL(file)
+    const overlay: ImageOverlay = {
+      id: crypto.randomUUID(),
+      url: imageUrl,
+      name: file.name,
+      x: canvasSize.width * 0.18,
+      y: canvasSize.height * 0.18,
+      width: Math.min(canvasSize.width * 0.28, 280),
+      height: Math.min(canvasSize.height * 0.28, 280),
+      startTime: clamp(currentTime, 0, duration),
+      endTime: clamp(currentTime + 3, 0, duration),
+    }
+
+    const image = new Image()
+    image.onload = () => {
+      const aspectRatio = image.naturalWidth > 0 && image.naturalHeight > 0
+        ? image.naturalWidth / image.naturalHeight
+        : 1
+
+      setImageOverlays((current) =>
+        current.map((item) =>
+          item.id === overlay.id
+            ? {
+                ...item,
+                height: item.width / aspectRatio,
+              }
+            : item
+        )
+      )
+      drawCanvas()
+    }
+    image.src = imageUrl
+    imageElementsRef.current.set(overlay.id, image)
+
+    setImageOverlays((current) => [...current, overlay])
+    setActiveImageId(overlay.id)
+    setActiveOverlayId(null)
+    setActivePanel('image')
     event.target.value = ''
   }
 
@@ -312,6 +444,8 @@ export default function VideoEditor() {
   function clearEditorAfterPublish() {
     if (videoUrl) URL.revokeObjectURL(videoUrl)
     if (audioUrl) URL.revokeObjectURL(audioUrl)
+    imageOverlays.forEach((overlay) => URL.revokeObjectURL(overlay.url))
+    imageElementsRef.current.clear()
 
     setVideoFile(null)
     setVideoUrl('')
@@ -321,8 +455,11 @@ export default function VideoEditor() {
     setAudioName('')
     setOverlays([])
     setActiveOverlayId(null)
+    setImageOverlays([])
+    setActiveImageId(null)
     setCaption('')
     setTextValue('')
+    setCompressionStats(null)
     setCurrentTime(0)
     setIsPlaying(false)
   }
@@ -403,6 +540,30 @@ export default function VideoEditor() {
     context.clearRect(0, 0, canvas.width, canvas.height)
     context.textBaseline = 'top'
 
+    imageOverlays
+      .filter((overlay) => currentTime >= overlay.startTime && currentTime <= overlay.endTime)
+      .forEach((overlay) => {
+        const image = imageElementsRef.current.get(overlay.id)
+        if (!image || !image.complete) return
+
+        context.drawImage(image, overlay.x, overlay.y, overlay.width, overlay.height)
+
+        if (overlay.id === activeImageId) {
+          context.save()
+          context.strokeStyle = 'rgba(251, 191, 36, 0.95)'
+          context.lineWidth = 3
+          context.setLineDash([10, 7])
+          context.strokeRect(overlay.x - 8, overlay.y - 8, overlay.width + 16, overlay.height + 16)
+          context.setLineDash([])
+          context.fillStyle = 'rgba(251, 191, 36, 0.95)'
+          context.fillRect(overlay.x + overlay.width - 8, overlay.y + overlay.height - 8, 18, 18)
+          context.strokeStyle = 'rgba(255, 255, 255, 0.95)'
+          context.lineWidth = 2
+          context.strokeRect(overlay.x + overlay.width - 8, overlay.y + overlay.height - 8, 18, 18)
+          context.restore()
+        }
+      })
+
     overlays
       .filter((overlay) => currentTime >= overlay.startTime && currentTime <= overlay.endTime)
       .forEach((overlay) => {
@@ -451,6 +612,7 @@ export default function VideoEditor() {
 
     setOverlays((current) => [...current, overlay])
     setActiveOverlayId(overlay.id)
+    setActiveImageId(null)
     setActivePanel('text')
     setTextValue(cleanText)
   }
@@ -480,9 +642,37 @@ export default function VideoEditor() {
     return null
   }
 
+  function findImageAtPoint(point: { x: number; y: number }) {
+    for (const overlay of [...imageOverlays].reverse()) {
+      if (currentTime < overlay.startTime || currentTime > overlay.endTime) continue
+
+      if (
+        point.x >= overlay.x - 10 &&
+        point.x <= overlay.x + overlay.width + 10 &&
+        point.y >= overlay.y - 10 &&
+        point.y <= overlay.y + overlay.height + 10
+      ) {
+        return overlay
+      }
+    }
+
+    return null
+  }
+
   function selectOverlay(overlay: TextOverlay) {
     setActiveOverlayId(overlay.id)
+    setActiveImageId(null)
     setActivePanel('text')
+
+    if (currentTime < overlay.startTime || currentTime > overlay.endTime) {
+      handleSeek(overlay.startTime)
+    }
+  }
+
+  function selectImageOverlay(overlay: ImageOverlay) {
+    setActiveImageId(overlay.id)
+    setActiveOverlayId(null)
+    setActivePanel('image')
 
     if (currentTime < overlay.startTime || currentTime > overlay.endTime) {
       handleSeek(overlay.startTime)
@@ -494,31 +684,45 @@ export default function VideoEditor() {
     if (!canvas) return
 
     const point = getCanvasPoint(event, canvas)
-    const overlay = findOverlayAtPoint(point)
+    const imageOverlay = findImageAtPoint(point)
+    const overlay = imageOverlay ? null : findOverlayAtPoint(point)
 
-    if (!overlay) {
+    if (!overlay && !imageOverlay) {
       setActiveOverlayId(null)
+      setActiveImageId(null)
       pointerStartedOnOverlayRef.current = false
       pointerMovedRef.current = false
-      draggingOverlayIdRef.current = null
+      draggingLayerRef.current = null
       return
     }
 
     pointerStartedOnOverlayRef.current = true
     pointerMovedRef.current = false
-    draggingOverlayIdRef.current = overlay.id
     canvas.setPointerCapture(event.pointerId)
-    setActiveOverlayId(overlay.id)
-    setActivePanel('text')
-    setDragOffset({
-      x: point.x - overlay.x,
-      y: point.y - overlay.y,
-    })
+    if (imageOverlay) {
+      draggingLayerRef.current = { type: 'image', id: imageOverlay.id }
+      setActiveOverlayId(null)
+      setActiveImageId(imageOverlay.id)
+      setActivePanel('image')
+      setDragOffset({
+        x: point.x - imageOverlay.x,
+        y: point.y - imageOverlay.y,
+      })
+    } else if (overlay) {
+      draggingLayerRef.current = { type: 'text', id: overlay.id }
+      setActiveOverlayId(overlay.id)
+      setActiveImageId(null)
+      setActivePanel('text')
+      setDragOffset({
+        x: point.x - overlay.x,
+        y: point.y - overlay.y,
+      })
+    }
   }
 
   function handlePointerMove(event: PointerEvent<HTMLCanvasElement>) {
-    const draggingOverlayId = draggingOverlayIdRef.current || activeOverlayId
-    if (!draggingOverlayId) return
+    const draggingLayer = draggingLayerRef.current
+    if (!draggingLayer) return
 
     const canvas = canvasRef.current
     if (!canvas || !canvas.hasPointerCapture(event.pointerId)) return
@@ -526,14 +730,29 @@ export default function VideoEditor() {
     const point = getCanvasPoint(event, canvas)
     pointerMovedRef.current = true
 
-    setOverlays((current) =>
+    if (draggingLayer.type === 'text') {
+      setOverlays((current) =>
+        current.map((overlay) => {
+          if (overlay.id !== draggingLayer.id) return overlay
+
+          return {
+            ...overlay,
+            x: clamp(point.x - dragOffset.x, 0, canvas.width),
+            y: clamp(point.y - dragOffset.y, 0, canvas.height),
+          }
+        })
+      )
+      return
+    }
+
+    setImageOverlays((current) =>
       current.map((overlay) => {
-        if (overlay.id !== draggingOverlayId) return overlay
+        if (overlay.id !== draggingLayer.id) return overlay
 
         return {
           ...overlay,
-          x: clamp(point.x - dragOffset.x, 0, canvas.width),
-          y: clamp(point.y - dragOffset.y, 0, canvas.height),
+          x: clamp(point.x - dragOffset.x, 0, canvas.width - overlay.width),
+          y: clamp(point.y - dragOffset.y, 0, canvas.height - overlay.height),
         }
       })
     )
@@ -551,7 +770,7 @@ export default function VideoEditor() {
 
     pointerMovedRef.current = false
     pointerStartedOnOverlayRef.current = false
-    draggingOverlayIdRef.current = null
+    draggingLayerRef.current = null
   }
 
   async function togglePlayback() {
@@ -591,6 +810,30 @@ export default function VideoEditor() {
     setOverlays((current) =>
       current.map((overlay) => {
         if (overlay.id !== activeOverlayId) return overlay
+
+        const nextValue = clamp(value, 0, duration)
+
+        if (key === 'startTime') {
+          return {
+            ...overlay,
+            startTime: Math.min(nextValue, overlay.endTime),
+          }
+        }
+
+        return {
+          ...overlay,
+          endTime: Math.max(nextValue, overlay.startTime),
+        }
+      })
+    )
+  }
+
+  function updateActiveImageTiming(key: 'startTime' | 'endTime', value: number) {
+    if (!activeImageId) return
+
+    setImageOverlays((current) =>
+      current.map((overlay) => {
+        if (overlay.id !== activeImageId) return overlay
 
         const nextValue = clamp(value, 0, duration)
 
@@ -652,6 +895,17 @@ export default function VideoEditor() {
     setOverlays((current) => current.filter((overlay) => overlay.id !== activeOverlayId))
     setActiveOverlayId(null)
     setTextValue('')
+  }
+
+  function removeActiveImageOverlay() {
+    if (!activeImageId) return
+
+    const activeImage = imageOverlays.find((overlay) => overlay.id === activeImageId)
+    if (activeImage) URL.revokeObjectURL(activeImage.url)
+
+    imageElementsRef.current.delete(activeImageId)
+    setImageOverlays((current) => current.filter((overlay) => overlay.id !== activeImageId))
+    setActiveImageId(null)
   }
 
   async function getFFmpeg() {
@@ -832,6 +1086,113 @@ export default function VideoEditor() {
     ]
   }
 
+  function shouldPreferCompactCompression() {
+    const isCoarseMobileDevice =
+      typeof navigator !== 'undefined' &&
+      (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) || navigator.maxTouchPoints > 1)
+
+    return isCoarseMobileDevice || (videoFile?.size || 0) > HEAVY_VIDEO_SIZE_BYTES
+  }
+
+  function getCompressionProfile() {
+    return shouldPreferCompactCompression()
+      ? COMPRESSION_PROFILES['480p']
+      : COMPRESSION_PROFILES['720p']
+  }
+
+  function buildCompressionArgs(inputName: string, outputName: string, profile: CompressionProfile) {
+    const scaleFilter = [
+      'scale=',
+      `'if(gt(iw,ih),min(iw,${profile.maxWidth}),-2)'`,
+      ':',
+      `'if(gt(iw,ih),-2,min(ih,${profile.maxHeight}))'`,
+    ].join('')
+
+    return [
+      '-i',
+      inputName,
+      '-vf',
+      scaleFilter,
+      '-c:v',
+      'libx264',
+      '-preset',
+      'veryfast',
+      '-b:v',
+      profile.videoBitrate,
+      '-maxrate',
+      profile.videoBitrate,
+      '-bufsize',
+      `${Number.parseInt(profile.videoBitrate, 10) * 2}k`,
+      '-pix_fmt',
+      'yuv420p',
+      '-c:a',
+      'aac',
+      '-b:a',
+      profile.audioBitrate,
+      '-movflags',
+      '+faststart',
+      outputName,
+    ]
+  }
+
+  function readFfmpegBytes(outputData: Awaited<ReturnType<FFmpeg['readFile']>>) {
+    const outputBytes =
+      typeof outputData === 'string'
+        ? new TextEncoder().encode(outputData)
+        : outputData
+
+    return new Uint8Array(outputBytes)
+  }
+
+  async function optimizeRenderedVideo(ffmpeg: FFmpeg, renderedName: string, optimizedName: string) {
+    const renderedData = await ffmpeg.readFile(renderedName)
+    const renderedArray = readFfmpegBytes(renderedData)
+    const profile = getCompressionProfile()
+
+    setRenderStage('optimizing', `Otimizando video em ${profile.label}...`)
+    console.info('[VideoEditor] Compression start:', {
+      sourceBytes: renderedArray.byteLength,
+      profile: profile.label,
+      maxWidth: profile.maxWidth,
+      maxHeight: profile.maxHeight,
+      videoBitrate: profile.videoBitrate,
+      audioBitrate: profile.audioBitrate,
+    })
+
+    await cleanupFfmpegFiles(ffmpeg, [optimizedName])
+
+    const compressionArgs = buildCompressionArgs(renderedName, optimizedName, profile)
+    console.info('[VideoEditor] FFmpeg compression command:', compressionArgs.join(' '))
+    const exitCode = await ffmpeg.exec(compressionArgs)
+
+    if (exitCode !== 0) {
+      throw new Error('FFmpeg retornou erro ao otimizar o video.')
+    }
+
+    const optimizedData = await ffmpeg.readFile(optimizedName)
+    const optimizedArray = readFfmpegBytes(optimizedData)
+    const finalArray = optimizedArray.byteLength < renderedArray.byteLength
+      ? optimizedArray
+      : renderedArray
+
+    setCompressionStats({
+      originalBytes: renderedArray.byteLength,
+      optimizedBytes: finalArray.byteLength,
+      profile: profile.label,
+    })
+
+    console.info('[VideoEditor] Compression done:', {
+      sourceBytes: renderedArray.byteLength,
+      optimizedBytes: optimizedArray.byteLength,
+      uploadedBytes: finalArray.byteLength,
+      reductionPercent: getReductionPercent(renderedArray.byteLength, finalArray.byteLength),
+      usedOptimizedFile: optimizedArray.byteLength < renderedArray.byteLength,
+      profile: profile.label,
+    })
+
+    return finalArray
+  }
+
   async function cleanupFfmpegFiles(ffmpeg: FFmpeg, paths: string[]) {
     await Promise.all(
       paths.map(async (path) => {
@@ -852,12 +1213,14 @@ export default function VideoEditor() {
     setIsPlaying(false)
     setIsRendering(true)
     setRenderProgress(0)
-    setRenderStage('starting', isReady ? 'Preparando arquivos...' : 'Carregando motor de video...')
+    setCompressionStats(null)
+    setRenderStage('starting', isReady ? 'Preparando video...' : 'Carregando motor de video...')
 
     const inputVideoName = `input.${getFileExtension(videoFile.name, 'mp4')}`
     const inputAudioName = audioFile ? `music.${getFileExtension(audioFile.name, 'mp3')}` : null
     const outputName = 'entreus_output.mp4'
-    const filesToClean = [inputVideoName, outputName, ...(inputAudioName ? [inputAudioName] : [])]
+    const optimizedOutputName = 'entreus_output_optimized.mp4'
+    const filesToClean = [inputVideoName, outputName, optimizedOutputName, ...(inputAudioName ? [inputAudioName] : [])]
 
     try {
       logRenderContext('start', {
@@ -867,20 +1230,20 @@ export default function VideoEditor() {
       })
       const ffmpeg = await getFFmpeg()
 
-      setRenderStage('cleanup', 'Preparando arquivos...')
+      setRenderStage('cleanup', 'Preparando video...')
       await cleanupFfmpegFiles(ffmpeg, filesToClean)
 
-      setRenderStage('write_video', 'Enviando arquivos para o FFmpeg...')
+      setRenderStage('write_video', 'Preparando video...')
       await ffmpeg.writeFile(inputVideoName, await fetchFile(videoFile))
 
       if (audioFile && inputAudioName) {
-        setRenderStage('write_audio', 'Enviando musica para o FFmpeg...')
+        setRenderStage('write_audio', 'Preparando audio...')
         await ffmpeg.writeFile(inputAudioName, await fetchFile(audioFile))
       }
 
       const renderArgs = buildRenderArgs(inputVideoName, inputAudioName)
       console.info('[VideoEditor] FFmpeg command:', renderArgs.join(' '))
-      setRenderStage('exec_primary', 'Renderizando video final...')
+      setRenderStage('exec_primary', 'Renderizando versao final...')
 
       let exitCode = await ffmpeg.exec(renderArgs)
 
@@ -897,16 +1260,10 @@ export default function VideoEditor() {
         throw new Error('FFmpeg retornou erro ao renderizar o video.')
       }
 
-      setRenderStage('read_output', 'Preparando video para upload...')
-      const outputData = await ffmpeg.readFile(outputName)
-      const outputBytes =
-        typeof outputData === 'string'
-          ? new TextEncoder().encode(outputData)
-          : outputData
-      const outputArray = new Uint8Array(outputBytes)
+      const outputArray = await optimizeRenderedVideo(ffmpeg, outputName, optimizedOutputName)
       const outputBlob = new Blob([outputArray.buffer], { type: 'video/mp4' })
 
-      setRenderStage('uploading', 'Fazendo upload para a EntreUS...')
+      setRenderStage('uploading', 'Enviando para a EntreUS...')
 
       const {
         data: { user },
@@ -972,13 +1329,19 @@ export default function VideoEditor() {
         duration,
         canvasSize,
       })
-      setRenderMessage('Nao foi possivel renderizar neste navegador. Tente um video menor ou outro navegador.')
+      const failedDuringOptimization = renderStageRef.current === 'optimizing'
+      setRenderMessage(
+        failedDuringOptimization
+          ? 'Nao foi possivel otimizar este video neste navegador. Tente novamente com um video menor.'
+          : 'Nao foi possivel renderizar neste navegador. Tente um video menor ou outro navegador.'
+      )
     } finally {
       setIsRendering(false)
     }
   }
 
   const activeOverlay = overlays.find((overlay) => overlay.id === activeOverlayId)
+  const activeImageOverlay = imageOverlays.find((overlay) => overlay.id === activeImageId)
   const selectedFilter = videoFilters.find((item) => item.value === filter) || videoFilters[0]
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0
   const editableText = activeOverlay ? activeOverlay.text : textValue
@@ -989,8 +1352,12 @@ export default function VideoEditor() {
   const activeTimelineWidth = activeOverlay && duration > 0
     ? ((activeOverlay.endTime - activeOverlay.startTime) / duration) * 100
     : 0
+  const activeImageTimelineWidth = activeImageOverlay && duration > 0
+    ? ((activeImageOverlay.endTime - activeImageOverlay.startTime) / duration) * 100
+    : 0
   const toolButtons = [
     { id: 'text' as EditorPanel, label: 'Texto', icon: <Type className="h-5 w-5" /> },
+    { id: 'image' as EditorPanel, label: 'Imagem', icon: <ImageIcon className="h-5 w-5" /> },
     { id: 'audio' as EditorPanel, label: 'Audio', icon: <Music className="h-5 w-5" /> },
     { id: 'effects' as EditorPanel, label: 'Efeitos', icon: <SlidersHorizontal className="h-5 w-5" /> },
     { id: 'caption' as EditorPanel, label: 'Legenda', icon: <Captions className="h-5 w-5" /> },
@@ -1111,8 +1478,8 @@ export default function VideoEditor() {
 
           {videoUrl && (
             <div
-              className={`shrink-0 border-t border-white/10 bg-black/80 px-3 py-3 transition-all duration-300 sm:px-5 ${
-                controlsVisible ? 'translate-y-0 opacity-100' : 'pointer-events-none -mb-32 translate-y-6 opacity-0'
+              className={`shrink-0 border-t border-white/10 bg-black/85 px-3 py-3 transition-all duration-300 sm:px-5 ${
+                controlsVisible ? 'translate-y-0 opacity-100' : 'pointer-events-none -mb-48 translate-y-6 opacity-0'
               }`}
             >
               <div className="mb-2 flex items-center justify-between gap-3 text-xs font-black text-zinc-400">
@@ -1120,53 +1487,153 @@ export default function VideoEditor() {
                 <span className="text-zinc-600">{formatEditorTime(duration)}</span>
               </div>
 
-              <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 p-2">
+              <div className="relative rounded-2xl border border-white/10 bg-zinc-950/95 p-2 shadow-inner shadow-black">
                 <div className="pointer-events-none absolute left-1/2 top-2 z-20 h-[calc(100%-1rem)] w-0.5 -translate-x-1/2 rounded-full bg-sky-200 shadow-[0_0_18px_rgba(125,211,252,0.75)]" />
                 <div className="pointer-events-none absolute left-1/2 top-1 z-20 h-3 w-3 -translate-x-1/2 rounded-full bg-sky-200" />
 
-                <div className="flex items-stretch gap-1 overflow-x-auto pb-1">
-                  <button
-                    type="button"
-                    onClick={() => setActivePanel('add')}
-                    className="flex w-9 shrink-0 items-center justify-center rounded-lg bg-sky-500 text-white"
-                    aria-label="Adicionar clipe"
-                  >
-                    <Plus className="h-4 w-4" />
-                  </button>
-
-                  <div className="grid h-14 min-w-[34rem] flex-1 grid-cols-12 gap-1 overflow-hidden rounded-lg">
-                    {timelineBlocks.map((item) => (
-                      <button
-                        key={item}
-                        type="button"
-                        onClick={() => handleSeek((duration / timelineBlocks.length) * item)}
-                        className="relative overflow-hidden rounded-md border border-white/10 bg-zinc-800"
-                        aria-label={`Ir para bloco ${item + 1}`}
-                      >
-                        {videoUrl ? (
-                          <video
-                            src={videoUrl}
-                            muted
-                            playsInline
-                            preload="metadata"
-                            className="h-full w-full object-cover opacity-70"
-                          />
-                        ) : (
-                          <span className="block h-full w-full bg-zinc-800" />
-                        )}
-                        <span className="absolute inset-0 bg-gradient-to-b from-white/10 to-black/20" />
-                      </button>
+                <div className="flex gap-2 overflow-x-auto scroll-smooth pb-1">
+                  <div className="sticky left-0 z-10 grid w-16 shrink-0 gap-1 bg-zinc-950/95 pr-1 text-[10px] font-black text-zinc-500">
+                    <button
+                      type="button"
+                      onClick={() => setActivePanel('add')}
+                      className="flex h-7 items-center justify-center rounded-lg bg-sky-500 text-white"
+                      aria-label="Adicionar midia"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </button>
+                    {['Video', 'Texto', 'Imagem', 'Audio', 'Voz'].map((track) => (
+                      <span key={track} className="flex h-8 items-center justify-end pr-1">
+                        {track}
+                      </span>
                     ))}
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => setActivePanel('add')}
-                    className="flex w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 text-white"
-                    aria-label="Adicionar no fim"
-                  >
-                    <Plus className="h-4 w-4" />
-                  </button>
+                  <div className="min-w-[42rem] flex-1">
+                    <div className="mb-1 grid h-7 grid-cols-12 gap-1 px-1 text-[10px] font-black text-zinc-600">
+                      {timelineBlocks.map((item) => (
+                        <button
+                          key={item}
+                          type="button"
+                          onClick={() => handleSeek((duration / timelineBlocks.length) * item)}
+                          className="border-l border-white/10 pl-1 text-left"
+                        >
+                          {formatEditorTime((duration / timelineBlocks.length) * item)}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="relative h-8 overflow-hidden rounded-lg border border-white/10 bg-zinc-900">
+                      <div className="grid h-full grid-cols-12 gap-1 p-1">
+                        {timelineBlocks.map((item) => (
+                          <button
+                            key={item}
+                            type="button"
+                            onClick={() => handleSeek((duration / timelineBlocks.length) * item)}
+                            className="relative overflow-hidden rounded-md bg-zinc-800"
+                            aria-label={`Ir para bloco ${item + 1}`}
+                          >
+                            <video
+                              src={videoUrl}
+                              muted
+                              playsInline
+                              preload="metadata"
+                              className="h-full w-full object-cover opacity-60"
+                            />
+                            <span className="absolute inset-0 bg-gradient-to-b from-white/10 to-black/30" />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="relative mt-1 h-8 rounded-lg border border-sky-300/15 bg-sky-500/10">
+                      {overlays.map((overlay, index) => (
+                        <button
+                          key={overlay.id}
+                          type="button"
+                          onClick={() => selectOverlay(overlay)}
+                          className={`absolute top-1 h-6 min-w-8 rounded-md px-2 text-left text-[10px] font-black transition ${
+                            overlay.id === activeOverlayId
+                              ? 'bg-white text-black ring-2 ring-sky-300'
+                              : 'bg-sky-300/75 text-sky-950 hover:bg-sky-200'
+                          }`}
+                          style={{
+                            left: `${duration > 0 ? (overlay.startTime / duration) * 100 : 0}%`,
+                            width: `${duration > 0 ? Math.max(((overlay.endTime - overlay.startTime) / duration) * 100, 7) : 7}%`,
+                          }}
+                          aria-label={`Selecionar ${getOverlayLabel(overlay, index)}`}
+                        >
+                          <span className="block truncate">{getOverlayLabel(overlay, index)}</span>
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="relative mt-1 h-8 rounded-lg border border-amber-300/15 bg-amber-500/10">
+                      {imageOverlays.length === 0 ? (
+                        <label className="absolute left-2 top-1 inline-flex h-6 cursor-pointer items-center gap-1 rounded-md border border-amber-300/20 bg-amber-500/10 px-2 text-[10px] font-black text-amber-100">
+                          <Plus className="h-3 w-3" />
+                          Imagem
+                          <input
+                            type="file"
+                            accept="image/*,.png,.jpg,.jpeg,.webp"
+                            onChange={handleImageChange}
+                            className="sr-only"
+                          />
+                        </label>
+                      ) : (
+                        imageOverlays.map((overlay) => (
+                          <button
+                            key={overlay.id}
+                            type="button"
+                            onClick={() => selectImageOverlay(overlay)}
+                            className={`absolute top-1 h-6 min-w-8 rounded-md px-2 text-left text-[10px] font-black transition ${
+                              overlay.id === activeImageId
+                                ? 'bg-white text-black ring-2 ring-amber-300'
+                                : 'bg-amber-300/80 text-amber-950 hover:bg-amber-200'
+                            }`}
+                            style={{
+                              left: `${duration > 0 ? (overlay.startTime / duration) * 100 : 0}%`,
+                              width: `${duration > 0 ? Math.max(((overlay.endTime - overlay.startTime) / duration) * 100, 8) : 8}%`,
+                            }}
+                          >
+                            <span className="block truncate">{overlay.name}</span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+
+                    <div className="relative mt-1 h-8 rounded-lg border border-emerald-300/15 bg-emerald-500/10">
+                      {audioName ? (
+                        <button
+                          type="button"
+                          onClick={() => setActivePanel('audio')}
+                          className="absolute inset-x-1 top-1 flex h-6 items-center gap-2 rounded-md bg-emerald-300/80 px-2 text-left text-[10px] font-black text-emerald-950"
+                        >
+                          <Music className="h-3 w-3 shrink-0" />
+                          <span className="truncate">{audioName}</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setActivePanel('audio')}
+                          className="absolute left-2 top-1 inline-flex h-6 items-center gap-1 rounded-md border border-emerald-300/20 bg-emerald-500/10 px-2 text-[10px] font-black text-emerald-100"
+                        >
+                          <Plus className="h-3 w-3" />
+                          Audio
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="relative mt-1 h-8 rounded-lg border border-violet-300/15 bg-violet-500/10">
+                      <button
+                        type="button"
+                        onClick={() => setActivePanel('voice')}
+                        className="absolute left-2 top-1 inline-flex h-6 items-center gap-1 rounded-md border border-violet-300/20 bg-violet-500/10 px-2 text-[10px] font-black text-violet-100"
+                      >
+                        <Mic className="h-3 w-3" />
+                        Voz
+                      </button>
+                    </div>
+                  </div>
                 </div>
 
                 <input
@@ -1179,50 +1646,6 @@ export default function VideoEditor() {
                   className="mt-2 w-full accent-sky-500"
                   aria-label="Linha do tempo do video"
                 />
-
-                <div className="mt-2 grid gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setActivePanel('audio')}
-                    className="relative flex h-8 items-center gap-2 overflow-hidden rounded-lg border border-emerald-300/20 bg-emerald-500/10 px-3 text-xs font-black text-emerald-100"
-                  >
-                    <Music className="h-3.5 w-3.5 shrink-0" />
-                    <span className="truncate">{audioName ? audioName : 'Faixa de audio'}</span>
-                  </button>
-                  <div className="relative min-h-9 overflow-hidden rounded-lg border border-sky-300/20 bg-sky-500/10 px-3 py-1.5">
-                    <button
-                      type="button"
-                      onClick={() => setActivePanel('text')}
-                      className="flex w-full items-center gap-2 text-left text-xs font-black text-sky-100"
-                    >
-                      <Type className="h-3.5 w-3.5 shrink-0" />
-                      <span className="truncate">{overlays.length > 0 ? `${overlays.length} texto(s)` : 'Faixa de texto'}</span>
-                    </button>
-                    {overlays.length > 0 && (
-                      <div className="relative mt-2 h-5 rounded bg-black/25">
-                        {overlays.map((overlay, index) => (
-                          <button
-                            key={overlay.id}
-                            type="button"
-                            onClick={() => selectOverlay(overlay)}
-                            className={`absolute top-0 h-5 min-w-6 rounded text-[10px] font-black transition ${
-                              overlay.id === activeOverlayId
-                                ? 'bg-white text-black ring-2 ring-sky-300'
-                                : 'bg-sky-300/70 text-sky-950 hover:bg-sky-200'
-                            }`}
-                            style={{
-                              left: `${duration > 0 ? (overlay.startTime / duration) * 100 : 0}%`,
-                              width: `${duration > 0 ? Math.max(((overlay.endTime - overlay.startTime) / duration) * 100, 8) : 8}%`,
-                            }}
-                            aria-label={`Selecionar ${getOverlayLabel(overlay, index)}`}
-                          >
-                            <span className="block truncate px-1">{index + 1}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
               </div>
             </div>
           )}
@@ -1239,6 +1662,22 @@ export default function VideoEditor() {
                   style={{ width: `${renderProgress}%` }}
                 />
               </div>
+              {compressionStats && (
+                <div className="mt-3 grid grid-cols-3 gap-2 text-center text-[11px] font-black text-sky-50">
+                  <div className="rounded-lg border border-white/10 bg-black/25 px-2 py-2">
+                    <span className="block text-zinc-500">Original</span>
+                    <span>{formatFileSize(compressionStats.originalBytes)}</span>
+                  </div>
+                  <div className="rounded-lg border border-white/10 bg-black/25 px-2 py-2">
+                    <span className="block text-zinc-500">Otimizado</span>
+                    <span>{formatFileSize(compressionStats.optimizedBytes)}</span>
+                  </div>
+                  <div className="rounded-lg border border-emerald-300/20 bg-emerald-500/10 px-2 py-2 text-emerald-100">
+                    <span className="block text-emerald-100/60">{compressionStats.profile}</span>
+                    <span>-{getReductionPercent(compressionStats.originalBytes, compressionStats.optimizedBytes)}%</span>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -1251,7 +1690,7 @@ export default function VideoEditor() {
               : 'pointer-events-none translate-y-full opacity-0 lg:translate-x-8 lg:translate-y-0'
           }`}
         >
-          <div className="grid grid-cols-6 gap-1 border-b border-white/10 p-2 lg:grid-cols-3">
+          <div className="grid grid-cols-4 gap-1 border-b border-white/10 p-2 sm:grid-cols-7 lg:grid-cols-3">
             {toolButtons.map((item) => (
               <button
                 key={item.id}
@@ -1289,6 +1728,22 @@ export default function VideoEditor() {
                     type="file"
                     accept="video/*,.mp4,.mov,.webm,.m4v"
                     onChange={handleVideoChange}
+                    className="sr-only"
+                  />
+                </label>
+
+                <label className="flex cursor-pointer items-center gap-3 rounded-2xl border border-dashed border-amber-300/30 bg-amber-500/10 px-4 py-4 transition hover:bg-amber-500/15">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-500/20 text-amber-100">
+                    <ImageIcon className="h-5 w-5" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-black text-white">Imagem</span>
+                    <span className="block truncate text-xs text-amber-100/60">PNG, JPG, WebP</span>
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/*,.png,.jpg,.jpeg,.webp"
+                    onChange={handleImageChange}
                     className="sr-only"
                   />
                 </label>
@@ -1468,6 +1923,149 @@ export default function VideoEditor() {
                     >
                       <Trash2 className="h-4 w-4" />
                       Remover texto
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activePanel === 'image' && (
+              <div className="space-y-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h3 className="text-base font-black">Imagem</h3>
+                    <p className="mt-1 truncate text-sm text-zinc-500">
+                      {activeImageOverlay ? 'Figurinha selecionada' : 'Adicionar figurinha'}
+                    </p>
+                  </div>
+                  {activeImageOverlay && (
+                    <button
+                      type="button"
+                      onClick={removeActiveImageOverlay}
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-red-300/25 bg-red-500/10 text-red-100 transition hover:bg-red-500/20"
+                      aria-label="Remover imagem selecionada"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+
+                <label className="flex cursor-pointer items-center gap-3 rounded-2xl border border-dashed border-amber-300/30 bg-amber-500/10 px-4 py-4 transition hover:bg-amber-500/15">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-500/20 text-amber-100">
+                    <ImageIcon className="h-5 w-5" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-black text-white">Adicionar imagem</span>
+                    <span className="block truncate text-xs text-amber-100/60">PNG, JPG, WebP</span>
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/*,.png,.jpg,.jpeg,.webp"
+                    onChange={handleImageChange}
+                    className="sr-only"
+                  />
+                </label>
+
+                <div className="rounded-xl border border-white/10 bg-zinc-950 p-3">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <span className="text-xs font-black text-zinc-300">Camadas</span>
+                    <span className="text-xs font-semibold text-zinc-600">{imageOverlays.length}</span>
+                  </div>
+                  {imageOverlays.length > 0 ? (
+                    <div className="grid gap-2">
+                      {imageOverlays.map((overlay) => (
+                        <button
+                          key={overlay.id}
+                          type="button"
+                          onClick={() => selectImageOverlay(overlay)}
+                          className={`flex items-center gap-3 rounded-lg border px-3 py-2 text-left transition ${
+                            overlay.id === activeImageId
+                              ? 'border-amber-300/60 bg-amber-500/15 text-amber-50'
+                              : 'border-white/10 bg-black/25 text-zinc-300 hover:border-white/20'
+                          }`}
+                        >
+                          <ImageIcon className="h-4 w-4 shrink-0 text-amber-200" />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-xs font-black">{overlay.name}</span>
+                            <span className="mt-0.5 block text-[11px] font-semibold text-zinc-500">
+                              {overlay.startTime.toFixed(1)}s - {overlay.endTime.toFixed(1)}s
+                            </span>
+                          </span>
+                          {overlay.id === activeImageId && <Check className="h-4 w-4 shrink-0" />}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs font-semibold text-zinc-600">Nenhuma imagem adicionada.</p>
+                  )}
+                </div>
+
+                {activeImageOverlay && (
+                  <div className="rounded-xl border border-amber-300/20 bg-amber-500/10 p-3 text-sm text-amber-50">
+                    <div className="flex items-center justify-between gap-3 font-black">
+                      <span className="inline-flex items-center gap-2">
+                        <Move className="h-4 w-4" />
+                        Selecionada
+                      </span>
+                      <span className="text-xs text-amber-100/60">
+                        X {Math.round(activeImageOverlay.x)} / Y {Math.round(activeImageOverlay.y)}
+                      </span>
+                    </div>
+
+                    <div className="mt-4 rounded-xl border border-white/10 bg-black/25 p-3">
+                      <div className="mb-3 flex items-center justify-between gap-3 text-xs font-black text-amber-100">
+                        <span>Tempo</span>
+                        <span>{activeImageOverlay.startTime.toFixed(1)}s - {activeImageOverlay.endTime.toFixed(1)}s</span>
+                      </div>
+
+                      <div className="relative mb-4 h-2 rounded-full bg-white/10">
+                        <div
+                          className="absolute top-0 h-full rounded-full bg-amber-300"
+                          style={{
+                            left: `${duration > 0 ? (activeImageOverlay.startTime / duration) * 100 : 0}%`,
+                            width: `${activeImageTimelineWidth}%`,
+                          }}
+                        />
+                        <div
+                          className="absolute -top-1 h-4 w-1 rounded-full bg-sky-200"
+                          style={{ left: `${progressPercent}%` }}
+                        />
+                      </div>
+
+                      <label className="block">
+                        <span className="text-xs font-bold text-amber-100/70">Entrada</span>
+                        <input
+                          type="range"
+                          min="0"
+                          max={duration}
+                          step="0.05"
+                          value={activeImageOverlay.startTime}
+                          onChange={(event) => updateActiveImageTiming('startTime', Number(event.target.value))}
+                          className="mt-2 w-full accent-amber-300"
+                        />
+                      </label>
+
+                      <label className="mt-3 block">
+                        <span className="text-xs font-bold text-amber-100/70">Saida</span>
+                        <input
+                          type="range"
+                          min="0"
+                          max={duration}
+                          step="0.05"
+                          value={activeImageOverlay.endTime}
+                          onChange={(event) => updateActiveImageTiming('endTime', Number(event.target.value))}
+                          className="mt-2 w-full accent-amber-300"
+                        />
+                      </label>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={removeActiveImageOverlay}
+                      className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-red-300/25 bg-red-500/10 px-4 py-2 text-xs font-black text-red-100 transition hover:bg-red-500/20"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Remover imagem
                     </button>
                   </div>
                 )}
