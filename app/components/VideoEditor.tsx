@@ -6,6 +6,7 @@ import { fetchFile, toBlobURL } from '@ffmpeg/util'
 import {
   ArrowLeft,
   Captions,
+  Check,
   Loader2,
   Mic,
   Move,
@@ -135,6 +136,15 @@ function formatEditorTime(value: number) {
   return `${minutes}:${String(seconds).padStart(2, '0')}`
 }
 
+function getOverlayLabel(overlay: TextOverlay, index: number) {
+  const normalizedText = overlay.text.trim()
+  if (!normalizedText) return `Texto ${index + 1}`
+
+  return normalizedText.length > 24
+    ? `${normalizedText.slice(0, 24)}...`
+    : normalizedText
+}
+
 export default function VideoEditor() {
   const ffmpegRef = useRef<FFmpeg | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
@@ -142,6 +152,7 @@ export default function VideoEditor() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const pointerMovedRef = useRef(false)
   const pointerStartedOnOverlayRef = useRef(false)
+  const draggingOverlayIdRef = useRef<string | null>(null)
   const renderStageRef = useRef('idle')
 
   const [videoFile, setVideoFile] = useState<File | null>(null)
@@ -403,20 +414,29 @@ export default function VideoEditor() {
 
       if (overlay.id === activeOverlayId) {
         const metrics = context.measureText(overlay.text)
-        context.strokeStyle = 'rgba(96, 165, 250, 0.95)'
+        const boxX = overlay.x - 10
+        const boxY = overlay.y - 10
+        const boxWidth = metrics.width + 20
+        const boxHeight = overlay.fontSize + 20
+
+        context.save()
+        context.strokeStyle = 'rgba(125, 211, 252, 0.95)'
         context.lineWidth = 3
-        context.strokeRect(
-          overlay.x - 8,
-          overlay.y - 8,
-          metrics.width + 16,
-          overlay.fontSize + 16
-        )
+        context.setLineDash([10, 7])
+        context.strokeRect(boxX, boxY, boxWidth, boxHeight)
+        context.setLineDash([])
+        context.fillStyle = 'rgba(14, 165, 233, 0.95)'
+        context.fillRect(boxX + boxWidth - 10, boxY + boxHeight - 10, 20, 20)
+        context.strokeStyle = 'rgba(255, 255, 255, 0.95)'
+        context.lineWidth = 2
+        context.strokeRect(boxX + boxWidth - 10, boxY + boxHeight - 10, 20, 20)
+        context.restore()
       }
       })
   }
 
   function addTextOverlay() {
-    const cleanText = textValue.trim() || 'Novo texto'
+    const cleanText = activeOverlayId ? 'Novo texto' : textValue.trim() || 'Novo texto'
 
     const overlay: TextOverlay = {
       id: crypto.randomUUID(),
@@ -432,7 +452,7 @@ export default function VideoEditor() {
     setOverlays((current) => [...current, overlay])
     setActiveOverlayId(overlay.id)
     setActivePanel('text')
-    setTextValue('')
+    setTextValue(cleanText)
   }
 
   function findOverlayAtPoint(point: { x: number; y: number }) {
@@ -441,6 +461,8 @@ export default function VideoEditor() {
     if (!context) return null
 
     for (const overlay of [...overlays].reverse()) {
+      if (currentTime < overlay.startTime || currentTime > overlay.endTime) continue
+
       context.font = `800 ${overlay.fontSize}px Inter, ui-sans-serif, system-ui, sans-serif`
       const width = context.measureText(overlay.text).width
       const height = overlay.fontSize
@@ -458,6 +480,15 @@ export default function VideoEditor() {
     return null
   }
 
+  function selectOverlay(overlay: TextOverlay) {
+    setActiveOverlayId(overlay.id)
+    setActivePanel('text')
+
+    if (currentTime < overlay.startTime || currentTime > overlay.endTime) {
+      handleSeek(overlay.startTime)
+    }
+  }
+
   function handlePointerDown(event: PointerEvent<HTMLCanvasElement>) {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -469,11 +500,13 @@ export default function VideoEditor() {
       setActiveOverlayId(null)
       pointerStartedOnOverlayRef.current = false
       pointerMovedRef.current = false
+      draggingOverlayIdRef.current = null
       return
     }
 
     pointerStartedOnOverlayRef.current = true
     pointerMovedRef.current = false
+    draggingOverlayIdRef.current = overlay.id
     canvas.setPointerCapture(event.pointerId)
     setActiveOverlayId(overlay.id)
     setActivePanel('text')
@@ -484,7 +517,8 @@ export default function VideoEditor() {
   }
 
   function handlePointerMove(event: PointerEvent<HTMLCanvasElement>) {
-    if (!activeOverlayId) return
+    const draggingOverlayId = draggingOverlayIdRef.current || activeOverlayId
+    if (!draggingOverlayId) return
 
     const canvas = canvasRef.current
     if (!canvas || !canvas.hasPointerCapture(event.pointerId)) return
@@ -494,7 +528,7 @@ export default function VideoEditor() {
 
     setOverlays((current) =>
       current.map((overlay) => {
-        if (overlay.id !== activeOverlayId) return overlay
+        if (overlay.id !== draggingOverlayId) return overlay
 
         return {
           ...overlay,
@@ -517,6 +551,7 @@ export default function VideoEditor() {
 
     pointerMovedRef.current = false
     pointerStartedOnOverlayRef.current = false
+    draggingOverlayIdRef.current = null
   }
 
   async function togglePlayback() {
@@ -616,6 +651,7 @@ export default function VideoEditor() {
 
     setOverlays((current) => current.filter((overlay) => overlay.id !== activeOverlayId))
     setActiveOverlayId(null)
+    setTextValue('')
   }
 
   async function getFFmpeg() {
@@ -950,6 +986,9 @@ export default function VideoEditor() {
   const editableTextColor = activeOverlay ? activeOverlay.color : textColor
   const timelineBlocks = Array.from({ length: 12 }, (_, index) => index)
   const controlsVisible = Boolean(videoUrl && !isPlaying)
+  const activeTimelineWidth = activeOverlay && duration > 0
+    ? ((activeOverlay.endTime - activeOverlay.startTime) / duration) * 100
+    : 0
   const toolButtons = [
     { id: 'text' as EditorPanel, label: 'Texto', icon: <Type className="h-5 w-5" /> },
     { id: 'audio' as EditorPanel, label: 'Audio', icon: <Music className="h-5 w-5" /> },
@@ -960,8 +999,8 @@ export default function VideoEditor() {
   ]
 
   return (
-    <section className="w-full overflow-hidden rounded-[1.25rem] border border-white/10 bg-black text-white shadow-2xl shadow-black/40 ring-1 ring-blue-400/10">
-      <div className="flex flex-col gap-0 lg:min-h-[78vh] lg:flex-row">
+    <section className="w-full overflow-hidden rounded-[1.25rem] border border-white/10 bg-black text-white shadow-2xl shadow-black/40 ring-1 ring-sky-400/10">
+      <div className="flex flex-col gap-0 lg:min-h-[82vh] lg:flex-row">
         <div className="relative flex min-w-0 flex-1 flex-col bg-zinc-950">
           <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 px-3 py-2.5 sm:px-5">
             <div className="flex min-w-0 items-center gap-2">
@@ -990,15 +1029,15 @@ export default function VideoEditor() {
                 type="button"
                 onClick={renderFinalVideo}
                 disabled={!videoFile || isRendering}
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-blue-500 px-4 text-sm font-black text-white shadow-lg shadow-blue-950/30 transition hover:bg-blue-400 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-sky-500 px-3 text-sm font-black text-white shadow-lg shadow-sky-950/30 transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-50 sm:px-4"
               >
                 {isRendering ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}
-                Publicar
+                <span className="hidden sm:inline">Publicar</span>
               </button>
             </div>
           </div>
 
-          <div className={`flex flex-1 items-center justify-center px-2 py-3 transition-all sm:px-5 ${videoUrl ? 'min-h-[18rem] sm:min-h-[28rem]' : 'min-h-[24rem] sm:min-h-[34rem]'}`}>
+          <div className={`flex flex-1 items-center justify-center px-2 py-3 transition-all sm:px-5 ${videoUrl ? 'min-h-[19rem] sm:min-h-[30rem]' : 'min-h-[24rem] sm:min-h-[34rem]'}`}>
             <div className={`relative w-full overflow-hidden bg-black shadow-2xl shadow-black/40 ${videoUrl ? 'rounded-xl sm:rounded-[1.25rem]' : 'rounded-[1.25rem] border border-white/10'}`}>
             {videoUrl ? (
               <div
@@ -1072,8 +1111,8 @@ export default function VideoEditor() {
 
           {videoUrl && (
             <div
-              className={`shrink-0 border-t border-white/10 bg-black/70 px-3 py-3 transition-all duration-300 sm:px-5 ${
-                controlsVisible ? 'translate-y-0 opacity-100' : 'pointer-events-none -mb-28 translate-y-6 opacity-0'
+              className={`shrink-0 border-t border-white/10 bg-black/80 px-3 py-3 transition-all duration-300 sm:px-5 ${
+                controlsVisible ? 'translate-y-0 opacity-100' : 'pointer-events-none -mb-32 translate-y-6 opacity-0'
               }`}
             >
               <div className="mb-2 flex items-center justify-between gap-3 text-xs font-black text-zinc-400">
@@ -1081,21 +1120,21 @@ export default function VideoEditor() {
                 <span className="text-zinc-600">{formatEditorTime(duration)}</span>
               </div>
 
-              <div className="relative rounded-2xl border border-white/10 bg-zinc-950 p-2">
-                <div className="pointer-events-none absolute left-1/2 top-2 z-20 h-[calc(100%-1rem)] w-0.5 -translate-x-1/2 rounded-full bg-blue-200 shadow-[0_0_18px_rgba(147,197,253,0.75)]" />
-                <div className="pointer-events-none absolute left-1/2 top-1 z-20 h-3 w-3 -translate-x-1/2 rounded-full bg-blue-200" />
+              <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-zinc-950 p-2">
+                <div className="pointer-events-none absolute left-1/2 top-2 z-20 h-[calc(100%-1rem)] w-0.5 -translate-x-1/2 rounded-full bg-sky-200 shadow-[0_0_18px_rgba(125,211,252,0.75)]" />
+                <div className="pointer-events-none absolute left-1/2 top-1 z-20 h-3 w-3 -translate-x-1/2 rounded-full bg-sky-200" />
 
-                <div className="flex items-stretch gap-1 overflow-hidden rounded-xl">
+                <div className="flex items-stretch gap-1 overflow-x-auto pb-1">
                   <button
                     type="button"
                     onClick={() => setActivePanel('add')}
-                    className="flex w-10 shrink-0 items-center justify-center rounded-lg bg-blue-500 text-white"
+                    className="flex w-9 shrink-0 items-center justify-center rounded-lg bg-sky-500 text-white"
                     aria-label="Adicionar clipe"
                   >
                     <Plus className="h-4 w-4" />
                   </button>
 
-                  <div className="grid h-14 min-w-[34rem] flex-1 grid-cols-12 gap-1 overflow-hidden">
+                  <div className="grid h-14 min-w-[34rem] flex-1 grid-cols-12 gap-1 overflow-hidden rounded-lg">
                     {timelineBlocks.map((item) => (
                       <button
                         key={item}
@@ -1123,7 +1162,7 @@ export default function VideoEditor() {
                   <button
                     type="button"
                     onClick={() => setActivePanel('add')}
-                    className="flex w-10 shrink-0 items-center justify-center rounded-lg bg-white/10 text-white"
+                    className="flex w-9 shrink-0 items-center justify-center rounded-lg bg-white/10 text-white"
                     aria-label="Adicionar no fim"
                   >
                     <Plus className="h-4 w-4" />
@@ -1137,7 +1176,7 @@ export default function VideoEditor() {
                   step="0.05"
                   value={currentTime}
                   onChange={(event) => handleSeek(Number(event.target.value))}
-                  className="mt-2 w-full accent-blue-500"
+                  className="mt-2 w-full accent-sky-500"
                   aria-label="Linha do tempo do video"
                 />
 
@@ -1145,19 +1184,44 @@ export default function VideoEditor() {
                   <button
                     type="button"
                     onClick={() => setActivePanel('audio')}
-                    className="flex h-8 items-center gap-2 rounded-lg border border-emerald-300/20 bg-emerald-500/10 px-3 text-xs font-black text-emerald-100"
+                    className="relative flex h-8 items-center gap-2 overflow-hidden rounded-lg border border-emerald-300/20 bg-emerald-500/10 px-3 text-xs font-black text-emerald-100"
                   >
-                    <Plus className="h-3.5 w-3.5" />
-                    {audioName ? audioName : 'Adicionar audio'}
+                    <Music className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">{audioName ? audioName : 'Faixa de audio'}</span>
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setActivePanel('text')}
-                    className="flex h-8 items-center gap-2 rounded-lg border border-blue-300/20 bg-blue-500/10 px-3 text-xs font-black text-blue-100"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    {overlays.length > 0 ? `${overlays.length} texto(s)` : 'Adicionar texto'}
-                  </button>
+                  <div className="relative min-h-9 overflow-hidden rounded-lg border border-sky-300/20 bg-sky-500/10 px-3 py-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setActivePanel('text')}
+                      className="flex w-full items-center gap-2 text-left text-xs font-black text-sky-100"
+                    >
+                      <Type className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate">{overlays.length > 0 ? `${overlays.length} texto(s)` : 'Faixa de texto'}</span>
+                    </button>
+                    {overlays.length > 0 && (
+                      <div className="relative mt-2 h-5 rounded bg-black/25">
+                        {overlays.map((overlay, index) => (
+                          <button
+                            key={overlay.id}
+                            type="button"
+                            onClick={() => selectOverlay(overlay)}
+                            className={`absolute top-0 h-5 min-w-6 rounded text-[10px] font-black transition ${
+                              overlay.id === activeOverlayId
+                                ? 'bg-white text-black ring-2 ring-sky-300'
+                                : 'bg-sky-300/70 text-sky-950 hover:bg-sky-200'
+                            }`}
+                            style={{
+                              left: `${duration > 0 ? (overlay.startTime / duration) * 100 : 0}%`,
+                              width: `${duration > 0 ? Math.max(((overlay.endTime - overlay.startTime) / duration) * 100, 8) : 8}%`,
+                            }}
+                            aria-label={`Selecionar ${getOverlayLabel(overlay, index)}`}
+                          >
+                            <span className="block truncate px-1">{index + 1}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -1181,7 +1245,7 @@ export default function VideoEditor() {
 
         {videoUrl && (
         <aside
-          className={`fixed inset-x-0 bottom-16 z-30 flex max-h-[48dvh] shrink-0 flex-col rounded-t-[1.25rem] border-t border-white/10 bg-black/95 shadow-2xl shadow-black/50 ring-1 ring-white/10 transition-all duration-300 lg:static lg:max-h-none lg:w-[21rem] lg:rounded-none lg:border-l lg:border-t-0 lg:bg-black/80 lg:shadow-none lg:ring-0 ${
+          className={`fixed inset-x-0 bottom-16 z-30 flex max-h-[56dvh] shrink-0 flex-col rounded-t-[1.25rem] border-t border-white/10 bg-black/95 shadow-2xl shadow-black/50 ring-1 ring-white/10 transition-all duration-300 lg:static lg:max-h-none lg:w-[22rem] lg:rounded-none lg:border-l lg:border-t-0 lg:bg-black/80 lg:shadow-none lg:ring-0 ${
             controlsVisible
               ? 'translate-y-0 opacity-100'
               : 'pointer-events-none translate-y-full opacity-0 lg:translate-x-8 lg:translate-y-0'
@@ -1193,9 +1257,9 @@ export default function VideoEditor() {
                 key={item.id}
                 type="button"
                 onClick={() => setActivePanel(item.id)}
-                className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-2xl px-2 text-[11px] font-black transition ${
+                className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl px-2 text-[11px] font-black transition ${
                   activePanel === item.id
-                    ? 'bg-blue-500 text-white shadow-lg shadow-blue-950/30'
+                    ? 'bg-sky-500 text-white shadow-lg shadow-sky-950/30'
                     : 'text-zinc-500 hover:bg-white/5 hover:text-zinc-100'
                 }`}
               >
@@ -1233,9 +1297,23 @@ export default function VideoEditor() {
 
             {activePanel === 'text' && (
               <div className="space-y-4">
-                <div>
-                  <h3 className="text-base font-black">Texto</h3>
-                  <p className="mt-1 text-sm text-zinc-500">Toque e arraste no preview.</p>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h3 className="text-base font-black">Texto</h3>
+                    <p className="mt-1 truncate text-sm text-zinc-500">
+                      {activeOverlay ? 'Editando camada selecionada' : 'Nova camada de texto'}
+                    </p>
+                  </div>
+                  {activeOverlay && (
+                    <button
+                      type="button"
+                      onClick={removeActiveOverlay}
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-red-300/25 bg-red-500/10 text-red-100 transition hover:bg-red-500/20"
+                      aria-label="Remover texto selecionado"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
                 </div>
 
                 <label className="block">
@@ -1246,19 +1324,57 @@ export default function VideoEditor() {
                       value={editableText}
                       onChange={(event) => updateActiveOverlayText(event.target.value)}
                       placeholder="Digite uma frase"
-                      className="min-w-0 flex-1 rounded-2xl border border-white/10 bg-zinc-950 px-4 py-3 text-sm font-semibold text-white outline-none placeholder:text-zinc-600 focus:border-blue-300"
+                      className="min-w-0 flex-1 rounded-xl border border-white/10 bg-zinc-950 px-4 py-3 text-sm font-semibold text-white outline-none placeholder:text-zinc-600 focus:border-sky-300"
                     />
                     <button
                       type="button"
                       onClick={addTextOverlay}
-                      disabled={!activeOverlay && !textValue.trim()}
-                      className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white text-black transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white text-black transition hover:bg-sky-50"
                       aria-label={activeOverlay ? 'Adicionar novo texto' : 'Adicionar texto'}
                     >
                       <Plus className="h-4 w-4" />
                     </button>
                   </div>
                 </label>
+
+                <div className="rounded-xl border border-white/10 bg-zinc-950 p-3">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <span className="text-xs font-black text-zinc-300">Camadas</span>
+                    <span className="text-xs font-semibold text-zinc-600">{overlays.length}</span>
+                  </div>
+                  {overlays.length > 0 ? (
+                    <div className="grid gap-2">
+                      {overlays.map((overlay, index) => (
+                        <button
+                          key={overlay.id}
+                          type="button"
+                          onClick={() => selectOverlay(overlay)}
+                          className={`flex items-center gap-3 rounded-lg border px-3 py-2 text-left transition ${
+                            overlay.id === activeOverlayId
+                              ? 'border-sky-300/60 bg-sky-500/15 text-sky-50'
+                              : 'border-white/10 bg-black/25 text-zinc-300 hover:border-white/20'
+                          }`}
+                        >
+                          <span
+                            className="h-4 w-4 shrink-0 rounded-full border border-white/20"
+                            style={{ backgroundColor: overlay.color }}
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-xs font-black">
+                              {getOverlayLabel(overlay, index)}
+                            </span>
+                            <span className="mt-0.5 block text-[11px] font-semibold text-zinc-500">
+                              {overlay.startTime.toFixed(1)}s - {overlay.endTime.toFixed(1)}s
+                            </span>
+                          </span>
+                          {overlay.id === activeOverlayId && <Check className="h-4 w-4 shrink-0" />}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs font-semibold text-zinc-600">Nenhum texto adicionado.</p>
+                  )}
+                </div>
 
                 <label className="block">
                   <span className="text-xs font-black text-zinc-400">Tamanho</span>
@@ -1268,36 +1384,38 @@ export default function VideoEditor() {
                     max="120"
                     value={editableFontSize}
                     onChange={(event) => updateActiveOverlayStyle('fontSize', Number(event.target.value))}
-                    className="mt-3 w-full accent-blue-500"
+                    className="mt-3 w-full accent-sky-500"
                   />
                   <span className="mt-1 block text-xs font-semibold text-zinc-500">{editableFontSize}px</span>
                 </label>
 
                 <label className="block">
                   <span className="text-xs font-black text-zinc-400">Cor</span>
-                  <div className="mt-2 flex items-center gap-3 rounded-2xl border border-white/10 bg-zinc-950 px-3 py-2">
+                  <div className="mt-2 flex items-center gap-3 rounded-xl border border-white/10 bg-zinc-950 px-3 py-2">
                     <input
                       type="color"
                       value={editableTextColor}
                       onChange={(event) => updateActiveOverlayStyle('color', event.target.value)}
-                      className="h-10 w-12 cursor-pointer rounded-xl border-0 bg-transparent p-0"
+                      className="h-10 w-12 cursor-pointer rounded-lg border-0 bg-transparent p-0"
                     />
                     <span className="text-sm font-semibold text-zinc-400">{editableTextColor.toUpperCase()}</span>
                   </div>
                 </label>
 
                 {activeOverlay && (
-                  <div className="rounded-2xl border border-blue-300/20 bg-blue-500/10 p-3 text-sm text-blue-50">
-                    <div className="flex items-center gap-2 font-black">
-                      <Move className="h-4 w-4" />
-                      Selecionado
+                  <div className="rounded-xl border border-sky-300/20 bg-sky-500/10 p-3 text-sm text-sky-50">
+                    <div className="flex items-center justify-between gap-3 font-black">
+                      <span className="inline-flex items-center gap-2">
+                        <Move className="h-4 w-4" />
+                        Selecionado
+                      </span>
+                      <span className="text-xs text-sky-100/60">
+                        X {Math.round(activeOverlay.x)} / Y {Math.round(activeOverlay.y)}
+                      </span>
                     </div>
-                    <p className="mt-2 text-xs text-blue-100/60">
-                      X {Math.round(activeOverlay.x)} / Y {Math.round(activeOverlay.y)}
-                    </p>
 
-                    <div className="mt-4 rounded-2xl border border-white/10 bg-black/25 p-3">
-                      <div className="mb-3 flex items-center justify-between gap-3 text-xs font-black text-blue-100">
+                    <div className="mt-4 rounded-xl border border-white/10 bg-black/25 p-3">
+                      <div className="mb-3 flex items-center justify-between gap-3 text-xs font-black text-sky-100">
                         <span>Tempo</span>
                         <span>{activeOverlay.startTime.toFixed(1)}s - {activeOverlay.endTime.toFixed(1)}s</span>
                       </div>
@@ -1307,17 +1425,17 @@ export default function VideoEditor() {
                           className="absolute top-0 h-full rounded-full bg-emerald-400"
                           style={{
                             left: `${duration > 0 ? (activeOverlay.startTime / duration) * 100 : 0}%`,
-                            width: `${duration > 0 ? ((activeOverlay.endTime - activeOverlay.startTime) / duration) * 100 : 0}%`,
+                            width: `${activeTimelineWidth}%`,
                           }}
                         />
                         <div
-                          className="absolute -top-1 h-4 w-1 rounded-full bg-blue-200"
+                          className="absolute -top-1 h-4 w-1 rounded-full bg-sky-200"
                           style={{ left: `${progressPercent}%` }}
                         />
                       </div>
 
                       <label className="block">
-                        <span className="text-xs font-bold text-blue-100/70">Entrada</span>
+                        <span className="text-xs font-bold text-sky-100/70">Entrada</span>
                         <input
                           type="range"
                           min="0"
@@ -1330,7 +1448,7 @@ export default function VideoEditor() {
                       </label>
 
                       <label className="mt-3 block">
-                        <span className="text-xs font-bold text-blue-100/70">Saida</span>
+                        <span className="text-xs font-bold text-sky-100/70">Saida</span>
                         <input
                           type="range"
                           min="0"
@@ -1346,7 +1464,7 @@ export default function VideoEditor() {
                     <button
                       type="button"
                       onClick={removeActiveOverlay}
-                      className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-full border border-red-300/25 bg-red-500/10 px-4 py-2 text-xs font-black text-red-100 transition hover:bg-red-500/20"
+                      className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-red-300/25 bg-red-500/10 px-4 py-2 text-xs font-black text-red-100 transition hover:bg-red-500/20"
                     >
                       <Trash2 className="h-4 w-4" />
                       Remover texto
