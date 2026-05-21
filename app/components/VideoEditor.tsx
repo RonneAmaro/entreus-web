@@ -77,6 +77,8 @@ const DEFAULT_VIDEO_DURATION = 10
 const FFMPEG_CORE_VERSION = '0.12.10'
 const FFMPEG_CORE_BASE_URL = `https://unpkg.com/@ffmpeg/core@${FFMPEG_CORE_VERSION}/dist/umd`
 const HEAVY_VIDEO_SIZE_BYTES = 30 * 1024 * 1024
+const MAX_IMAGE_OVERLAY_SIZE_BYTES = 5 * 1024 * 1024
+const SUPPORTED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp']
 
 const COMPRESSION_PROFILES: Record<CompressionProfile['label'], CompressionProfile> = {
   '720p': {
@@ -245,6 +247,7 @@ export default function VideoEditor() {
   const [renderProgress, setRenderProgress] = useState(0)
   const [renderMessage, setRenderMessage] = useState('')
   const [compressionStats, setCompressionStats] = useState<CompressionStats | null>(null)
+  const [imageMessage, setImageMessage] = useState('')
 
   function setRenderStage(stage: string, message?: string) {
     renderStageRef.current = stage
@@ -307,6 +310,12 @@ export default function VideoEditor() {
 
       const image = new Image()
       image.onload = drawCanvas
+      image.onerror = () => {
+        imageElementsRef.current.delete(overlay.id)
+        setImageOverlays((current) => current.filter((item) => item.id !== overlay.id))
+        if (activeImageId === overlay.id) setActiveImageId(null)
+        setImageMessage('Nao foi possivel carregar esta imagem. Tente PNG, JPG ou WebP menor que 5 MB.')
+      }
       image.src = overlay.url
       imageElementsRef.current.set(overlay.id, image)
     })
@@ -363,6 +372,7 @@ export default function VideoEditor() {
     setActiveOverlayId(null)
     setImageOverlays([])
     setActiveImageId(null)
+    setImageMessage('')
     setCompressionStats(null)
     setIsPlaying(false)
     setCurrentTime(0)
@@ -384,6 +394,20 @@ export default function VideoEditor() {
   function handleImageChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
     if (!file) return
+
+    setImageMessage('')
+
+    if (!SUPPORTED_IMAGE_TYPES.includes(file.type)) {
+      setImageMessage('Use uma imagem PNG, JPG ou WebP.')
+      event.target.value = ''
+      return
+    }
+
+    if (file.size > MAX_IMAGE_OVERLAY_SIZE_BYTES) {
+      setImageMessage('Use uma imagem menor que 5 MB.')
+      event.target.value = ''
+      return
+    }
 
     const imageUrl = URL.createObjectURL(file)
     const overlay: ImageOverlay = {
@@ -415,6 +439,13 @@ export default function VideoEditor() {
         )
       )
       drawCanvas()
+    }
+    image.onerror = () => {
+      URL.revokeObjectURL(imageUrl)
+      imageElementsRef.current.delete(overlay.id)
+      setImageOverlays((current) => current.filter((item) => item.id !== overlay.id))
+      setActiveImageId((current) => (current === overlay.id ? null : current))
+      setImageMessage('Nao foi possivel carregar esta imagem. Tente outro arquivo.')
     }
     image.src = imageUrl
     imageElementsRef.current.set(overlay.id, image)
@@ -457,6 +488,7 @@ export default function VideoEditor() {
     setActiveOverlayId(null)
     setImageOverlays([])
     setActiveImageId(null)
+    setImageMessage('')
     setCaption('')
     setTextValue('')
     setCompressionStats(null)
@@ -906,6 +938,7 @@ export default function VideoEditor() {
     imageElementsRef.current.delete(activeImageId)
     setImageOverlays((current) => current.filter((overlay) => overlay.id !== activeImageId))
     setActiveImageId(null)
+    setImageMessage('')
   }
 
   async function getFFmpeg() {
@@ -1737,8 +1770,8 @@ export default function VideoEditor() {
                     <ImageIcon className="h-5 w-5" />
                   </span>
                   <span className="min-w-0">
-                    <span className="block text-sm font-black text-white">Imagem</span>
-                    <span className="block truncate text-xs text-amber-100/60">PNG, JPG, WebP</span>
+                    <span className="block text-sm font-black text-white">Adicionar imagem</span>
+                    <span className="block truncate text-xs text-amber-100/60">PNG, JPG, WebP ate 5 MB</span>
                   </span>
                   <input
                     type="file"
@@ -1950,13 +1983,23 @@ export default function VideoEditor() {
                   )}
                 </div>
 
+                <div className="rounded-xl border border-amber-300/20 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-100">
+                  Figurinhas aparecem na previa. A inclusao no video final sera ativada em breve.
+                </div>
+
+                {imageMessage && (
+                  <div className="rounded-xl border border-red-300/20 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-100">
+                    {imageMessage}
+                  </div>
+                )}
+
                 <label className="flex cursor-pointer items-center gap-3 rounded-2xl border border-dashed border-amber-300/30 bg-amber-500/10 px-4 py-4 transition hover:bg-amber-500/15">
                   <span className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-500/20 text-amber-100">
                     <ImageIcon className="h-5 w-5" />
                   </span>
                   <span className="min-w-0">
                     <span className="block text-sm font-black text-white">Adicionar imagem</span>
-                    <span className="block truncate text-xs text-amber-100/60">PNG, JPG, WebP</span>
+                    <span className="block truncate text-xs text-amber-100/60">PNG, JPG, WebP ate 5 MB</span>
                   </span>
                   <input
                     type="file"
