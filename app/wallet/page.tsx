@@ -2,6 +2,10 @@
 
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { useTheme } from 'next-themes'
+import AppSidebar from '../components/AppSidebar'
+import MobileNavigation from '../components/MobileNavigation'
 import {
   ArrowDownLeft,
   ArrowLeft,
@@ -98,6 +102,12 @@ type ProfileSummary = {
   display_name: string | null
 }
 
+type CurrentProfile = {
+  username: string | null
+  display_name: string | null
+  avatar_url: string | null
+}
+
 const transactionLabels: Record<string, string> = {
   admin_credit: 'Credito administrativo',
   reward: 'Recompensa',
@@ -179,13 +189,24 @@ function getGiftNameFromDescription(description: string | null) {
 }
 
 export default function WalletPage() {
+  const router = useRouter()
+  const { theme, setTheme } = useTheme()
+
+  const [mounted, setMounted] = useState(false)
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState('')
+  const [email, setEmail] = useState('')
+  const [currentProfile, setCurrentProfile] = useState<CurrentProfile | null>(null)
+  const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0)
   const [wallet, setWallet] = useState<ItaCashWallet | null>(null)
   const [transactions, setTransactions] = useState<ItaCashTransaction[]>([])
   const [giftContexts, setGiftContexts] = useState<Record<string, UserGiftContext>>({})
   const [purchaseRequests, setPurchaseRequests] = useState<PurchaseRequest[]>([])
   const [paymentOrders, setPaymentOrders] = useState<PaymentOrder[]>([])
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   useEffect(() => {
     loadWallet()
@@ -289,7 +310,11 @@ export default function WalletPage() {
       return
     }
 
+    setEmail(user.email || '')
+
     await Promise.all([
+      loadNavigationProfile(user.id),
+      loadUnreadNotificationsCount(user.id),
       loadPurchaseRequests(user.id),
       loadPaymentOrders(user.id),
     ])
@@ -432,9 +457,72 @@ export default function WalletPage() {
     setPaymentOrders((data || []) as PaymentOrder[])
   }
 
+  async function loadNavigationProfile(currentUserId: string) {
+    const { data } = await supabase
+      .from('profiles')
+      .select('username, display_name, avatar_url')
+      .eq('id', currentUserId)
+      .maybeSingle()
+
+    if (!data) return
+
+    setCurrentProfile({
+      username: data.username,
+      display_name: data.display_name,
+      avatar_url: data.avatar_url,
+    })
+  }
+
+  async function loadUnreadNotificationsCount(currentUserId: string) {
+    const { count } = await supabase
+      .from('notifications')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', currentUserId)
+      .eq('read', false)
+
+    setUnreadNotificationsCount(count || 0)
+  }
+
+  async function handleLogout() {
+    await supabase.auth.signOut()
+    router.push('/login')
+  }
+
+  function handleToggleTheme() {
+    setTheme(theme === 'dark' ? 'light' : 'dark')
+  }
+
+  function handlePostClick() {
+    router.push('/feed')
+  }
+
   return (
     <main className="min-h-screen overflow-hidden bg-black text-white">
-      <section className="relative mx-auto min-h-screen w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <AppSidebar
+        unreadNotificationsCount={unreadNotificationsCount}
+        mounted={mounted}
+        theme={theme}
+        displayName={currentProfile?.display_name || currentProfile?.username || undefined}
+        username={currentProfile?.username || null}
+        email={email}
+        avatarUrl={currentProfile?.avatar_url || null}
+        onToggleTheme={handleToggleTheme}
+        onLogout={handleLogout}
+      />
+
+      <MobileNavigation
+        email={email}
+        displayName={currentProfile?.display_name || currentProfile?.username || 'Minha conta'}
+        avatarUrl={currentProfile?.avatar_url || null}
+        unreadNotificationsCount={unreadNotificationsCount}
+        mounted={mounted}
+        theme={theme}
+        onToggleTheme={handleToggleTheme}
+        onLogout={handleLogout}
+        onPostClick={handlePostClick}
+      />
+
+      <section className="relative mx-auto min-h-screen w-full max-w-7xl px-4 py-20 pb-24 sm:px-6 lg:ml-[104px] lg:max-w-[calc(80rem-104px)] lg:px-8 lg:py-6">
         <div className="pointer-events-none absolute -right-24 top-24 h-72 w-72 rounded-full bg-blue-500/15 blur-3xl" />
 
         <header className="relative z-10 flex items-center justify-between gap-4">
