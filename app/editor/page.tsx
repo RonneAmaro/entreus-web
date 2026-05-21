@@ -114,17 +114,14 @@ export default function EditorPage() {
         onPostClick={handlePostClick}
       />
 
-      <section className="relative mx-auto min-h-screen w-full max-w-7xl px-4 py-20 pb-24 sm:px-6 lg:ml-[104px] lg:max-w-[calc(80rem-104px)] lg:px-8 lg:py-6">
-        <header className="relative z-10 mb-6">
+      <section className="relative mx-auto min-h-screen w-full max-w-7xl px-3 py-16 pb-20 sm:px-5 lg:ml-[104px] lg:max-w-[calc(80rem-104px)] lg:px-8 lg:py-5">
+        <header className="relative z-10 mb-3 hidden sm:block">
           <p className="text-xs font-black uppercase tracking-[0.24em] text-blue-300">
             Creator Studio
           </p>
-          <h1 className="mt-3 text-3xl font-black tracking-tight sm:text-5xl">
+          <h1 className="mt-2 text-3xl font-black tracking-tight">
             Editar video
           </h1>
-          <p className="mt-3 max-w-2xl text-sm font-semibold text-zinc-500 sm:text-base">
-            Adicione texto, audio e efeitos.
-          </p>
         </header>
 
         <div className="relative z-10">

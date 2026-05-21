@@ -4,14 +4,17 @@ import { ChangeEvent, PointerEvent, useEffect, useRef, useState } from 'react'
 import { FFmpeg } from '@ffmpeg/ffmpeg'
 import { fetchFile, toBlobURL } from '@ffmpeg/util'
 import {
+  ArrowLeft,
   Captions,
   Loader2,
   Mic,
   Move,
   Music,
+  Play,
   Plus,
   Rocket,
   SlidersHorizontal,
+  Trash2,
   Type,
   Upload,
   Video,
@@ -124,11 +127,22 @@ function getVisualFilter(value: VideoFilter) {
   return 'null'
 }
 
+function formatEditorTime(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return '0:00'
+
+  const minutes = Math.floor(value / 60)
+  const seconds = Math.floor(value % 60)
+  return `${minutes}:${String(seconds).padStart(2, '0')}`
+}
+
 export default function VideoEditor() {
   const ffmpegRef = useRef<FFmpeg | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const pointerMovedRef = useRef(false)
+  const pointerStartedOnOverlayRef = useRef(false)
+  const renderStageRef = useRef('idle')
 
   const [videoFile, setVideoFile] = useState<File | null>(null)
   const [videoUrl, setVideoUrl] = useState('')
@@ -155,6 +169,37 @@ export default function VideoEditor() {
   const [isRendering, setIsRendering] = useState(false)
   const [renderProgress, setRenderProgress] = useState(0)
   const [renderMessage, setRenderMessage] = useState('')
+
+  function setRenderStage(stage: string, message?: string) {
+    renderStageRef.current = stage
+    if (message) setRenderMessage(message)
+    console.info('[VideoEditor] Render stage:', stage)
+  }
+
+  function logRenderContext(stage: string, details: Record<string, unknown> = {}) {
+    console.info('[VideoEditor] Render context:', {
+      stage,
+      ffmpegLoaded: Boolean(ffmpegRef.current?.loaded),
+      video: videoFile
+        ? {
+            name: videoFile.name,
+            type: videoFile.type,
+            size: videoFile.size,
+          }
+        : null,
+      audio: audioFile
+        ? {
+            name: audioFile.name,
+            type: audioFile.type,
+            size: audioFile.size,
+          }
+        : null,
+      duration,
+      filter,
+      overlays: overlays.length,
+      ...details,
+    })
+  }
 
   useEffect(() => {
     return () => {
@@ -371,8 +416,7 @@ export default function VideoEditor() {
   }
 
   function addTextOverlay() {
-    const cleanText = textValue.trim()
-    if (!cleanText) return
+    const cleanText = textValue.trim() || 'Novo texto'
 
     const overlay: TextOverlay = {
       id: crypto.randomUUID(),
@@ -387,6 +431,7 @@ export default function VideoEditor() {
 
     setOverlays((current) => [...current, overlay])
     setActiveOverlayId(overlay.id)
+    setActivePanel('text')
     setTextValue('')
   }
 
@@ -422,11 +467,16 @@ export default function VideoEditor() {
 
     if (!overlay) {
       setActiveOverlayId(null)
+      pointerStartedOnOverlayRef.current = false
+      pointerMovedRef.current = false
       return
     }
 
+    pointerStartedOnOverlayRef.current = true
+    pointerMovedRef.current = false
     canvas.setPointerCapture(event.pointerId)
     setActiveOverlayId(overlay.id)
+    setActivePanel('text')
     setDragOffset({
       x: point.x - overlay.x,
       y: point.y - overlay.y,
@@ -440,6 +490,7 @@ export default function VideoEditor() {
     if (!canvas || !canvas.hasPointerCapture(event.pointerId)) return
 
     const point = getCanvasPoint(event, canvas)
+    pointerMovedRef.current = true
 
     setOverlays((current) =>
       current.map((overlay) => {
@@ -459,6 +510,13 @@ export default function VideoEditor() {
     if (canvas?.hasPointerCapture(event.pointerId)) {
       canvas.releasePointerCapture(event.pointerId)
     }
+
+    if (!pointerStartedOnOverlayRef.current && !pointerMovedRef.current) {
+      void togglePlayback()
+    }
+
+    pointerMovedRef.current = false
+    pointerStartedOnOverlayRef.current = false
   }
 
   async function togglePlayback() {
@@ -516,13 +574,58 @@ export default function VideoEditor() {
     )
   }
 
+  function updateActiveOverlayText(value: string) {
+    if (!activeOverlayId) {
+      setTextValue(value)
+      return
+    }
+
+    setOverlays((current) =>
+      current.map((overlay) =>
+        overlay.id === activeOverlayId
+          ? {
+              ...overlay,
+              text: value,
+            }
+          : overlay
+      )
+    )
+  }
+
+  function updateActiveOverlayStyle(key: 'fontSize' | 'color', value: number | string) {
+    if (!activeOverlayId) {
+      if (key === 'fontSize') setFontSize(Number(value))
+      if (key === 'color') setTextColor(String(value))
+      return
+    }
+
+    setOverlays((current) =>
+      current.map((overlay) =>
+        overlay.id === activeOverlayId
+          ? {
+              ...overlay,
+              [key]: key === 'fontSize' ? Number(value) : String(value),
+            }
+          : overlay
+      )
+    )
+  }
+
+  function removeActiveOverlay() {
+    if (!activeOverlayId) return
+
+    setOverlays((current) => current.filter((overlay) => overlay.id !== activeOverlayId))
+    setActiveOverlayId(null)
+  }
+
   async function getFFmpeg() {
     if (ffmpegRef.current?.loaded) {
       setIsReady(true)
+      logRenderContext('ffmpeg_already_loaded')
       return ffmpegRef.current
     }
 
-    setRenderMessage('Carregando motor de video...')
+    setRenderStage('ffmpeg_loading', 'Carregando motor de video...')
 
     const ffmpeg = new FFmpeg()
     ffmpegRef.current = ffmpeg
@@ -531,12 +634,17 @@ export default function VideoEditor() {
       setRenderProgress(clamp(Math.round(progress * 100), 0, 100))
     })
 
+    ffmpeg.on('log', ({ type, message }) => {
+      console.info('[VideoEditor] FFmpeg:', { type, message })
+    })
+
     await ffmpeg.load({
       coreURL: await toBlobURL(`${FFMPEG_CORE_BASE_URL}/ffmpeg-core.js`, 'text/javascript'),
       wasmURL: await toBlobURL(`${FFMPEG_CORE_BASE_URL}/ffmpeg-core.wasm`, 'application/wasm'),
     })
 
     setIsReady(true)
+    logRenderContext('ffmpeg_loaded')
     return ffmpeg
   }
 
@@ -708,7 +816,7 @@ export default function VideoEditor() {
     setIsPlaying(false)
     setIsRendering(true)
     setRenderProgress(0)
-    setRenderMessage(isReady ? 'Preparando arquivos...' : 'Carregando motor de video...')
+    setRenderStage('starting', isReady ? 'Preparando arquivos...' : 'Carregando motor de video...')
 
     const inputVideoName = `input.${getFileExtension(videoFile.name, 'mp4')}`
     const inputAudioName = audioFile ? `music.${getFileExtension(audioFile.name, 'mp3')}` : null
@@ -716,32 +824,44 @@ export default function VideoEditor() {
     const filesToClean = [inputVideoName, outputName, ...(inputAudioName ? [inputAudioName] : [])]
 
     try {
+      logRenderContext('start', {
+        inputVideoName,
+        inputAudioName,
+        canvasSize,
+      })
       const ffmpeg = await getFFmpeg()
 
+      setRenderStage('cleanup', 'Preparando arquivos...')
       await cleanupFfmpegFiles(ffmpeg, filesToClean)
 
-      setRenderMessage('Enviando arquivos para o FFmpeg...')
+      setRenderStage('write_video', 'Enviando arquivos para o FFmpeg...')
       await ffmpeg.writeFile(inputVideoName, await fetchFile(videoFile))
 
       if (audioFile && inputAudioName) {
+        setRenderStage('write_audio', 'Enviando musica para o FFmpeg...')
         await ffmpeg.writeFile(inputAudioName, await fetchFile(audioFile))
       }
 
-      setRenderMessage('Renderizando video final...')
+      const renderArgs = buildRenderArgs(inputVideoName, inputAudioName)
+      console.info('[VideoEditor] FFmpeg command:', renderArgs.join(' '))
+      setRenderStage('exec_primary', 'Renderizando video final...')
 
-      let exitCode = await ffmpeg.exec(buildRenderArgs(inputVideoName, inputAudioName))
+      let exitCode = await ffmpeg.exec(renderArgs)
 
       if (exitCode !== 0) {
-        setRenderMessage('Ajustando mixagem e tentando novamente...')
+        console.warn('[VideoEditor] FFmpeg primary render failed:', { exitCode })
+        setRenderStage('exec_fallback', 'Ajustando mixagem e tentando novamente...')
         await cleanupFfmpegFiles(ffmpeg, [outputName])
-        exitCode = await ffmpeg.exec(buildFallbackRenderArgs(inputVideoName, inputAudioName))
+        const fallbackArgs = buildFallbackRenderArgs(inputVideoName, inputAudioName)
+        console.info('[VideoEditor] FFmpeg fallback command:', fallbackArgs.join(' '))
+        exitCode = await ffmpeg.exec(fallbackArgs)
       }
 
       if (exitCode !== 0) {
         throw new Error('FFmpeg retornou erro ao renderizar o video.')
       }
 
-      setRenderMessage('Preparando video para upload...')
+      setRenderStage('read_output', 'Preparando video para upload...')
       const outputData = await ffmpeg.readFile(outputName)
       const outputBytes =
         typeof outputData === 'string'
@@ -750,7 +870,7 @@ export default function VideoEditor() {
       const outputArray = new Uint8Array(outputBytes)
       const outputBlob = new Blob([outputArray.buffer], { type: 'video/mp4' })
 
-      setRenderMessage('Fazendo upload para a EntreUS...')
+      setRenderStage('uploading', 'Fazendo upload para a EntreUS...')
 
       const {
         data: { user },
@@ -790,13 +910,33 @@ export default function VideoEditor() {
       }
 
       setRenderProgress(100)
-      setRenderMessage('🚀 Publicado com sucesso!')
+      setRenderStage('done', 'Publicado com sucesso!')
       clearEditorAfterPublish()
 
       await cleanupFfmpegFiles(ffmpeg, filesToClean)
     } catch (error) {
-      console.error('Erro ao renderizar video final:', error)
-      setRenderMessage('Nao foi possivel renderizar o video final neste navegador.')
+      console.error('[VideoEditor] Render failed:', {
+        stage: renderStageRef.current,
+        error,
+        ffmpegLoaded: Boolean(ffmpegRef.current?.loaded),
+        video: videoFile
+          ? {
+              name: videoFile.name,
+              type: videoFile.type,
+              size: videoFile.size,
+            }
+          : null,
+        audio: audioFile
+          ? {
+              name: audioFile.name,
+              type: audioFile.type,
+              size: audioFile.size,
+            }
+          : null,
+        duration,
+        canvasSize,
+      })
+      setRenderMessage('Nao foi possivel renderizar neste navegador. Tente um video menor ou outro navegador.')
     } finally {
       setIsRendering(false)
     }
@@ -805,6 +945,11 @@ export default function VideoEditor() {
   const activeOverlay = overlays.find((overlay) => overlay.id === activeOverlayId)
   const selectedFilter = videoFilters.find((item) => item.value === filter) || videoFilters[0]
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0
+  const editableText = activeOverlay ? activeOverlay.text : textValue
+  const editableFontSize = activeOverlay ? activeOverlay.fontSize : fontSize
+  const editableTextColor = activeOverlay ? activeOverlay.color : textColor
+  const timelineBlocks = Array.from({ length: 12 }, (_, index) => index)
+  const controlsVisible = Boolean(videoUrl && !isPlaying)
   const toolButtons = [
     { id: 'text' as EditorPanel, label: 'Texto', icon: <Type className="h-5 w-5" /> },
     { id: 'audio' as EditorPanel, label: 'Audio', icon: <Music className="h-5 w-5" /> },
@@ -815,28 +960,32 @@ export default function VideoEditor() {
   ]
 
   return (
-    <section className="w-full overflow-hidden rounded-[1.5rem] border border-white/10 bg-black text-white shadow-2xl shadow-black/40 ring-1 ring-blue-400/10">
+    <section className="w-full overflow-hidden rounded-[1.25rem] border border-white/10 bg-black text-white shadow-2xl shadow-black/40 ring-1 ring-blue-400/10">
       <div className="flex flex-col gap-0 lg:min-h-[78vh] lg:flex-row">
         <div className="relative flex min-w-0 flex-1 flex-col bg-zinc-950">
-          <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 px-4 py-3 sm:px-5">
-            <div className="min-w-0">
-              <p className="text-lg font-black leading-none">Editar video</p>
-              <p className="mt-1 truncate text-xs font-semibold text-zinc-500">
-                {videoName || 'Selecione um video'}
-              </p>
+          <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 px-3 py-2.5 sm:px-5">
+            <div className="flex min-w-0 items-center gap-2">
+              <button
+                type="button"
+                onClick={() => window.history.back()}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-zinc-400 transition hover:bg-white/10 hover:text-white"
+                aria-label="Voltar"
+              >
+                <ArrowLeft className="h-5 w-5" />
+              </button>
+              <div className="min-w-0">
+                <p className="truncate text-base font-black leading-none sm:text-lg">
+                  {videoName || 'Editar video'}
+                </p>
+                {videoUrl && (
+                  <p className="mt-1 text-xs font-semibold text-zinc-500">
+                    {formatEditorTime(currentTime)} / {formatEditorTime(duration)}
+                  </p>
+                )}
+              </div>
             </div>
 
             <div className="flex shrink-0 items-center gap-2">
-              {videoUrl && (
-                <button
-                  type="button"
-                  onClick={togglePlayback}
-                  className="inline-flex h-10 items-center justify-center rounded-full border border-white/10 bg-white px-4 text-sm font-black text-black transition hover:bg-blue-50"
-                >
-                  {isPlaying ? 'Pausar' : 'Play'}
-                </button>
-              )}
-
               <button
                 type="button"
                 onClick={renderFinalVideo}
@@ -849,11 +998,11 @@ export default function VideoEditor() {
             </div>
           </div>
 
-          <div className="flex min-h-[26rem] flex-1 items-center justify-center px-3 py-4 sm:px-5">
-            <div className="relative w-full overflow-hidden rounded-[1.25rem] border border-white/10 bg-black shadow-2xl shadow-black/40">
+          <div className={`flex flex-1 items-center justify-center px-2 py-3 transition-all sm:px-5 ${videoUrl ? 'min-h-[18rem] sm:min-h-[28rem]' : 'min-h-[24rem] sm:min-h-[34rem]'}`}>
+            <div className={`relative w-full overflow-hidden bg-black shadow-2xl shadow-black/40 ${videoUrl ? 'rounded-xl sm:rounded-[1.25rem]' : 'rounded-[1.25rem] border border-white/10'}`}>
             {videoUrl ? (
               <div
-                className="relative mx-auto w-full max-h-[70vh]"
+                className="relative mx-auto w-full max-h-[68vh]"
                 style={{ aspectRatio: `${canvasSize.width} / ${canvasSize.height}` }}
               >
                 <video
@@ -889,14 +1038,23 @@ export default function VideoEditor() {
                   onPointerCancel={handlePointerUp}
                   className="absolute inset-0 h-full w-full touch-none cursor-move"
                 />
+                {!isPlaying && (
+                  <button
+                    type="button"
+                    onClick={togglePlayback}
+                    className="absolute left-1/2 top-1/2 z-10 flex h-20 w-20 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white shadow-2xl ring-1 ring-white/20 backdrop-blur-md transition hover:scale-105 hover:bg-blue-500/80"
+                    aria-label="Reproduzir video"
+                  >
+                    <Play className="ml-1 h-9 w-9 fill-current" />
+                  </button>
+                )}
               </div>
             ) : (
-              <div className="flex min-h-[28rem] flex-col items-center justify-center px-6 text-center text-zinc-400">
+              <div className="flex min-h-[24rem] flex-col items-center justify-center px-6 text-center text-zinc-400 sm:min-h-[32rem]">
                 <div className="flex h-16 w-16 items-center justify-center rounded-full border border-blue-300/25 bg-blue-500/10 text-blue-100">
                   <Video className="h-7 w-7" />
                 </div>
                 <p className="mt-4 text-xl font-black text-white">Selecione um video</p>
-                <p className="mt-2 text-sm font-semibold text-zinc-500">Adicione texto, audio e efeitos.</p>
                 <label className="mt-5 inline-flex cursor-pointer items-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-black text-black transition hover:bg-blue-50">
                   <Upload className="h-4 w-4" />
                   Escolher arquivo
@@ -912,32 +1070,96 @@ export default function VideoEditor() {
             </div>
           </div>
 
-          {videoName && (
-            <div className="shrink-0 border-t border-white/10 px-4 py-3 sm:px-5">
-              <div className="flex items-center justify-between gap-3 text-xs font-semibold text-zinc-500">
-                <span className="truncate">
-                  Arquivo: <span className="text-zinc-300">{videoName}</span>
-                </span>
-                <span className="shrink-0 text-zinc-400">
-                  {currentTime.toFixed(1)}s / {duration.toFixed(1)}s
-                </span>
+          {videoUrl && (
+            <div
+              className={`shrink-0 border-t border-white/10 bg-black/70 px-3 py-3 transition-all duration-300 sm:px-5 ${
+                controlsVisible ? 'translate-y-0 opacity-100' : 'pointer-events-none -mb-28 translate-y-6 opacity-0'
+              }`}
+            >
+              <div className="mb-2 flex items-center justify-between gap-3 text-xs font-black text-zinc-400">
+                <span>{formatEditorTime(currentTime)}</span>
+                <span className="text-zinc-600">{formatEditorTime(duration)}</span>
               </div>
-              <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/10">
-                <div
-                  className="h-full rounded-full bg-blue-500 transition-[width]"
-                  style={{ width: `${progressPercent}%` }}
+
+              <div className="relative rounded-2xl border border-white/10 bg-zinc-950 p-2">
+                <div className="pointer-events-none absolute left-1/2 top-2 z-20 h-[calc(100%-1rem)] w-0.5 -translate-x-1/2 rounded-full bg-blue-200 shadow-[0_0_18px_rgba(147,197,253,0.75)]" />
+                <div className="pointer-events-none absolute left-1/2 top-1 z-20 h-3 w-3 -translate-x-1/2 rounded-full bg-blue-200" />
+
+                <div className="flex items-stretch gap-1 overflow-hidden rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => setActivePanel('add')}
+                    className="flex w-10 shrink-0 items-center justify-center rounded-lg bg-blue-500 text-white"
+                    aria-label="Adicionar clipe"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
+
+                  <div className="grid h-14 min-w-[34rem] flex-1 grid-cols-12 gap-1 overflow-hidden">
+                    {timelineBlocks.map((item) => (
+                      <button
+                        key={item}
+                        type="button"
+                        onClick={() => handleSeek((duration / timelineBlocks.length) * item)}
+                        className="relative overflow-hidden rounded-md border border-white/10 bg-zinc-800"
+                        aria-label={`Ir para bloco ${item + 1}`}
+                      >
+                        {videoUrl ? (
+                          <video
+                            src={videoUrl}
+                            muted
+                            playsInline
+                            preload="metadata"
+                            className="h-full w-full object-cover opacity-70"
+                          />
+                        ) : (
+                          <span className="block h-full w-full bg-zinc-800" />
+                        )}
+                        <span className="absolute inset-0 bg-gradient-to-b from-white/10 to-black/20" />
+                      </button>
+                    ))}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setActivePanel('add')}
+                    className="flex w-10 shrink-0 items-center justify-center rounded-lg bg-white/10 text-white"
+                    aria-label="Adicionar no fim"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
+                </div>
+
+                <input
+                  type="range"
+                  min="0"
+                  max={duration}
+                  step="0.05"
+                  value={currentTime}
+                  onChange={(event) => handleSeek(Number(event.target.value))}
+                  className="mt-2 w-full accent-blue-500"
+                  aria-label="Linha do tempo do video"
                 />
+
+                <div className="mt-2 grid gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setActivePanel('audio')}
+                    className="flex h-8 items-center gap-2 rounded-lg border border-emerald-300/20 bg-emerald-500/10 px-3 text-xs font-black text-emerald-100"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    {audioName ? audioName : 'Adicionar audio'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActivePanel('text')}
+                    className="flex h-8 items-center gap-2 rounded-lg border border-blue-300/20 bg-blue-500/10 px-3 text-xs font-black text-blue-100"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    {overlays.length > 0 ? `${overlays.length} texto(s)` : 'Adicionar texto'}
+                  </button>
+                </div>
               </div>
-              <input
-                type="range"
-                min="0"
-                max={duration}
-                step="0.05"
-                value={currentTime}
-                onChange={(event) => handleSeek(Number(event.target.value))}
-                className="mt-2 w-full accent-blue-500"
-                aria-label="Linha do tempo do video"
-              />
             </div>
           )}
 
@@ -957,7 +1179,14 @@ export default function VideoEditor() {
           )}
         </div>
 
-        <aside className="flex shrink-0 flex-col border-t border-white/10 bg-black/80 lg:w-[21rem] lg:border-l lg:border-t-0">
+        {videoUrl && (
+        <aside
+          className={`fixed inset-x-0 bottom-16 z-30 flex max-h-[48dvh] shrink-0 flex-col rounded-t-[1.25rem] border-t border-white/10 bg-black/95 shadow-2xl shadow-black/50 ring-1 ring-white/10 transition-all duration-300 lg:static lg:max-h-none lg:w-[21rem] lg:rounded-none lg:border-l lg:border-t-0 lg:bg-black/80 lg:shadow-none lg:ring-0 ${
+            controlsVisible
+              ? 'translate-y-0 opacity-100'
+              : 'pointer-events-none translate-y-full opacity-0 lg:translate-x-8 lg:translate-y-0'
+          }`}
+        >
           <div className="grid grid-cols-6 gap-1 border-b border-white/10 p-2 lg:grid-cols-3">
             {toolButtons.map((item) => (
               <button
@@ -1014,17 +1243,17 @@ export default function VideoEditor() {
                   <div className="mt-2 flex gap-2">
                     <input
                       type="text"
-                      value={textValue}
-                      onChange={(event) => setTextValue(event.target.value)}
+                      value={editableText}
+                      onChange={(event) => updateActiveOverlayText(event.target.value)}
                       placeholder="Digite uma frase"
                       className="min-w-0 flex-1 rounded-2xl border border-white/10 bg-zinc-950 px-4 py-3 text-sm font-semibold text-white outline-none placeholder:text-zinc-600 focus:border-blue-300"
                     />
                     <button
                       type="button"
                       onClick={addTextOverlay}
-                      disabled={!textValue.trim()}
+                      disabled={!activeOverlay && !textValue.trim()}
                       className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white text-black transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
-                      aria-label="Adicionar texto"
+                      aria-label={activeOverlay ? 'Adicionar novo texto' : 'Adicionar texto'}
                     >
                       <Plus className="h-4 w-4" />
                     </button>
@@ -1037,11 +1266,11 @@ export default function VideoEditor() {
                     type="range"
                     min="18"
                     max="120"
-                    value={fontSize}
-                    onChange={(event) => setFontSize(Number(event.target.value))}
+                    value={editableFontSize}
+                    onChange={(event) => updateActiveOverlayStyle('fontSize', Number(event.target.value))}
                     className="mt-3 w-full accent-blue-500"
                   />
-                  <span className="mt-1 block text-xs font-semibold text-zinc-500">{fontSize}px</span>
+                  <span className="mt-1 block text-xs font-semibold text-zinc-500">{editableFontSize}px</span>
                 </label>
 
                 <label className="block">
@@ -1049,11 +1278,11 @@ export default function VideoEditor() {
                   <div className="mt-2 flex items-center gap-3 rounded-2xl border border-white/10 bg-zinc-950 px-3 py-2">
                     <input
                       type="color"
-                      value={textColor}
-                      onChange={(event) => setTextColor(event.target.value)}
+                      value={editableTextColor}
+                      onChange={(event) => updateActiveOverlayStyle('color', event.target.value)}
                       className="h-10 w-12 cursor-pointer rounded-xl border-0 bg-transparent p-0"
                     />
-                    <span className="text-sm font-semibold text-zinc-400">{textColor.toUpperCase()}</span>
+                    <span className="text-sm font-semibold text-zinc-400">{editableTextColor.toUpperCase()}</span>
                   </div>
                 </label>
 
@@ -1063,7 +1292,6 @@ export default function VideoEditor() {
                       <Move className="h-4 w-4" />
                       Selecionado
                     </div>
-                    <p className="mt-2 break-words text-blue-100/80">{activeOverlay.text}</p>
                     <p className="mt-2 text-xs text-blue-100/60">
                       X {Math.round(activeOverlay.x)} / Y {Math.round(activeOverlay.y)}
                     </p>
@@ -1114,6 +1342,15 @@ export default function VideoEditor() {
                         />
                       </label>
                     </div>
+
+                    <button
+                      type="button"
+                      onClick={removeActiveOverlay}
+                      className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-full border border-red-300/25 bg-red-500/10 px-4 py-2 text-xs font-black text-red-100 transition hover:bg-red-500/20"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Remover texto
+                    </button>
                   </div>
                 )}
               </div>
@@ -1266,6 +1503,7 @@ export default function VideoEditor() {
             </button>
           </div>
         </aside>
+        )}
       </div>
     </section>
   )
