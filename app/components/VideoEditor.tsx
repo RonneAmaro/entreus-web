@@ -4,6 +4,7 @@ import { ChangeEvent, PointerEvent, useEffect, useRef, useState } from 'react'
 import { FFmpeg } from '@ffmpeg/ffmpeg'
 import { fetchFile, toBlobURL } from '@ffmpeg/util'
 import { Loader2, Move, Music, Plus, Rocket, Type, Upload, Video, X } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
 
 type VideoFilter = 'normal' | 'mono' | 'sepia' | 'warm'
 
@@ -133,6 +134,7 @@ export default function VideoEditor() {
   const [filter, setFilter] = useState<VideoFilter>('normal')
   const [videoVolume, setVideoVolume] = useState(1)
   const [musicVolume, setMusicVolume] = useState(0.45)
+  const [caption, setCaption] = useState('')
   const [isReady, setIsReady] = useState(false)
   const [isRendering, setIsRendering] = useState(false)
   const [renderProgress, setRenderProgress] = useState(0)
@@ -233,6 +235,24 @@ export default function VideoEditor() {
     setAudioFile(null)
     setAudioUrl('')
     setAudioName('')
+  }
+
+  function clearEditorAfterPublish() {
+    if (videoUrl) URL.revokeObjectURL(videoUrl)
+    if (audioUrl) URL.revokeObjectURL(audioUrl)
+
+    setVideoFile(null)
+    setVideoUrl('')
+    setVideoName('')
+    setAudioFile(null)
+    setAudioUrl('')
+    setAudioName('')
+    setOverlays([])
+    setActiveOverlayId(null)
+    setCaption('')
+    setTextValue('')
+    setCurrentTime(0)
+    setIsPlaying(false)
   }
 
   function handleLoadedMetadata() {
@@ -480,27 +500,6 @@ export default function VideoEditor() {
     )
   }
 
-  function exportCurrentFrame() {
-    const video = videoRef.current
-    const overlayCanvas = canvasRef.current
-    if (!video || !overlayCanvas) return
-
-    const output = document.createElement('canvas')
-    output.width = overlayCanvas.width
-    output.height = overlayCanvas.height
-
-    const context = output.getContext('2d')
-    if (!context) return
-
-    context.drawImage(video, 0, 0, output.width, output.height)
-    context.drawImage(overlayCanvas, 0, 0)
-
-    const link = document.createElement('a')
-    link.href = output.toDataURL('image/png')
-    link.download = 'entreus-video-frame.png'
-    link.click()
-  }
-
   async function getFFmpeg() {
     if (ffmpegRef.current?.loaded) {
       setIsReady(true)
@@ -726,7 +725,7 @@ export default function VideoEditor() {
         throw new Error('FFmpeg retornou erro ao renderizar o video.')
       }
 
-      setRenderMessage('Preparando download...')
+      setRenderMessage('Preparando video para upload...')
       const outputData = await ffmpeg.readFile(outputName)
       const outputBytes =
         typeof outputData === 'string'
@@ -734,14 +733,49 @@ export default function VideoEditor() {
           : outputData
       const outputArray = new Uint8Array(outputBytes)
       const outputBlob = new Blob([outputArray.buffer], { type: 'video/mp4' })
-      const outputUrl = URL.createObjectURL(outputBlob)
-      const link = document.createElement('a')
-      link.href = outputUrl
-      link.download = outputName
-      link.click()
-      URL.revokeObjectURL(outputUrl)
+
+      setRenderMessage('Fazendo upload para a EntreUS...')
+
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser()
+
+      if (userError || !user) {
+        throw new Error('Usuario nao autenticado.')
+      }
+
+      const filePath = `videos/${user.id}_${Date.now()}.mp4`
+      const { error: uploadError } = await supabase.storage
+        .from('posts')
+        .upload(filePath, outputBlob, {
+          cacheControl: '3600',
+          contentType: 'video/mp4',
+          upsert: false,
+        })
+
+      if (uploadError) {
+        throw uploadError
+      }
+
+      const { data: publicUrlData } = supabase.storage
+        .from('posts')
+        .getPublicUrl(filePath)
+
+      const { error: insertError } = await supabase.from('posts').insert({
+        user_id: user.id,
+        video_url: publicUrlData.publicUrl,
+        content: caption.trim() || null,
+        created_at: new Date().toISOString(),
+      })
+
+      if (insertError) {
+        throw insertError
+      }
+
       setRenderProgress(100)
-      setRenderMessage('Video renderizado com sucesso.')
+      setRenderMessage('🚀 Publicado com sucesso!')
+      clearEditorAfterPublish()
 
       await cleanupFfmpegFiles(ffmpeg, filesToClean)
     } catch (error) {
@@ -874,6 +908,17 @@ export default function VideoEditor() {
           </label>
 
           <div className="mt-5 space-y-4">
+            <label className="block rounded-2xl border border-white/10 bg-zinc-950 p-3">
+              <span className="text-sm font-black text-zinc-200">Legenda do post</span>
+              <textarea
+                value={caption}
+                onChange={(event) => setCaption(event.target.value)}
+                rows={4}
+                placeholder="O que voce esta pensando sobre esse video?"
+                className="mt-3 w-full resize-none rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm font-semibold text-white outline-none placeholder:text-zinc-600 focus:border-blue-300"
+              />
+            </label>
+
             <section className="rounded-2xl border border-white/10 bg-zinc-950 p-3">
               <div className="flex items-center gap-2 font-black text-zinc-200">
                 <Music className="h-4 w-4 text-blue-200" />
@@ -1104,7 +1149,7 @@ export default function VideoEditor() {
                 <Type className="h-4 w-4" />
                 Dica
               </div>
-              Clique no texto no preview e arraste para reposicionar. O botao salvar exporta o frame atual com o overlay.
+              Clique no texto no preview e arraste para reposicionar. O botao final renderiza o MP4, envia para a EntreUS e publica no feed.
             </div>
           </div>
         </aside>
