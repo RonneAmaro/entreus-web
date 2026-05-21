@@ -228,7 +228,7 @@ async function processPaymentId(
   }
 
   const externalReference = payment.external_reference || merchantOrder?.external_reference || null
-  const paymentExternalReference = payment.external_reference ?? null
+  const paymentExternalReference = externalReference ?? null
   const orderId = getSafeOrderId(payment.metadata?.order_id)
   const preferenceId = getProviderPreferenceId(payment, merchantOrder)
   const providerStatus = payment.status || 'unknown'
@@ -249,9 +249,17 @@ async function processPaymentId(
     p_provider_payment_id: providerPaymentId,
     p_provider_status: providerStatus,
     p_external_reference: paymentExternalReference,
-    p_order_id: orderId ?? null,
-    p_provider_preference_id: preferenceId ?? null,
-    p_provider_payment_method: providerPaymentMethod,
+    p_metadata: {
+      provider: 'mercadopago',
+      origin: 'mercadopago_webhook',
+      provider_payment_id: providerPaymentId,
+      provider_status: providerStatus,
+      provider_payment_method: providerPaymentMethod,
+      external_reference: paymentExternalReference,
+      metadata_order_id: orderId,
+      provider_order_id: payment.order?.id ? String(payment.order.id) : null,
+      provider_preference_id: preferenceId,
+    },
   })
 
   if (error && paymentExternalReference) {
