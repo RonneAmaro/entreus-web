@@ -39,6 +39,7 @@ type TextOverlay = {
 
 type ImageOverlay = {
   id: string
+  file: File
   url: string
   name: string
   x: number
@@ -79,6 +80,7 @@ const FFMPEG_CORE_BASE_URL = `https://unpkg.com/@ffmpeg/core@${FFMPEG_CORE_VERSI
 const HEAVY_VIDEO_SIZE_BYTES = 30 * 1024 * 1024
 const MAX_IMAGE_OVERLAY_SIZE_BYTES = 5 * 1024 * 1024
 const SUPPORTED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp']
+const RENDERABLE_IMAGE_TYPES = ['image/png', 'image/jpeg']
 
 const COMPRESSION_PROFILES: Record<CompressionProfile['label'], CompressionProfile> = {
   '720p': {
@@ -206,6 +208,10 @@ function getReductionPercent(originalBytes: number, optimizedBytes: number) {
   if (originalBytes <= 0 || optimizedBytes <= 0) return 0
 
   return clamp(Math.round((1 - optimizedBytes / originalBytes) * 100), 0, 99)
+}
+
+function getImageRenderExtension(file: File) {
+  return file.type === 'image/png' ? 'png' : 'jpg'
 }
 
 export default function VideoEditor() {
@@ -412,6 +418,7 @@ export default function VideoEditor() {
     const imageUrl = URL.createObjectURL(file)
     const overlay: ImageOverlay = {
       id: crypto.randomUUID(),
+      file,
       url: imageUrl,
       name: file.name,
       x: canvasSize.width * 0.18,
@@ -971,7 +978,7 @@ export default function VideoEditor() {
     return ffmpeg
   }
 
-  function buildVideoFilter() {
+  function buildVideoFilter(includeOutputFormat = true) {
     const filters = [getVisualFilter(filter)]
 
     overlays.forEach((overlay) => {
@@ -991,14 +998,86 @@ export default function VideoEditor() {
       )
     })
 
-    filters.push('format=yuv420p')
+    if (includeOutputFormat) filters.push('format=yuv420p')
     return filters.join(',')
   }
 
-  function buildRenderArgs(inputVideoName: string, inputAudioName: string | null) {
-    const videoFilter = buildVideoFilter()
+  function getRenderableImageOverlay() {
+    return imageOverlays.find((overlay) => RENDERABLE_IMAGE_TYPES.includes(overlay.file.type)) || null
+  }
+
+  function getImageOverlayPlacement(overlay: ImageOverlay) {
+    const outputWidth = canvasSize.width || 1280
+    const outputHeight = canvasSize.height || 720
+    const scaleX = outputWidth / (canvasSize.width || outputWidth)
+    const scaleY = outputHeight / (canvasSize.height || outputHeight)
+    const width = Math.max(2, Math.round(overlay.width * scaleX))
+    const height = Math.max(2, Math.round(overlay.height * scaleY))
+
+    return {
+      x: clamp(Math.round(overlay.x * scaleX), 0, Math.max(outputWidth - width, 0)),
+      y: clamp(Math.round(overlay.y * scaleY), 0, Math.max(outputHeight - height, 0)),
+      width,
+      height,
+    }
+  }
+
+  function buildImageVideoFilter(
+    renderImage: { overlay: ImageOverlay; inputIndex: number },
+    includeTiming: boolean
+  ) {
+    const placement = getImageOverlayPlacement(renderImage.overlay)
+    const timing = includeTiming
+      ? `:enable='between(t,${renderImage.overlay.startTime.toFixed(3)},${renderImage.overlay.endTime.toFixed(3)})'`
+      : ''
+
+    return [
+      `[0:v]${buildVideoFilter(false)}[vbase]`,
+      `[${renderImage.inputIndex}:v]scale=${placement.width}:${placement.height}[img0]`,
+      `[vbase][img0]overlay=${placement.x}:${placement.y}${timing},format=yuv420p[v]`,
+    ].join(';')
+  }
+
+  function buildRenderArgs(
+    inputVideoName: string,
+    inputAudioName: string | null,
+    renderImage?: { inputName: string; overlay: ImageOverlay; inputIndex: number } | null,
+    includeImageTiming = true
+  ) {
+    const videoFilter = renderImage
+      ? buildImageVideoFilter(renderImage, includeImageTiming)
+      : buildVideoFilter()
 
     if (!inputAudioName) {
+      if (renderImage) {
+        return [
+          '-i',
+          inputVideoName,
+          '-i',
+          renderImage.inputName,
+          '-filter_complex',
+          `${videoFilter};[0:a]volume=${videoVolume.toFixed(2)}[a]`,
+          '-map',
+          '[v]',
+          '-map',
+          '[a]',
+          '-c:v',
+          'libx264',
+          '-preset',
+          'veryfast',
+          '-crf',
+          '23',
+          '-c:a',
+          'aac',
+          '-b:a',
+          '192k',
+          '-movflags',
+          '+faststart',
+          '-shortest',
+          'entreus_output.mp4',
+        ]
+      }
+
       return [
         '-i',
         inputVideoName,
@@ -1032,13 +1111,21 @@ export default function VideoEditor() {
       '-1',
       '-i',
       inputAudioName,
+      ...(renderImage ? ['-i', renderImage.inputName] : []),
       '-filter_complex',
-      [
-        `[0:v]${videoFilter}[v]`,
-        `[0:a]volume=${videoVolume.toFixed(2)}[a0]`,
-        `[1:a]atrim=0:${duration.toFixed(3)},asetpts=PTS-STARTPTS,volume=${musicVolume.toFixed(2)}[a1]`,
-        '[a0][a1]amix=inputs=2:duration=first:dropout_transition=0[a]',
-      ].join(';'),
+      renderImage
+        ? [
+            videoFilter,
+            `[0:a]volume=${videoVolume.toFixed(2)}[a0]`,
+            `[1:a]atrim=0:${duration.toFixed(3)},asetpts=PTS-STARTPTS,volume=${musicVolume.toFixed(2)}[a1]`,
+            '[a0][a1]amix=inputs=2:duration=first:dropout_transition=0[a]',
+          ].join(';')
+        : [
+            `[0:v]${videoFilter}[v]`,
+            `[0:a]volume=${videoVolume.toFixed(2)}[a0]`,
+            `[1:a]atrim=0:${duration.toFixed(3)},asetpts=PTS-STARTPTS,volume=${musicVolume.toFixed(2)}[a1]`,
+            '[a0][a1]amix=inputs=2:duration=first:dropout_transition=0[a]',
+          ].join(';'),
       '-map',
       '[v]',
       '-map',
@@ -1061,10 +1148,40 @@ export default function VideoEditor() {
     ]
   }
 
-  function buildFallbackRenderArgs(inputVideoName: string, inputAudioName: string | null) {
-    const videoFilter = buildVideoFilter()
+  function buildFallbackRenderArgs(
+    inputVideoName: string,
+    inputAudioName: string | null,
+    renderImage?: { inputName: string; overlay: ImageOverlay; inputIndex: number } | null,
+    includeImageTiming = false
+  ) {
+    const videoFilter = renderImage
+      ? buildImageVideoFilter(renderImage, includeImageTiming)
+      : buildVideoFilter()
 
     if (!inputAudioName) {
+      if (renderImage) {
+        return [
+          '-i',
+          inputVideoName,
+          '-i',
+          renderImage.inputName,
+          '-filter_complex',
+          videoFilter,
+          '-map',
+          '[v]',
+          '-an',
+          '-c:v',
+          'libx264',
+          '-preset',
+          'veryfast',
+          '-crf',
+          '23',
+          '-movflags',
+          '+faststart',
+          'entreus_output.mp4',
+        ]
+      }
+
       return [
         '-i',
         inputVideoName,
@@ -1092,11 +1209,17 @@ export default function VideoEditor() {
       '-1',
       '-i',
       inputAudioName,
+      ...(renderImage ? ['-i', renderImage.inputName] : []),
       '-filter_complex',
-      [
-        `[0:v]${videoFilter}[v]`,
-        `[1:a]atrim=0:${duration.toFixed(3)},asetpts=PTS-STARTPTS,volume=${musicVolume.toFixed(2)}[a]`,
-      ].join(';'),
+      renderImage
+        ? [
+            videoFilter,
+            `[1:a]atrim=0:${duration.toFixed(3)},asetpts=PTS-STARTPTS,volume=${musicVolume.toFixed(2)}[a]`,
+          ].join(';')
+        : [
+            `[0:v]${videoFilter}[v]`,
+            `[1:a]atrim=0:${duration.toFixed(3)},asetpts=PTS-STARTPTS,volume=${musicVolume.toFixed(2)}[a]`,
+          ].join(';'),
       '-map',
       '[v]',
       '-map',
@@ -1253,13 +1376,43 @@ export default function VideoEditor() {
     const inputAudioName = audioFile ? `music.${getFileExtension(audioFile.name, 'mp3')}` : null
     const outputName = 'entreus_output.mp4'
     const optimizedOutputName = 'entreus_output_optimized.mp4'
-    const filesToClean = [inputVideoName, outputName, optimizedOutputName, ...(inputAudioName ? [inputAudioName] : [])]
+    const renderableImageOverlay = getRenderableImageOverlay()
+    const renderImageInputName = renderableImageOverlay
+      ? `image_overlay_0.${getImageRenderExtension(renderableImageOverlay.file)}`
+      : null
+    const renderImageInput = renderableImageOverlay && renderImageInputName
+      ? {
+          inputName: renderImageInputName,
+          overlay: renderableImageOverlay,
+          inputIndex: inputAudioName ? 2 : 1,
+        }
+      : null
+    const filesToClean = [
+      inputVideoName,
+      outputName,
+      optimizedOutputName,
+      ...(inputAudioName ? [inputAudioName] : []),
+      ...(renderImageInputName ? [renderImageInputName] : []),
+    ]
 
     try {
+      const firstImageOverlay = imageOverlays[0]
+      if (firstImageOverlay?.file.type === 'image/webp') {
+        setImageMessage('WebP aparece na previa, mas ainda nao entra no video final. Use PNG ou JPG.')
+      }
+
       logRenderContext('start', {
         inputVideoName,
         inputAudioName,
         canvasSize,
+        imageOverlay: renderImageInput
+          ? {
+              type: renderImageInput.overlay.file.type,
+              size: renderImageInput.overlay.file.size,
+              inputName: renderImageInput.inputName,
+              placement: getImageOverlayPlacement(renderImageInput.overlay),
+            }
+          : null,
       })
       const ffmpeg = await getFFmpeg()
 
@@ -1274,22 +1427,49 @@ export default function VideoEditor() {
         await ffmpeg.writeFile(inputAudioName, await fetchFile(audioFile))
       }
 
-      const renderArgs = buildRenderArgs(inputVideoName, inputAudioName)
+      if (renderImageInput) {
+        const placement = getImageOverlayPlacement(renderImageInput.overlay)
+        setRenderStage('write_image', 'Preparando imagem...')
+        console.info('[VideoEditor] Image overlay input:', {
+          type: renderImageInput.overlay.file.type,
+          size: renderImageInput.overlay.file.size,
+          name: renderImageInput.overlay.name,
+          inputName: renderImageInput.inputName,
+          placement,
+          startTime: renderImageInput.overlay.startTime,
+          endTime: renderImageInput.overlay.endTime,
+        })
+        await ffmpeg.writeFile(renderImageInput.inputName, await fetchFile(renderImageInput.overlay.file))
+      }
+
+      const renderArgs = buildRenderArgs(inputVideoName, inputAudioName, renderImageInput)
       console.info('[VideoEditor] FFmpeg command:', renderArgs.join(' '))
       setRenderStage('exec_primary', 'Renderizando versao final...')
 
       let exitCode = await ffmpeg.exec(renderArgs)
 
+      if (exitCode !== 0 && renderImageInput) {
+        console.warn('[VideoEditor] FFmpeg image timing render failed:', { exitCode })
+        setRenderStage('exec_image_fallback', 'Ajustando imagem e tentando novamente...')
+        await cleanupFfmpegFiles(ffmpeg, [outputName])
+        const imageFallbackArgs = buildRenderArgs(inputVideoName, inputAudioName, renderImageInput, false)
+        console.info('[VideoEditor] FFmpeg image fallback command:', imageFallbackArgs.join(' '))
+        exitCode = await ffmpeg.exec(imageFallbackArgs)
+      }
+
       if (exitCode !== 0) {
         console.warn('[VideoEditor] FFmpeg primary render failed:', { exitCode })
         setRenderStage('exec_fallback', 'Ajustando mixagem e tentando novamente...')
         await cleanupFfmpegFiles(ffmpeg, [outputName])
-        const fallbackArgs = buildFallbackRenderArgs(inputVideoName, inputAudioName)
+        const fallbackArgs = buildFallbackRenderArgs(inputVideoName, inputAudioName, renderImageInput)
         console.info('[VideoEditor] FFmpeg fallback command:', fallbackArgs.join(' '))
         exitCode = await ffmpeg.exec(fallbackArgs)
       }
 
       if (exitCode !== 0) {
+        if (renderImageInput) {
+          throw new Error('IMAGE_OVERLAY_RENDER_FAILED')
+        }
         throw new Error('FFmpeg retornou erro ao renderizar o video.')
       }
 
@@ -1363,8 +1543,12 @@ export default function VideoEditor() {
         canvasSize,
       })
       const failedDuringOptimization = renderStageRef.current === 'optimizing'
+      const failedDuringImageOverlay =
+        error instanceof Error && error.message === 'IMAGE_OVERLAY_RENDER_FAILED'
       setRenderMessage(
-        failedDuringOptimization
+        failedDuringImageOverlay
+          ? 'Nao foi possivel incluir a imagem no video final. Tente PNG/JPG menor.'
+          : failedDuringOptimization
           ? 'Nao foi possivel otimizar este video neste navegador. Tente novamente com um video menor.'
           : 'Nao foi possivel renderizar neste navegador. Tente um video menor ou outro navegador.'
       )
@@ -1984,7 +2168,7 @@ export default function VideoEditor() {
                 </div>
 
                 <div className="rounded-xl border border-amber-300/20 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-100">
-                  Figurinhas aparecem na previa. A inclusao no video final sera ativada em breve.
+                  PNG/JPG sera incluido no video final. WebP ainda fica apenas na previa.
                 </div>
 
                 {imageMessage && (
