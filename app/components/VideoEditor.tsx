@@ -3,7 +3,20 @@
 import { ChangeEvent, PointerEvent, useEffect, useRef, useState } from 'react'
 import { FFmpeg } from '@ffmpeg/ffmpeg'
 import { fetchFile, toBlobURL } from '@ffmpeg/util'
-import { Loader2, Move, Music, Plus, Rocket, Type, Upload, Video, X } from 'lucide-react'
+import {
+  Captions,
+  Loader2,
+  Mic,
+  Move,
+  Music,
+  Plus,
+  Rocket,
+  SlidersHorizontal,
+  Type,
+  Upload,
+  Video,
+  X,
+} from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 
 type VideoFilter = 'normal' | 'mono' | 'sepia' | 'warm'
@@ -23,6 +36,8 @@ type CanvasSize = {
   width: number
   height: number
 }
+
+type EditorPanel = 'add' | 'text' | 'audio' | 'effects' | 'caption' | 'voice'
 
 const DEFAULT_TEXT_COLOR = '#ffffff'
 const DEFAULT_FONT_SIZE = 42
@@ -135,6 +150,7 @@ export default function VideoEditor() {
   const [videoVolume, setVideoVolume] = useState(1)
   const [musicVolume, setMusicVolume] = useState(0.45)
   const [caption, setCaption] = useState('')
+  const [activePanel, setActivePanel] = useState<EditorPanel>('text')
   const [isReady, setIsReady] = useState(false)
   const [isRendering, setIsRendering] = useState(false)
   const [renderProgress, setRenderProgress] = useState(0)
@@ -789,31 +805,52 @@ export default function VideoEditor() {
   const activeOverlay = overlays.find((overlay) => overlay.id === activeOverlayId)
   const selectedFilter = videoFilters.find((item) => item.value === filter) || videoFilters[0]
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0
+  const toolButtons = [
+    { id: 'text' as EditorPanel, label: 'Texto', icon: <Type className="h-5 w-5" /> },
+    { id: 'audio' as EditorPanel, label: 'Audio', icon: <Music className="h-5 w-5" /> },
+    { id: 'effects' as EditorPanel, label: 'Efeitos', icon: <SlidersHorizontal className="h-5 w-5" /> },
+    { id: 'caption' as EditorPanel, label: 'Legenda', icon: <Captions className="h-5 w-5" /> },
+    { id: 'voice' as EditorPanel, label: 'Voz', icon: <Mic className="h-5 w-5" /> },
+    { id: 'add' as EditorPanel, label: 'Adicionar', icon: <Plus className="h-5 w-5" /> },
+  ]
 
   return (
-    <section className="w-full rounded-[2rem] border border-white/10 bg-zinc-950 p-4 text-white shadow-2xl shadow-black/30 ring-1 ring-white/5 sm:p-5">
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_22rem]">
-        <div className="min-w-0">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-xs font-black uppercase tracking-[0.22em] text-blue-300">
-                Video Studio
+    <section className="w-full overflow-hidden rounded-[1.5rem] border border-white/10 bg-black text-white shadow-2xl shadow-black/40 ring-1 ring-blue-400/10">
+      <div className="flex flex-col gap-0 lg:min-h-[78vh] lg:flex-row">
+        <div className="relative flex min-w-0 flex-1 flex-col bg-zinc-950">
+          <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 px-4 py-3 sm:px-5">
+            <div className="min-w-0">
+              <p className="text-lg font-black leading-none">Editar video</p>
+              <p className="mt-1 truncate text-xs font-semibold text-zinc-500">
+                {videoName || 'Selecione um video'}
               </p>
-              <h2 className="mt-1 text-2xl font-black">Editor de texto em video</h2>
             </div>
 
-            {videoUrl && (
+            <div className="flex shrink-0 items-center gap-2">
+              {videoUrl && (
+                <button
+                  type="button"
+                  onClick={togglePlayback}
+                  className="inline-flex h-10 items-center justify-center rounded-full border border-white/10 bg-white px-4 text-sm font-black text-black transition hover:bg-blue-50"
+                >
+                  {isPlaying ? 'Pausar' : 'Play'}
+                </button>
+              )}
+
               <button
                 type="button"
-                onClick={togglePlayback}
-                className="inline-flex items-center justify-center rounded-full bg-white px-4 py-2 text-sm font-black text-black transition hover:bg-blue-50"
+                onClick={renderFinalVideo}
+                disabled={!videoFile || isRendering}
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-blue-500 px-4 text-sm font-black text-white shadow-lg shadow-blue-950/30 transition hover:bg-blue-400 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {isPlaying ? 'Pausar' : 'Reproduzir'}
+                {isRendering ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}
+                Publicar
               </button>
-            )}
+            </div>
           </div>
 
-          <div className="relative overflow-hidden rounded-[1.5rem] border border-white/10 bg-black">
+          <div className="flex min-h-[26rem] flex-1 items-center justify-center px-3 py-4 sm:px-5">
+            <div className="relative w-full overflow-hidden rounded-[1.25rem] border border-white/10 bg-black shadow-2xl shadow-black/40">
             {videoUrl ? (
               <div
                 className="relative mx-auto w-full max-h-[70vh]"
@@ -854,18 +891,29 @@ export default function VideoEditor() {
                 />
               </div>
             ) : (
-              <div className="flex min-h-[22rem] flex-col items-center justify-center px-6 text-center text-zinc-400">
-                <Video className="h-12 w-12 text-blue-200" />
-                <p className="mt-4 text-lg font-black text-white">Carregue um video para comecar</p>
-                <p className="mt-2 max-w-md text-sm leading-6">
-                  O canvas aparece sobre o player e o texto pode ser arrastado diretamente no preview.
-                </p>
+              <div className="flex min-h-[28rem] flex-col items-center justify-center px-6 text-center text-zinc-400">
+                <div className="flex h-16 w-16 items-center justify-center rounded-full border border-blue-300/25 bg-blue-500/10 text-blue-100">
+                  <Video className="h-7 w-7" />
+                </div>
+                <p className="mt-4 text-xl font-black text-white">Selecione um video</p>
+                <p className="mt-2 text-sm font-semibold text-zinc-500">Adicione texto, audio e efeitos.</p>
+                <label className="mt-5 inline-flex cursor-pointer items-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-black text-black transition hover:bg-blue-50">
+                  <Upload className="h-4 w-4" />
+                  Escolher arquivo
+                  <input
+                    type="file"
+                    accept="video/*,.mp4,.mov,.webm,.m4v"
+                    onChange={handleVideoChange}
+                    className="sr-only"
+                  />
+                </label>
               </div>
             )}
+            </div>
           </div>
 
           {videoName && (
-            <div className="mt-3">
+            <div className="shrink-0 border-t border-white/10 px-4 py-3 sm:px-5">
               <div className="flex items-center justify-between gap-3 text-xs font-semibold text-zinc-500">
                 <span className="truncate">
                   Arquivo: <span className="text-zinc-300">{videoName}</span>
@@ -892,107 +940,270 @@ export default function VideoEditor() {
               />
             </div>
           )}
+
+          {(isRendering || renderMessage) && (
+            <div className="border-t border-blue-300/15 bg-blue-500/10 px-4 py-3 sm:px-5">
+              <div className="flex items-center justify-between gap-3 text-xs font-black text-blue-100">
+                <span>{renderMessage || 'Renderizando...'}</span>
+                <span>{renderProgress}%</span>
+              </div>
+              <div className="mt-2 h-2 overflow-hidden rounded-full bg-black/40">
+                <div
+                  className="h-full rounded-full bg-blue-300 transition-[width]"
+                  style={{ width: `${renderProgress}%` }}
+                />
+              </div>
+            </div>
+          )}
         </div>
 
-        <aside className="rounded-[1.5rem] border border-white/10 bg-black/45 p-4">
-          <label className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed border-blue-300/30 bg-blue-500/10 px-4 py-6 text-center transition hover:bg-blue-500/15">
-            <Upload className="h-7 w-7 text-blue-200" />
-            <span className="mt-3 text-sm font-black">Selecionar video</span>
-            <span className="mt-1 text-xs text-blue-100/70">MP4, MOV, WebM e formatos suportados pelo navegador</span>
-            <input
-              type="file"
-              accept="video/*,.mp4,.mov,.webm,.m4v"
-              onChange={handleVideoChange}
-              className="sr-only"
-            />
-          </label>
+        <aside className="flex shrink-0 flex-col border-t border-white/10 bg-black/80 lg:w-[21rem] lg:border-l lg:border-t-0">
+          <div className="grid grid-cols-6 gap-1 border-b border-white/10 p-2 lg:grid-cols-3">
+            {toolButtons.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setActivePanel(item.id)}
+                className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-2xl px-2 text-[11px] font-black transition ${
+                  activePanel === item.id
+                    ? 'bg-blue-500 text-white shadow-lg shadow-blue-950/30'
+                    : 'text-zinc-500 hover:bg-white/5 hover:text-zinc-100'
+                }`}
+              >
+                {item.icon}
+                <span className="max-w-full truncate">{item.label}</span>
+              </button>
+            ))}
+          </div>
 
-          <div className="mt-5 space-y-4">
-            <label className="block rounded-2xl border border-white/10 bg-zinc-950 p-3">
-              <span className="text-sm font-black text-zinc-200">Legenda do post</span>
-              <textarea
-                value={caption}
-                onChange={(event) => setCaption(event.target.value)}
-                rows={4}
-                placeholder="O que voce esta pensando sobre esse video?"
-                className="mt-3 w-full resize-none rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm font-semibold text-white outline-none placeholder:text-zinc-600 focus:border-blue-300"
-              />
-            </label>
+          <div className="min-h-0 flex-1 overflow-y-auto p-4">
+            {activePanel === 'add' && (
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-base font-black">Adicionar</h3>
+                  <p className="mt-1 text-sm text-zinc-500">Troque ou selecione o video.</p>
+                </div>
 
-            <section className="rounded-2xl border border-white/10 bg-zinc-950 p-3">
-              <div className="flex items-center gap-2 font-black text-zinc-200">
-                <Music className="h-4 w-4 text-blue-200" />
-                Trilha Sonora
+                <label className="flex cursor-pointer items-center gap-3 rounded-2xl border border-dashed border-blue-300/30 bg-blue-500/10 px-4 py-4 transition hover:bg-blue-500/15">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-500/20 text-blue-100">
+                    <Upload className="h-5 w-5" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-black text-white">Selecionar video</span>
+                    <span className="block truncate text-xs text-blue-100/60">MP4, MOV, WebM</span>
+                  </span>
+                  <input
+                    type="file"
+                    accept="video/*,.mp4,.mov,.webm,.m4v"
+                    onChange={handleVideoChange}
+                    className="sr-only"
+                  />
+                </label>
               </div>
+            )}
 
-              <label className="mt-3 flex cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed border-emerald-300/30 bg-emerald-500/10 px-4 py-5 text-center transition hover:bg-emerald-500/15">
-                <Upload className="h-6 w-6 text-emerald-200" />
-                <span className="mt-2 text-sm font-black">Selecionar musica</span>
-                <span className="mt-1 text-xs text-emerald-100/70">MP3, WAV, M4A e formatos suportados pelo navegador</span>
-                <input
-                  type="file"
-                  accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg"
-                  onChange={handleAudioChange}
-                  className="sr-only"
-                />
-              </label>
+            {activePanel === 'text' && (
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-base font-black">Texto</h3>
+                  <p className="mt-1 text-sm text-zinc-500">Toque e arraste no preview.</p>
+                </div>
 
-              {audioName && (
-                <div className="mt-3 rounded-2xl border border-emerald-300/20 bg-emerald-500/10 p-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-200/70">Musica</p>
-                      <p className="mt-1 truncate text-sm font-semibold text-emerald-50">{audioName}</p>
-                    </div>
+                <label className="block">
+                  <span className="text-xs font-black text-zinc-400">Frase</span>
+                  <div className="mt-2 flex gap-2">
+                    <input
+                      type="text"
+                      value={textValue}
+                      onChange={(event) => setTextValue(event.target.value)}
+                      placeholder="Digite uma frase"
+                      className="min-w-0 flex-1 rounded-2xl border border-white/10 bg-zinc-950 px-4 py-3 text-sm font-semibold text-white outline-none placeholder:text-zinc-600 focus:border-blue-300"
+                    />
                     <button
                       type="button"
-                      onClick={removeAudioTrack}
-                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/10 bg-black/30 text-emerald-50 transition hover:bg-red-500/20 hover:text-red-100"
-                      aria-label="Remover trilha sonora"
+                      onClick={addTextOverlay}
+                      disabled={!textValue.trim()}
+                      className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white text-black transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      aria-label="Adicionar texto"
                     >
-                      <X className="h-4 w-4" />
+                      <Plus className="h-4 w-4" />
                     </button>
                   </div>
-                </div>
-              )}
+                </label>
 
-              <label className="mt-4 block">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-xs font-black text-zinc-300">Volume do Video Original</span>
-                  <span className="text-xs font-semibold text-zinc-500">{Math.round(videoVolume * 100)}%</span>
-                </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.01"
-                  value={videoVolume}
-                  onChange={(event) => setVideoVolume(Number(event.target.value))}
-                  className="mt-2 w-full accent-blue-500"
-                />
-              </label>
+                <label className="block">
+                  <span className="text-xs font-black text-zinc-400">Tamanho</span>
+                  <input
+                    type="range"
+                    min="18"
+                    max="120"
+                    value={fontSize}
+                    onChange={(event) => setFontSize(Number(event.target.value))}
+                    className="mt-3 w-full accent-blue-500"
+                  />
+                  <span className="mt-1 block text-xs font-semibold text-zinc-500">{fontSize}px</span>
+                </label>
 
-              <label className="mt-4 block">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-xs font-black text-zinc-300">Volume da Musica de Fundo</span>
-                  <span className="text-xs font-semibold text-zinc-500">{Math.round(musicVolume * 100)}%</span>
-                </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.01"
-                  value={musicVolume}
-                  onChange={(event) => setMusicVolume(Number(event.target.value))}
-                  disabled={!audioUrl}
-                  className="mt-2 w-full accent-emerald-400 disabled:opacity-40"
-                />
-              </label>
-            </section>
+                <label className="block">
+                  <span className="text-xs font-black text-zinc-400">Cor</span>
+                  <div className="mt-2 flex items-center gap-3 rounded-2xl border border-white/10 bg-zinc-950 px-3 py-2">
+                    <input
+                      type="color"
+                      value={textColor}
+                      onChange={(event) => setTextColor(event.target.value)}
+                      className="h-10 w-12 cursor-pointer rounded-xl border-0 bg-transparent p-0"
+                    />
+                    <span className="text-sm font-semibold text-zinc-400">{textColor.toUpperCase()}</span>
+                  </div>
+                </label>
 
-            <div>
-              <span className="text-sm font-black text-zinc-200">Filtro visual</span>
-              <div className="mt-2 grid grid-cols-2 gap-2">
+                {activeOverlay && (
+                  <div className="rounded-2xl border border-blue-300/20 bg-blue-500/10 p-3 text-sm text-blue-50">
+                    <div className="flex items-center gap-2 font-black">
+                      <Move className="h-4 w-4" />
+                      Selecionado
+                    </div>
+                    <p className="mt-2 break-words text-blue-100/80">{activeOverlay.text}</p>
+                    <p className="mt-2 text-xs text-blue-100/60">
+                      X {Math.round(activeOverlay.x)} / Y {Math.round(activeOverlay.y)}
+                    </p>
+
+                    <div className="mt-4 rounded-2xl border border-white/10 bg-black/25 p-3">
+                      <div className="mb-3 flex items-center justify-between gap-3 text-xs font-black text-blue-100">
+                        <span>Tempo</span>
+                        <span>{activeOverlay.startTime.toFixed(1)}s - {activeOverlay.endTime.toFixed(1)}s</span>
+                      </div>
+
+                      <div className="relative mb-4 h-2 rounded-full bg-white/10">
+                        <div
+                          className="absolute top-0 h-full rounded-full bg-emerald-400"
+                          style={{
+                            left: `${duration > 0 ? (activeOverlay.startTime / duration) * 100 : 0}%`,
+                            width: `${duration > 0 ? ((activeOverlay.endTime - activeOverlay.startTime) / duration) * 100 : 0}%`,
+                          }}
+                        />
+                        <div
+                          className="absolute -top-1 h-4 w-1 rounded-full bg-blue-200"
+                          style={{ left: `${progressPercent}%` }}
+                        />
+                      </div>
+
+                      <label className="block">
+                        <span className="text-xs font-bold text-blue-100/70">Entrada</span>
+                        <input
+                          type="range"
+                          min="0"
+                          max={duration}
+                          step="0.05"
+                          value={activeOverlay.startTime}
+                          onChange={(event) => updateActiveOverlayTiming('startTime', Number(event.target.value))}
+                          className="mt-2 w-full accent-emerald-400"
+                        />
+                      </label>
+
+                      <label className="mt-3 block">
+                        <span className="text-xs font-bold text-blue-100/70">Saida</span>
+                        <input
+                          type="range"
+                          min="0"
+                          max={duration}
+                          step="0.05"
+                          value={activeOverlay.endTime}
+                          onChange={(event) => updateActiveOverlayTiming('endTime', Number(event.target.value))}
+                          className="mt-2 w-full accent-emerald-400"
+                        />
+                      </label>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activePanel === 'audio' && (
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-base font-black">Audio</h3>
+                  <p className="mt-1 text-sm text-zinc-500">Musica e volumes.</p>
+                </div>
+
+                <label className="flex cursor-pointer items-center gap-3 rounded-2xl border border-dashed border-emerald-300/30 bg-emerald-500/10 px-4 py-4 transition hover:bg-emerald-500/15">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-100">
+                    <Upload className="h-5 w-5" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-black text-white">Selecionar musica</span>
+                    <span className="block truncate text-xs text-emerald-100/60">MP3, WAV, M4A</span>
+                  </span>
+                  <input
+                    type="file"
+                    accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg"
+                    onChange={handleAudioChange}
+                    className="sr-only"
+                  />
+                </label>
+
+                {audioName && (
+                  <div className="rounded-2xl border border-emerald-300/20 bg-emerald-500/10 p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-200/70">Musica</p>
+                        <p className="mt-1 truncate text-sm font-semibold text-emerald-50">{audioName}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={removeAudioTrack}
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/10 bg-black/30 text-emerald-50 transition hover:bg-red-500/20 hover:text-red-100"
+                        aria-label="Remover trilha sonora"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <label className="block">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-xs font-black text-zinc-300">Video original</span>
+                    <span className="text-xs font-semibold text-zinc-500">{Math.round(videoVolume * 100)}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    value={videoVolume}
+                    onChange={(event) => setVideoVolume(Number(event.target.value))}
+                    className="mt-2 w-full accent-blue-500"
+                  />
+                </label>
+
+                <label className="block">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-xs font-black text-zinc-300">Musica</span>
+                    <span className="text-xs font-semibold text-zinc-500">{Math.round(musicVolume * 100)}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    value={musicVolume}
+                    onChange={(event) => setMusicVolume(Number(event.target.value))}
+                    disabled={!audioUrl}
+                    className="mt-2 w-full accent-emerald-400 disabled:opacity-40"
+                  />
+                </label>
+              </div>
+            )}
+
+            {activePanel === 'effects' && (
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-base font-black">Efeitos</h3>
+                  <p className="mt-1 text-sm text-zinc-500">Escolha um filtro.</p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
                 {videoFilters.map((item) => (
                   <button
                     key={item.value}
@@ -1008,117 +1219,42 @@ export default function VideoEditor() {
                     <span className="mt-2 block text-xs font-black">{item.label}</span>
                   </button>
                 ))}
-              </div>
-            </div>
-
-            <label className="block">
-              <span className="text-sm font-black text-zinc-200">Texto</span>
-              <div className="mt-2 flex gap-2">
-                <input
-                  type="text"
-                  value={textValue}
-                  onChange={(event) => setTextValue(event.target.value)}
-                  placeholder="Digite uma frase"
-                  className="min-w-0 flex-1 rounded-2xl border border-white/10 bg-zinc-950 px-4 py-3 text-sm font-semibold text-white outline-none placeholder:text-zinc-600 focus:border-blue-300"
-                />
-                <button
-                  type="button"
-                  onClick={addTextOverlay}
-                  disabled={!textValue.trim()}
-                  className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white text-black transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
-                  aria-label="Adicionar texto"
-                >
-                  <Plus className="h-4 w-4" />
-                </button>
-              </div>
-            </label>
-
-            <label className="block">
-              <span className="text-sm font-black text-zinc-200">Tamanho da fonte</span>
-              <input
-                type="range"
-                min="18"
-                max="120"
-                value={fontSize}
-                onChange={(event) => setFontSize(Number(event.target.value))}
-                className="mt-3 w-full accent-blue-500"
-              />
-              <span className="mt-1 block text-xs font-semibold text-zinc-500">{fontSize}px</span>
-            </label>
-
-            <label className="block">
-              <span className="text-sm font-black text-zinc-200">Cor</span>
-              <div className="mt-2 flex items-center gap-3 rounded-2xl border border-white/10 bg-zinc-950 px-3 py-2">
-                <input
-                  type="color"
-                  value={textColor}
-                  onChange={(event) => setTextColor(event.target.value)}
-                  className="h-10 w-12 cursor-pointer rounded-xl border-0 bg-transparent p-0"
-                />
-                <span className="text-sm font-semibold text-zinc-400">{textColor.toUpperCase()}</span>
-              </div>
-            </label>
-
-            {activeOverlay && (
-              <div className="rounded-2xl border border-blue-300/20 bg-blue-500/10 p-3 text-sm text-blue-50">
-                <div className="flex items-center gap-2 font-black">
-                  <Move className="h-4 w-4" />
-                  Texto selecionado
-                </div>
-                <p className="mt-2 break-words text-blue-100/80">{activeOverlay.text}</p>
-                <p className="mt-2 text-xs text-blue-100/60">
-                  X {Math.round(activeOverlay.x)} / Y {Math.round(activeOverlay.y)}
-                </p>
-
-                <div className="mt-4 rounded-2xl border border-white/10 bg-black/25 p-3">
-                  <div className="mb-3 flex items-center justify-between gap-3 text-xs font-black text-blue-100">
-                    <span>Timeline do texto</span>
-                    <span>{activeOverlay.startTime.toFixed(1)}s - {activeOverlay.endTime.toFixed(1)}s</span>
-                  </div>
-
-                  <div className="relative mb-4 h-2 rounded-full bg-white/10">
-                    <div
-                      className="absolute top-0 h-full rounded-full bg-emerald-400"
-                      style={{
-                        left: `${duration > 0 ? (activeOverlay.startTime / duration) * 100 : 0}%`,
-                        width: `${duration > 0 ? ((activeOverlay.endTime - activeOverlay.startTime) / duration) * 100 : 0}%`,
-                      }}
-                    />
-                    <div
-                      className="absolute -top-1 h-4 w-1 rounded-full bg-blue-200"
-                      style={{ left: `${progressPercent}%` }}
-                    />
-                  </div>
-
-                  <label className="block">
-                    <span className="text-xs font-bold text-blue-100/70">Entrada</span>
-                    <input
-                      type="range"
-                      min="0"
-                      max={duration}
-                      step="0.05"
-                      value={activeOverlay.startTime}
-                      onChange={(event) => updateActiveOverlayTiming('startTime', Number(event.target.value))}
-                      className="mt-2 w-full accent-emerald-400"
-                    />
-                  </label>
-
-                  <label className="mt-3 block">
-                    <span className="text-xs font-bold text-blue-100/70">Saida</span>
-                    <input
-                      type="range"
-                      min="0"
-                      max={duration}
-                      step="0.05"
-                      value={activeOverlay.endTime}
-                      onChange={(event) => updateActiveOverlayTiming('endTime', Number(event.target.value))}
-                      className="mt-2 w-full accent-emerald-400"
-                    />
-                  </label>
                 </div>
               </div>
             )}
 
+            {activePanel === 'caption' && (
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-base font-black">Legenda</h3>
+                  <p className="mt-1 text-sm text-zinc-500">Texto do post.</p>
+                </div>
+
+                <textarea
+                  value={caption}
+                  onChange={(event) => setCaption(event.target.value)}
+                  rows={7}
+                  placeholder="O que voce esta pensando?"
+                  className="w-full resize-none rounded-2xl border border-white/10 bg-zinc-950 px-4 py-3 text-sm font-semibold text-white outline-none placeholder:text-zinc-600 focus:border-blue-300"
+                />
+              </div>
+            )}
+
+            {activePanel === 'voice' && (
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-base font-black">Voz</h3>
+                  <p className="mt-1 text-sm text-zinc-500">Em breve.</p>
+                </div>
+
+                <div className="rounded-2xl border border-white/10 bg-zinc-950 p-4 text-sm text-zinc-400">
+                  Grave narrações em uma proxima versao. O editor atual preserva audio original e musica.
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="border-t border-white/10 p-4">
             <button
               type="button"
               onClick={renderFinalVideo}
@@ -1126,31 +1262,8 @@ export default function VideoEditor() {
               className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-blue-500 px-5 py-3 text-sm font-black text-white shadow-lg shadow-blue-950/30 transition hover:bg-blue-400 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isRendering ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}
-              Renderizar Video Final
+              {isRendering ? 'Publicando...' : 'Avancar'}
             </button>
-
-            {(isRendering || renderMessage) && (
-              <div className="rounded-2xl border border-blue-300/20 bg-blue-500/10 p-3">
-                <div className="flex items-center justify-between gap-3 text-xs font-black text-blue-100">
-                  <span>{renderMessage || 'Renderizando...'}</span>
-                  <span>{renderProgress}%</span>
-                </div>
-                <div className="mt-2 h-2 overflow-hidden rounded-full bg-black/40">
-                  <div
-                    className="h-full rounded-full bg-blue-300 transition-[width]"
-                    style={{ width: `${renderProgress}%` }}
-                  />
-                </div>
-              </div>
-            )}
-
-            <div className="rounded-2xl border border-white/10 bg-zinc-950 p-3 text-xs leading-5 text-zinc-500">
-              <div className="mb-1 flex items-center gap-2 font-black text-zinc-300">
-                <Type className="h-4 w-4" />
-                Dica
-              </div>
-              Clique no texto no preview e arraste para reposicionar. O botao final renderiza o MP4, envia para a EntreUS e publica no feed.
-            </div>
           </div>
         </aside>
       </div>

@@ -6,6 +6,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
+  BarChart3,
   Bell,
   Bookmark,
   Compass,
@@ -392,9 +393,9 @@ export default function AppSidebar({
             <span className={navTextClass}>Meet</span>
           </Link>
 
-          <Link href="/editor" className={`${navLinkClass('/editor')} ${collapsedCenterClass}`}>
-            <Video className={navIconClass('/editor')} />
-            <span className={navTextClass}>Estudio de Video</span>
+          <Link href="/creator-dashboard" className={`${navLinkClass('/creator-dashboard')} ${collapsedCenterClass}`}>
+            <BarChart3 className={navIconClass('/creator-dashboard')} />
+            <span className={navTextClass}>Creator Studio</span>
           </Link>
 
           <Link href="/saved" className={`${navLinkClass('/saved')} ${collapsedCenterClass}`}>

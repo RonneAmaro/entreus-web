@@ -115,18 +115,15 @@ export default function EditorPage() {
       />
 
       <section className="relative mx-auto min-h-screen w-full max-w-7xl px-4 py-20 pb-24 sm:px-6 lg:ml-[104px] lg:max-w-[calc(80rem-104px)] lg:px-8 lg:py-6">
-        <div className="pointer-events-none absolute -right-24 top-16 h-80 w-80 rounded-full bg-blue-500/15 blur-3xl" />
-        <div className="pointer-events-none absolute -left-24 top-96 h-72 w-72 rounded-full bg-emerald-400/10 blur-3xl" />
-
         <header className="relative z-10 mb-6">
           <p className="text-xs font-black uppercase tracking-[0.24em] text-blue-300">
-            EntreUS Studio
+            Creator Studio
           </p>
-          <h1 className="mt-3 text-4xl font-black tracking-tight sm:text-6xl">
-            Estudio de Video
+          <h1 className="mt-3 text-3xl font-black tracking-tight sm:text-5xl">
+            Editar video
           </h1>
-          <p className="mt-4 max-w-2xl text-base leading-7 text-zinc-400">
-            Edite, renderize e publique videos com texto, filtros e trilha sonora direto no feed.
+          <p className="mt-3 max-w-2xl text-sm font-semibold text-zinc-500 sm:text-base">
+            Adicione texto, audio e efeitos.
           </p>
         </header>
 

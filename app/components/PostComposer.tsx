@@ -2,10 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import Link from 'next/link'
 import {
   Globe2,
   ImagePlus,
   Lock,
+  Scissors,
   Play,
   Send,
   Smile,
@@ -495,6 +497,15 @@ export default function PostComposer({
                   >
                     <ImagePlus className="h-5 w-5" />
                   </button>
+
+                  <Link
+                    href="/editor"
+                    className="inline-flex h-10 shrink-0 items-center gap-2 rounded-full border border-blue-400/25 bg-blue-500/10 px-3 text-xs font-black text-blue-600 transition hover:bg-blue-500/15 dark:text-blue-200"
+                    title="Editar video antes de publicar"
+                  >
+                    <Scissors className="h-4 w-4" />
+                    Editar video
+                  </Link>
 
                   <div className="relative shrink-0">
                     <button
