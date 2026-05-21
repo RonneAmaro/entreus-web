@@ -227,9 +227,10 @@ async function processPaymentId(
     }
   }
 
-  const externalReference = payment.external_reference || merchantOrder?.external_reference || null
-  const paymentExternalReference = externalReference ?? null
+  // CORREÇÃO: Extrai o orderId primeiro e garante o fallback caso o external_reference principal venha nulo
   const orderId = getSafeOrderId(payment.metadata?.order_id)
+  const externalReference = payment.external_reference || merchantOrder?.external_reference || orderId || null
+  const paymentExternalReference = externalReference ?? null
   const preferenceId = getProviderPreferenceId(payment, merchantOrder)
   const providerStatus = payment.status || 'unknown'
   const providerPaymentId = String(payment.id || paymentId)
