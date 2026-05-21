@@ -392,6 +392,11 @@ export default function AppSidebar({
             <span className={navTextClass}>Meet</span>
           </Link>
 
+          <Link href="/editor" className={`${navLinkClass('/editor')} ${collapsedCenterClass}`}>
+            <Video className={navIconClass('/editor')} />
+            <span className={navTextClass}>Estudio de Video</span>
+          </Link>
+
           <Link href="/saved" className={`${navLinkClass('/saved')} ${collapsedCenterClass}`}>
             <Bookmark className={navIconClass('/saved')} />
             <span className={navTextClass}>{t('nav.saved')}</span>
