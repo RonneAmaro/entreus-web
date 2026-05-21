@@ -5,7 +5,7 @@ import MobileNavigation from '../components/MobileNavigation'
 import BrandHeader from '../components/BrandHeader'
 import UserBadges from '../components/UserBadges'
 import Link from 'next/link'
-import { Bell, CheckCheck, Coins, Gift, Heart, MessageCircle, Repeat2, UserPlus, WalletCards } from 'lucide-react'
+import { AlertTriangle, Bell, CheckCheck, CheckCircle2, Coins, Gift, Heart, MessageCircle, Repeat2, UserPlus } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
@@ -98,8 +98,8 @@ function getNotificationIcon(type: string) {
   if (type === 'gift_received') return <Gift className="h-5 w-5 text-blue-500" />
   if (type === 'tip_received') return <Coins className="h-5 w-5 text-emerald-500" />
   if (type === 'promotional_itacash') return <Coins className="h-5 w-5 text-blue-500" />
-  if (type === 'itacash_purchase_approved') return <WalletCards className="h-5 w-5 text-emerald-500" />
-  if (type === 'itacash_purchase_rejected') return <WalletCards className="h-5 w-5 text-red-500" />
+  if (type === 'itacash_purchase_approved') return <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+  if (type === 'itacash_purchase_rejected') return <AlertTriangle className="h-5 w-5 text-red-500" />
 
   return <Bell className="h-5 w-5 text-zinc-500" />
 }
@@ -125,10 +125,13 @@ function getNotificationActionTextView(notification: NotificationView) {
     return `Voce recebeu ItaCash promocional.`
   }
   if (notification.type === 'itacash_purchase_approved') {
-    return `aprovou sua compra de ItaCash.`
+    const amount = notification.purchaseRequest?.amount_itacash || notification.amount
+    return amount
+      ? `Sua compra de ${amount} ItaCash foi aprovada e o saldo ja esta na sua carteira.`
+      : 'Sua compra de ItaCash foi aprovada e o saldo ja esta na sua carteira.'
   }
   if (notification.type === 'itacash_purchase_rejected') {
-    return `recusou sua compra de ItaCash.`
+    return 'Sua compra de ItaCash foi recusada.'
   }
 
   return getNotificationActionText(notification.type)
@@ -610,7 +613,9 @@ export default function NotificationsPage() {
                           )}
 
                           <span className="min-w-0 break-words">
-                            {actorName} {getNotificationActionTextView(notification)}
+                            {isItaCashPurchaseStatus
+                              ? getNotificationActionTextView(notification)
+                              : `${actorName} ${getNotificationActionTextView(notification)}`}
                           </span>
                         </p>
 
@@ -660,7 +665,7 @@ export default function NotificationsPage() {
 
                     {notification.type === 'itacash_purchase_approved' && (
                       <p className="mt-3 rounded-xl bg-emerald-100 px-3 py-2 text-sm font-semibold text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100">
-                        Sua compra de {notification.purchaseRequest?.amount_itacash || notification.amount || 0} ItaCash foi aprovada e o saldo ja esta na sua carteira.
+                        {getNotificationActionTextView(notification)}
                       </p>
                     )}
 

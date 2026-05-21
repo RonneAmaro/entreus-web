@@ -146,6 +146,7 @@ function purchaseStatusLabel(status: string) {
   if (status === 'approved') return 'Compra aprovada e saldo creditado'
   if (status === 'rejected') return 'Compra recusada'
   if (status === 'canceled') return 'Cancelada'
+  if (status === 'pending') return 'Aguardando analise'
   if (status === 'failed') return 'Pagamento recusado'
   if (status === 'expired') return 'Pagamento expirado'
   return 'Aguardando analise'
@@ -577,27 +578,42 @@ export default function WalletPage() {
                   <div className="space-y-3">
                     {purchaseRequests.map((request) => (
                       <div key={request.id} className="rounded-2xl border border-white/10 bg-black/35 p-3 text-sm text-zinc-300">
-                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="grid gap-3 sm:grid-cols-2">
                           <div>
-                            <p className="font-black text-white">{request.amount_itacash} ItaCash</p>
-                            <p className="mt-1 text-xs font-semibold text-zinc-500">{formatDate(request.created_at)}</p>
+                            <p className="text-[11px] font-black uppercase tracking-[0.16em] text-zinc-500">Metodo de pagamento</p>
+                            <p className="mt-1 font-semibold text-zinc-100">{paymentMethodLabel(request.payment_method)}</p>
                           </div>
 
-                          <span className={`w-fit rounded-full px-2.5 py-1 text-[11px] font-black ring-1 ${purchaseStatusClass(request.status)}`}>
-                            {purchaseStatusLabel(request.status)}
-                          </span>
+                          <div>
+                            <p className="text-[11px] font-black uppercase tracking-[0.16em] text-zinc-500">Quantidade</p>
+                            <p className="mt-1 font-black text-white">{request.amount_itacash} ItaCash</p>
+                          </div>
+
+                          <div>
+                            <p className="text-[11px] font-black uppercase tracking-[0.16em] text-zinc-500">Total pago</p>
+                            <p className="mt-1 font-semibold text-zinc-100">{formatBRLFromCents(request.total_brl_cents)}</p>
+                          </div>
+
+                          <div>
+                            <p className="text-[11px] font-black uppercase tracking-[0.16em] text-zinc-500">Data da solicitacao</p>
+                            <p className="mt-1 font-semibold text-zinc-100">{formatDate(request.created_at)}</p>
+                          </div>
                         </div>
 
-                        <div className="mt-3 grid gap-2 text-xs font-semibold text-zinc-400 sm:grid-cols-2">
-                          <p>Metodo: <span className="text-zinc-200">{paymentMethodLabel(request.payment_method)}</span></p>
-                          <p>Total pago: <span className="text-zinc-200">{formatBRLFromCents(request.total_brl_cents)}</span></p>
-                        </div>
+                        <div className="mt-3 rounded-xl border border-white/10 bg-black/30 px-3 py-2">
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                            <span className="text-xs font-black uppercase tracking-[0.16em] text-zinc-500">Status atual</span>
+                            <span className={`w-fit rounded-full px-2.5 py-1 text-[11px] font-black ring-1 ${purchaseStatusClass(request.status)}`}>
+                              {purchaseStatusLabel(request.status)}
+                            </span>
+                          </div>
 
-                        {request.status === 'rejected' && request.rejection_reason && (
-                          <p className="mt-3 rounded-xl bg-red-500/10 px-3 py-2 text-xs font-semibold leading-5 text-red-100 ring-1 ring-red-300/15">
-                            Motivo da recusa: {request.rejection_reason}
-                          </p>
-                        )}
+                          {request.status === 'rejected' && request.rejection_reason && (
+                            <p className="mt-3 rounded-xl bg-red-500/10 px-3 py-2 text-xs font-semibold leading-5 text-red-100 ring-1 ring-red-300/15">
+                              Motivo da recusa: {request.rejection_reason}
+                            </p>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
