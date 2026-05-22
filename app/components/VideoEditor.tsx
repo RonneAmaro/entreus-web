@@ -285,6 +285,10 @@ export default function VideoEditor() {
   const [filter, setFilter] = useState<VideoFilter>('normal')
   const [videoVolume, setVideoVolume] = useState(1)
   const [musicVolume, setMusicVolume] = useState(0.45)
+  const [musicStartTime, setMusicStartTime] = useState(0)
+  const [audioDuration, setAudioDuration] = useState(0)
+  const [audioMessage, setAudioMessage] = useState('')
+  const [musicVolumeTouched, setMusicVolumeTouched] = useState(false)
   const [caption, setCaption] = useState('')
   const [activePanel, setActivePanel] = useState<EditorPanel>('text')
   const [isReady, setIsReady] = useState(false)
@@ -365,6 +369,13 @@ export default function VideoEditor() {
   }, [musicVolume, audioUrl])
 
   useEffect(() => {
+    if (!voiceBlob || !audioFile || musicVolumeTouched) return
+
+    setMusicVolume(0.45)
+    setAudioMessage('Ajuste o volume para a narracao ficar clara.')
+  }, [audioFile, musicVolumeTouched, voiceBlob])
+
+  useEffect(() => {
     drawCanvas()
   }, [canvasSize, overlays, imageOverlays, activeOverlayId, activeImageId, currentTime])
 
@@ -403,10 +414,19 @@ export default function VideoEditor() {
       if (video) {
         setCurrentTime(video.currentTime)
 
-        if (audio && audioUrl && !audio.paused) {
-          const expectedAudioTime = getSyncedAudioTime(video.currentTime)
-          if (Math.abs(audio.currentTime - expectedAudioTime) > 0.35) {
-            audio.currentTime = expectedAudioTime
+        if (audio && audioUrl) {
+          if (video.currentTime < musicStartTime) {
+            if (!audio.paused) audio.pause()
+          } else {
+            const expectedAudioTime = getSyncedAudioTime(video.currentTime)
+            if (Math.abs(audio.currentTime - expectedAudioTime) > 0.35) {
+              audio.currentTime = expectedAudioTime
+            }
+            if (audio.paused) {
+              audio.play().catch(() => {
+                // Browser autoplay policies may block audio until the next user gesture.
+              })
+            }
           }
         }
       }
@@ -419,7 +439,7 @@ export default function VideoEditor() {
     return () => {
       window.cancelAnimationFrame(animationFrame)
     }
-  }, [audioUrl, isPlaying])
+  }, [audioUrl, isPlaying, musicStartTime])
 
   function handleVideoChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
@@ -518,6 +538,9 @@ export default function VideoEditor() {
     setAudioFile(file)
     setAudioUrl(URL.createObjectURL(file))
     setAudioName(file.name)
+    setAudioDuration(0)
+    setMusicStartTime(0)
+    setAudioMessage('Musica adicionada')
     event.target.value = ''
   }
 
@@ -601,6 +624,25 @@ export default function VideoEditor() {
     setAudioFile(null)
     setAudioUrl('')
     setAudioName('')
+    setAudioDuration(0)
+    setMusicStartTime(0)
+    setAudioMessage('')
+    setMusicVolumeTouched(false)
+    setAudioDuration(0)
+    setMusicStartTime(0)
+    setAudioMessage('')
+  }
+
+  function playMusicPreview() {
+    const audio = audioRef.current
+    if (!audio || !audioUrl) return
+
+    audio.currentTime = 0
+    audio.volume = musicVolume
+    audio.play().catch((error) => {
+      console.warn('[VideoEditor] Music preview failed:', error)
+      setAudioMessage('Nao foi possivel tocar a previa desta musica.')
+    })
   }
 
   async function startVoiceRecording() {
@@ -646,6 +688,10 @@ export default function VideoEditor() {
         setVoiceDuration(nextDuration)
         setVoiceStartTime(0)
         setVoiceMessage('Voz pronta')
+        if (audioFile && !musicVolumeTouched) {
+          setMusicVolume(0.45)
+          setAudioMessage('Ajuste o volume para a narracao ficar clara.')
+        }
         setIsRecordingVoice(false)
         voiceStreamRef.current?.getTracks().forEach((track) => track.stop())
         voiceStreamRef.current = null
@@ -767,7 +813,9 @@ export default function VideoEditor() {
       return 0
     }
 
-    return targetTime % audioDuration
+    if (targetTime < musicStartTime) return 0
+
+    return (targetTime - musicStartTime) % audioDuration
   }
 
   function syncBackgroundMusic(targetTime: number) {
@@ -781,6 +829,12 @@ export default function VideoEditor() {
     const audio = audioRef.current
     const video = videoRef.current
     if (!audio || !video || !audioUrl) return
+
+    if (video.currentTime < musicStartTime) {
+      audio.pause()
+      audio.currentTime = 0
+      return
+    }
 
     syncBackgroundMusic(video.currentTime)
     audio.loop = true
@@ -1355,8 +1409,9 @@ export default function VideoEditor() {
     }
 
     if (musicInputIndex !== null) {
+      const musicDelayMs = Math.max(Math.round(musicStartTime * 1000), 0)
       filters.push(
-        `[${musicInputIndex}:a]atrim=0:${totalDuration.toFixed(3)},asetpts=PTS-STARTPTS,volume=${musicVolume.toFixed(2)}[aMusic]`
+        `[${musicInputIndex}:a]adelay=${musicDelayMs}:all=1,atrim=0:${totalDuration.toFixed(3)},asetpts=PTS-STARTPTS,volume=${musicVolume.toFixed(2)}[aMusic]`
       )
       labels.push('[aMusic]')
     }
@@ -1491,6 +1546,8 @@ export default function VideoEditor() {
       ]
     }
 
+    const musicDelayMs = Math.max(Math.round(musicStartTime * 1000), 0)
+
     return [
       '-i',
       inputVideoName,
@@ -1504,13 +1561,13 @@ export default function VideoEditor() {
         ? [
             videoFilter,
             `[0:a]volume=${videoVolume.toFixed(2)}[a0]`,
-            `[1:a]atrim=0:${duration.toFixed(3)},asetpts=PTS-STARTPTS,volume=${musicVolume.toFixed(2)}[a1]`,
+            `[1:a]adelay=${musicDelayMs}:all=1,atrim=0:${duration.toFixed(3)},asetpts=PTS-STARTPTS,volume=${musicVolume.toFixed(2)}[a1]`,
             '[a0][a1]amix=inputs=2:duration=first:dropout_transition=0[a]',
           ].join(';')
         : [
             `[0:v]${videoFilter}[v]`,
             `[0:a]volume=${videoVolume.toFixed(2)}[a0]`,
-            `[1:a]atrim=0:${duration.toFixed(3)},asetpts=PTS-STARTPTS,volume=${musicVolume.toFixed(2)}[a1]`,
+            `[1:a]adelay=${musicDelayMs}:all=1,atrim=0:${duration.toFixed(3)},asetpts=PTS-STARTPTS,volume=${musicVolume.toFixed(2)}[a1]`,
             '[a0][a1]amix=inputs=2:duration=first:dropout_transition=0[a]',
           ].join(';'),
       '-map',
@@ -1637,6 +1694,8 @@ export default function VideoEditor() {
       ]
     }
 
+    const musicDelayMs = Math.max(Math.round(musicStartTime * 1000), 0)
+
     return [
       '-i',
       inputVideoName,
@@ -1649,11 +1708,11 @@ export default function VideoEditor() {
       renderImage
         ? [
             videoFilter,
-            `[1:a]atrim=0:${duration.toFixed(3)},asetpts=PTS-STARTPTS,volume=${musicVolume.toFixed(2)}[a]`,
+            `[1:a]adelay=${musicDelayMs}:all=1,atrim=0:${duration.toFixed(3)},asetpts=PTS-STARTPTS,volume=${musicVolume.toFixed(2)}[a]`,
           ].join(';')
         : [
             `[0:v]${videoFilter}[v]`,
-            `[1:a]atrim=0:${duration.toFixed(3)},asetpts=PTS-STARTPTS,volume=${musicVolume.toFixed(2)}[a]`,
+            `[1:a]adelay=${musicDelayMs}:all=1,atrim=0:${duration.toFixed(3)},asetpts=PTS-STARTPTS,volume=${musicVolume.toFixed(2)}[a]`,
           ].join(';'),
       '-map',
       '[v]',
@@ -2277,6 +2336,11 @@ export default function VideoEditor() {
   const hasEditorMedia = Boolean(videoUrl || photoSlides.length > 0)
   const canPublish = Boolean((editorMode === 'video' && videoFile) || (editorMode === 'photos' && photoSlides.length > 0))
   const controlsVisible = Boolean(hasEditorMedia && !isPlaying)
+  const audioTimelineLeft = timelineDuration > 0 ? Math.min((musicStartTime / timelineDuration) * 100, 92) : 0
+  const audioTimelineWidth = timelineDuration > 0
+    ? Math.max(((timelineDuration - musicStartTime) / timelineDuration) * 100, 10)
+    : 18
+  const waveformBars = Array.from({ length: 18 }, (_, index) => 35 + ((index * 17) % 55))
   const activeTimelineWidth = activeOverlay && duration > 0
     ? ((activeOverlay.endTime - activeOverlay.startTime) / duration) * 100
     : 0
@@ -2357,6 +2421,8 @@ export default function VideoEditor() {
                   preload="metadata"
                   loop
                   onLoadedMetadata={() => {
+                    const nextDuration = audioRef.current?.duration || 0
+                    setAudioDuration(Number.isFinite(nextDuration) ? nextDuration : 0)
                     syncBackgroundMusic(currentTime)
                     if (isPlaying) void playBackgroundMusic()
                   }}
@@ -2600,10 +2666,26 @@ export default function VideoEditor() {
                         <button
                           type="button"
                           onClick={() => setActivePanel('audio')}
-                          className="absolute inset-x-1 top-1 flex h-6 items-center gap-2 rounded-md bg-emerald-300/80 px-2 text-left text-[10px] font-black text-emerald-950"
+                          className="absolute top-1 flex h-6 min-w-14 items-center gap-2 overflow-hidden rounded-md bg-emerald-300/85 px-2 text-left text-[10px] font-black text-emerald-950 ring-1 ring-emerald-100"
+                          style={{
+                            left: `${audioTimelineLeft}%`,
+                            width: `${audioTimelineWidth}%`,
+                          }}
                         >
                           <Music className="h-3 w-3 shrink-0" />
                           <span className="truncate">{audioName}</span>
+                          <span className="ml-auto shrink-0 text-[9px] opacity-70">
+                            {audioDuration > 0 ? formatEditorTime(audioDuration) : formatEditorTime(timelineDuration)}
+                          </span>
+                          <span className="pointer-events-none absolute inset-x-8 bottom-0.5 flex h-2 items-end gap-0.5 opacity-35">
+                            {waveformBars.map((height, index) => (
+                              <span
+                                key={index}
+                                className="w-0.5 rounded-full bg-emerald-950"
+                                style={{ height: `${height}%` }}
+                              />
+                            ))}
+                          </span>
                         </button>
                       ) : (
                         <button
@@ -2630,6 +2712,15 @@ export default function VideoEditor() {
                         >
                           <Mic className="h-3 w-3 shrink-0" />
                           <span className="truncate">{formatEditorTime(voiceDuration)}</span>
+                          <span className="pointer-events-none absolute inset-x-7 bottom-0.5 flex h-2 items-end gap-0.5 opacity-35">
+                            {waveformBars.slice(0, 12).map((height, index) => (
+                              <span
+                                key={index}
+                                className="w-0.5 rounded-full bg-violet-950"
+                                style={{ height: `${height}%` }}
+                              />
+                            ))}
+                          </span>
                         </button>
                       ) : (
                         <button
@@ -3231,15 +3322,23 @@ export default function VideoEditor() {
               <div className="space-y-4">
                 <div>
                   <h3 className="text-base font-black">Audio</h3>
-                  <p className="mt-1 text-sm text-zinc-500">Musica e volumes.</p>
+                  <p className="mt-1 text-sm text-zinc-500">Musica, inicio e volumes.</p>
                 </div>
+
+                {audioMessage && (
+                  <div className="rounded-xl border border-emerald-300/20 bg-emerald-500/10 px-3 py-2 text-xs font-bold text-emerald-100">
+                    {audioMessage}
+                  </div>
+                )}
 
                 <label className="flex cursor-pointer items-center gap-3 rounded-2xl border border-dashed border-emerald-300/30 bg-emerald-500/10 px-4 py-4 transition hover:bg-emerald-500/15">
                   <span className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-100">
                     <Upload className="h-5 w-5" />
                   </span>
                   <span className="min-w-0">
-                    <span className="block text-sm font-black text-white">Selecionar musica</span>
+                    <span className="block text-sm font-black text-white">
+                      {audioName ? 'Trocar musica' : 'Selecionar musica'}
+                    </span>
                     <span className="block truncate text-xs text-emerald-100/60">MP3, WAV, M4A</span>
                   </span>
                   <input
@@ -3251,11 +3350,14 @@ export default function VideoEditor() {
                 </label>
 
                 {audioName && (
-                  <div className="rounded-2xl border border-emerald-300/20 bg-emerald-500/10 p-3">
+                  <div className="space-y-3 rounded-2xl border border-emerald-300/20 bg-emerald-500/10 p-3">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-200/70">Musica</p>
                         <p className="mt-1 truncate text-sm font-semibold text-emerald-50">{audioName}</p>
+                        <p className="mt-1 text-xs font-bold text-emerald-100/60">
+                          {audioDuration > 0 ? formatEditorTime(audioDuration) : 'Duracao lendo...'}
+                        </p>
                       </div>
                       <button
                         type="button"
@@ -3266,6 +3368,15 @@ export default function VideoEditor() {
                         <X className="h-4 w-4" />
                       </button>
                     </div>
+
+                    <button
+                      type="button"
+                      onClick={playMusicPreview}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-300 px-3 py-2 text-sm font-black text-emerald-950 transition hover:bg-emerald-200"
+                    >
+                      <Play className="h-4 w-4" />
+                      Ouvir previa
+                    </button>
                   </div>
                 )}
 
@@ -3296,7 +3407,27 @@ export default function VideoEditor() {
                     max="1"
                     step="0.01"
                     value={musicVolume}
-                    onChange={(event) => setMusicVolume(Number(event.target.value))}
+                    onChange={(event) => {
+                      setMusicVolume(Number(event.target.value))
+                      setMusicVolumeTouched(true)
+                    }}
+                    disabled={!audioUrl}
+                    className="mt-2 w-full accent-emerald-400 disabled:opacity-40"
+                  />
+                </label>
+
+                <label className="block">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-xs font-black text-zinc-300">Inicio da musica</span>
+                    <span className="text-xs font-semibold text-zinc-500">{formatEditorTime(musicStartTime)}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max={Math.max(timelineDuration - 0.1, 0)}
+                    step="0.1"
+                    value={musicStartTime}
+                    onChange={(event) => setMusicStartTime(Number(event.target.value))}
                     disabled={!audioUrl}
                     className="mt-2 w-full accent-emerald-400 disabled:opacity-40"
                   />
