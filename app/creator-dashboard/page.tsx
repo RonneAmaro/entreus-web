@@ -342,18 +342,21 @@ export default function CreatorDashboardPage() {
       loadUnreadNotificationsCount(user.id),
     ])
 
-    if (analyticsResult.error || postsResult.error) {
-      setMessage(
-        'Nao foi possivel carregar analytics: ' +
-          (analyticsResult.error?.message || postsResult.error?.message || 'tente novamente.')
-      )
+    if (postsResult.error) {
+      setMessage('Nao foi possivel carregar suas publicacoes agora. Tente novamente em instantes.')
       setRows([])
       setPosts([])
       setLoading(false)
       return
     }
 
-    setRows((analyticsResult.data || []) as AnalyticsRow[])
+    if (analyticsResult.error) {
+      setMessage('Analytics indisponivel no momento. Suas publicacoes continuam visiveis abaixo.')
+      setRows([])
+    } else {
+      setRows((analyticsResult.data || []) as AnalyticsRow[])
+    }
+
     setPosts((postsResult.data || []) as CreatorPost[])
     setLoading(false)
   }

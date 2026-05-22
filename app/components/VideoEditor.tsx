@@ -296,6 +296,7 @@ export default function VideoEditor() {
   const pointerStartedOnOverlayRef = useRef(false)
   const draggingLayerRef = useRef<DraggingLayer>(null)
   const renderStageRef = useRef('idle')
+  const renderLockRef = useRef(false)
 
   const [editorMode, setEditorMode] = useState<EditorMode>('video')
   const [videoFile, setVideoFile] = useState<File | null>(null)
@@ -392,6 +393,14 @@ export default function VideoEditor() {
     }
 
     setActivePanel(panel)
+  }
+
+  function getDefaultLayerTiming() {
+    const safeDuration = Math.max(duration, DEFAULT_VIDEO_DURATION)
+    const startTime = clamp(currentTime, 0, Math.max(safeDuration - 0.5, 0))
+    const endTime = clamp(startTime + 3, Math.min(startTime + 0.5, safeDuration), safeDuration)
+
+    return { startTime, endTime }
   }
 
   useEffect(() => {
@@ -649,6 +658,7 @@ export default function VideoEditor() {
     const imageUrl = URL.createObjectURL(file)
     const initialWidth = Math.min(canvasSize.width * 0.34, 320)
     const initialHeight = Math.min(canvasSize.height * 0.34, 320)
+    const timing = getDefaultLayerTiming()
     const overlay: ImageOverlay = {
       id: crypto.randomUUID(),
       file,
@@ -659,8 +669,8 @@ export default function VideoEditor() {
       width: initialWidth,
       height: initialHeight,
       rotation: 0,
-      startTime: clamp(currentTime, 0, duration),
-      endTime: clamp(currentTime + 3, 0, duration),
+      startTime: timing.startTime,
+      endTime: timing.endTime,
     }
 
     const image = new Image()
@@ -1147,6 +1157,7 @@ export default function VideoEditor() {
 
   function addTextOverlay() {
     const cleanText = activeOverlayId ? 'Novo texto' : textValue.trim() || 'Novo texto'
+    const timing = getDefaultLayerTiming()
 
     const overlay: TextOverlay = {
       id: crypto.randomUUID(),
@@ -1155,8 +1166,8 @@ export default function VideoEditor() {
       y: canvasSize.height * 0.12,
       fontSize,
       color: textColor,
-      startTime: clamp(currentTime, 0, duration),
-      endTime: clamp(currentTime + 3, 0, duration),
+      startTime: timing.startTime,
+      endTime: timing.endTime,
     }
 
     setOverlays((current) => [...current, overlay])
@@ -1168,6 +1179,7 @@ export default function VideoEditor() {
   }
 
   function addSticker(value: string) {
+    const timing = getDefaultLayerTiming()
     const sticker: StickerOverlay = {
       id: crypto.randomUUID(),
       value,
@@ -1175,8 +1187,8 @@ export default function VideoEditor() {
       y: canvasSize.height * 0.5,
       size: Math.max(Math.min(canvasSize.width, canvasSize.height) * 0.12, 54),
       rotation: 0,
-      startTime: clamp(currentTime, 0, duration),
-      endTime: clamp(currentTime + 3, 0, duration),
+      startTime: timing.startTime,
+      endTime: timing.endTime,
       layerOrder: LAYER_ORDER.sticker,
     }
 
@@ -1717,6 +1729,26 @@ export default function VideoEditor() {
     setIsReady(true)
     logRenderContext('ffmpeg_loaded')
     return ffmpeg
+  }
+
+  function getFriendlyRenderErrorMessage(error: unknown) {
+    if (error instanceof Error && error.message === 'IMAGE_OVERLAY_RENDER_FAILED') {
+      return 'Nao foi possivel incluir a imagem no video final. Tente uma imagem PNG/JPG menor.'
+    }
+
+    if (renderStageRef.current === 'optimizing') {
+      return 'Nao foi possivel otimizar este video neste navegador. Vamos publicar a versao padrao quando possivel; se falhar de novo, tente um video menor.'
+    }
+
+    if (renderStageRef.current === 'ffmpeg_loading') {
+      return 'Nao foi possivel carregar o motor de video. Tente outro navegador atualizado ou verifique a conexao.'
+    }
+
+    if (renderStageRef.current === 'uploading') {
+      return 'O video foi renderizado, mas o envio falhou. Verifique a conexao e tente publicar novamente.'
+    }
+
+    return 'Nao foi possivel renderizar neste navegador. Tente um video menor, feche apps pesados ou use outro navegador. No celular, evite videos muito longos.'
   }
 
   function buildTextDrawFilters() {
@@ -2616,20 +2648,28 @@ export default function VideoEditor() {
         hasAudio: Boolean(audioFile),
         hasVoice: Boolean(voiceBlob),
       })
-      setRenderMessage('Nao foi possivel criar o video com fotos neste navegador. Tente menos fotos ou imagens menores.')
+      setRenderMessage('Nao foi possivel criar o video com fotos neste navegador. Tente menos fotos, imagens menores, outro navegador ou feche apps pesados.')
     } finally {
       setIsRendering(false)
     }
   }
 
   async function renderFinalVideo() {
+    if (renderLockRef.current) return
+
     if (editorMode === 'photos') {
-      await renderPhotoVideo()
+      renderLockRef.current = true
+      try {
+        await renderPhotoVideo()
+      } finally {
+        renderLockRef.current = false
+      }
       return
     }
 
     if (!videoFile || isRendering) return
 
+    renderLockRef.current = true
     pauseBackgroundMusic()
     videoRef.current?.pause()
     setIsPlaying(false)
@@ -2823,17 +2863,9 @@ export default function VideoEditor() {
         duration,
         canvasSize,
       })
-      const failedDuringOptimization = renderStageRef.current === 'optimizing'
-      const failedDuringImageOverlay =
-        error instanceof Error && error.message === 'IMAGE_OVERLAY_RENDER_FAILED'
-      setRenderMessage(
-        failedDuringImageOverlay
-          ? 'Nao foi possivel incluir a imagem no video final. Tente PNG/JPG menor.'
-          : failedDuringOptimization
-          ? 'Nao foi possivel otimizar este video neste navegador. Tente novamente com um video menor.'
-          : 'Nao foi possivel renderizar neste navegador. Tente um video menor ou outro navegador.'
-      )
+      setRenderMessage(getFriendlyRenderErrorMessage(error))
     } finally {
+      renderLockRef.current = false
       setIsRendering(false)
     }
   }
