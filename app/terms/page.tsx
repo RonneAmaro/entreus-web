@@ -10,71 +10,71 @@ export default function TermsPage() {
   return (
     <InstitutionalPageLayout
       title="Termos de Uso"
-      description="Estes termos apresentam as regras iniciais para uso do EntreUS, uma rede social criada para conexao, expressao, comunidade e recursos digitais em evolucao."
+      description="Estes termos apresentam as regras iniciais para uso do EntreUS, uma rede social criada para conexão, expressão, comunidade e recursos digitais em evolução."
       sections={[
         {
           title: 'Cadastro e conta',
-          body: 'Ao criar uma conta, o usuario deve informar dados verdadeiros, incluindo data de nascimento real, proteger suas credenciais e responder pelas atividades feitas em seu perfil. Informacoes falsas, especialmente sobre idade, podem gerar bloqueio de recursos, suspensao ou remocao da conta.',
+          body: 'Ao criar uma conta, o usuário deve informar dados verdadeiros, incluindo a data de nascimento real, proteger suas credenciais e responder pelas atividades feitas em seu perfil. Informações falsas, especialmente sobre idade, podem gerar o bloqueio de recursos, suspensão ou remoção da conta.',
         },
         {
-          title: 'Idade minima e menores',
-          body: 'Usuarios menores de 18 anos podem precisar de autorizacao de responsavel para usar recursos gerais da plataforma. A autorizacao do responsavel organiza o uso geral da conta, mas nao libera acesso a conteudo 18+.',
+          title: 'Idade mínima e menores',
+          body: 'Usuários menores de 18 anos podem precisar de autorização do responsável para usar recursos gerais da plataforma. A autorização do responsável organiza o uso geral da conta, mas não libera o acesso a conteúdo 18+.',
         },
         {
-          title: 'Conduta dos usuarios',
-          body: 'Esperamos respeito, boa-fe e responsabilidade. Nao sao permitidos assedio, ameacas, discurso de odio, golpes, spam, exposicao indevida de terceiros ou qualquer uso que prejudique a comunidade.',
+          title: 'Conduta dos usuários',
+          body: 'Esperamos respeito, boa-fé e responsabilidade. Não são permitidos assédio, ameaças, discurso de ódio, golpes, spam, exposição indevida de terceiros ou qualquer uso que prejudique a comunidade.',
         },
         {
-          title: 'Publicacoes e midias',
-          body: 'Posts, comentarios, imagens, videos, links e GIFs devem respeitar direitos de terceiros e as regras da plataforma. Conteudos ilegais, enganosos, abusivos, sem consentimento, com exposicao indevida de terceiros ou que violem privacidade podem ser moderados.',
+          title: 'Publicações e mídias',
+          body: 'Posts, comentários, imagens, vídeos, links e GIFs devem respeitar direitos de terceiros e as regras da plataforma. Conteúdos ilegais, enganosos, abusivos, sem consentimento, com exposição indevida de terceiros ou que violem a privacidade podem ser moderados.',
         },
         {
-          title: 'Conteudo 18+',
-          body: 'Conteudo adulto, sensual ou equivalente e tratado como 18+. Esse tipo de conteudo e restrito a usuarios maiores de 18 anos e aprovados em verificacao de idade. O EntreUS pode bloquear, recusar, limitar ou remover acesso a conteudo 18+ conforme criterios de seguranca.',
+          title: 'Conteúdo 18+',
+          body: 'Conteúdo adulto, sensual ou equivalente é tratado como 18+. Esse tipo de conteúdo é restrito a usuários maiores de 18 anos e aprovados em verificação de idade. O EntreUS pode bloquear, recusar, limitar ou remover o acesso a conteúdo 18+ conforme critérios de segurança.',
         },
         {
-          title: 'Verificacao de idade',
-          body: 'Para liberar visualizacao de conteudo 18+, a plataforma pode solicitar documento e selfie para analise manual. O envio de materiais falsos, adulterados ou de terceiros pode gerar recusa, restricao de recursos ou bloqueio da conta.',
+          title: 'Verificação de idade',
+          body: 'Para liberar a visualização de conteúdo 18+, a plataforma pode solicitar documento e selfie para análise manual. O envio de materiais falsos, adulterados ou de terceiros pode gerar recusa, restrição de recursos ou bloqueio da conta.',
         },
         {
-          title: 'Conteudo proibido',
-          body: 'E proibido publicar ou compartilhar conteudo ilegal, exploracao, abuso, violencia sexual, exposicao de terceiros sem consentimento, material envolvendo menores, fraude, ameacas ou qualquer conteudo que coloque pessoas em risco.',
+          title: 'Conteúdo proibido',
+          body: 'É proibido publicar ou compartilhar conteúdo ilegal, exploração, abuso, violência sexual, exposição de terceiros sem consentimento, material envolvendo menores, fraude, ameaças ou qualquer conteúdo que coloque pessoas em risco.',
         },
         {
           title: 'Mensagens privadas',
-          body: 'O bate-papo existe para conversas diretas entre usuarios. Mensagens ofensivas, insistentes, fraudulentas ou usadas para importunacao podem gerar denuncia, bloqueio e medidas de moderacao.',
+          body: 'O bate-papo existe para conversas diretas entre usuários. Mensagens ofensivas, insistentes, fraudulentas ou usadas para importunação podem gerar denúncia, bloqueio e medidas de moderação.',
         },
         {
           title: 'EntreUS Meet',
-          body: 'O Meet permite salas de audio e video por link, com dono ou administrador da sala. Os participantes devem manter respeito nas chamadas e seguir as orientacoes de seguranca e convivencia.',
+          body: 'O Meet permite salas de áudio e vídeo por link, com dono ou administrador da sala. Os participantes devem manter o respeito nas chamadas e seguir as orientações de segurança e convivência.',
         },
         {
-          title: 'Gravacoes temporarias',
-          body: 'Recursos futuros poderao permitir gravacoes temporarias, especialmente para usuarios VIP. Quando disponiveis, terao regras proprias de aviso, acesso, prazo e exclusao.',
+          title: 'Gravações temporárias',
+          body: 'Recursos futuros poderão permitir gravações temporárias, especialmente para usuários VIP. Quando disponíveis, terão regras próprias de aviso, acesso, prazo e exclusão.',
         },
         {
           title: 'Selos EntreUS',
-          body: 'Selos como Comunidade, VIP e Anciao poderao reconhecer participacao, assinatura ou acesso especial. Beneficios, criterios e limites poderao evoluir conforme documentos especificos.',
+          body: 'Selos como Comunidade, VIP e Ancião poderão reconhecer participação, assinatura ou acesso especial. Benefícios, critérios e limites poderão evoluir conforme documentos específicos.',
         },
         {
           title: 'ItaCash e presentes',
-          body: 'ItaCash sera um credito interno futuro do EntreUS, pensado para recursos pagos, recompensas e presentes digitais. Nao e moeda oficial nem investimento financeiro.',
+          body: 'ItaCash será um crédito interno futuro do EntreUS, pensado para recursos pagos, recompensas e presentes digitais. Não é moeda oficial nem investimento financeiro.',
         },
         {
           title: 'Plano VIP',
-          body: 'O VIP podera oferecer beneficios premium, como mais tempo no Meet, recursos exclusivos e gravacoes temporarias futuras. Valores, prazos e vantagens serao informados antes da contratacao.',
+          body: 'O VIP poderá oferecer benefícios premium, como mais tempo no Meet, recursos exclusivos e gravações temporárias futuras. Valores, prazos e vantagens serão informados antes da contratação.',
         },
         {
-          title: 'Denuncias e moderacao',
-          body: 'Usuarios poderao denunciar perfis, posts, comentarios e mensagens. O EntreUS podera analisar conteudos, aplicar restricoes, remover publicacoes ou suspender contas conforme a gravidade.',
+          title: 'Denúncias e moderação',
+          body: 'Usuários poderão denunciar perfis, posts, comentários e mensagens. O EntreUS poderá analisar conteúdos, aplicar restrições, remover publicações ou suspender contas conforme a gravidade.',
         },
         {
           title: 'Privacidade e dados',
-          body: 'O tratamento de dados segue a Politica de Privacidade. Usamos dados para login, perfil, feed, mensagens, seguranca, Meet, selos, ItaCash e melhorias da plataforma.',
+          body: 'O tratamento de dados segue a Política de Privacidade. Usamos dados para login, perfil, feed, mensagens, segurança, Meet, selos, ItaCash e melhorias da plataforma.',
         },
         {
-          title: 'Alteracoes e contato',
-          body: 'Estes termos podem ser atualizados para refletir novos recursos, regras legais ou mudancas da plataforma, incluindo regras de idade, seguranca e verificacao. Duvidas e solicitacoes devem ser enviadas pelos canais oficiais do EntreUS quando disponibilizados.',
+          title: 'Alterações e contato',
+          body: 'Estes termos podem ser atualizados para refletir novos recursos, regras legais ou mudanças da plataforma, incluindo regras de idade, segurança e verificação. Dúvidas e solicitações devem ser enviadas pelos canais oficiais do EntreUS quando disponibilizados.',
         },
       ]}
     />

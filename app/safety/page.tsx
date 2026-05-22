@@ -2,55 +2,55 @@ import type { Metadata } from 'next'
 import InstitutionalPageLayout from '../components/InstitutionalPageLayout'
 
 export const metadata: Metadata = {
-  title: 'Seguranca e Denuncias',
-  description: 'Orientacoes de seguranca, denuncia e moderacao do EntreUS.',
+  title: 'Segurança e Denúncias',
+  description: 'Orientações de segurança, denúncia e moderação do EntreUS.',
 }
 
 export default function SafetyPage() {
   return (
     <InstitutionalPageLayout
-      title="Seguranca e Denuncias"
-      description="O EntreUS busca construir uma comunidade segura, com ferramentas de denuncia, bloqueio e moderacao para reduzir abuso e proteger usuarios."
+      title="Segurança e Denúncias"
+      description="O EntreUS busca construir uma comunidade segura, com ferramentas de denúncia, bloqueio e moderação para reduzir o abuso e proteger usuários."
       sections={[
         {
           title: 'Como denunciar',
-          body: 'Quando disponivel no conteudo, use as opcoes de denuncia em usuarios, posts, comentarios e mensagens. Descreva o problema com clareza para ajudar a analise da moderacao.',
+          body: 'Quando disponível no conteúdo, use as opções de denúncia em usuários, posts, comentários e mensagens. Descreva o problema com clareza para ajudar a análise da moderação.',
         },
         {
           title: 'Como bloquear',
-          body: 'O bloqueio ajuda a limitar interacoes indesejadas com outro usuario. Use-o quando nao quiser receber contato, ver conteudos ou manter interacao com determinado perfil.',
+          body: 'O bloqueio ajuda a limitar interações indesejadas com outro usuário. Use-o quando não quiser receber contato, ver conteúdos ou manter interação com determinado perfil.',
         },
         {
           title: 'Condutas proibidas',
-          body: 'Nao permitimos ameacas, assedio, discurso de odio, exploracao, exposicao de dados privados, golpes, spam, impersonificacao, conteudo ilegal, exposicao sem consentimento ou incentivo a violencia.',
+          body: 'Não permitimos ameaças, assédio, discurso de ódio, exploração, exposição de dados privados, golpes, spam, personificação, conteúdo ilegal, exposição sem consentimento ou incentivo à violência.',
         },
         {
-          title: 'Conteudo 18+',
-          body: 'Conteudo 18+ fica bloqueado para quem nao tem verificacao aprovada. Menores de 18 anos nao podem acessar conteudo 18+, mesmo com autorizacao de responsavel.',
+          title: 'Conteúdo 18+',
+          body: 'Conteúdo 18+ fica bloqueado para quem não tem verificação aprovada. Menores de 18 anos não podem acessar conteúdo 18+, mesmo com autorização de responsável.',
         },
         {
           title: 'Consentimento parental',
-          body: 'O responsavel pode autorizar o uso geral da plataforma por um menor quando solicitado. Essa autorizacao nao libera recursos 18+ e nao substitui verificacao de idade.',
+          body: 'O responsável pode autorizar o uso geral da plataforma por um menor quando solicitado. Essa autorização não libera recursos 18+ e não substitui a verificação de idade.',
         },
         {
-          title: 'Verificacao 18+',
-          body: 'A verificacao 18+ passa por analise manual. A plataforma pode solicitar documento e selfie, sempre com cuidado por se tratar de dados sensiveis. Esses arquivos nao devem ser compartilhados publicamente.',
+          title: 'Verificação 18+',
+          body: 'A verificação 18+ passa por análise manual. A plataforma pode solicitar documento e selfie, sempre com cuidado por se tratar de dados sensíveis. Esses arquivos não devem ser compartilhados publicamente.',
         },
         {
-          title: 'Moderacao',
-          body: 'A equipe podera analisar denuncias, remover conteudos, limitar alcance, restringir recursos, suspender contas ou tomar outras medidas proporcionais ao risco e a gravidade.',
+          title: 'Moderação',
+          body: 'A equipe poderá analisar denúncias, remover conteúdos, limitar alcance, restringir recursos, suspender contas ou tomar outras medidas proporcionais ao risco e à gravidade.',
         },
         {
           title: 'Abuso, spam e golpes',
-          body: 'Perfis usados para fraude, phishing, promessas enganosas, links maliciosos, publicidade abusiva ou manipulacao de interacoes podem ser removidos da plataforma.',
+          body: 'Perfis usados para fraude, phishing, promessas enganosas, links maliciosos, publicidade abusiva ou manipulação de interações podem ser removidos da plataforma.',
         },
         {
-          title: 'Denuncias sensiveis',
-          body: 'Denuncie abuso, fraude, conteudo ilegal, exposicao sem consentimento, suspeita de exploracao ou qualquer publicacao que coloque pessoas em risco. As denuncias serao analisadas pela moderacao.',
+          title: 'Denúncias sensíveis',
+          body: 'Denuncie abuso, fraude, conteúdo ilegal, exposição sem consentimento, suspeita de exploração ou qualquer publicação que coloque pessoas em risco. As denúncias serão analisadas pela moderação.',
         },
         {
-          title: 'Boas praticas',
-          body: 'Proteja sua senha, desconfie de ofertas irreais, evite enviar documentos ou codigos para desconhecidos e denuncie comportamentos suspeitos rapidamente.',
+          title: 'Boas práticas',
+          body: 'Proteja sua senha, desconfie de ofertas irreais, evite enviar documentos ou códigos para desconhecidos e denuncie comportamentos suspeitos rapidamente.',
         },
       ]}
     />
