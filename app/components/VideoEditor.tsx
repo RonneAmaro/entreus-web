@@ -47,6 +47,7 @@ type ImageOverlay = {
   y: number
   width: number
   height: number
+  rotation: number
   startTime: number
   endTime: number
 }
@@ -93,6 +94,12 @@ type CompressionStats = {
   originalBytes: number
   optimizedBytes: number
   profile: CompressionProfile['label']
+}
+
+type RenderImageInput = {
+  inputName: string
+  overlay: ImageOverlay
+  inputIndex: number
 }
 
 const DEFAULT_TEXT_COLOR = '#ffffff'
@@ -590,15 +597,18 @@ export default function VideoEditor() {
     }
 
     const imageUrl = URL.createObjectURL(file)
+    const initialWidth = Math.min(canvasSize.width * 0.34, 320)
+    const initialHeight = Math.min(canvasSize.height * 0.34, 320)
     const overlay: ImageOverlay = {
       id: crypto.randomUUID(),
       file,
       url: imageUrl,
       name: file.name,
-      x: canvasSize.width * 0.18,
-      y: canvasSize.height * 0.18,
-      width: Math.min(canvasSize.width * 0.28, 280),
-      height: Math.min(canvasSize.height * 0.28, 280),
+      x: (canvasSize.width - initialWidth) / 2,
+      y: (canvasSize.height - initialHeight) / 2,
+      width: initialWidth,
+      height: initialHeight,
+      rotation: 0,
       startTime: clamp(currentTime, 0, duration),
       endTime: clamp(currentTime + 3, 0, duration),
     }
@@ -615,6 +625,7 @@ export default function VideoEditor() {
             ? {
                 ...item,
                 height: item.width / aspectRatio,
+                y: clamp((canvasSize.height - item.width / aspectRatio) / 2, 0, canvasSize.height),
               }
             : item
         )
@@ -990,20 +1001,26 @@ export default function VideoEditor() {
         const image = imageElementsRef.current.get(overlay.id)
         if (!image || !image.complete) return
 
-        context.drawImage(image, overlay.x, overlay.y, overlay.width, overlay.height)
+        context.save()
+        context.translate(overlay.x + overlay.width / 2, overlay.y + overlay.height / 2)
+        context.rotate((overlay.rotation * Math.PI) / 180)
+        context.drawImage(image, -overlay.width / 2, -overlay.height / 2, overlay.width, overlay.height)
+        context.restore()
 
         if (overlay.id === activeImageId) {
           context.save()
+          context.translate(overlay.x + overlay.width / 2, overlay.y + overlay.height / 2)
+          context.rotate((overlay.rotation * Math.PI) / 180)
           context.strokeStyle = 'rgba(251, 191, 36, 0.95)'
           context.lineWidth = 3
           context.setLineDash([10, 7])
-          context.strokeRect(overlay.x - 8, overlay.y - 8, overlay.width + 16, overlay.height + 16)
+          context.strokeRect(-overlay.width / 2 - 8, -overlay.height / 2 - 8, overlay.width + 16, overlay.height + 16)
           context.setLineDash([])
           context.fillStyle = 'rgba(251, 191, 36, 0.95)'
-          context.fillRect(overlay.x + overlay.width - 8, overlay.y + overlay.height - 8, 18, 18)
+          context.fillRect(overlay.width / 2 - 8, overlay.height / 2 - 8, 18, 18)
           context.strokeStyle = 'rgba(255, 255, 255, 0.95)'
           context.lineWidth = 2
-          context.strokeRect(overlay.x + overlay.width - 8, overlay.y + overlay.height - 8, 18, 18)
+          context.strokeRect(overlay.width / 2 - 8, overlay.height / 2 - 8, 18, 18)
           context.restore()
         }
       })
@@ -1403,6 +1420,45 @@ export default function VideoEditor() {
     )
   }
 
+  function updateActiveImageSize(width: number) {
+    if (!activeImageId) return
+
+    setImageOverlays((current) =>
+      current.map((overlay) => {
+        if (overlay.id !== activeImageId) return overlay
+
+        const aspectRatio = overlay.width > 0 && overlay.height > 0
+          ? overlay.width / overlay.height
+          : 1
+        const nextWidth = clamp(width, 32, canvasSize.width)
+        const nextHeight = nextWidth / aspectRatio
+
+        return {
+          ...overlay,
+          width: nextWidth,
+          height: nextHeight,
+          x: clamp(overlay.x, 0, Math.max(canvasSize.width - nextWidth, 0)),
+          y: clamp(overlay.y, 0, Math.max(canvasSize.height - nextHeight, 0)),
+        }
+      })
+    )
+  }
+
+  function updateActiveImageRotation(rotation: number) {
+    if (!activeImageId) return
+
+    setImageOverlays((current) =>
+      current.map((overlay) =>
+        overlay.id === activeImageId
+          ? {
+              ...overlay,
+              rotation,
+            }
+          : overlay
+      )
+    )
+  }
+
   function updateActiveStickerTiming(key: 'startTime' | 'endTime', value: number) {
     if (!activeStickerId) return
 
@@ -1674,8 +1730,8 @@ export default function VideoEditor() {
     return filters.join(',')
   }
 
-  function getRenderableImageOverlay() {
-    return imageOverlays.find((overlay) => RENDERABLE_IMAGE_TYPES.includes(overlay.file.type)) || null
+  function getRenderableImageOverlays() {
+    return imageOverlays.filter((overlay) => RENDERABLE_IMAGE_TYPES.includes(overlay.file.type))
   }
 
   function getImageOverlayPlacement(overlay: ImageOverlay) {
@@ -1695,23 +1751,36 @@ export default function VideoEditor() {
   }
 
   function buildImageVideoFilter(
-    renderImage: { overlay: ImageOverlay; inputIndex: number },
+    renderImages: RenderImageInput[],
     includeTiming: boolean,
     includeStickers = true
   ) {
-    const placement = getImageOverlayPlacement(renderImage.overlay)
-    const timing = includeTiming
-      ? `:enable='between(t,${renderImage.overlay.startTime.toFixed(3)},${renderImage.overlay.endTime.toFixed(3)})'`
-      : ''
-
     const layerFilters = buildLayerDrawFilters(true, includeStickers)
+    const filters = [`[0:v]${getVisualFilter(filter)}[vbase]`]
+    let previousLabel = 'vbase'
 
-    return [
-      `[0:v]${getVisualFilter(filter)}[vbase]`,
-      `[${renderImage.inputIndex}:v]scale=${placement.width}:${placement.height}[img0]`,
-      `[vbase][img0]overlay=${placement.x}:${placement.y}${timing}[vimg]`,
-      `[vimg]${layerFilters}[v]`,
-    ].join(';')
+    renderImages.forEach((renderImage, index) => {
+      const placement = getImageOverlayPlacement(renderImage.overlay)
+      const startTime = Number.isFinite(renderImage.overlay.startTime)
+        ? renderImage.overlay.startTime
+        : 0
+      const endTime = Number.isFinite(renderImage.overlay.endTime)
+        ? renderImage.overlay.endTime
+        : duration
+      const timing = includeTiming
+        ? `:enable='between(t,${startTime.toFixed(3)},${endTime.toFixed(3)})'`
+        : ''
+      const imageLabel = `img${index}`
+      const nextLabel = `vimg${index}`
+
+      filters.push(`[${renderImage.inputIndex}:v]scale=${placement.width}:${placement.height}[${imageLabel}]`)
+      filters.push(`[${previousLabel}][${imageLabel}]overlay=${placement.x}:${placement.y}${timing}[${nextLabel}]`)
+      previousLabel = nextLabel
+    })
+
+    filters.push(`[${previousLabel}]${layerFilters}[v]`)
+
+    return filters.join(';')
   }
 
   function buildAudioMixFilters({
@@ -1765,21 +1834,23 @@ export default function VideoEditor() {
     inputAudioName: string | null,
     inputVoiceName: string | null,
     voiceInputIndex: number | null,
-    renderImage?: { inputName: string; overlay: ImageOverlay; inputIndex: number } | null,
+    renderImages: RenderImageInput[],
     includeImageTiming = true,
     includeStickers = true
   ) {
+    const hasRenderImages = renderImages.length > 0
+
     if (inputVoiceName) {
       const inputArgs = [
         '-i',
         inputVideoName,
         ...(inputAudioName ? ['-stream_loop', '-1', '-i', inputAudioName] : []),
-        ...(renderImage ? ['-i', renderImage.inputName] : []),
+        ...renderImages.flatMap((renderImage) => ['-i', renderImage.inputName]),
         '-i',
         inputVoiceName,
       ]
-      const videoGraph = renderImage
-        ? buildImageVideoFilter(renderImage, includeImageTiming, includeStickers)
+      const videoGraph = hasRenderImages
+        ? buildImageVideoFilter(renderImages, includeImageTiming, includeStickers)
         : `[0:v]${buildVideoFilter(true, includeStickers)}[v]`
       const audioFilters = buildAudioMixFilters({
         totalDuration: duration,
@@ -1814,17 +1885,16 @@ export default function VideoEditor() {
       ]
     }
 
-    const videoFilter = renderImage
-      ? buildImageVideoFilter(renderImage, includeImageTiming, includeStickers)
+    const videoFilter = hasRenderImages
+      ? buildImageVideoFilter(renderImages, includeImageTiming, includeStickers)
       : buildVideoFilter(true, includeStickers)
 
     if (!inputAudioName) {
-      if (renderImage) {
+      if (hasRenderImages) {
         return [
           '-i',
           inputVideoName,
-          '-i',
-          renderImage.inputName,
+          ...renderImages.flatMap((renderImage) => ['-i', renderImage.inputName]),
           '-filter_complex',
           `${videoFilter};[0:a]volume=${videoVolume.toFixed(2)}[a]`,
           '-map',
@@ -1883,9 +1953,9 @@ export default function VideoEditor() {
       '-1',
       '-i',
       inputAudioName,
-      ...(renderImage ? ['-i', renderImage.inputName] : []),
+      ...renderImages.flatMap((renderImage) => ['-i', renderImage.inputName]),
       '-filter_complex',
-      renderImage
+      hasRenderImages
         ? [
             videoFilter,
             `[0:a]volume=${videoVolume.toFixed(2)}[a0]`,
@@ -1925,21 +1995,23 @@ export default function VideoEditor() {
     inputAudioName: string | null,
     inputVoiceName: string | null,
     voiceInputIndex: number | null,
-    renderImage?: { inputName: string; overlay: ImageOverlay; inputIndex: number } | null,
+    renderImages: RenderImageInput[],
     includeImageTiming = false,
     includeStickers = true
   ) {
+    const hasRenderImages = renderImages.length > 0
+
     if (inputVoiceName) {
       const inputArgs = [
         '-i',
         inputVideoName,
         ...(inputAudioName ? ['-stream_loop', '-1', '-i', inputAudioName] : []),
-        ...(renderImage ? ['-i', renderImage.inputName] : []),
+        ...renderImages.flatMap((renderImage) => ['-i', renderImage.inputName]),
         '-i',
         inputVoiceName,
       ]
-      const videoGraph = renderImage
-        ? buildImageVideoFilter(renderImage, includeImageTiming, includeStickers)
+      const videoGraph = hasRenderImages
+        ? buildImageVideoFilter(renderImages, includeImageTiming, includeStickers)
         : `[0:v]${buildVideoFilter(true, includeStickers)}[v]`
       const audioFilters = buildAudioMixFilters({
         totalDuration: duration,
@@ -1975,17 +2047,16 @@ export default function VideoEditor() {
       ]
     }
 
-    const videoFilter = renderImage
-      ? buildImageVideoFilter(renderImage, includeImageTiming, includeStickers)
+    const videoFilter = hasRenderImages
+      ? buildImageVideoFilter(renderImages, includeImageTiming, includeStickers)
       : buildVideoFilter(true, includeStickers)
 
     if (!inputAudioName) {
-      if (renderImage) {
+      if (hasRenderImages) {
         return [
           '-i',
           inputVideoName,
-          '-i',
-          renderImage.inputName,
+          ...renderImages.flatMap((renderImage) => ['-i', renderImage.inputName]),
           '-filter_complex',
           videoFilter,
           '-map',
@@ -2032,9 +2103,9 @@ export default function VideoEditor() {
       '-1',
       '-i',
       inputAudioName,
-      ...(renderImage ? ['-i', renderImage.inputName] : []),
+      ...renderImages.flatMap((renderImage) => ['-i', renderImage.inputName]),
       '-filter_complex',
-      renderImage
+      hasRenderImages
         ? [
             videoFilter,
             `[1:a]adelay=${musicDelayMs}:all=1,atrim=0:${duration.toFixed(3)},asetpts=PTS-STARTPTS,volume=${musicVolume.toFixed(2)}[a]`,
@@ -2488,19 +2559,15 @@ export default function VideoEditor() {
     const inputVoiceName = voiceBlob ? `voice_track.${getVoiceInputExtension(voiceBlob)}` : null
     const outputName = 'entreus_output.mp4'
     const optimizedOutputName = 'entreus_output_optimized.mp4'
-    const renderableImageOverlay = getRenderableImageOverlay()
-    const renderImageInputName = renderableImageOverlay
-      ? `image_overlay_0.${getImageRenderExtension(renderableImageOverlay.file)}`
-      : null
-    const renderImageInput = renderableImageOverlay && renderImageInputName
-      ? {
-          inputName: renderImageInputName,
-          overlay: renderableImageOverlay,
-          inputIndex: inputAudioName ? 2 : 1,
-        }
-      : null
+    const renderableImageOverlays = getRenderableImageOverlays()
+    const imageInputStartIndex = 1 + (inputAudioName ? 1 : 0)
+    const renderImageInputs: RenderImageInput[] = renderableImageOverlays.map((overlay, index) => ({
+      inputName: `image_overlay_${index}.${getImageRenderExtension(overlay.file)}`,
+      overlay,
+      inputIndex: imageInputStartIndex + index,
+    }))
     const voiceInputIndex = inputVoiceName
-      ? 1 + (inputAudioName ? 1 : 0) + (renderImageInput ? 1 : 0)
+      ? 1 + (inputAudioName ? 1 : 0) + renderImageInputs.length
       : null
     const filesToClean = [
       inputVideoName,
@@ -2508,7 +2575,7 @@ export default function VideoEditor() {
       optimizedOutputName,
       ...(inputAudioName ? [inputAudioName] : []),
       ...(inputVoiceName ? [inputVoiceName] : []),
-      ...(renderImageInputName ? [renderImageInputName] : []),
+      ...renderImageInputs.map((renderImage) => renderImage.inputName),
     ]
 
     try {
@@ -2522,14 +2589,17 @@ export default function VideoEditor() {
         inputAudioName,
         inputVoiceName,
         canvasSize,
-        imageOverlay: renderImageInput
-          ? {
-              type: renderImageInput.overlay.file.type,
-              size: renderImageInput.overlay.file.size,
-              inputName: renderImageInput.inputName,
-              placement: getImageOverlayPlacement(renderImageInput.overlay),
-            }
-          : null,
+        imageOverlays: renderImageInputs.map((renderImage) => ({
+          type: renderImage.overlay.file.type,
+          size: renderImage.overlay.file.size,
+          name: renderImage.overlay.name,
+          inputName: renderImage.inputName,
+          inputIndex: renderImage.inputIndex,
+          placement: getImageOverlayPlacement(renderImage.overlay),
+          startTime: renderImage.overlay.startTime,
+          endTime: renderImage.overlay.endTime,
+          rotation: renderImage.overlay.rotation,
+        })),
         stickers: stickers.map((sticker) => ({
           value: sticker.value,
           placement: getStickerPlacement(sticker),
@@ -2564,7 +2634,7 @@ export default function VideoEditor() {
         await ffmpeg.writeFile(inputVoiceName, await fetchFile(voiceBlob))
       }
 
-      if (renderImageInput) {
+      for (const renderImageInput of renderImageInputs) {
         const placement = getImageOverlayPlacement(renderImageInput.overlay)
         setRenderStage('write_image', 'Preparando imagem...')
         console.info('[VideoEditor] Image overlay input:', {
@@ -2575,21 +2645,22 @@ export default function VideoEditor() {
           placement,
           startTime: renderImageInput.overlay.startTime,
           endTime: renderImageInput.overlay.endTime,
+          rotation: renderImageInput.overlay.rotation,
         })
         await ffmpeg.writeFile(renderImageInput.inputName, await fetchFile(renderImageInput.overlay.file))
       }
 
-      const renderArgs = buildRenderArgs(inputVideoName, inputAudioName, inputVoiceName, voiceInputIndex, renderImageInput)
+      const renderArgs = buildRenderArgs(inputVideoName, inputAudioName, inputVoiceName, voiceInputIndex, renderImageInputs)
       console.info('[VideoEditor] FFmpeg command:', renderArgs.join(' '))
       setRenderStage('exec_primary', 'Renderizando versao final...')
 
       let exitCode = await ffmpeg.exec(renderArgs)
 
-      if (exitCode !== 0 && renderImageInput) {
+      if (exitCode !== 0 && renderImageInputs.length > 0) {
         console.warn('[VideoEditor] FFmpeg image timing render failed:', { exitCode })
         setRenderStage('exec_image_fallback', 'Ajustando imagem e tentando novamente...')
         await cleanupFfmpegFiles(ffmpeg, [outputName])
-        const imageFallbackArgs = buildRenderArgs(inputVideoName, inputAudioName, inputVoiceName, voiceInputIndex, renderImageInput, false)
+        const imageFallbackArgs = buildRenderArgs(inputVideoName, inputAudioName, inputVoiceName, voiceInputIndex, renderImageInputs, false)
         console.info('[VideoEditor] FFmpeg image fallback command:', imageFallbackArgs.join(' '))
         exitCode = await ffmpeg.exec(imageFallbackArgs)
       }
@@ -2606,7 +2677,7 @@ export default function VideoEditor() {
           inputAudioName,
           inputVoiceName,
           voiceInputIndex,
-          renderImageInput,
+          renderImageInputs,
           false,
           false
         )
@@ -2618,13 +2689,13 @@ export default function VideoEditor() {
         console.warn('[VideoEditor] FFmpeg primary render failed:', { exitCode })
         setRenderStage('exec_fallback', 'Ajustando mixagem e tentando novamente...')
         await cleanupFfmpegFiles(ffmpeg, [outputName])
-        const fallbackArgs = buildFallbackRenderArgs(inputVideoName, inputAudioName, inputVoiceName, voiceInputIndex, renderImageInput, false, stickers.length === 0)
+        const fallbackArgs = buildFallbackRenderArgs(inputVideoName, inputAudioName, inputVoiceName, voiceInputIndex, renderImageInputs, false, stickers.length === 0)
         console.info('[VideoEditor] FFmpeg fallback command:', fallbackArgs.join(' '))
         exitCode = await ffmpeg.exec(fallbackArgs)
       }
 
       if (exitCode !== 0) {
-        if (renderImageInput) {
+        if (renderImageInputs.length > 0) {
           throw new Error('IMAGE_OVERLAY_RENDER_FAILED')
         }
         throw new Error('FFmpeg retornou erro ao renderizar o video.')
@@ -3856,6 +3927,33 @@ export default function VideoEditor() {
                         X {Math.round(activeImageOverlay.x)} / Y {Math.round(activeImageOverlay.y)}
                       </span>
                     </div>
+
+                    <label className="mt-4 block">
+                      <span className="text-xs font-black text-amber-100/80">Largura</span>
+                      <input
+                        type="range"
+                        min="32"
+                        max={canvasSize.width}
+                        value={activeImageOverlay.width}
+                        onChange={(event) => updateActiveImageSize(Number(event.target.value))}
+                        className="mt-2 w-full accent-amber-300"
+                      />
+                      <span className="mt-1 block text-xs font-semibold text-amber-100/60">
+                        {Math.round(activeImageOverlay.width)}px
+                      </span>
+                    </label>
+
+                    <label className="mt-3 block">
+                      <span className="text-xs font-black text-amber-100/80">Rotacao</span>
+                      <input
+                        type="range"
+                        min="-45"
+                        max="45"
+                        value={activeImageOverlay.rotation}
+                        onChange={(event) => updateActiveImageRotation(Number(event.target.value))}
+                        className="mt-2 w-full accent-amber-300"
+                      />
+                    </label>
 
                     <div className="mt-4 rounded-xl border border-white/10 bg-black/25 p-3">
                       <div className="mb-3 flex items-center justify-between gap-3 text-xs font-black text-amber-100">
