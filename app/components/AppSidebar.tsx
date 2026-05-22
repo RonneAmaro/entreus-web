@@ -22,7 +22,7 @@ import {
 import { supabase } from '@/lib/supabase'
 import MoreMenu from './MoreMenu'
 import { useLanguage } from './LanguageProvider'
-import { usePendingItaCashPurchasesCount } from '../hooks/usePendingItaCashPurchasesCount'
+import { useAdminPendingAlerts } from '../hooks/useAdminPendingAlerts'
 import { isAdminRole } from '@/lib/admin'
 
 type AppSidebarProps = {
@@ -72,7 +72,7 @@ export default function AppSidebar({
   const [moreMenuPosition, setMoreMenuPosition] = useState({ left: 96, top: 12 })
   const [internalUnreadMessagesCount, setInternalUnreadMessagesCount] = useState(0)
   const [isAdmin, setIsAdmin] = useState(false)
-  const { pendingCount: pendingItaCashPurchasesCount } = usePendingItaCashPurchasesCount({
+  const { totalPending: adminPendingCount } = useAdminPendingAlerts({
     enabled: isAdmin,
   })
 
@@ -418,9 +418,9 @@ export default function AppSidebar({
               <div className="relative shrink-0">
                 <ShieldCheck className={navIconClass('/admin')} />
 
-                {pendingItaCashPurchasesCount > 0 && (
+                {adminPendingCount > 0 && (
                   <span className="absolute -right-2 -top-2 flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-black text-white ring-2 ring-black">
-                    {formatBadge(pendingItaCashPurchasesCount)}
+                    {formatBadge(adminPendingCount)}
                   </span>
                 )}
               </div>
@@ -465,7 +465,7 @@ export default function AppSidebar({
                   onLogout={onLogout}
                   onClose={() => setMoreMenuAnchor(null)}
                   isAdmin={isAdmin}
-                  pendingItaCashPurchasesCount={pendingItaCashPurchasesCount}
+                  adminPendingCount={adminPendingCount}
                 />
               </>,
               document.body
@@ -546,7 +546,7 @@ export default function AppSidebar({
                 onLogout={onLogout}
                 onClose={() => setMoreMenuAnchor(null)}
                 isAdmin={isAdmin}
-                pendingItaCashPurchasesCount={pendingItaCashPurchasesCount}
+                adminPendingCount={adminPendingCount}
               />
             </>,
             document.body

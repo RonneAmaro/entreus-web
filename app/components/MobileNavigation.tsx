@@ -40,7 +40,7 @@ import {
 import { supabase } from '@/lib/supabase'
 import { useLanguage } from './LanguageProvider'
 import type { LanguageCode } from '@/lib/translations'
-import { usePendingItaCashPurchasesCount } from '../hooks/usePendingItaCashPurchasesCount'
+import { useAdminPendingAlerts } from '../hooks/useAdminPendingAlerts'
 import { isAdminRole } from '@/lib/admin'
 
 type MobileNavigationProps = {
@@ -94,7 +94,7 @@ export default function MobileNavigation({
   const [openPostMenu, setOpenPostMenu] = useState(false)
   const [internalUnreadMessagesCount, setInternalUnreadMessagesCount] = useState(0)
   const [isAdmin, setIsAdmin] = useState(false)
-  const { pendingCount: pendingItaCashPurchasesCount } = usePendingItaCashPurchasesCount({
+  const { totalPending: adminPendingCount } = useAdminPendingAlerts({
     enabled: isAdmin,
   })
 
@@ -330,9 +330,9 @@ export default function MobileNavigation({
         >
           <MoreHorizontal className="h-6 w-6" />
 
-          {isAdmin && pendingItaCashPurchasesCount > 0 && (
+          {isAdmin && adminPendingCount > 0 && (
             <span className="absolute -right-1 -top-1 flex min-h-[17px] min-w-[17px] items-center justify-center rounded-full bg-red-600 px-1 text-[9px] font-black text-white ring-2 ring-white dark:ring-black">
-              {formatBadge(pendingItaCashPurchasesCount)}
+              {formatBadge(adminPendingCount)}
             </span>
           )}
         </button>
@@ -363,9 +363,9 @@ export default function MobileNavigation({
                 >
                   <ShieldCheck className={drawerIconClass('/admin')} />
                   <span className="min-w-0 flex-1">Admin</span>
-                  {pendingItaCashPurchasesCount > 0 && (
+                  {adminPendingCount > 0 && (
                     <span className="flex min-h-[20px] min-w-[20px] items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-black text-white">
-                      {formatBadge(pendingItaCashPurchasesCount)}
+                      {formatBadge(adminPendingCount)}
                     </span>
                   )}
                 </Link>
@@ -626,9 +626,9 @@ export default function MobileNavigation({
                 >
                   <ShieldCheck className={drawerIconClass('/admin')} />
                   <span className="min-w-0 flex-1">Admin</span>
-                  {pendingItaCashPurchasesCount > 0 && (
+                  {adminPendingCount > 0 && (
                     <span className="flex min-h-[20px] min-w-[20px] items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-black text-white">
-                      {formatBadge(pendingItaCashPurchasesCount)}
+                      {formatBadge(adminPendingCount)}
                     </span>
                   )}
                 </Link>

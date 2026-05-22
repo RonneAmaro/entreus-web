@@ -9,6 +9,7 @@ import {
   Bug,
   CheckCircle2,
   Coins,
+  Flag,
   Gift,
   Lightbulb,
   Loader2,
@@ -19,7 +20,7 @@ import {
   Wallet,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import { usePendingItaCashPurchasesCount } from '../hooks/usePendingItaCashPurchasesCount'
+import { useAdminPendingAlerts } from '../hooks/useAdminPendingAlerts'
 import { isAdminRole } from '@/lib/admin'
 
 type AdminProfile = {
@@ -50,8 +51,14 @@ const adminCards = [
   {
     title: 'Feedbacks e Bugs',
     description: 'Acompanhar mensagens, sugestoes e problemas enviados pelos usuarios.',
-    href: '/feedback',
+    href: '/admin/feedback',
     icon: Bug,
+  },
+  {
+    title: 'Denuncias',
+    description: 'Revisar denuncias de posts e usuarios feitas pela comunidade.',
+    href: '/admin/reports',
+    icon: Flag,
   },
   {
     title: 'Sugestoes da Comunidade',
@@ -86,16 +93,56 @@ export default function AdminPage() {
   const [adminProfile, setAdminProfile] = useState<AdminProfile | null>(null)
   const [newPendingAlert, setNewPendingAlert] = useState(false)
   const isAdmin = isAdminRole(adminProfile?.role)
-  const handleNewPendingPurchase = useCallback(() => {
+  const handleNewPendingAlert = useCallback(() => {
     setNewPendingAlert(true)
   }, [])
   const {
-    pendingCount: pendingItaCashPurchasesCount,
-    loading: pendingItaCashPurchasesLoading,
-  } = usePendingItaCashPurchasesCount({
+    counts: adminPendingCounts,
+    errors: adminPendingErrors,
+    loading: adminPendingLoading,
+    totalPending,
+  } = useAdminPendingAlerts({
     enabled: isAdmin,
-    onNewPending: handleNewPendingPurchase,
+    onNewPending: handleNewPendingAlert,
   })
+  const pendingSummaryCards = [
+    {
+      key: 'itacashPurchases' as const,
+      title: 'Compras ItaCash pendentes',
+      count: adminPendingCounts.itacashPurchases,
+      description: 'Compras manuais e Pix com comprovante aguardando analise.',
+      href: '/admin/itacash-purchases',
+      action: 'Ver compras',
+      icon: Coins,
+    },
+    {
+      key: 'ageVerifications' as const,
+      title: 'Verificacoes 18+ pendentes',
+      count: adminPendingCounts.ageVerifications,
+      description: 'Documentos e selfies aguardando revisao manual.',
+      href: '/admin/age-verifications',
+      action: 'Ver verificacoes',
+      icon: ShieldCheck,
+    },
+    {
+      key: 'reports' as const,
+      title: 'Denuncias pendentes',
+      count: adminPendingCounts.reports,
+      description: 'Relatos de usuarios sobre posts ou perfis.',
+      href: '/admin/reports',
+      action: 'Ver denuncias',
+      icon: Flag,
+    },
+    {
+      key: 'feedbackReports' as const,
+      title: 'Feedbacks e bugs novos',
+      count: adminPendingCounts.feedbackReports,
+      description: 'Relatos internos abertos, triados ou em andamento.',
+      href: '/admin/feedback',
+      action: 'Ver feedbacks',
+      icon: Bug,
+    },
+  ]
 
   useEffect(() => {
     loadPage()
@@ -198,8 +245,8 @@ export default function AdminPage() {
             <div className="flex items-start gap-3">
               <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-200" />
               <div>
-                <p className="font-black">Nova compra ItaCash aguardando analise.</p>
-                <p className="mt-1 text-sm text-red-100/80">Abra a fila de compras para conferir o comprovante.</p>
+                <p className="font-black">Nova pendencia administrativa aguardando analise.</p>
+                <p className="mt-1 text-sm text-red-100/80">Confira o resumo abaixo e priorize os itens mais urgentes.</p>
               </div>
             </div>
             <button
@@ -213,44 +260,93 @@ export default function AdminPage() {
         )}
 
         <div className={`relative z-10 mb-6 rounded-[2rem] border p-5 shadow-xl ring-1 ${
-          pendingItaCashPurchasesCount > 0
+          totalPending > 0
             ? 'border-red-300/30 bg-red-500/15 text-red-50 shadow-red-950/20 ring-red-300/15'
             : 'border-emerald-300/20 bg-emerald-500/10 text-emerald-50 shadow-black/20 ring-emerald-300/10'
         }`}>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">
               <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${
-                pendingItaCashPurchasesCount > 0 ? 'bg-red-500/20 text-red-100' : 'bg-emerald-500/15 text-emerald-100'
+                totalPending > 0 ? 'bg-red-500/20 text-red-100' : 'bg-emerald-500/15 text-emerald-100'
               }`}>
-                {pendingItaCashPurchasesCount > 0 ? <AlertTriangle className="h-5 w-5" /> : <CheckCircle2 className="h-5 w-5" />}
+                {totalPending > 0 ? <AlertTriangle className="h-5 w-5" /> : <CheckCircle2 className="h-5 w-5" />}
               </span>
               <div>
                 <p className="text-lg font-black">
-                  {pendingItaCashPurchasesLoading
-                    ? 'Verificando compras ItaCash...'
-                    : pendingItaCashPurchasesCount > 0
-                      ? `Voce tem ${pendingItaCashPurchasesCount} compras de ItaCash aguardando analise.`
-                      : 'Nenhuma compra ItaCash pendente no momento.'}
+                  {adminPendingLoading
+                    ? 'Verificando pendencias administrativas...'
+                    : totalPending > 0
+                      ? `Voce tem ${totalPending} pendencias administrativas aguardando analise.`
+                      : 'Tudo certo por aqui. Nenhuma pendencia administrativa no momento.'}
                 </p>
                 <p className="mt-1 text-sm opacity-80">
-                  {pendingItaCashPurchasesCount > 0
-                    ? 'Revise comprovantes e aprove ou recuse cada solicitacao.'
-                    : 'A fila de compras manuais esta tranquila agora.'}
+                  {totalPending > 0
+                    ? 'Revise compras, verificacoes, denuncias e feedbacks antes que acumulem.'
+                    : 'As filas principais da administracao estao tranquilas agora.'}
                 </p>
               </div>
             </div>
 
-            <Link
-              href="/admin/itacash-purchases"
-              className={`inline-flex items-center justify-center rounded-full px-5 py-3 text-sm font-black transition ${
-                pendingItaCashPurchasesCount > 0
-                  ? 'bg-white text-red-950 hover:bg-red-50'
-                  : 'border border-emerald-200/20 bg-emerald-500/10 text-emerald-50 hover:bg-emerald-500/20'
-              }`}
-            >
-              Analisar compras
-            </Link>
+            {totalPending > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {pendingSummaryCards.filter((item) => item.count > 0).slice(0, 4).map((item) => (
+                  <Link
+                    key={item.key}
+                    href={item.href}
+                    className="inline-flex items-center justify-center rounded-full bg-white px-4 py-2 text-xs font-black text-red-950 transition hover:bg-red-50"
+                  >
+                    {item.action}
+                  </Link>
+                ))}
+              </div>
+            )}
           </div>
+        </div>
+
+        <div className="relative z-10 mb-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {pendingSummaryCards.map((item) => {
+            const Icon = item.icon
+            const hasError = Boolean(adminPendingErrors[item.key])
+            const hasPending = item.count > 0
+
+            return (
+              <Link
+                key={item.key}
+                href={item.href}
+                className={`rounded-[1.5rem] border p-4 shadow-xl shadow-black/20 ring-1 transition hover:-translate-y-0.5 ${
+                  hasError
+                    ? 'border-amber-300/25 bg-amber-500/10 text-amber-50 ring-amber-300/10'
+                    : hasPending
+                    ? 'border-red-300/25 bg-red-500/10 text-red-50 ring-red-300/10'
+                    : 'border-white/10 bg-zinc-950/90 text-white ring-white/5 hover:border-blue-300/25'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <span className={`flex h-11 w-11 items-center justify-center rounded-2xl ${
+                    hasPending ? 'bg-red-500/20 text-red-100' : 'bg-blue-500/15 text-blue-100'
+                  }`}>
+                    <Icon className="h-5 w-5" />
+                  </span>
+                  <span className={`rounded-full px-3 py-1 text-sm font-black ${
+                    hasError
+                      ? 'bg-amber-300 text-amber-950'
+                      : hasPending
+                      ? 'bg-red-600 text-white'
+                      : 'bg-white/10 text-zinc-300'
+                  }`}>
+                    {hasError ? '!' : item.count}
+                  </span>
+                </div>
+                <h2 className="mt-4 text-base font-black">{item.title}</h2>
+                <p className="mt-2 min-h-10 text-sm leading-5 opacity-75">
+                  {hasError ? adminPendingErrors[item.key] : item.description}
+                </p>
+                <span className="mt-4 inline-flex rounded-full bg-white px-4 py-2 text-xs font-black text-black">
+                  {item.action}
+                </span>
+              </Link>
+            )
+          })}
         </div>
 
         {message && (
@@ -275,9 +371,9 @@ export default function AdminPage() {
 
                 <h2 className="mt-5 text-xl font-black text-white">
                   {card.title}
-                  {card.href === '/admin/itacash-purchases' && pendingItaCashPurchasesCount > 0 && (
+                  {card.href === '/admin/itacash-purchases' && adminPendingCounts.itacashPurchases > 0 && (
                     <span className="ml-2 inline-flex min-h-[22px] min-w-[22px] items-center justify-center rounded-full bg-red-600 px-1.5 align-middle text-[11px] font-black text-white">
-                      {pendingItaCashPurchasesCount > 99 ? '99+' : pendingItaCashPurchasesCount}
+                      {adminPendingCounts.itacashPurchases > 99 ? '99+' : adminPendingCounts.itacashPurchases}
                     </span>
                   )}
                 </h2>
