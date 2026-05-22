@@ -158,8 +158,8 @@ function purchaseStatusLabel(status: string) {
   if (status === 'canceled') return 'Cancelada'
   if (status === 'cancelled') return 'Cancelada'
   if (status === 'pending') return 'Aguardando analise'
-  if (status === 'failed') return 'Pagamento recusado'
-  if (status === 'expired') return 'Pagamento expirado'
+  if (status === 'failed') return 'Falhou'
+  if (status === 'expired') return 'Expirada'
   return 'Aguardando analise'
 }
 
@@ -398,9 +398,11 @@ export default function WalletPage() {
     }
 
     if (transaction.type === 'purchase_confirmed') {
+      const isPaymentOrder = transaction.reference_type === 'payment_order'
+
       return {
-        title: 'Compra manual de ItaCash confirmada',
-        detail: transaction.description || 'Credito aprovado pela equipe',
+        title: isPaymentOrder ? 'Compra de ItaCash confirmada' : 'Compra manual de ItaCash confirmada',
+        detail: transaction.description || (isPaymentOrder ? 'Saldo creditado automaticamente' : 'Credito aprovado pela equipe'),
         tone: 'in',
       }
     }

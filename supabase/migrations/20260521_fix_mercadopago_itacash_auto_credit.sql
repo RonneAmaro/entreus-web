@@ -19,6 +19,7 @@ declare
   v_status text := coalesce(nullif(trim(p_provider_status), ''), 'unknown');
   v_payment_id text := nullif(trim(p_provider_payment_id), '');
   v_external_reference text := nullif(trim(p_external_reference), '');
+  v_payment_method text := nullif(trim(p_metadata->>'provider_payment_method'), '');
   v_has_purchase_credit boolean := false;
 begin
   select *
@@ -57,6 +58,11 @@ begin
         else 'failed'
       end,
       provider_payment_id = coalesce(v_payment_id, provider_payment_id),
+      provider_status = v_status,
+      provider_payment_method = coalesce(v_payment_method, provider_payment_method),
+      metadata = coalesce(metadata, '{}'::jsonb) || coalesce(p_metadata, '{}'::jsonb) || jsonb_build_object(
+        'provider_status', v_status
+      ),
       updated_at = now()
     where id = v_order.id;
 
@@ -73,7 +79,14 @@ begin
     set
       status = 'paid',
       provider_payment_id = coalesce(v_payment_id, provider_payment_id),
+      provider_status = v_status,
+      provider_payment_method = coalesce(v_payment_method, provider_payment_method),
+      paid_at = coalesce(paid_at, now()),
       processed_at = coalesce(processed_at, now()),
+      metadata = coalesce(metadata, '{}'::jsonb) || coalesce(p_metadata, '{}'::jsonb) || jsonb_build_object(
+        'provider_status', v_status,
+        'paid_at', now()
+      ),
       updated_at = now()
     where id = v_order.id;
 
@@ -89,7 +102,14 @@ begin
     set
       status = 'paid',
       provider_payment_id = coalesce(v_payment_id, provider_payment_id),
+      provider_status = v_status,
+      provider_payment_method = coalesce(v_payment_method, provider_payment_method),
+      paid_at = coalesce(paid_at, now()),
       processed_at = coalesce(processed_at, now()),
+      metadata = coalesce(metadata, '{}'::jsonb) || coalesce(p_metadata, '{}'::jsonb) || jsonb_build_object(
+        'provider_status', v_status,
+        'paid_at', now()
+      ),
       updated_at = now()
     where id = v_order.id;
 
@@ -111,6 +131,13 @@ begin
   set
     status = 'paid',
     provider_payment_id = coalesce(v_payment_id, provider_payment_id),
+    provider_status = v_status,
+    provider_payment_method = coalesce(v_payment_method, provider_payment_method),
+    paid_at = coalesce(paid_at, now()),
+    metadata = coalesce(metadata, '{}'::jsonb) || coalesce(p_metadata, '{}'::jsonb) || jsonb_build_object(
+      'provider_status', v_status,
+      'paid_at', now()
+    ),
     updated_at = now()
   where id = v_order.id;
 
@@ -156,6 +183,7 @@ begin
       'provider', 'mercadopago',
       'origin', 'mercadopago_webhook',
       'provider_payment_id', coalesce(v_payment_id, v_order.provider_payment_id),
+      'payment_method', coalesce(v_payment_method, v_order.provider_payment_method),
       'external_reference', v_order.external_reference
     )
   );
@@ -174,7 +202,7 @@ begin
   )
   values (
     v_order.user_id,
-    null,
+    v_order.user_id,
     'itacash_purchase_approved',
     v_order.amount_itacash
   );

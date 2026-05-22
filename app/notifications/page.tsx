@@ -127,8 +127,8 @@ function getNotificationActionTextView(notification: NotificationView) {
   if (notification.type === 'itacash_purchase_approved') {
     const amount = notification.amount || notification.itacashPurchaseRequest?.amount_itacash
     return amount
-      ? `Sua compra de ${amount} ItaCash foi aprovada e o saldo ja esta na sua carteira.`
-      : 'Sua compra de ItaCash foi aprovada e o saldo ja esta na sua carteira.'
+      ? `Sua compra de ${amount} ItaCash foi aprovada e o saldo já está na sua carteira.`
+      : 'Sua compra de ItaCash foi aprovada e o saldo já está na sua carteira.'
   }
   if (notification.type === 'itacash_purchase_rejected') {
     const amount = notification.amount || notification.itacashPurchaseRequest?.amount_itacash
