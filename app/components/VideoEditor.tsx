@@ -55,8 +55,17 @@ type CanvasSize = {
   height: number
 }
 
+type EditorMode = 'video' | 'photos'
 type EditorPanel = 'add' | 'text' | 'image' | 'audio' | 'effects' | 'caption' | 'voice'
 type DraggingLayer = { type: 'text' | 'image'; id: string } | null
+
+type PhotoSlide = {
+  id: string
+  file: File
+  previewUrl: string
+  duration: number
+  order: number
+}
 
 type CompressionProfile = {
   label: '720p' | '480p'
@@ -79,6 +88,11 @@ const FFMPEG_CORE_VERSION = '0.12.10'
 const FFMPEG_CORE_BASE_URL = `https://unpkg.com/@ffmpeg/core@${FFMPEG_CORE_VERSION}/dist/umd`
 const HEAVY_VIDEO_SIZE_BYTES = 30 * 1024 * 1024
 const MAX_IMAGE_OVERLAY_SIZE_BYTES = 5 * 1024 * 1024
+const MAX_PHOTO_SLIDE_SIZE_BYTES = 8 * 1024 * 1024
+const MAX_PHOTO_SLIDES = 10
+const DEFAULT_PHOTO_DURATION = 3
+const PHOTO_VIDEO_WIDTH = 720
+const PHOTO_VIDEO_HEIGHT = 1280
 const SUPPORTED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp']
 const RENDERABLE_IMAGE_TYPES = ['image/png', 'image/jpeg']
 
@@ -214,6 +228,10 @@ function getImageRenderExtension(file: File) {
   return file.type === 'image/png' ? 'png' : 'jpg'
 }
 
+function getPhotoInputExtension(file: File) {
+  return file.type === 'image/png' ? 'png' : 'jpg'
+}
+
 export default function VideoEditor() {
   const ffmpegRef = useRef<FFmpeg | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
@@ -225,6 +243,7 @@ export default function VideoEditor() {
   const draggingLayerRef = useRef<DraggingLayer>(null)
   const renderStageRef = useRef('idle')
 
+  const [editorMode, setEditorMode] = useState<EditorMode>('video')
   const [videoFile, setVideoFile] = useState<File | null>(null)
   const [videoUrl, setVideoUrl] = useState('')
   const [videoName, setVideoName] = useState('')
@@ -254,6 +273,8 @@ export default function VideoEditor() {
   const [renderMessage, setRenderMessage] = useState('')
   const [compressionStats, setCompressionStats] = useState<CompressionStats | null>(null)
   const [imageMessage, setImageMessage] = useState('')
+  const [photoSlides, setPhotoSlides] = useState<PhotoSlide[]>([])
+  const [photoMessage, setPhotoMessage] = useState('')
 
   function setRenderStage(stage: string, message?: string) {
     renderStageRef.current = stage
@@ -371,6 +392,7 @@ export default function VideoEditor() {
     imageOverlays.forEach((overlay) => URL.revokeObjectURL(overlay.url))
     imageElementsRef.current.clear()
 
+    setEditorMode('video')
     setVideoFile(file)
     setVideoUrl(URL.createObjectURL(file))
     setVideoName(file.name)
@@ -383,6 +405,70 @@ export default function VideoEditor() {
     setIsPlaying(false)
     setCurrentTime(0)
     syncBackgroundMusic(0)
+  }
+
+  function handlePhotoSlidesChange(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files || [])
+    if (files.length === 0) return
+
+    setPhotoMessage('')
+
+    const availableSlots = Math.max(MAX_PHOTO_SLIDES - photoSlides.length, 0)
+    if (availableSlots <= 0) {
+      setPhotoMessage(`Use no maximo ${MAX_PHOTO_SLIDES} fotos neste modo.`)
+      event.target.value = ''
+      return
+    }
+
+    const acceptedSlides: PhotoSlide[] = []
+
+    for (const file of files.slice(0, availableSlots)) {
+      if (!RENDERABLE_IMAGE_TYPES.includes(file.type)) {
+        setPhotoMessage('Fotos em video aceitam PNG ou JPG neste MVP.')
+        continue
+      }
+
+      if (file.size > MAX_PHOTO_SLIDE_SIZE_BYTES) {
+        setPhotoMessage('Cada foto precisa ter ate 8 MB.')
+        continue
+      }
+
+      acceptedSlides.push({
+        id: crypto.randomUUID(),
+        file,
+        previewUrl: URL.createObjectURL(file),
+        duration: DEFAULT_PHOTO_DURATION,
+        order: photoSlides.length + acceptedSlides.length,
+      })
+    }
+
+    if (files.length > availableSlots) {
+      setPhotoMessage(`Foram adicionadas ${availableSlots} fotos. O limite inicial e ${MAX_PHOTO_SLIDES}.`)
+    }
+
+    if (acceptedSlides.length > 0) {
+      if (videoRef.current) videoRef.current.pause()
+      setIsPlaying(false)
+      setEditorMode('photos')
+      setVideoFile(null)
+      if (videoUrl) URL.revokeObjectURL(videoUrl)
+      setVideoUrl('')
+      setVideoName('')
+      setOverlays([])
+      setActiveOverlayId(null)
+      setImageOverlays((current) => {
+        current.forEach((overlay) => URL.revokeObjectURL(overlay.url))
+        return []
+      })
+      imageElementsRef.current.clear()
+      setActiveImageId(null)
+      setCanvasSize({ width: PHOTO_VIDEO_WIDTH, height: PHOTO_VIDEO_HEIGHT })
+      setCurrentTime(0)
+      setDuration((photoSlides.length + acceptedSlides.length) * DEFAULT_PHOTO_DURATION)
+      setPhotoSlides((current) => [...current, ...acceptedSlides])
+    }
+
+    event.target.value = ''
   }
 
   function handleAudioChange(event: ChangeEvent<HTMLInputElement>) {
@@ -483,8 +569,10 @@ export default function VideoEditor() {
     if (videoUrl) URL.revokeObjectURL(videoUrl)
     if (audioUrl) URL.revokeObjectURL(audioUrl)
     imageOverlays.forEach((overlay) => URL.revokeObjectURL(overlay.url))
+    photoSlides.forEach((slide) => URL.revokeObjectURL(slide.previewUrl))
     imageElementsRef.current.clear()
 
+    setEditorMode('video')
     setVideoFile(null)
     setVideoUrl('')
     setVideoName('')
@@ -495,6 +583,8 @@ export default function VideoEditor() {
     setActiveOverlayId(null)
     setImageOverlays([])
     setActiveImageId(null)
+    setPhotoSlides([])
+    setPhotoMessage('')
     setImageMessage('')
     setCaption('')
     setTextValue('')
@@ -948,6 +1038,22 @@ export default function VideoEditor() {
     setImageMessage('')
   }
 
+  function removePhotoSlide(slideId: string) {
+    const slide = photoSlides.find((item) => item.id === slideId)
+    if (slide) URL.revokeObjectURL(slide.previewUrl)
+
+    setPhotoSlides((current) => {
+      const nextSlides = current
+        .filter((item) => item.id !== slideId)
+        .map((item, index) => ({ ...item, order: index }))
+      setDuration(Math.max(nextSlides.reduce((total, item) => total + item.duration, 0), DEFAULT_VIDEO_DURATION))
+      setCurrentTime((currentTimeValue) =>
+        clamp(currentTimeValue, 0, Math.max(nextSlides.reduce((total, item) => total + item.duration, 0), 0))
+      )
+      return nextSlides
+    })
+  }
+
   async function getFFmpeg() {
     if (ffmpegRef.current?.loaded) {
       setIsReady(true)
@@ -1361,7 +1467,261 @@ export default function VideoEditor() {
     )
   }
 
+  function getPhotoSlidesDuration(slides = photoSlides) {
+    return slides.reduce((total, slide) => total + slide.duration, 0)
+  }
+
+  function getActivePhotoSlide() {
+    let elapsed = 0
+
+    for (const slide of photoSlides) {
+      const start = elapsed
+      const end = elapsed + slide.duration
+      if (currentTime >= start && currentTime < end) return slide
+      elapsed = end
+    }
+
+    return photoSlides[photoSlides.length - 1] || null
+  }
+
+  function buildPhotoVideoFilter(slides: PhotoSlide[], useFade: boolean) {
+    const slideFilters = slides.map((slide, index) => {
+      const baseFilters = [
+        `scale=${PHOTO_VIDEO_WIDTH}:${PHOTO_VIDEO_HEIGHT}:force_original_aspect_ratio=decrease`,
+        `pad=${PHOTO_VIDEO_WIDTH}:${PHOTO_VIDEO_HEIGHT}:(ow-iw)/2:(oh-ih)/2`,
+        'setsar=1',
+        'format=yuv420p',
+      ]
+
+      if (useFade && slide.duration > 0.8) {
+        baseFilters.push('fade=t=in:st=0:d=0.25')
+        baseFilters.push(`fade=t=out:st=${Math.max(slide.duration - 0.25, 0).toFixed(2)}:d=0.25`)
+      }
+
+      return `[${index}:v]${baseFilters.join(',')}[p${index}]`
+    })
+
+    if (slides.length === 1) {
+      return [...slideFilters, '[p0]null[v]'].join(';')
+    }
+
+    const concatInputs = slides.map((_, index) => `[p${index}]`).join('')
+    return [...slideFilters, `${concatInputs}concat=n=${slides.length}:v=1:a=0[v]`].join(';')
+  }
+
+  function buildPhotoRenderArgs(
+    photoInputs: { name: string; slide: PhotoSlide }[],
+    inputAudioName: string | null,
+    useFade: boolean
+  ) {
+    const totalDuration = getPhotoSlidesDuration(photoInputs.map((item) => item.slide))
+    const inputArgs = photoInputs.flatMap((item) => [
+      '-loop',
+      '1',
+      '-t',
+      item.slide.duration.toFixed(3),
+      '-i',
+      item.name,
+    ])
+
+    if (inputAudioName) {
+      const audioInputIndex = photoInputs.length
+      return [
+        ...inputArgs,
+        '-stream_loop',
+        '-1',
+        '-i',
+        inputAudioName,
+        '-filter_complex',
+        [
+          buildPhotoVideoFilter(photoInputs.map((item) => item.slide), useFade),
+          `[${audioInputIndex}:a]atrim=0:${totalDuration.toFixed(3)},asetpts=PTS-STARTPTS,volume=${musicVolume.toFixed(2)}[a]`,
+        ].join(';'),
+        '-map',
+        '[v]',
+        '-map',
+        '[a]',
+        '-r',
+        '30',
+        '-c:v',
+        'libx264',
+        '-preset',
+        'veryfast',
+        '-crf',
+        '23',
+        '-c:a',
+        'aac',
+        '-b:a',
+        '192k',
+        '-movflags',
+        '+faststart',
+        '-t',
+        totalDuration.toFixed(3),
+        'entreus_output.mp4',
+      ]
+    }
+
+    return [
+      ...inputArgs,
+      '-filter_complex',
+      buildPhotoVideoFilter(photoInputs.map((item) => item.slide), useFade),
+      '-map',
+      '[v]',
+      '-r',
+      '30',
+      '-an',
+      '-c:v',
+      'libx264',
+      '-preset',
+      'veryfast',
+      '-crf',
+      '23',
+      '-movflags',
+      '+faststart',
+      'entreus_output.mp4',
+    ]
+  }
+
+  async function publishOutputArray(outputArray: Uint8Array) {
+    const outputBuffer = outputArray.buffer.slice(
+      outputArray.byteOffset,
+      outputArray.byteOffset + outputArray.byteLength
+    ) as ArrayBuffer
+    const outputBlob = new Blob([outputBuffer], { type: 'video/mp4' })
+
+    setRenderStage('uploading', 'Enviando para a EntreUS...')
+
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser()
+
+    if (userError || !user) {
+      throw new Error('Usuario nao autenticado.')
+    }
+
+    const filePath = `videos/${user.id}_${Date.now()}.mp4`
+    const { error: uploadError } = await supabase.storage
+      .from('posts')
+      .upload(filePath, outputBlob, {
+        cacheControl: '3600',
+        contentType: 'video/mp4',
+        upsert: false,
+      })
+
+    if (uploadError) {
+      throw uploadError
+    }
+
+    const { data: publicUrlData } = supabase.storage
+      .from('posts')
+      .getPublicUrl(filePath)
+
+    const { error: insertError } = await supabase.from('posts').insert({
+      user_id: user.id,
+      video_url: publicUrlData.publicUrl,
+      content: caption.trim() || null,
+      created_at: new Date().toISOString(),
+    })
+
+    if (insertError) {
+      throw insertError
+    }
+
+    setRenderProgress(100)
+    setRenderStage('done', 'Publicado com sucesso!')
+    clearEditorAfterPublish()
+  }
+
+  async function renderPhotoVideo() {
+    if (photoSlides.length === 0 || isRendering) return
+
+    pauseBackgroundMusic()
+    setIsPlaying(false)
+    setIsRendering(true)
+    setRenderProgress(0)
+    setCompressionStats(null)
+    setRenderStage('starting', isReady ? 'Preparando fotos...' : 'Carregando motor de video...')
+
+    const orderedSlides = [...photoSlides].sort((a, b) => a.order - b.order)
+    const photoInputs = orderedSlides.map((slide, index) => ({
+      slide,
+      name: `photo_slide_${index}.${getPhotoInputExtension(slide.file)}`,
+    }))
+    const inputAudioName = audioFile ? `music.${getFileExtension(audioFile.name, 'mp3')}` : null
+    const outputName = 'entreus_output.mp4'
+    const optimizedOutputName = 'entreus_output_optimized.mp4'
+    const filesToClean = [
+      ...photoInputs.map((item) => item.name),
+      outputName,
+      optimizedOutputName,
+      ...(inputAudioName ? [inputAudioName] : []),
+    ]
+
+    try {
+      const ffmpeg = await getFFmpeg()
+      setDuration(getPhotoSlidesDuration(orderedSlides))
+      setRenderStage('cleanup', 'Preparando fotos...')
+      await cleanupFfmpegFiles(ffmpeg, filesToClean)
+
+      setRenderStage('write_photos', 'Enviando fotos para o FFmpeg...')
+      await Promise.all(
+        photoInputs.map(async (item) => {
+          await ffmpeg.writeFile(item.name, await fetchFile(item.slide.file))
+        })
+      )
+
+      if (audioFile && inputAudioName) {
+        setRenderStage('write_audio', 'Preparando audio...')
+        await ffmpeg.writeFile(inputAudioName, await fetchFile(audioFile))
+      }
+
+      const renderArgs = buildPhotoRenderArgs(photoInputs, inputAudioName, true)
+      console.info('[VideoEditor] Photo FFmpeg command:', renderArgs.join(' '))
+      setRenderStage('exec_photos', 'Renderizando fotos em video...')
+
+      let exitCode = await ffmpeg.exec(renderArgs)
+
+      if (exitCode !== 0) {
+        console.warn('[VideoEditor] Photo fade render failed:', { exitCode })
+        setRenderStage('exec_photos_fallback', 'Tentando sem transicao...')
+        await cleanupFfmpegFiles(ffmpeg, [outputName])
+        const fallbackArgs = buildPhotoRenderArgs(photoInputs, inputAudioName, false)
+        console.info('[VideoEditor] Photo fallback command:', fallbackArgs.join(' '))
+        exitCode = await ffmpeg.exec(fallbackArgs)
+      }
+
+      if (exitCode !== 0) {
+        throw new Error('PHOTO_RENDER_FAILED')
+      }
+
+      const outputArray = await optimizeRenderedVideo(ffmpeg, outputName, optimizedOutputName)
+      await publishOutputArray(outputArray)
+      await cleanupFfmpegFiles(ffmpeg, filesToClean)
+    } catch (error) {
+      console.error('[VideoEditor] Photo render failed:', {
+        stage: renderStageRef.current,
+        error,
+        photos: orderedSlides.map((slide) => ({
+          name: slide.file.name,
+          type: slide.file.type,
+          size: slide.file.size,
+          duration: slide.duration,
+        })),
+        hasAudio: Boolean(audioFile),
+      })
+      setRenderMessage('Nao foi possivel criar o video com fotos neste navegador. Tente menos fotos ou imagens menores.')
+    } finally {
+      setIsRendering(false)
+    }
+  }
+
   async function renderFinalVideo() {
+    if (editorMode === 'photos') {
+      await renderPhotoVideo()
+      return
+    }
+
     if (!videoFile || isRendering) return
 
     pauseBackgroundMusic()
@@ -1474,51 +1834,7 @@ export default function VideoEditor() {
       }
 
       const outputArray = await optimizeRenderedVideo(ffmpeg, outputName, optimizedOutputName)
-      const outputBlob = new Blob([outputArray.buffer], { type: 'video/mp4' })
-
-      setRenderStage('uploading', 'Enviando para a EntreUS...')
-
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser()
-
-      if (userError || !user) {
-        throw new Error('Usuario nao autenticado.')
-      }
-
-      const filePath = `videos/${user.id}_${Date.now()}.mp4`
-      const { error: uploadError } = await supabase.storage
-        .from('posts')
-        .upload(filePath, outputBlob, {
-          cacheControl: '3600',
-          contentType: 'video/mp4',
-          upsert: false,
-        })
-
-      if (uploadError) {
-        throw uploadError
-      }
-
-      const { data: publicUrlData } = supabase.storage
-        .from('posts')
-        .getPublicUrl(filePath)
-
-      const { error: insertError } = await supabase.from('posts').insert({
-        user_id: user.id,
-        video_url: publicUrlData.publicUrl,
-        content: caption.trim() || null,
-        created_at: new Date().toISOString(),
-      })
-
-      if (insertError) {
-        throw insertError
-      }
-
-      setRenderProgress(100)
-      setRenderStage('done', 'Publicado com sucesso!')
-      clearEditorAfterPublish()
-
+      await publishOutputArray(outputArray)
       await cleanupFfmpegFiles(ffmpeg, filesToClean)
     } catch (error) {
       console.error('[VideoEditor] Render failed:', {
@@ -1565,7 +1881,12 @@ export default function VideoEditor() {
   const editableFontSize = activeOverlay ? activeOverlay.fontSize : fontSize
   const editableTextColor = activeOverlay ? activeOverlay.color : textColor
   const timelineBlocks = Array.from({ length: 12 }, (_, index) => index)
-  const controlsVisible = Boolean(videoUrl && !isPlaying)
+  const photoSlidesDuration = getPhotoSlidesDuration()
+  const activePhotoSlide = getActivePhotoSlide()
+  const timelineDuration = editorMode === 'photos' ? photoSlidesDuration : duration
+  const hasEditorMedia = Boolean(videoUrl || photoSlides.length > 0)
+  const canPublish = Boolean((editorMode === 'video' && videoFile) || (editorMode === 'photos' && photoSlides.length > 0))
+  const controlsVisible = Boolean(hasEditorMedia && !isPlaying)
   const activeTimelineWidth = activeOverlay && duration > 0
     ? ((activeOverlay.endTime - activeOverlay.startTime) / duration) * 100
     : 0
@@ -1598,11 +1919,11 @@ export default function VideoEditor() {
               </button>
               <div className="min-w-0">
                 <p className="truncate text-base font-black leading-none sm:text-lg">
-                  {videoName || 'Editar video'}
+                  {editorMode === 'photos' ? 'Fotos em video' : videoName || 'Editar video'}
                 </p>
-                {videoUrl && (
+                {hasEditorMedia && (
                   <p className="mt-1 text-xs font-semibold text-zinc-500">
-                    {formatEditorTime(currentTime)} / {formatEditorTime(duration)}
+                    {formatEditorTime(currentTime)} / {formatEditorTime(editorMode === 'photos' ? photoSlidesDuration : duration)}
                   </p>
                 )}
               </div>
@@ -1612,7 +1933,7 @@ export default function VideoEditor() {
               <button
                 type="button"
                 onClick={renderFinalVideo}
-                disabled={!videoFile || isRendering}
+                disabled={!canPublish || isRendering}
                 className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-sky-500 px-3 text-sm font-black text-white shadow-lg shadow-sky-950/30 transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-50 sm:px-4"
               >
                 {isRendering ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}
@@ -1621,9 +1942,9 @@ export default function VideoEditor() {
             </div>
           </div>
 
-          <div className={`flex flex-1 items-center justify-center px-2 py-3 transition-all sm:px-5 ${videoUrl ? 'min-h-[19rem] sm:min-h-[30rem]' : 'min-h-[24rem] sm:min-h-[34rem]'}`}>
-            <div className={`relative w-full overflow-hidden bg-black shadow-2xl shadow-black/40 ${videoUrl ? 'rounded-xl sm:rounded-[1.25rem]' : 'rounded-[1.25rem] border border-white/10'}`}>
-            {videoUrl ? (
+          <div className={`flex flex-1 items-center justify-center px-2 py-3 transition-all sm:px-5 ${hasEditorMedia ? 'min-h-[19rem] sm:min-h-[30rem]' : 'min-h-[24rem] sm:min-h-[34rem]'}`}>
+            <div className={`relative w-full overflow-hidden bg-black shadow-2xl shadow-black/40 ${hasEditorMedia ? 'rounded-xl sm:rounded-[1.25rem]' : 'rounded-[1.25rem] border border-white/10'}`}>
+            {editorMode === 'video' && videoUrl ? (
               <div
                 className="relative mx-auto w-full max-h-[68vh]"
                 style={{ aspectRatio: `${canvasSize.width} / ${canvasSize.height}` }}
@@ -1672,6 +1993,20 @@ export default function VideoEditor() {
                   </button>
                 )}
               </div>
+            ) : editorMode === 'photos' && activePhotoSlide ? (
+              <div
+                className="relative mx-auto flex w-full max-w-[24rem] items-center justify-center bg-black sm:max-h-[68vh]"
+                style={{ aspectRatio: `${PHOTO_VIDEO_WIDTH} / ${PHOTO_VIDEO_HEIGHT}` }}
+              >
+                <img
+                  src={activePhotoSlide.previewUrl}
+                  alt={activePhotoSlide.file.name}
+                  className="h-full w-full object-contain"
+                />
+                <div className="absolute bottom-3 left-3 rounded-full bg-black/55 px-3 py-1 text-xs font-black text-white ring-1 ring-white/10">
+                  {activePhotoSlide.order + 1} / {photoSlides.length}
+                </div>
+              </div>
             ) : (
               <div className="flex min-h-[24rem] flex-col items-center justify-center px-6 text-center text-zinc-400 sm:min-h-[32rem]">
                 <div className="flex h-16 w-16 items-center justify-center rounded-full border border-blue-300/25 bg-blue-500/10 text-blue-100">
@@ -1693,7 +2028,7 @@ export default function VideoEditor() {
             </div>
           </div>
 
-          {videoUrl && (
+          {hasEditorMedia && (
             <div
               className={`shrink-0 border-t border-white/10 bg-black/85 px-3 py-3 transition-all duration-300 sm:px-5 ${
                 controlsVisible ? 'translate-y-0 opacity-100' : 'pointer-events-none -mb-48 translate-y-6 opacity-0'
@@ -1701,7 +2036,7 @@ export default function VideoEditor() {
             >
               <div className="mb-2 flex items-center justify-between gap-3 text-xs font-black text-zinc-400">
                 <span>{formatEditorTime(currentTime)}</span>
-                <span className="text-zinc-600">{formatEditorTime(duration)}</span>
+                <span className="text-zinc-600">{formatEditorTime(timelineDuration)}</span>
               </div>
 
               <div className="relative rounded-2xl border border-white/10 bg-zinc-950/95 p-2 shadow-inner shadow-black">
@@ -1718,7 +2053,7 @@ export default function VideoEditor() {
                     >
                       <Plus className="h-4 w-4" />
                     </button>
-                    {['Video', 'Texto', 'Imagem', 'Audio', 'Voz'].map((track) => (
+                    {(editorMode === 'photos' ? ['Fotos', 'Audio'] : ['Video', 'Texto', 'Imagem', 'Audio', 'Voz']).map((track) => (
                       <span key={track} className="flex h-8 items-center justify-end pr-1">
                         {track}
                       </span>
@@ -1731,37 +2066,63 @@ export default function VideoEditor() {
                         <button
                           key={item}
                           type="button"
-                          onClick={() => handleSeek((duration / timelineBlocks.length) * item)}
+                          onClick={() => handleSeek((timelineDuration / timelineBlocks.length) * item)}
                           className="border-l border-white/10 pl-1 text-left"
                         >
-                          {formatEditorTime((duration / timelineBlocks.length) * item)}
+                          {formatEditorTime((timelineDuration / timelineBlocks.length) * item)}
                         </button>
                       ))}
                     </div>
 
                     <div className="relative h-8 overflow-hidden rounded-lg border border-white/10 bg-zinc-900">
-                      <div className="grid h-full grid-cols-12 gap-1 p-1">
-                        {timelineBlocks.map((item) => (
-                          <button
-                            key={item}
-                            type="button"
-                            onClick={() => handleSeek((duration / timelineBlocks.length) * item)}
-                            className="relative overflow-hidden rounded-md bg-zinc-800"
-                            aria-label={`Ir para bloco ${item + 1}`}
-                          >
-                            <video
-                              src={videoUrl}
-                              muted
-                              playsInline
-                              preload="metadata"
-                              className="h-full w-full object-cover opacity-60"
-                            />
-                            <span className="absolute inset-0 bg-gradient-to-b from-white/10 to-black/30" />
-                          </button>
-                        ))}
-                      </div>
+                      {editorMode === 'photos' ? (
+                        <div className="relative h-full p-1">
+                          {photoSlides.map((slide) => {
+                            const slideStart = photoSlides
+                              .filter((item) => item.order < slide.order)
+                              .reduce((total, item) => total + item.duration, 0)
+
+                            return (
+                              <button
+                                key={slide.id}
+                                type="button"
+                                onClick={() => handleSeek(slideStart)}
+                                className="absolute top-1 h-6 min-w-10 overflow-hidden rounded-md border border-white/10 bg-zinc-800"
+                                style={{
+                                  left: `${timelineDuration > 0 ? (slideStart / timelineDuration) * 100 : 0}%`,
+                                  width: `${timelineDuration > 0 ? Math.max((slide.duration / timelineDuration) * 100, 8) : 8}%`,
+                                }}
+                              >
+                                <img src={slide.previewUrl} alt="" className="h-full w-full object-cover opacity-80" />
+                              </button>
+                            )
+                          })}
+                        </div>
+                      ) : (
+                        <div className="grid h-full grid-cols-12 gap-1 p-1">
+                          {timelineBlocks.map((item) => (
+                            <button
+                              key={item}
+                              type="button"
+                              onClick={() => handleSeek((duration / timelineBlocks.length) * item)}
+                              className="relative overflow-hidden rounded-md bg-zinc-800"
+                              aria-label={`Ir para bloco ${item + 1}`}
+                            >
+                              <video
+                                src={videoUrl}
+                                muted
+                                playsInline
+                                preload="metadata"
+                                className="h-full w-full object-cover opacity-60"
+                              />
+                              <span className="absolute inset-0 bg-gradient-to-b from-white/10 to-black/30" />
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
 
+                    {editorMode === 'video' && (
                     <div className="relative mt-1 h-8 rounded-lg border border-sky-300/15 bg-sky-500/10">
                       {overlays.map((overlay, index) => (
                         <button
@@ -1783,7 +2144,9 @@ export default function VideoEditor() {
                         </button>
                       ))}
                     </div>
+                    )}
 
+                    {editorMode === 'video' && (
                     <div className="relative mt-1 h-8 rounded-lg border border-amber-300/15 bg-amber-500/10">
                       {imageOverlays.length === 0 ? (
                         <label className="absolute left-2 top-1 inline-flex h-6 cursor-pointer items-center gap-1 rounded-md border border-amber-300/20 bg-amber-500/10 px-2 text-[10px] font-black text-amber-100">
@@ -1817,6 +2180,7 @@ export default function VideoEditor() {
                         ))
                       )}
                     </div>
+                    )}
 
                     <div className="relative mt-1 h-8 rounded-lg border border-emerald-300/15 bg-emerald-500/10">
                       {audioName ? (
@@ -1840,6 +2204,7 @@ export default function VideoEditor() {
                       )}
                     </div>
 
+                    {editorMode === 'video' && (
                     <div className="relative mt-1 h-8 rounded-lg border border-violet-300/15 bg-violet-500/10">
                       <button
                         type="button"
@@ -1850,13 +2215,14 @@ export default function VideoEditor() {
                         Voz
                       </button>
                     </div>
+                    )}
                   </div>
                 </div>
 
                 <input
                   type="range"
                   min="0"
-                  max={duration}
+                  max={timelineDuration}
                   step="0.05"
                   value={currentTime}
                   onChange={(event) => handleSeek(Number(event.target.value))}
@@ -1899,7 +2265,7 @@ export default function VideoEditor() {
           )}
         </div>
 
-        {videoUrl && (
+        {hasEditorMedia && (
         <aside
           className={`fixed inset-x-0 bottom-16 z-30 flex max-h-[56dvh] shrink-0 flex-col rounded-t-[1.25rem] border-t border-white/10 bg-black/95 shadow-2xl shadow-black/50 ring-1 ring-white/10 transition-all duration-300 lg:static lg:max-h-none lg:w-[22rem] lg:rounded-none lg:border-l lg:border-t-0 lg:bg-black/80 lg:shadow-none lg:ring-0 ${
             controlsVisible
@@ -1930,8 +2296,59 @@ export default function VideoEditor() {
               <div className="space-y-4">
                 <div>
                   <h3 className="text-base font-black">Adicionar</h3>
-                  <p className="mt-1 text-sm text-zinc-500">Troque ou selecione o video.</p>
+                  <p className="mt-1 text-sm text-zinc-500">{editorMode === 'photos' ? 'Fotos em video' : 'Midias do editor'}</p>
                 </div>
+
+                <label className="flex cursor-pointer items-center gap-3 rounded-2xl border border-dashed border-sky-300/30 bg-sky-500/10 px-4 py-4 transition hover:bg-sky-500/15">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-sky-500/20 text-sky-100">
+                    <ImageIcon className="h-5 w-5" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-black text-white">Criar com fotos</span>
+                    <span className="block truncate text-xs text-sky-100/60">PNG/JPG, ate {MAX_PHOTO_SLIDES} fotos</span>
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,.png,.jpg,.jpeg"
+                    multiple
+                    onChange={handlePhotoSlidesChange}
+                    className="sr-only"
+                  />
+                </label>
+
+                {photoMessage && (
+                  <div className="rounded-xl border border-red-300/20 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-100">
+                    {photoMessage}
+                  </div>
+                )}
+
+                {photoSlides.length > 0 && (
+                  <div className="rounded-xl border border-white/10 bg-zinc-950 p-3">
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <span className="text-xs font-black text-zinc-300">Fotos</span>
+                      <span className="text-xs font-semibold text-zinc-600">{formatEditorTime(photoSlidesDuration)}</span>
+                    </div>
+                    <div className="grid gap-2">
+                      {photoSlides.map((slide) => (
+                        <div key={slide.id} className="flex items-center gap-2 rounded-lg border border-white/10 bg-black/25 p-2">
+                          <img src={slide.previewUrl} alt="" className="h-10 w-8 rounded object-cover" />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-xs font-black text-white">{slide.file.name}</span>
+                            <span className="text-[11px] font-semibold text-zinc-500">{slide.duration}s</span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => removePhotoSlide(slide.id)}
+                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-red-100 hover:bg-red-500/15"
+                            aria-label="Remover foto"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <label className="flex cursor-pointer items-center gap-3 rounded-2xl border border-dashed border-blue-300/30 bg-blue-500/10 px-4 py-4 transition hover:bg-blue-500/15">
                   <span className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-500/20 text-blue-100">
@@ -1961,6 +2378,17 @@ export default function VideoEditor() {
                     type="file"
                     accept="image/*,.png,.jpg,.jpeg,.webp"
                     onChange={handleImageChange}
+                    className="sr-only"
+                  />
+                </label>
+                <label className="mt-3 inline-flex cursor-pointer items-center gap-2 rounded-full border border-white/10 bg-white/10 px-5 py-3 text-sm font-black text-white transition hover:bg-white/15">
+                  <ImageIcon className="h-4 w-4" />
+                  Criar com fotos
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,.png,.jpg,.jpeg"
+                    multiple
+                    onChange={handlePhotoSlidesChange}
                     className="sr-only"
                   />
                 </label>
