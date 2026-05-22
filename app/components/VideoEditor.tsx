@@ -73,6 +73,7 @@ type EditorMode = 'video' | 'photos'
 type EditorPanel = 'add' | 'text' | 'sticker' | 'image' | 'audio' | 'effects' | 'caption' | 'voice'
 type DraggingLayer = { type: 'text' | 'sticker' | 'image'; id: string } | null
 type PhotoTransition = 'none' | 'fade'
+type CompressionPreset = 'auto' | 'light' | 'high'
 
 type PhotoSlide = {
   id: string
@@ -83,17 +84,19 @@ type PhotoSlide = {
 }
 
 type CompressionProfile = {
-  label: '720p' | '480p'
+  label: string
   maxWidth: number
   maxHeight: number
   videoBitrate: string
   audioBitrate: string
+  description: string
 }
 
 type CompressionStats = {
   originalBytes: number
   optimizedBytes: number
-  profile: CompressionProfile['label']
+  profile: string
+  usedOptimizedFile: boolean
 }
 
 type RenderImageInput = {
@@ -124,20 +127,30 @@ const LAYER_ORDER = {
 }
 const STICKER_LIBRARY = ['❤️', '🔥', '⭐', '✨', '😂', '👏', '🎉', '💎', '🚀', '👑']
 
-const COMPRESSION_PROFILES: Record<CompressionProfile['label'], CompressionProfile> = {
-  '720p': {
-    label: '720p',
+const COMPRESSION_PROFILES: Record<CompressionPreset, CompressionProfile> = {
+  auto: {
+    label: 'Automatica',
     maxWidth: 1280,
-    maxHeight: 720,
+    maxHeight: 1280,
     videoBitrate: '1500k',
     audioBitrate: '128k',
+    description: 'Recomendada para o feed',
   },
-  '480p': {
-    label: '480p',
+  light: {
+    label: 'Leve',
     maxWidth: 854,
-    maxHeight: 480,
+    maxHeight: 854,
     videoBitrate: '850k',
     audioBitrate: '96k',
+    description: 'Menor e mais rapida',
+  },
+  high: {
+    label: 'Alta qualidade',
+    maxWidth: 1920,
+    maxHeight: 1920,
+    videoBitrate: '2800k',
+    audioBitrate: '160k',
+    description: 'Mais qualidade, pode demorar',
   },
 }
 
@@ -325,6 +338,7 @@ export default function VideoEditor() {
   const [isRendering, setIsRendering] = useState(false)
   const [renderProgress, setRenderProgress] = useState(0)
   const [renderMessage, setRenderMessage] = useState('')
+  const [compressionPreset, setCompressionPreset] = useState<CompressionPreset>('auto')
   const [compressionStats, setCompressionStats] = useState<CompressionStats | null>(null)
   const [imageMessage, setImageMessage] = useState('')
   const [photoSlides, setPhotoSlides] = useState<PhotoSlide[]>([])
@@ -2145,9 +2159,12 @@ export default function VideoEditor() {
   }
 
   function getCompressionProfile() {
+    if (compressionPreset === 'light') return COMPRESSION_PROFILES.light
+    if (compressionPreset === 'high') return COMPRESSION_PROFILES.high
+
     return shouldPreferCompactCompression()
-      ? COMPRESSION_PROFILES['480p']
-      : COMPRESSION_PROFILES['720p']
+      ? COMPRESSION_PROFILES.light
+      : COMPRESSION_PROFILES.auto
   }
 
   function buildCompressionArgs(inputName: string, outputName: string, profile: CompressionProfile) {
@@ -2198,10 +2215,12 @@ export default function VideoEditor() {
     const renderedData = await ffmpeg.readFile(renderedName)
     const renderedArray = readFfmpegBytes(renderedData)
     const profile = getCompressionProfile()
+    const startedAt = performance.now()
 
-    setRenderStage('optimizing', `Otimizando video em ${profile.label}...`)
+    setRenderStage('optimizing', `Otimizando video (${profile.label})...`)
     console.info('[VideoEditor] Compression start:', {
       sourceBytes: renderedArray.byteLength,
+      chosenPreset: compressionPreset,
       profile: profile.label,
       maxWidth: profile.maxWidth,
       maxHeight: profile.maxHeight,
@@ -2209,38 +2228,57 @@ export default function VideoEditor() {
       audioBitrate: profile.audioBitrate,
     })
 
-    await cleanupFfmpegFiles(ffmpeg, [optimizedName])
+    try {
+      await cleanupFfmpegFiles(ffmpeg, [optimizedName])
 
-    const compressionArgs = buildCompressionArgs(renderedName, optimizedName, profile)
-    console.info('[VideoEditor] FFmpeg compression command:', compressionArgs.join(' '))
-    const exitCode = await ffmpeg.exec(compressionArgs)
+      const compressionArgs = buildCompressionArgs(renderedName, optimizedName, profile)
+      console.info('[VideoEditor] FFmpeg compression command:', compressionArgs.join(' '))
+      const exitCode = await ffmpeg.exec(compressionArgs)
 
-    if (exitCode !== 0) {
-      throw new Error('FFmpeg retornou erro ao otimizar o video.')
+      if (exitCode !== 0) {
+        throw new Error('FFmpeg retornou erro ao otimizar o video.')
+      }
+
+      const optimizedData = await ffmpeg.readFile(optimizedName)
+      const optimizedArray = readFfmpegBytes(optimizedData)
+      const usedOptimizedFile = optimizedArray.byteLength < renderedArray.byteLength
+      const finalArray = usedOptimizedFile ? optimizedArray : renderedArray
+
+      setCompressionStats({
+        originalBytes: renderedArray.byteLength,
+        optimizedBytes: finalArray.byteLength,
+        profile: profile.label,
+        usedOptimizedFile,
+      })
+
+      console.info('[VideoEditor] Compression done:', {
+        sourceBytes: renderedArray.byteLength,
+        optimizedBytes: optimizedArray.byteLength,
+        uploadedBytes: finalArray.byteLength,
+        reductionPercent: getReductionPercent(renderedArray.byteLength, finalArray.byteLength),
+        usedOptimizedFile,
+        profile: profile.label,
+        elapsedMs: Math.round(performance.now() - startedAt),
+      })
+
+      return finalArray
+    } catch (error) {
+      console.warn('[VideoEditor] Compression failed, publishing standard render:', {
+        error,
+        sourceBytes: renderedArray.byteLength,
+        chosenPreset: compressionPreset,
+        profile: profile.label,
+      })
+      setRenderStage('optimizing_fallback', 'Nao foi possivel otimizar neste navegador. Tentando publicar com renderizacao padrao.')
+      setCompressionStats({
+        originalBytes: renderedArray.byteLength,
+        optimizedBytes: renderedArray.byteLength,
+        profile: `${profile.label} (padrao)`,
+        usedOptimizedFile: false,
+      })
+
+      return renderedArray
     }
-
-    const optimizedData = await ffmpeg.readFile(optimizedName)
-    const optimizedArray = readFfmpegBytes(optimizedData)
-    const finalArray = optimizedArray.byteLength < renderedArray.byteLength
-      ? optimizedArray
-      : renderedArray
-
-    setCompressionStats({
-      originalBytes: renderedArray.byteLength,
-      optimizedBytes: finalArray.byteLength,
-      profile: profile.label,
-    })
-
-    console.info('[VideoEditor] Compression done:', {
-      sourceBytes: renderedArray.byteLength,
-      optimizedBytes: optimizedArray.byteLength,
-      uploadedBytes: finalArray.byteLength,
-      reductionPercent: getReductionPercent(renderedArray.byteLength, finalArray.byteLength),
-      usedOptimizedFile: optimizedArray.byteLength < renderedArray.byteLength,
-      profile: profile.label,
-    })
-
-    return finalArray
   }
 
   async function cleanupFfmpegFiles(ffmpeg: FFmpeg, paths: string[]) {
@@ -2593,6 +2631,7 @@ export default function VideoEditor() {
         inputVideoName,
         inputAudioName,
         inputVoiceName,
+        compressionPreset,
         canvasSize,
         imageOverlays: renderImageInputs.map((renderImage) => ({
           type: renderImage.overlay.file.type,
@@ -2769,6 +2808,9 @@ export default function VideoEditor() {
   const hasEditorMedia = Boolean(videoUrl || photoSlides.length > 0)
   const canPublish = Boolean((editorMode === 'video' && videoFile) || (editorMode === 'photos' && photoSlides.length > 0))
   const controlsVisible = Boolean(hasEditorMedia && !isPlaying)
+  const sourceMediaBytes = editorMode === 'video'
+    ? videoFile?.size || 0
+    : photoSlides.reduce((total, slide) => total + slide.file.size, 0)
   const getTimelineLeft = (startTime: number) =>
     timelineDuration > 0 ? clamp((startTime / timelineDuration) * 100, 0, 96) : 0
   const getTimelineWidth = (startTime: number, endTime: number, minWidth = 8) =>
@@ -2836,6 +2878,11 @@ export default function VideoEditor() {
     { label: 'Voz', icon: <Mic className="h-3 w-3" />, active: activePanel === 'voice' },
     { label: 'Musica', icon: <Music className="h-3 w-3" />, active: activePanel === 'audio' && Boolean(audioName) },
     { label: 'Original', icon: <Video className="h-3 w-3" />, active: activePanel === 'audio' && !audioName },
+  ]
+  const compressionOptions: { id: CompressionPreset; label: string; description: string }[] = [
+    { id: 'auto', label: 'Automatica', description: 'Recomendada' },
+    { id: 'light', label: 'Leve', description: 'Menor arquivo' },
+    { id: 'high', label: 'Alta', description: 'Mais qualidade' },
   ]
 
   return (
@@ -3351,16 +3398,20 @@ export default function VideoEditor() {
               {compressionStats && (
                 <div className="mt-3 grid grid-cols-3 gap-2 text-center text-[11px] font-black text-sky-50">
                   <div className="rounded-lg border border-white/10 bg-black/25 px-2 py-2">
-                    <span className="block text-zinc-500">Original</span>
+                    <span className="block text-zinc-500">Render</span>
                     <span>{formatFileSize(compressionStats.originalBytes)}</span>
                   </div>
                   <div className="rounded-lg border border-white/10 bg-black/25 px-2 py-2">
-                    <span className="block text-zinc-500">Otimizado</span>
+                    <span className="block text-zinc-500">Envio</span>
                     <span>{formatFileSize(compressionStats.optimizedBytes)}</span>
                   </div>
                   <div className="rounded-lg border border-emerald-300/20 bg-emerald-500/10 px-2 py-2 text-emerald-100">
                     <span className="block text-emerald-100/60">{compressionStats.profile}</span>
-                    <span>-{getReductionPercent(compressionStats.originalBytes, compressionStats.optimizedBytes)}%</span>
+                    <span>
+                      {compressionStats.usedOptimizedFile
+                        ? `-${getReductionPercent(compressionStats.originalBytes, compressionStats.optimizedBytes)}%`
+                        : 'padrao'}
+                    </span>
                   </div>
                 </div>
               )}
@@ -4378,6 +4429,40 @@ export default function VideoEditor() {
           </div>
 
           <div className="border-t border-white/10 p-4">
+            <div className="mb-3 rounded-2xl border border-white/10 bg-zinc-950/80 p-3">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <span className="text-xs font-black text-zinc-200">Qualidade do video</span>
+                {sourceMediaBytes > 0 && (
+                  <span className="text-[11px] font-semibold text-zinc-500">
+                    Original {formatFileSize(sourceMediaBytes)}
+                  </span>
+                )}
+              </div>
+              <div className="grid grid-cols-3 gap-1 rounded-xl bg-black/35 p-1">
+                {compressionOptions.map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => setCompressionPreset(option.id)}
+                    disabled={isRendering}
+                    className={`rounded-lg px-2 py-2 text-center transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                      compressionPreset === option.id
+                        ? 'bg-sky-500 text-white'
+                        : 'text-zinc-500 hover:bg-white/10 hover:text-white'
+                    }`}
+                  >
+                    <span className="block truncate text-[11px] font-black">{option.label}</span>
+                    <span className="mt-0.5 block truncate text-[9px] font-semibold opacity-70">
+                      {option.description}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              <p className="mt-2 text-[11px] font-semibold leading-relaxed text-zinc-500">
+                A EntreUS reduz o peso do video para carregar melhor no feed. Videos maiores podem demorar mais para otimizar.
+              </p>
+            </div>
+
             <button
               type="button"
               onClick={renderFinalVideo}
