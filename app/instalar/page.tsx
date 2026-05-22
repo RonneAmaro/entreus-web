@@ -22,45 +22,32 @@ const iphoneSteps = [
 
 function AndroidChromeBadge() {
   return (
-    <div className="flex h-14 w-16 shrink-0 items-center justify-center -space-x-2 rounded-2xl bg-emerald-400/15 text-emerald-100 ring-1 ring-emerald-300/20">
-      <svg
-        viewBox="0 0 24 24"
-        aria-hidden="true"
-        className="h-8 w-8 drop-shadow"
-        fill="currentColor"
-      >
-        <path d="M7.4 8.6h9.2l1.1-1.9a.7.7 0 1 0-1.2-.7l-1.1 1.9H8.6L7.5 6a.7.7 0 1 0-1.2.7l1.1 1.9ZM6 10.1v6.1c0 .7.6 1.3 1.3 1.3h.8v2a.9.9 0 0 0 1.8 0v-2h4.2v2a.9.9 0 0 0 1.8 0v-2h.8c.7 0 1.3-.6 1.3-1.3v-6.1H6Zm3 3.1a.9.9 0 1 1 0-1.8.9.9 0 0 1 0 1.8Zm6 0a.9.9 0 1 1 0-1.8.9.9 0 0 1 0 1.8ZM3.8 10.3a.9.9 0 0 0-.9.9v4a.9.9 0 1 0 1.8 0v-4a.9.9 0 0 0-.9-.9Zm16.4 0a.9.9 0 0 0-.9.9v4a.9.9 0 1 0 1.8 0v-4a.9.9 0 0 0-.9-.9Z" />
-      </svg>
-      <svg viewBox="0 0 24 24" aria-hidden="true" className="h-8 w-8 drop-shadow">
-        <circle cx="12" cy="12" r="10" fill="#fbbc04" />
-        <path d="M12 2a10 10 0 0 1 8.7 5H12a5 5 0 0 0-4.3 2.5L5.2 5.2A10 10 0 0 1 12 2Z" fill="#ea4335" />
-        <path d="M20.7 7A10 10 0 0 1 12 22l4.3-7.5A5 5 0 0 0 17 12a5 5 0 0 0-.7-2.5L20.7 7Z" fill="#34a853" />
-        <path d="M12 22A10 10 0 0 1 5.2 5.2l4.3 7.5A5 5 0 0 0 12 17h4.3L12 22Z" fill="#4285f4" />
-        <circle cx="12" cy="12" r="4.2" fill="#fff" />
-        <circle cx="12" cy="12" r="2.8" fill="#4285f4" />
-      </svg>
+    <div className="grid w-24 shrink-0 gap-1.5 rounded-2xl bg-emerald-400/10 p-2 ring-1 ring-emerald-300/20">
+      <span className="inline-flex items-center justify-center gap-1 rounded-xl bg-emerald-400/15 px-2 py-1.5 text-[11px] font-black text-emerald-100">
+        <span className="h-2 w-2 rounded-full bg-emerald-300" />
+        Android
+      </span>
+      <span className="inline-flex items-center justify-center gap-1 rounded-xl bg-white/10 px-2 py-1.5 text-[11px] font-black text-sky-100">
+        <span className="h-3 w-3 rounded-full border-2 border-sky-300 bg-red-400 shadow-[inset_5px_0_0_#facc15]" />
+        Chrome
+      </span>
     </div>
   )
 }
 
 function AppleSafariBadge() {
   return (
-    <div className="flex h-14 w-16 shrink-0 items-center justify-center -space-x-2 rounded-2xl bg-slate-100/15 text-slate-50 ring-1 ring-white/20">
-      <svg
-        viewBox="0 0 24 24"
-        aria-hidden="true"
-        className="h-8 w-8 drop-shadow"
-        fill="currentColor"
-      >
-        <path d="M16.7 12.8c0-2 1.6-3 1.7-3.1-1-1.4-2.4-1.6-2.9-1.7-1.2-.1-2.3.7-2.9.7-.6 0-1.5-.7-2.5-.7-1.3 0-2.5.8-3.2 1.9-1.4 2.4-.4 6 1 8 .7 1 1.5 2.1 2.5 2.1 1 0 1.4-.7 2.6-.7s1.6.7 2.6.7c1.1 0 1.8-1 2.5-2 .8-1.1 1.1-2.2 1.1-2.3 0-.1-2.5-1-2.5-2.9ZM14.7 6.8c.6-.7 1-1.6.9-2.5-.9 0-1.9.6-2.5 1.3-.6.6-1 1.6-.9 2.4.9.1 1.9-.5 2.5-1.2Z" />
-      </svg>
-      <svg viewBox="0 0 24 24" aria-hidden="true" className="h-8 w-8 drop-shadow">
-        <circle cx="12" cy="12" r="10" fill="#0ea5e9" />
-        <circle cx="12" cy="12" r="7.5" fill="#e0f2fe" />
-        <path d="m13.3 10.7 3.4-3.4-1.9 4.4-4.1 1.6 2.6-2.6Z" fill="#ef4444" />
-        <path d="m10.7 13.3-3.4 3.4 1.9-4.4 4.1-1.6-2.6 2.6Z" fill="#0284c7" />
-        <circle cx="12" cy="12" r="1.2" fill="#0f172a" />
-      </svg>
+    <div className="grid w-24 shrink-0 gap-1.5 rounded-2xl bg-slate-100/10 p-2 ring-1 ring-white/20">
+      <span className="inline-flex items-center justify-center gap-1 rounded-xl bg-white/10 px-2 py-1.5 text-[11px] font-black text-slate-100">
+        <span className="h-3 w-2 rounded-[0.35rem] border border-slate-200" />
+        iPhone
+      </span>
+      <span className="inline-flex items-center justify-center gap-1 rounded-xl bg-sky-400/15 px-2 py-1.5 text-[11px] font-black text-sky-100">
+        <span className="relative h-3 w-3 rounded-full border border-sky-200">
+          <span className="absolute left-1/2 top-1/2 h-1.5 w-px origin-bottom -translate-x-1/2 -translate-y-full rotate-45 rounded-full bg-red-300" />
+        </span>
+        Safari
+      </span>
     </div>
   )
 }
@@ -131,10 +118,10 @@ export default function InstallPage() {
                   alt="Tela inicial da EntreUS"
                   fill
                   sizes="280px"
-                  className="object-cover"
+                  className="object-contain"
                   priority
                 />
-                <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-slate-950/35 via-transparent to-black/20" />
+                <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-slate-950/20 via-transparent to-black/15" />
               </div>
             </div>
           </div>

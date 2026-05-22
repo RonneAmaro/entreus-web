@@ -21,7 +21,6 @@ import {
   FlaskConical,
   Gift,
   Heart,
-  Home,
   ImageIcon,
   Landmark,
   MessageCircle,
@@ -415,28 +414,24 @@ function FeedInstallAppCard() {
   return (
     <Link
       href="/instalar"
-      className="group mb-4 flex items-center gap-3 rounded-[1.5rem] border border-blue-300/20 bg-slate-950 px-4 py-3 text-white shadow-sm shadow-blue-950/10 ring-1 ring-white/10 transition hover:-translate-y-0.5 hover:border-blue-300/40 hover:shadow-xl hover:shadow-blue-500/10 sm:px-5 sm:py-4"
+      className="group mb-4 flex items-center gap-3 rounded-[1.35rem] border border-blue-300/20 bg-slate-950 px-3.5 py-3 text-white shadow-sm shadow-blue-950/10 ring-1 ring-white/10 transition hover:border-blue-300/40 lg:hidden"
     >
-      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-blue-500/15 text-blue-200 ring-1 ring-blue-300/20">
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-blue-500/15 text-blue-200 ring-1 ring-blue-300/20">
         <Smartphone className="h-5 w-5" />
       </span>
 
       <span className="min-w-0 flex-1">
-        <span className="block text-sm font-black sm:text-base">
+        <span className="block text-sm font-black">
           Instale a EntreUS
         </span>
-        <span className="mt-0.5 block text-xs leading-5 text-blue-100/75 sm:text-sm">
-          Acesse como app direto da tela inicial do seu celular.
+        <span className="mt-0.5 block text-xs leading-5 text-blue-100/75">
+          Use como app direto da tela inicial.
         </span>
       </span>
 
-      <span className="hidden shrink-0 items-center gap-2 rounded-full bg-blue-500 px-4 py-2 text-sm font-black text-white shadow-sm shadow-blue-500/25 transition group-hover:bg-blue-400 sm:inline-flex">
+      <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-blue-500 px-3 py-2 text-xs font-black text-white shadow-sm shadow-blue-500/25 transition group-hover:bg-blue-400">
         <Download className="h-4 w-4" />
         Instalar app
-      </span>
-
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-500 text-white shadow-sm shadow-blue-500/25 transition group-hover:bg-blue-400 sm:hidden">
-        <Home className="h-4 w-4" />
       </span>
     </Link>
   )
