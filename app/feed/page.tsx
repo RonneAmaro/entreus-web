@@ -16,10 +16,12 @@ import Link from 'next/link'
 import {
   Award,
   CreditCard,
+  Download,
   Edit3,
   FlaskConical,
   Gift,
   Heart,
+  Home,
   ImageIcon,
   Landmark,
   MessageCircle,
@@ -30,6 +32,7 @@ import {
   Search,
   SmilePlus,
   Sparkles,
+  Smartphone,
   Trophy,
   Trash2,
 } from 'lucide-react'
@@ -378,6 +381,65 @@ function getDateLocale(language: string) {
   }
 
   return locales[language] || 'pt-BR'
+}
+
+function isStandaloneDisplay() {
+  if (typeof window === 'undefined') return false
+
+  const standaloneMedia = window.matchMedia('(display-mode: standalone)').matches
+  const navigatorStandalone =
+    'standalone' in window.navigator &&
+    (window.navigator as Navigator & { standalone?: boolean }).standalone === true
+
+  return standaloneMedia || navigatorStandalone
+}
+
+function FeedInstallAppCard() {
+  const [isStandalone, setIsStandalone] = useState(false)
+
+  useEffect(() => {
+    setIsStandalone(isStandaloneDisplay())
+
+    const mediaQuery = window.matchMedia('(display-mode: standalone)')
+    const handleChange = () => setIsStandalone(isStandaloneDisplay())
+
+    mediaQuery.addEventListener('change', handleChange)
+
+    return () => {
+      mediaQuery.removeEventListener('change', handleChange)
+    }
+  }, [])
+
+  if (isStandalone) return null
+
+  return (
+    <Link
+      href="/instalar"
+      className="group mb-4 flex items-center gap-3 rounded-[1.5rem] border border-blue-300/20 bg-slate-950 px-4 py-3 text-white shadow-sm shadow-blue-950/10 ring-1 ring-white/10 transition hover:-translate-y-0.5 hover:border-blue-300/40 hover:shadow-xl hover:shadow-blue-500/10 sm:px-5 sm:py-4"
+    >
+      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-blue-500/15 text-blue-200 ring-1 ring-blue-300/20">
+        <Smartphone className="h-5 w-5" />
+      </span>
+
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-black sm:text-base">
+          Instale a EntreUS
+        </span>
+        <span className="mt-0.5 block text-xs leading-5 text-blue-100/75 sm:text-sm">
+          Acesse como app direto da tela inicial do seu celular.
+        </span>
+      </span>
+
+      <span className="hidden shrink-0 items-center gap-2 rounded-full bg-blue-500 px-4 py-2 text-sm font-black text-white shadow-sm shadow-blue-500/25 transition group-hover:bg-blue-400 sm:inline-flex">
+        <Download className="h-4 w-4" />
+        Instalar app
+      </span>
+
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-500 text-white shadow-sm shadow-blue-500/25 transition group-hover:bg-blue-400 sm:hidden">
+        <Home className="h-4 w-4" />
+      </span>
+    </Link>
+  )
 }
 
 function getCategoryKey(value: string | null) {
@@ -2682,6 +2744,8 @@ function FeedContent() {
                 </p>
               )}
             </div>
+
+            <FeedInstallAppCard />
 
             <div className="space-y-3.5 sm:space-y-5">
               {visibleFeedItems.length === 0 && (

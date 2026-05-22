@@ -1,10 +1,13 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Providers } from './providers'
 import { LanguageProvider } from './components/LanguageProvider'
+import PWARegister from './components/PWARegister'
 import './globals.css'
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://entreus.vercel.app'),
+  manifest: '/manifest.webmanifest',
+  applicationName: 'EntreUS',
 
   title: {
     default: 'EntreUS — Só Entre Nós',
@@ -26,7 +29,13 @@ export const metadata: Metadata = {
       },
     ],
     shortcut: '/favicon-entreus.png',
-    apple: '/favicon-entreus.png',
+    apple: '/logo.png',
+  },
+
+  appleWebApp: {
+    capable: true,
+    title: 'EntreUS',
+    statusBarStyle: 'black-translucent',
   },
 
   openGraph: {
@@ -56,6 +65,11 @@ export const metadata: Metadata = {
   },
 }
 
+export const viewport: Viewport = {
+  themeColor: '#0ea5e9',
+  colorScheme: 'dark',
+}
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -65,6 +79,7 @@ export default function RootLayout({
     <html lang="pt-BR" suppressHydrationWarning>
       <body>
         <Providers>
+          <PWARegister />
           <LanguageProvider>{children}</LanguageProvider>
         </Providers>
       </body>
