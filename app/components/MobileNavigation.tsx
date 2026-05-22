@@ -12,6 +12,7 @@ import {
   Coins,
   Compass,
   Crown,
+  Download,
   Gift,
   Home,
   FlaskConical,
@@ -407,6 +408,15 @@ export default function MobileNavigation({
               </Link>
 
               <Link
+                href="/instalar"
+                onClick={closeMoreOptions}
+                className={drawerLinkClass('/instalar')}
+              >
+                <Download className={drawerIconClass('/instalar')} />
+                Instalar app
+              </Link>
+
+              <Link
                 href="/suggestions"
                 onClick={closeMoreOptions}
                 className={drawerLinkClass('/suggestions')}
@@ -719,6 +729,15 @@ export default function MobileNavigation({
               >
                 <HelpCircle className={drawerIconClass('/help')} />
                 Ajuda
+              </Link>
+
+              <Link
+                href="/instalar"
+                onClick={closeMenu}
+                className={drawerLinkClass('/instalar')}
+              >
+                <Download className={drawerIconClass('/instalar')} />
+                Instalar app
               </Link>
 
               <Link

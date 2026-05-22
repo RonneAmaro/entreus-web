@@ -7,6 +7,7 @@ import {
   Bug,
   Coins,
   Crown,
+  Download,
   FlaskConical,
   Gift,
   HelpCircle,
@@ -127,6 +128,16 @@ export default function MoreMenu({
         <Link href="/help" onClick={onClose} className={itemClass('/help')}>
           <HelpCircle className={iconClass('/help')} />
           <span>Ajuda</span>
+        </Link>
+
+        <Link href="/instalar" onClick={onClose} className={itemClass('/instalar')}>
+          <Download className={iconClass('/instalar')} />
+          <div className="min-w-0">
+            <p>Instalar app</p>
+            <p className="mt-0.5 truncate text-xs font-medium opacity-70">
+              EntreUS na tela inicial
+            </p>
+          </div>
         </Link>
 
         <Link href="/suggestions" onClick={onClose} className={itemClass('/suggestions')}>
