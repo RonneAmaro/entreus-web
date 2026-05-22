@@ -96,6 +96,12 @@ const PHOTO_VIDEO_WIDTH = 720
 const PHOTO_VIDEO_HEIGHT = 1280
 const SUPPORTED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp']
 const RENDERABLE_IMAGE_TYPES = ['image/png', 'image/jpeg']
+const LAYER_ORDER = {
+  video: 10,
+  image: 20,
+  sticker: 30,
+  text: 40,
+}
 
 const COMPRESSION_PROFILES: Record<CompressionProfile['label'], CompressionProfile> = {
   '720p': {
@@ -244,6 +250,7 @@ export default function VideoEditor() {
   const ffmpegRef = useRef<FFmpeg | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
+  const voicePlaybackRef = useRef<HTMLAudioElement | null>(null)
   const voiceRecorderRef = useRef<MediaRecorder | null>(null)
   const voiceStreamRef = useRef<MediaStream | null>(null)
   const voiceChunksRef = useRef<BlobPart[]>([])
@@ -369,6 +376,10 @@ export default function VideoEditor() {
   }, [musicVolume, audioUrl])
 
   useEffect(() => {
+    if (voicePlaybackRef.current) voicePlaybackRef.current.volume = voiceVolume
+  }, [voiceVolume, voiceUrl])
+
+  useEffect(() => {
     if (!voiceBlob || !audioFile || musicVolumeTouched) return
 
     setMusicVolume(0.45)
@@ -409,26 +420,10 @@ export default function VideoEditor() {
 
     function syncTime() {
       const video = videoRef.current
-      const audio = audioRef.current
 
       if (video) {
         setCurrentTime(video.currentTime)
-
-        if (audio && audioUrl) {
-          if (video.currentTime < musicStartTime) {
-            if (!audio.paused) audio.pause()
-          } else {
-            const expectedAudioTime = getSyncedAudioTime(video.currentTime)
-            if (Math.abs(audio.currentTime - expectedAudioTime) > 0.35) {
-              audio.currentTime = expectedAudioTime
-            }
-            if (audio.paused) {
-              audio.play().catch(() => {
-                // Browser autoplay policies may block audio until the next user gesture.
-              })
-            }
-          }
-        }
+        syncPreviewAudioTracks(video.currentTime, true)
       }
 
       animationFrame = window.requestAnimationFrame(syncTime)
@@ -439,7 +434,16 @@ export default function VideoEditor() {
     return () => {
       window.cancelAnimationFrame(animationFrame)
     }
-  }, [audioUrl, isPlaying, musicStartTime])
+  }, [
+    audioUrl,
+    isPlaying,
+    musicStartTime,
+    musicVolume,
+    voiceDuration,
+    voiceStartTime,
+    voiceUrl,
+    voiceVolume,
+  ])
 
   function handleVideoChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
@@ -461,7 +465,7 @@ export default function VideoEditor() {
     setCompressionStats(null)
     setIsPlaying(false)
     setCurrentTime(0)
-    syncBackgroundMusic(0)
+    syncPreviewAudioTracks(0, false)
   }
 
   function handlePhotoSlidesChange(event: ChangeEvent<HTMLInputElement>) {
@@ -533,6 +537,7 @@ export default function VideoEditor() {
     const file = event.target.files?.[0]
     if (!file) return
 
+    audioRef.current?.pause()
     if (audioUrl) URL.revokeObjectURL(audioUrl)
 
     setAudioFile(file)
@@ -628,15 +633,19 @@ export default function VideoEditor() {
     setMusicStartTime(0)
     setAudioMessage('')
     setMusicVolumeTouched(false)
-    setAudioDuration(0)
-    setMusicStartTime(0)
-    setAudioMessage('')
   }
 
   function playMusicPreview() {
-    const audio = audioRef.current
-    if (!audio || !audioUrl) return
+    if (!audioUrl) return
 
+    if (videoRef.current) {
+      setAudioMessage('Tocando musica junto com o video.')
+      void startPreviewPlayback()
+      return
+    }
+
+    const audio = audioRef.current
+    if (!audio) return
     audio.currentTime = 0
     audio.volume = musicVolume
     audio.play().catch((error) => {
@@ -647,6 +656,8 @@ export default function VideoEditor() {
 
   async function startVoiceRecording() {
     setVoiceMessage('')
+    voicePlaybackRef.current?.pause()
+    voicePreviewRef.current?.pause()
 
     if (typeof window === 'undefined' || typeof MediaRecorder === 'undefined') {
       setVoiceMessage('Este navegador nao suporta gravacao de voz.')
@@ -722,6 +733,14 @@ export default function VideoEditor() {
   }
 
   function playVoicePreview() {
+    if (!voiceUrl) return
+
+    if (videoRef.current) {
+      setVoiceMessage('Tocando voz junto com o video.')
+      void startPreviewPlayback()
+      return
+    }
+
     if (!voicePreviewRef.current) return
     voicePreviewRef.current.currentTime = 0
     voicePreviewRef.current.play().catch((error) => {
@@ -731,6 +750,10 @@ export default function VideoEditor() {
   }
 
   function removeVoiceRecording() {
+    voicePlaybackRef.current?.pause()
+    voicePreviewRef.current?.pause()
+    if (voicePlaybackRef.current) voicePlaybackRef.current.currentTime = 0
+    if (voicePreviewRef.current) voicePreviewRef.current.currentTime = 0
     if (voiceUrl) URL.revokeObjectURL(voiceUrl)
     setVoiceBlob(null)
     setVoiceUrl('')
@@ -801,7 +824,7 @@ export default function VideoEditor() {
     const nextTime = clamp(value, 0, duration)
 
     if (video) video.currentTime = nextTime
-    syncBackgroundMusic(nextTime)
+    syncPreviewAudioTracks(nextTime, isPlaying)
     setCurrentTime(nextTime)
   }
 
@@ -823,6 +846,82 @@ export default function VideoEditor() {
     if (!audio) return
 
     audio.currentTime = getSyncedAudioTime(targetTime)
+  }
+
+  function getSyncedVoiceTime(targetTime: number) {
+    if (!voiceUrl || targetTime < voiceStartTime) return 0
+    return clamp(targetTime - voiceStartTime, 0, voiceDuration || 0)
+  }
+
+  function syncVoiceTrack(targetTime: number) {
+    const voice = voicePlaybackRef.current
+    if (!voice) return
+
+    voice.currentTime = getSyncedVoiceTime(targetTime)
+  }
+
+  function syncPreviewAudioTracks(targetTime: number, shouldPlay: boolean) {
+    const audio = audioRef.current
+    const voice = voicePlaybackRef.current
+
+    if (audio && audioUrl) {
+      if (targetTime < musicStartTime) {
+        if (!audio.paused) audio.pause()
+        audio.currentTime = 0
+      } else {
+        const expectedAudioTime = getSyncedAudioTime(targetTime)
+        if (Math.abs(audio.currentTime - expectedAudioTime) > 0.35) {
+          audio.currentTime = expectedAudioTime
+        }
+        audio.volume = musicVolume
+        audio.loop = true
+
+        if (shouldPlay && audio.paused) {
+          audio.play().catch(() => {
+            // Browser autoplay policies may block audio until the next user gesture.
+          })
+        }
+      }
+    }
+
+    if (voice && voiceUrl) {
+      const voiceEndTime = voiceStartTime + voiceDuration
+      const shouldVoicePlay =
+        shouldPlay &&
+        targetTime >= voiceStartTime &&
+        (!voiceDuration || targetTime <= voiceEndTime)
+
+      if (!shouldVoicePlay) {
+        if (!voice.paused) voice.pause()
+        voice.currentTime = getSyncedVoiceTime(targetTime)
+        return
+      }
+
+      const expectedVoiceTime = getSyncedVoiceTime(targetTime)
+      if (Math.abs(voice.currentTime - expectedVoiceTime) > 0.35) {
+        voice.currentTime = expectedVoiceTime
+      }
+      voice.volume = voiceVolume
+
+      if (voice.paused) {
+        voice.play().catch(() => {
+          // Browser autoplay policies may block audio until the next user gesture.
+        })
+      }
+    }
+  }
+
+  async function startPreviewPlayback() {
+    const video = videoRef.current
+    if (!video) {
+      await playBackgroundMusic()
+      return
+    }
+
+    syncPreviewAudioTracks(video.currentTime, true)
+    await video.play()
+    syncPreviewAudioTracks(video.currentTime, true)
+    setIsPlaying(true)
   }
 
   async function playBackgroundMusic() {
@@ -849,6 +948,7 @@ export default function VideoEditor() {
 
   function pauseBackgroundMusic() {
     audioRef.current?.pause()
+    voicePlaybackRef.current?.pause()
   }
 
   function drawCanvas() {
@@ -1099,9 +1199,7 @@ export default function VideoEditor() {
     if (!video) return
 
     if (video.paused) {
-      await video.play()
-      await playBackgroundMusic()
-      setIsPlaying(true)
+      await startPreviewPlayback()
     } else {
       video.pause()
       pauseBackgroundMusic()
@@ -1111,7 +1209,7 @@ export default function VideoEditor() {
 
   function handleVideoPlay() {
     setIsPlaying(true)
-    void playBackgroundMusic()
+    syncPreviewAudioTracks(videoRef.current?.currentTime || 0, true)
   }
 
   function handleVideoPause() {
@@ -1122,7 +1220,7 @@ export default function VideoEditor() {
   function handleVideoEnded() {
     setIsPlaying(false)
     pauseBackgroundMusic()
-    syncBackgroundMusic(0)
+    syncPreviewAudioTracks(0, false)
   }
 
   function updateActiveOverlayTiming(key: 'startTime' | 'endTime', value: number) {
@@ -2336,10 +2434,18 @@ export default function VideoEditor() {
   const hasEditorMedia = Boolean(videoUrl || photoSlides.length > 0)
   const canPublish = Boolean((editorMode === 'video' && videoFile) || (editorMode === 'photos' && photoSlides.length > 0))
   const controlsVisible = Boolean(hasEditorMedia && !isPlaying)
-  const audioTimelineLeft = timelineDuration > 0 ? Math.min((musicStartTime / timelineDuration) * 100, 92) : 0
-  const audioTimelineWidth = timelineDuration > 0
-    ? Math.max(((timelineDuration - musicStartTime) / timelineDuration) * 100, 10)
-    : 18
+  const getTimelineLeft = (startTime: number) =>
+    timelineDuration > 0 ? clamp((startTime / timelineDuration) * 100, 0, 96) : 0
+  const getTimelineWidth = (startTime: number, endTime: number, minWidth = 8) =>
+    timelineDuration > 0
+      ? clamp(((endTime - startTime) / timelineDuration) * 100, minWidth, 100 - getTimelineLeft(startTime))
+      : minWidth
+  const musicTimelineEnd = audioDuration > 0
+    ? Math.min(musicStartTime + audioDuration, timelineDuration)
+    : timelineDuration
+  const voiceTimelineEnd = voiceDuration > 0
+    ? Math.min(voiceStartTime + voiceDuration, timelineDuration)
+    : voiceStartTime
   const waveformBars = Array.from({ length: 18 }, (_, index) => 35 + ((index * 17) % 55))
   const activeTimelineWidth = activeOverlay && duration > 0
     ? ((activeOverlay.endTime - activeOverlay.startTime) / duration) * 100
@@ -2413,7 +2519,8 @@ export default function VideoEditor() {
                   onPlay={handleVideoPlay}
                   onPause={handleVideoPause}
                   onEnded={handleVideoEnded}
-                  className={`h-full w-full object-contain transition duration-300 ${selectedFilter.className}`}
+                  className={`relative h-full w-full object-contain transition duration-300 ${selectedFilter.className}`}
+                  style={{ zIndex: LAYER_ORDER.video }}
                 />
                 <audio
                   ref={audioRef}
@@ -2428,6 +2535,16 @@ export default function VideoEditor() {
                   }}
                   className="hidden"
                 />
+                <audio
+                  ref={voicePlaybackRef}
+                  src={voiceUrl}
+                  preload="metadata"
+                  onLoadedMetadata={() => {
+                    syncVoiceTrack(currentTime)
+                    if (isPlaying) syncPreviewAudioTracks(currentTime, true)
+                  }}
+                  className="hidden"
+                />
                 <canvas
                   ref={canvasRef}
                   width={canvasSize.width}
@@ -2437,6 +2554,7 @@ export default function VideoEditor() {
                   onPointerUp={handlePointerUp}
                   onPointerCancel={handlePointerUp}
                   className="absolute inset-0 h-full w-full touch-none cursor-move"
+                  style={{ zIndex: LAYER_ORDER.text }}
                 />
                 {!isPlaying && (
                   <button
@@ -2504,7 +2622,7 @@ export default function VideoEditor() {
                 <div className="pointer-events-none absolute left-1/2 top-1 z-20 h-3 w-3 -translate-x-1/2 rounded-full bg-sky-200" />
 
                 <div className="flex gap-2 overflow-x-auto scroll-smooth pb-1">
-                  <div className="sticky left-0 z-10 grid w-16 shrink-0 gap-1 bg-zinc-950/95 pr-1 text-[10px] font-black text-zinc-500">
+                  <div className="sticky left-0 z-10 grid w-20 shrink-0 gap-1 bg-zinc-950/95 pr-1 text-[10px] font-black text-zinc-500">
                     <button
                       type="button"
                       onClick={() => setActivePanel('add')}
@@ -2513,14 +2631,14 @@ export default function VideoEditor() {
                     >
                       <Plus className="h-4 w-4" />
                     </button>
-                    {(editorMode === 'photos' ? ['Fotos', 'Audio', 'Voz'] : ['Video', 'Texto', 'Imagem', 'Audio', 'Voz']).map((track) => (
+                    {['Texto', 'Figurinha', 'Imagem', 'Video', 'Voz', 'Musica', 'Original'].map((track) => (
                       <span key={track} className="flex h-8 items-center justify-end pr-1">
                         {track}
                       </span>
                     ))}
                   </div>
 
-                  <div className="min-w-[42rem] flex-1">
+                  <div className="min-w-[48rem] flex-1">
                     <div className="mb-1 grid h-7 grid-cols-12 gap-1 px-1 text-[10px] font-black text-zinc-600">
                       {timelineBlocks.map((item) => (
                         <button
@@ -2534,7 +2652,85 @@ export default function VideoEditor() {
                       ))}
                     </div>
 
-                    <div className="relative h-8 overflow-hidden rounded-lg border border-white/10 bg-zinc-900">
+                    <div className="relative mt-1 h-8 rounded-lg border border-sky-300/15 bg-sky-500/10">
+                      {editorMode === 'video' && overlays.length > 0 ? (
+                        overlays.map((overlay, index) => (
+                          <button
+                            key={overlay.id}
+                            type="button"
+                            onClick={() => selectOverlay(overlay)}
+                            className={`absolute top-1 h-6 min-w-8 rounded-md px-2 text-left text-[10px] font-black transition ${
+                              overlay.id === activeOverlayId
+                                ? 'bg-white text-black ring-2 ring-sky-300'
+                                : 'bg-sky-300/75 text-sky-950 hover:bg-sky-200'
+                            }`}
+                            style={{
+                              left: `${getTimelineLeft(overlay.startTime)}%`,
+                              width: `${getTimelineWidth(overlay.startTime, overlay.endTime, 7)}%`,
+                            }}
+                            aria-label={`Selecionar ${getOverlayLabel(overlay, index)}`}
+                          >
+                            <span className="block truncate">{getOverlayLabel(overlay, index)}</span>
+                          </button>
+                        ))
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setActivePanel('text')}
+                          className="absolute left-2 top-1 inline-flex h-6 items-center gap-1 rounded-md border border-sky-300/20 bg-sky-500/10 px-2 text-[10px] font-black text-sky-100"
+                        >
+                          <Plus className="h-3 w-3" />
+                          Texto
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="relative mt-1 h-8 rounded-lg border border-fuchsia-300/15 bg-fuchsia-500/10">
+                      <button
+                        type="button"
+                        onClick={() => setActivePanel('add')}
+                        className="absolute left-2 top-1 inline-flex h-6 items-center gap-1 rounded-md border border-fuchsia-300/20 bg-fuchsia-500/10 px-2 text-[10px] font-black text-fuchsia-100"
+                      >
+                        <Plus className="h-3 w-3" />
+                        Adicionar figurinha
+                      </button>
+                    </div>
+
+                    <div className="relative mt-1 h-8 rounded-lg border border-amber-300/15 bg-amber-500/10">
+                      {editorMode === 'video' && imageOverlays.length > 0 ? (
+                        imageOverlays.map((overlay) => (
+                          <button
+                            key={overlay.id}
+                            type="button"
+                            onClick={() => selectImageOverlay(overlay)}
+                            className={`absolute top-1 h-6 min-w-8 rounded-md px-2 text-left text-[10px] font-black transition ${
+                              overlay.id === activeImageId
+                                ? 'bg-white text-black ring-2 ring-amber-300'
+                                : 'bg-amber-300/80 text-amber-950 hover:bg-amber-200'
+                            }`}
+                            style={{
+                              left: `${getTimelineLeft(overlay.startTime)}%`,
+                              width: `${getTimelineWidth(overlay.startTime, overlay.endTime, 8)}%`,
+                            }}
+                          >
+                            <span className="block truncate">{overlay.name}</span>
+                          </button>
+                        ))
+                      ) : (
+                        <label className="absolute left-2 top-1 inline-flex h-6 cursor-pointer items-center gap-1 rounded-md border border-amber-300/20 bg-amber-500/10 px-2 text-[10px] font-black text-amber-100">
+                          <Plus className="h-3 w-3" />
+                          Adicionar imagem
+                          <input
+                            type="file"
+                            accept="image/*,.png,.jpg,.jpeg,.webp"
+                            onChange={handleImageChange}
+                            className="sr-only"
+                          />
+                        </label>
+                      )}
+                    </div>
+
+                    <div className="relative mt-1 h-8 overflow-hidden rounded-lg border border-white/10 bg-zinc-900">
                       {editorMode === 'photos' ? (
                         <div className="relative h-full p-1">
                           {orderedPhotoSlides.map((slide, index) => {
@@ -2547,45 +2743,46 @@ export default function VideoEditor() {
                                 key={slide.id}
                                 className="absolute top-1 h-6 min-w-10"
                                 style={{
-                                  left: `${timelineDuration > 0 ? (slideStart / timelineDuration) * 100 : 0}%`,
-                                  width: `${timelineDuration > 0 ? Math.max((slide.duration / timelineDuration) * 100, 8) : 8}%`,
+                                  left: `${getTimelineLeft(slideStart)}%`,
+                                  width: `${getTimelineWidth(slideStart, slideStart + slide.duration, 8)}%`,
                                 }}
                               >
-                              <button
-                                type="button"
-                                onClick={() => selectPhotoSlide(slide.id)}
-                                className={`relative h-full w-full overflow-hidden rounded-md border text-left ${
-                                  slide.id === activePhotoId
-                                    ? 'border-white bg-sky-300 text-black ring-2 ring-sky-300'
-                                    : 'border-white/10 bg-zinc-800 text-white'
-                                }`}
-                              >
-                                <img src={slide.previewUrl} alt="" className="h-full w-full object-cover opacity-80" />
-                                <span className="absolute left-1 top-0.5 rounded bg-black/60 px-1 text-[9px] font-black text-white">
-                                  {index + 1}
-                                </span>
-                                <span className="absolute bottom-0.5 right-1 rounded bg-black/60 px-1 text-[9px] font-black text-white">
-                                  {slide.duration}s
-                                </span>
-                              </button>
-                              {index < orderedPhotoSlides.length - 1 && (
-                                <span className="absolute -right-1 top-1/2 z-10 h-3 w-3 -translate-y-1/2 rounded-full border border-white/20 bg-sky-400 text-[8px] font-black text-black">
-                                  {photoTransition === 'fade' ? 'F' : ''}
-                                </span>
-                              )}
+                                <button
+                                  type="button"
+                                  onClick={() => selectPhotoSlide(slide.id)}
+                                  className={`relative h-full w-full overflow-hidden rounded-md border text-left ${
+                                    slide.id === activePhotoId
+                                      ? 'border-white bg-sky-300 text-black ring-2 ring-sky-300'
+                                      : 'border-white/10 bg-zinc-800 text-white'
+                                  }`}
+                                >
+                                  <img src={slide.previewUrl} alt="" className="h-full w-full object-cover opacity-80" />
+                                  <span className="absolute left-1 top-0.5 rounded bg-black/60 px-1 text-[9px] font-black text-white">
+                                    {index + 1}
+                                  </span>
+                                  <span className="absolute bottom-0.5 right-1 rounded bg-black/60 px-1 text-[9px] font-black text-white">
+                                    {slide.duration}s
+                                  </span>
+                                </button>
                               </div>
                             )
                           })}
                         </div>
                       ) : (
-                        <div className="grid h-full grid-cols-12 gap-1 p-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveOverlayId(null)
+                            setActiveImageId(null)
+                            setActivePanel('effects')
+                          }}
+                          className="grid h-full w-full grid-cols-12 gap-1 p-1 text-left"
+                        >
                           {timelineBlocks.map((item) => (
-                            <button
+                            <span
                               key={item}
-                              type="button"
-                              onClick={() => handleSeek((duration / timelineBlocks.length) * item)}
                               className="relative overflow-hidden rounded-md bg-zinc-800"
-                              aria-label={`Ir para bloco ${item + 1}`}
+                              aria-label={`Trecho do video ${item + 1}`}
                             >
                               <video
                                 src={videoUrl}
@@ -2595,71 +2792,46 @@ export default function VideoEditor() {
                                 className="h-full w-full object-cover opacity-60"
                               />
                               <span className="absolute inset-0 bg-gradient-to-b from-white/10 to-black/30" />
-                            </button>
+                            </span>
                           ))}
-                        </div>
-                      )}
-                    </div>
-
-                    {editorMode === 'video' && (
-                    <div className="relative mt-1 h-8 rounded-lg border border-sky-300/15 bg-sky-500/10">
-                      {overlays.map((overlay, index) => (
-                        <button
-                          key={overlay.id}
-                          type="button"
-                          onClick={() => selectOverlay(overlay)}
-                          className={`absolute top-1 h-6 min-w-8 rounded-md px-2 text-left text-[10px] font-black transition ${
-                            overlay.id === activeOverlayId
-                              ? 'bg-white text-black ring-2 ring-sky-300'
-                              : 'bg-sky-300/75 text-sky-950 hover:bg-sky-200'
-                          }`}
-                          style={{
-                            left: `${duration > 0 ? (overlay.startTime / duration) * 100 : 0}%`,
-                            width: `${duration > 0 ? Math.max(((overlay.endTime - overlay.startTime) / duration) * 100, 7) : 7}%`,
-                          }}
-                          aria-label={`Selecionar ${getOverlayLabel(overlay, index)}`}
-                        >
-                          <span className="block truncate">{getOverlayLabel(overlay, index)}</span>
                         </button>
-                      ))}
-                    </div>
-                    )}
-
-                    {editorMode === 'video' && (
-                    <div className="relative mt-1 h-8 rounded-lg border border-amber-300/15 bg-amber-500/10">
-                      {imageOverlays.length === 0 ? (
-                        <label className="absolute left-2 top-1 inline-flex h-6 cursor-pointer items-center gap-1 rounded-md border border-amber-300/20 bg-amber-500/10 px-2 text-[10px] font-black text-amber-100">
-                          <Plus className="h-3 w-3" />
-                          Imagem
-                          <input
-                            type="file"
-                            accept="image/*,.png,.jpg,.jpeg,.webp"
-                            onChange={handleImageChange}
-                            className="sr-only"
-                          />
-                        </label>
-                      ) : (
-                        imageOverlays.map((overlay) => (
-                          <button
-                            key={overlay.id}
-                            type="button"
-                            onClick={() => selectImageOverlay(overlay)}
-                            className={`absolute top-1 h-6 min-w-8 rounded-md px-2 text-left text-[10px] font-black transition ${
-                              overlay.id === activeImageId
-                                ? 'bg-white text-black ring-2 ring-amber-300'
-                                : 'bg-amber-300/80 text-amber-950 hover:bg-amber-200'
-                            }`}
-                            style={{
-                              left: `${duration > 0 ? (overlay.startTime / duration) * 100 : 0}%`,
-                              width: `${duration > 0 ? Math.max(((overlay.endTime - overlay.startTime) / duration) * 100, 8) : 8}%`,
-                            }}
-                          >
-                            <span className="block truncate">{overlay.name}</span>
-                          </button>
-                        ))
                       )}
                     </div>
-                    )}
+
+                    <div className="relative mt-1 h-8 rounded-lg border border-violet-300/15 bg-violet-500/10">
+                      {voiceUrl ? (
+                        <button
+                          type="button"
+                          onClick={() => setActivePanel('voice')}
+                          className="absolute top-1 flex h-6 min-w-12 items-center gap-2 overflow-hidden rounded-md bg-violet-300/85 px-2 text-left text-[10px] font-black text-violet-950 ring-1 ring-violet-200"
+                          style={{
+                            left: `${getTimelineLeft(voiceStartTime)}%`,
+                            width: `${getTimelineWidth(voiceStartTime, voiceTimelineEnd, 10)}%`,
+                          }}
+                        >
+                          <Mic className="h-3 w-3 shrink-0" />
+                          <span className="truncate">Voz {formatEditorTime(voiceDuration)}</span>
+                          <span className="pointer-events-none absolute inset-x-7 bottom-0.5 flex h-2 items-end gap-0.5 opacity-35">
+                            {waveformBars.slice(0, 12).map((height, index) => (
+                              <span
+                                key={index}
+                                className="w-0.5 rounded-full bg-violet-950"
+                                style={{ height: `${height}%` }}
+                              />
+                            ))}
+                          </span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setActivePanel('voice')}
+                          className="absolute left-2 top-1 inline-flex h-6 items-center gap-1 rounded-md border border-violet-300/20 bg-violet-500/10 px-2 text-[10px] font-black text-violet-100"
+                        >
+                          <Mic className="h-3 w-3" />
+                          Gravar voz
+                        </button>
+                      )}
+                    </div>
 
                     <div className="relative mt-1 h-8 rounded-lg border border-emerald-300/15 bg-emerald-500/10">
                       {audioName ? (
@@ -2668,8 +2840,8 @@ export default function VideoEditor() {
                           onClick={() => setActivePanel('audio')}
                           className="absolute top-1 flex h-6 min-w-14 items-center gap-2 overflow-hidden rounded-md bg-emerald-300/85 px-2 text-left text-[10px] font-black text-emerald-950 ring-1 ring-emerald-100"
                           style={{
-                            left: `${audioTimelineLeft}%`,
-                            width: `${audioTimelineWidth}%`,
+                            left: `${getTimelineLeft(musicStartTime)}%`,
+                            width: `${getTimelineWidth(musicStartTime, musicTimelineEnd, 10)}%`,
                           }}
                         >
                           <Music className="h-3 w-3 shrink-0" />
@@ -2694,44 +2866,21 @@ export default function VideoEditor() {
                           className="absolute left-2 top-1 inline-flex h-6 items-center gap-1 rounded-md border border-emerald-300/20 bg-emerald-500/10 px-2 text-[10px] font-black text-emerald-100"
                         >
                           <Plus className="h-3 w-3" />
-                          Audio
+                          Adicionar musica
                         </button>
                       )}
                     </div>
 
-                    <div className="relative mt-1 h-8 rounded-lg border border-violet-300/15 bg-violet-500/10">
-                      {voiceUrl ? (
-                        <button
-                          type="button"
-                          onClick={() => setActivePanel('voice')}
-                          className="absolute top-1 flex h-6 min-w-12 items-center gap-2 rounded-md bg-violet-300/85 px-2 text-left text-[10px] font-black text-violet-950 ring-1 ring-violet-200"
-                          style={{
-                            left: `${timelineDuration > 0 ? Math.min((voiceStartTime / timelineDuration) * 100, 92) : 0}%`,
-                            width: `${timelineDuration > 0 ? Math.max((voiceDuration / timelineDuration) * 100, 10) : 18}%`,
-                          }}
-                        >
-                          <Mic className="h-3 w-3 shrink-0" />
-                          <span className="truncate">{formatEditorTime(voiceDuration)}</span>
-                          <span className="pointer-events-none absolute inset-x-7 bottom-0.5 flex h-2 items-end gap-0.5 opacity-35">
-                            {waveformBars.slice(0, 12).map((height, index) => (
-                              <span
-                                key={index}
-                                className="w-0.5 rounded-full bg-violet-950"
-                                style={{ height: `${height}%` }}
-                              />
-                            ))}
-                          </span>
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => setActivePanel('voice')}
-                          className="absolute left-2 top-1 inline-flex h-6 items-center gap-1 rounded-md border border-violet-300/20 bg-violet-500/10 px-2 text-[10px] font-black text-violet-100"
-                        >
-                          <Mic className="h-3 w-3" />
-                          Voz
-                        </button>
-                      )}
+                    <div className="relative mt-1 h-8 rounded-lg border border-blue-300/15 bg-blue-500/10">
+                      <button
+                        type="button"
+                        onClick={() => setActivePanel('audio')}
+                        className="absolute left-0 top-1 flex h-6 w-full items-center gap-2 overflow-hidden rounded-md bg-blue-300/80 px-2 text-left text-[10px] font-black text-blue-950"
+                      >
+                        <Video className="h-3 w-3 shrink-0" />
+                        <span className="truncate">Audio original do video</span>
+                        <span className="ml-auto shrink-0">{Math.round(videoVolume * 100)}%</span>
+                      </button>
                     </div>
                   </div>
                 </div>
