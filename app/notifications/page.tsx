@@ -26,6 +26,7 @@ type Notification = {
   post_id: string | null
   comment_id: string | null
   user_gift_id: string | null
+  itacash_purchase_request_id: string | null
   amount: number | null
   read: boolean | null
   created_at: string
@@ -69,11 +70,19 @@ type GiftSummaryRow = {
     | null
 }
 
+type ItaCashPurchaseRequestSummary = {
+  id: string
+  amount_itacash: number
+  status: string
+  rejection_reason: string | null
+}
+
 type NotificationView = Notification & {
   actor: ProfileSummary | null
   post: PostSummary | null
   comment: CommentSummary | null
   gift: GiftSummary | null
+  itacashPurchaseRequest: ItaCashPurchaseRequestSummary | null
 }
 
 function getInitial(text: string) {
@@ -116,13 +125,19 @@ function getNotificationActionTextView(notification: NotificationView) {
     return `Voce recebeu ItaCash promocional.`
   }
   if (notification.type === 'itacash_purchase_approved') {
-    const amount = notification.amount
+    const amount = notification.amount || notification.itacashPurchaseRequest?.amount_itacash
     return amount
       ? `Sua compra de ${amount} ItaCash foi aprovada e o saldo ja esta na sua carteira.`
       : 'Sua compra de ItaCash foi aprovada e o saldo ja esta na sua carteira.'
   }
   if (notification.type === 'itacash_purchase_rejected') {
-    return 'Sua compra de ItaCash foi recusada.'
+    const amount = notification.amount || notification.itacashPurchaseRequest?.amount_itacash
+    const reason = notification.itacashPurchaseRequest?.rejection_reason?.trim()
+    const baseMessage = amount
+      ? `Sua compra de ${amount} ItaCash foi recusada.`
+      : 'Sua compra de ItaCash foi recusada.'
+
+    return reason ? `${baseMessage} Motivo: ${reason}` : baseMessage
   }
 
   return getNotificationActionText(notification.type)
@@ -242,12 +257,28 @@ export default function NotificationsPage() {
   async function loadNotifications(currentUserId: string = userId) {
     if (!currentUserId) return
 
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('notifications')
-      .select('id, user_id, actor_id, type, post_id, comment_id, user_gift_id, amount, read, created_at')
+      .select('id, user_id, actor_id, type, post_id, comment_id, user_gift_id, itacash_purchase_request_id, amount, read, created_at')
       .eq('user_id', currentUserId)
       .order('created_at', { ascending: false })
       .limit(80)
+
+    if (error && error.message.includes('itacash_purchase_request_id')) {
+      console.warn('[Notifications] itacash_purchase_request_id unavailable, loading base notifications:', error.message)
+      const fallback = await supabase
+        .from('notifications')
+        .select('id, user_id, actor_id, type, post_id, comment_id, user_gift_id, amount, read, created_at')
+        .eq('user_id', currentUserId)
+        .order('created_at', { ascending: false })
+        .limit(80)
+
+      data = (fallback.data || []).map((item) => ({
+        ...item,
+        itacash_purchase_request_id: null,
+      }))
+      error = fallback.error
+    }
 
     if (error) {
       setMessage('Erro ao carregar notificações: ' + error.message)
@@ -272,10 +303,15 @@ export default function NotificationsPage() {
       new Set(rawNotifications.map((item) => item.user_gift_id).filter(Boolean))
     ) as string[]
 
+    const itacashPurchaseRequestIds = Array.from(
+      new Set(rawNotifications.map((item) => item.itacash_purchase_request_id).filter(Boolean))
+    ) as string[]
+
     let profilesById: Record<string, ProfileSummary> = {}
     let postsById: Record<string, PostSummary> = {}
     let commentsById: Record<string, CommentSummary> = {}
     let giftsById: Record<string, GiftSummary> = {}
+    let purchaseRequestsById: Record<string, ItaCashPurchaseRequestSummary> = {}
 
     if (actorIds.length > 0) {
       const { data: profilesData, error: profilesError } = await supabase
@@ -361,12 +397,34 @@ export default function NotificationsPage() {
       )
     }
 
+    if (itacashPurchaseRequestIds.length > 0) {
+      const { data: purchaseRequestsData, error: purchaseRequestsError } = await supabase
+        .from('itacash_purchase_requests')
+        .select('id, amount_itacash, status, rejection_reason')
+        .in('id', itacashPurchaseRequestIds)
+
+      if (purchaseRequestsError) {
+        console.error('Erro ao carregar compras ItaCash das notificacoes:', purchaseRequestsError.message)
+      }
+
+      purchaseRequestsById = ((purchaseRequestsData || []) as ItaCashPurchaseRequestSummary[]).reduce(
+        (acc, request) => {
+          acc[request.id] = request
+          return acc
+        },
+        {} as Record<string, ItaCashPurchaseRequestSummary>
+      )
+    }
+
     const normalizedNotifications: NotificationView[] = rawNotifications.map((item) => ({
       ...item,
       actor: item.actor_id ? profilesById[item.actor_id] || null : null,
       post: item.post_id ? postsById[item.post_id] || null : null,
       comment: item.comment_id ? commentsById[item.comment_id] || null : null,
       gift: item.user_gift_id ? giftsById[item.user_gift_id] || null : null,
+      itacashPurchaseRequest: item.itacash_purchase_request_id
+        ? purchaseRequestsById[item.itacash_purchase_request_id] || null
+        : null,
     }))
 
     setNotifications(normalizedNotifications)
@@ -534,7 +592,7 @@ export default function NotificationsPage() {
               (isItaCashPurchaseStatus ? 'EntreUS' : 'Usuário')
 
             const actorUsername = notification.actor?.username || 'usuario'
-            const actorAvatar = notification.actor?.avatar_url || ''
+            const actorAvatar = isItaCashPurchaseStatus ? '' : notification.actor?.avatar_url || ''
             const href = getNotificationHref(notification)
             const unread = !notification.read
 
@@ -572,7 +630,7 @@ export default function NotificationsPage() {
                     <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
                       <div>
                         <p className="inline-flex max-w-full items-center gap-1 break-words font-semibold text-zinc-950 dark:text-white">
-                          {notification.actor_id && (
+                          {notification.actor_id && !isItaCashPurchaseStatus && (
                             <UserBadges userId={notification.actor_id} size="sm" max={1} />
                           )}
 
@@ -583,7 +641,7 @@ export default function NotificationsPage() {
                           </span>
                         </p>
 
-                        {notification.actor?.username && (
+                        {notification.actor?.username && !isItaCashPurchaseStatus && (
                           <p className="mt-0.5 text-sm text-zinc-500">
                             @{actorUsername}
                           </p>
@@ -635,7 +693,7 @@ export default function NotificationsPage() {
 
                     {notification.type === 'itacash_purchase_rejected' && (
                       <p className="mt-3 rounded-xl bg-red-100 px-3 py-2 text-sm font-semibold text-red-800 dark:bg-red-950/40 dark:text-red-100">
-                        Sua compra de ItaCash foi recusada.
+                        {getNotificationActionTextView(notification)}
                       </p>
                     )}
 
