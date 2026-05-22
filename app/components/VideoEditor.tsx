@@ -16,6 +16,7 @@ import {
   Plus,
   Rocket,
   SlidersHorizontal,
+  Sparkles,
   Trash2,
   Type,
   Upload,
@@ -50,14 +51,26 @@ type ImageOverlay = {
   endTime: number
 }
 
+type StickerOverlay = {
+  id: string
+  value: string
+  x: number
+  y: number
+  size: number
+  rotation: number
+  startTime: number
+  endTime: number
+  layerOrder: number
+}
+
 type CanvasSize = {
   width: number
   height: number
 }
 
 type EditorMode = 'video' | 'photos'
-type EditorPanel = 'add' | 'text' | 'image' | 'audio' | 'effects' | 'caption' | 'voice'
-type DraggingLayer = { type: 'text' | 'image'; id: string } | null
+type EditorPanel = 'add' | 'text' | 'sticker' | 'image' | 'audio' | 'effects' | 'caption' | 'voice'
+type DraggingLayer = { type: 'text' | 'sticker' | 'image'; id: string } | null
 type PhotoTransition = 'none' | 'fade'
 
 type PhotoSlide = {
@@ -102,6 +115,7 @@ const LAYER_ORDER = {
   sticker: 30,
   text: 40,
 }
+const STICKER_LIBRARY = ['❤️', '🔥', '⭐', '✨', '😂', '👏', '🎉', '💎', '🚀', '👑']
 
 const COMPRESSION_PROFILES: Record<CompressionProfile['label'], CompressionProfile> = {
   '720p': {
@@ -285,6 +299,8 @@ export default function VideoEditor() {
   const [activeOverlayId, setActiveOverlayId] = useState<string | null>(null)
   const [imageOverlays, setImageOverlays] = useState<ImageOverlay[]>([])
   const [activeImageId, setActiveImageId] = useState<string | null>(null)
+  const [stickers, setStickers] = useState<StickerOverlay[]>([])
+  const [activeStickerId, setActiveStickerId] = useState<string | null>(null)
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
   const [isPlaying, setIsPlaying] = useState(false)
   const [duration, setDuration] = useState(DEFAULT_VIDEO_DURATION)
@@ -388,7 +404,7 @@ export default function VideoEditor() {
 
   useEffect(() => {
     drawCanvas()
-  }, [canvasSize, overlays, imageOverlays, activeOverlayId, activeImageId, currentTime])
+  }, [canvasSize, overlays, imageOverlays, stickers, activeOverlayId, activeImageId, activeStickerId, currentTime])
 
   useEffect(() => {
     imageOverlays.forEach((overlay) => {
@@ -459,8 +475,12 @@ export default function VideoEditor() {
     setVideoName(file.name)
     setOverlays([])
     setActiveOverlayId(null)
+    setStickers([])
+    setActiveStickerId(null)
     setImageOverlays([])
     setActiveImageId(null)
+    setStickers([])
+    setActiveStickerId(null)
     setImageMessage('')
     setCompressionStats(null)
     setIsPlaying(false)
@@ -517,6 +537,8 @@ export default function VideoEditor() {
       setVideoName('')
       setOverlays([])
       setActiveOverlayId(null)
+      setStickers([])
+      setActiveStickerId(null)
       setImageOverlays((current) => {
         current.forEach((overlay) => URL.revokeObjectURL(overlay.url))
         return []
@@ -612,6 +634,7 @@ export default function VideoEditor() {
     setImageOverlays((current) => [...current, overlay])
     setActiveImageId(overlay.id)
     setActiveOverlayId(null)
+    setActiveStickerId(null)
     setActivePanel('image')
     event.target.value = ''
   }
@@ -985,6 +1008,34 @@ export default function VideoEditor() {
         }
       })
 
+    stickers
+      .filter((sticker) => currentTime >= sticker.startTime && currentTime <= sticker.endTime)
+      .forEach((sticker) => {
+        context.save()
+        context.translate(sticker.x, sticker.y)
+        context.rotate((sticker.rotation * Math.PI) / 180)
+        context.textAlign = 'center'
+        context.textBaseline = 'middle'
+        context.font = `800 ${sticker.size}px Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, Inter, sans-serif`
+        context.fillText(sticker.value, 0, 0)
+
+        if (sticker.id === activeStickerId) {
+          const boxSize = sticker.size * 1.25
+          context.strokeStyle = 'rgba(217, 70, 239, 0.95)'
+          context.lineWidth = 3
+          context.setLineDash([9, 6])
+          context.strokeRect(-boxSize / 2, -boxSize / 2, boxSize, boxSize)
+          context.setLineDash([])
+          context.fillStyle = 'rgba(217, 70, 239, 0.95)'
+          context.fillRect(boxSize / 2 - 8, boxSize / 2 - 8, 16, 16)
+          context.strokeStyle = 'rgba(255, 255, 255, 0.95)'
+          context.lineWidth = 2
+          context.strokeRect(boxSize / 2 - 8, boxSize / 2 - 8, 16, 16)
+        }
+
+        context.restore()
+      })
+
     overlays
       .filter((overlay) => currentTime >= overlay.startTime && currentTime <= overlay.endTime)
       .forEach((overlay) => {
@@ -1033,9 +1084,30 @@ export default function VideoEditor() {
 
     setOverlays((current) => [...current, overlay])
     setActiveOverlayId(overlay.id)
+    setActiveStickerId(null)
     setActiveImageId(null)
     setActivePanel('text')
     setTextValue(cleanText)
+  }
+
+  function addSticker(value: string) {
+    const sticker: StickerOverlay = {
+      id: crypto.randomUUID(),
+      value,
+      x: canvasSize.width * 0.5,
+      y: canvasSize.height * 0.5,
+      size: Math.max(Math.min(canvasSize.width, canvasSize.height) * 0.12, 54),
+      rotation: 0,
+      startTime: clamp(currentTime, 0, duration),
+      endTime: clamp(currentTime + 3, 0, duration),
+      layerOrder: LAYER_ORDER.sticker,
+    }
+
+    setStickers((current) => [...current, sticker])
+    setActiveStickerId(sticker.id)
+    setActiveOverlayId(null)
+    setActiveImageId(null)
+    setActivePanel('sticker')
   }
 
   function findOverlayAtPoint(point: { x: number; y: number }) {
@@ -1080,8 +1152,27 @@ export default function VideoEditor() {
     return null
   }
 
+  function findStickerAtPoint(point: { x: number; y: number }) {
+    for (const sticker of [...stickers].reverse()) {
+      if (currentTime < sticker.startTime || currentTime > sticker.endTime) continue
+
+      const halfSize = sticker.size * 0.65
+      if (
+        point.x >= sticker.x - halfSize &&
+        point.x <= sticker.x + halfSize &&
+        point.y >= sticker.y - halfSize &&
+        point.y <= sticker.y + halfSize
+      ) {
+        return sticker
+      }
+    }
+
+    return null
+  }
+
   function selectOverlay(overlay: TextOverlay) {
     setActiveOverlayId(overlay.id)
+    setActiveStickerId(null)
     setActiveImageId(null)
     setActivePanel('text')
 
@@ -1090,9 +1181,21 @@ export default function VideoEditor() {
     }
   }
 
+  function selectSticker(sticker: StickerOverlay) {
+    setActiveStickerId(sticker.id)
+    setActiveOverlayId(null)
+    setActiveImageId(null)
+    setActivePanel('sticker')
+
+    if (currentTime < sticker.startTime || currentTime > sticker.endTime) {
+      handleSeek(sticker.startTime)
+    }
+  }
+
   function selectImageOverlay(overlay: ImageOverlay) {
     setActiveImageId(overlay.id)
     setActiveOverlayId(null)
+    setActiveStickerId(null)
     setActivePanel('image')
 
     if (currentTime < overlay.startTime || currentTime > overlay.endTime) {
@@ -1105,11 +1208,13 @@ export default function VideoEditor() {
     if (!canvas) return
 
     const point = getCanvasPoint(event, canvas)
-    const imageOverlay = findImageAtPoint(point)
-    const overlay = imageOverlay ? null : findOverlayAtPoint(point)
+    const overlay = findOverlayAtPoint(point)
+    const sticker = overlay ? null : findStickerAtPoint(point)
+    const imageOverlay = overlay || sticker ? null : findImageAtPoint(point)
 
-    if (!overlay && !imageOverlay) {
+    if (!overlay && !sticker && !imageOverlay) {
       setActiveOverlayId(null)
+      setActiveStickerId(null)
       setActiveImageId(null)
       pointerStartedOnOverlayRef.current = false
       pointerMovedRef.current = false
@@ -1120,23 +1225,35 @@ export default function VideoEditor() {
     pointerStartedOnOverlayRef.current = true
     pointerMovedRef.current = false
     canvas.setPointerCapture(event.pointerId)
-    if (imageOverlay) {
-      draggingLayerRef.current = { type: 'image', id: imageOverlay.id }
-      setActiveOverlayId(null)
-      setActiveImageId(imageOverlay.id)
-      setActivePanel('image')
-      setDragOffset({
-        x: point.x - imageOverlay.x,
-        y: point.y - imageOverlay.y,
-      })
-    } else if (overlay) {
+    if (overlay) {
       draggingLayerRef.current = { type: 'text', id: overlay.id }
       setActiveOverlayId(overlay.id)
+      setActiveStickerId(null)
       setActiveImageId(null)
       setActivePanel('text')
       setDragOffset({
         x: point.x - overlay.x,
         y: point.y - overlay.y,
+      })
+    } else if (sticker) {
+      draggingLayerRef.current = { type: 'sticker', id: sticker.id }
+      setActiveOverlayId(null)
+      setActiveStickerId(sticker.id)
+      setActiveImageId(null)
+      setActivePanel('sticker')
+      setDragOffset({
+        x: point.x - sticker.x,
+        y: point.y - sticker.y,
+      })
+    } else if (imageOverlay) {
+      draggingLayerRef.current = { type: 'image', id: imageOverlay.id }
+      setActiveOverlayId(null)
+      setActiveStickerId(null)
+      setActiveImageId(imageOverlay.id)
+      setActivePanel('image')
+      setDragOffset({
+        x: point.x - imageOverlay.x,
+        y: point.y - imageOverlay.y,
       })
     }
   }
@@ -1158,6 +1275,21 @@ export default function VideoEditor() {
 
           return {
             ...overlay,
+            x: clamp(point.x - dragOffset.x, 0, canvas.width),
+            y: clamp(point.y - dragOffset.y, 0, canvas.height),
+          }
+        })
+      )
+      return
+    }
+
+    if (draggingLayer.type === 'sticker') {
+      setStickers((current) =>
+        current.map((sticker) => {
+          if (sticker.id !== draggingLayer.id) return sticker
+
+          return {
+            ...sticker,
             x: clamp(point.x - dragOffset.x, 0, canvas.width),
             y: clamp(point.y - dragOffset.y, 0, canvas.height),
           }
@@ -1271,6 +1403,30 @@ export default function VideoEditor() {
     )
   }
 
+  function updateActiveStickerTiming(key: 'startTime' | 'endTime', value: number) {
+    if (!activeStickerId) return
+
+    setStickers((current) =>
+      current.map((sticker) => {
+        if (sticker.id !== activeStickerId) return sticker
+
+        const nextValue = clamp(value, 0, duration)
+
+        if (key === 'startTime') {
+          return {
+            ...sticker,
+            startTime: Math.min(nextValue, sticker.endTime),
+          }
+        }
+
+        return {
+          ...sticker,
+          endTime: Math.max(nextValue, sticker.startTime),
+        }
+      })
+    )
+  }
+
   function updateActiveOverlayText(value: string) {
     if (!activeOverlayId) {
       setTextValue(value)
@@ -1326,6 +1482,28 @@ export default function VideoEditor() {
     setImageOverlays((current) => current.filter((overlay) => overlay.id !== activeImageId))
     setActiveImageId(null)
     setImageMessage('')
+  }
+
+  function updateActiveStickerStyle(key: 'size' | 'rotation', value: number) {
+    if (!activeStickerId) return
+
+    setStickers((current) =>
+      current.map((sticker) =>
+        sticker.id === activeStickerId
+          ? {
+              ...sticker,
+              [key]: value,
+            }
+          : sticker
+      )
+    )
+  }
+
+  function removeActiveSticker() {
+    if (!activeStickerId) return
+
+    setStickers((current) => current.filter((sticker) => sticker.id !== activeStickerId))
+    setActiveStickerId(null)
   }
 
   function removePhotoSlide(slideId: string) {
@@ -2421,6 +2599,7 @@ export default function VideoEditor() {
 
   const activeOverlay = overlays.find((overlay) => overlay.id === activeOverlayId)
   const activeImageOverlay = imageOverlays.find((overlay) => overlay.id === activeImageId)
+  const activeSticker = stickers.find((sticker) => sticker.id === activeStickerId)
   const selectedFilter = videoFilters.find((item) => item.value === filter) || videoFilters[0]
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0
   const editableText = activeOverlay ? activeOverlay.text : textValue
@@ -2453,8 +2632,12 @@ export default function VideoEditor() {
   const activeImageTimelineWidth = activeImageOverlay && duration > 0
     ? ((activeImageOverlay.endTime - activeImageOverlay.startTime) / duration) * 100
     : 0
+  const activeStickerTimelineWidth = activeSticker && duration > 0
+    ? ((activeSticker.endTime - activeSticker.startTime) / duration) * 100
+    : 0
   const toolButtons = [
     { id: 'text' as EditorPanel, label: 'Texto', icon: <Type className="h-5 w-5" /> },
+    { id: 'sticker' as EditorPanel, label: 'Figurinhas', icon: <Sparkles className="h-5 w-5" /> },
     { id: 'image' as EditorPanel, label: 'Imagem', icon: <ImageIcon className="h-5 w-5" /> },
     { id: 'audio' as EditorPanel, label: 'Audio', icon: <Music className="h-5 w-5" /> },
     { id: 'effects' as EditorPanel, label: 'Efeitos', icon: <SlidersHorizontal className="h-5 w-5" /> },
@@ -2686,14 +2869,36 @@ export default function VideoEditor() {
                     </div>
 
                     <div className="relative mt-1 h-8 rounded-lg border border-fuchsia-300/15 bg-fuchsia-500/10">
-                      <button
-                        type="button"
-                        onClick={() => setActivePanel('add')}
-                        className="absolute left-2 top-1 inline-flex h-6 items-center gap-1 rounded-md border border-fuchsia-300/20 bg-fuchsia-500/10 px-2 text-[10px] font-black text-fuchsia-100"
-                      >
-                        <Plus className="h-3 w-3" />
-                        Adicionar figurinha
-                      </button>
+                      {editorMode === 'video' && stickers.length > 0 ? (
+                        stickers.map((sticker) => (
+                          <button
+                            key={sticker.id}
+                            type="button"
+                            onClick={() => selectSticker(sticker)}
+                            className={`absolute top-1 flex h-6 min-w-8 items-center gap-1 rounded-md px-2 text-left text-[10px] font-black transition ${
+                              sticker.id === activeStickerId
+                                ? 'bg-white text-black ring-2 ring-fuchsia-300'
+                                : 'bg-fuchsia-300/80 text-fuchsia-950 hover:bg-fuchsia-200'
+                            }`}
+                            style={{
+                              left: `${getTimelineLeft(sticker.startTime)}%`,
+                              width: `${getTimelineWidth(sticker.startTime, sticker.endTime, 7)}%`,
+                            }}
+                          >
+                            <span className="text-sm leading-none">{sticker.value}</span>
+                            <span className="truncate">Figurinha</span>
+                          </button>
+                        ))
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setActivePanel('sticker')}
+                          className="absolute left-2 top-1 inline-flex h-6 items-center gap-1 rounded-md border border-fuchsia-300/20 bg-fuchsia-500/10 px-2 text-[10px] font-black text-fuchsia-100"
+                        >
+                          <Plus className="h-3 w-3" />
+                          Adicionar figurinha
+                        </button>
+                      )}
                     </div>
 
                     <div className="relative mt-1 h-8 rounded-lg border border-amber-300/15 bg-amber-500/10">
@@ -3314,13 +3519,178 @@ export default function VideoEditor() {
               </div>
             )}
 
+            {activePanel === 'sticker' && (
+              <div className="space-y-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h3 className="text-base font-black">Figurinhas</h3>
+                    <p className="mt-1 truncate text-sm text-zinc-500">
+                      {activeSticker ? 'Editando elemento visual' : 'Escolha uma figurinha'}
+                    </p>
+                  </div>
+                  {activeSticker && (
+                    <button
+                      type="button"
+                      onClick={removeActiveSticker}
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-red-300/25 bg-red-500/10 text-red-100 transition hover:bg-red-500/20"
+                      aria-label="Remover figurinha selecionada"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-5 gap-2">
+                  {STICKER_LIBRARY.map((sticker) => (
+                    <button
+                      key={sticker}
+                      type="button"
+                      onClick={() => addSticker(sticker)}
+                      className="flex aspect-square items-center justify-center rounded-2xl border border-fuchsia-300/15 bg-fuchsia-500/10 text-3xl transition hover:border-fuchsia-200/40 hover:bg-fuchsia-500/20 active:scale-95"
+                      aria-label={`Adicionar figurinha ${sticker}`}
+                    >
+                      {sticker}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="rounded-xl border border-white/10 bg-zinc-950 p-3">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <span className="text-xs font-black text-zinc-300">Camadas</span>
+                    <span className="text-xs font-semibold text-zinc-600">{stickers.length}</span>
+                  </div>
+                  {stickers.length > 0 ? (
+                    <div className="grid gap-2">
+                      {stickers.map((sticker) => (
+                        <button
+                          key={sticker.id}
+                          type="button"
+                          onClick={() => selectSticker(sticker)}
+                          className={`flex items-center gap-3 rounded-lg border px-3 py-2 text-left transition ${
+                            sticker.id === activeStickerId
+                              ? 'border-fuchsia-300/60 bg-fuchsia-500/15 text-fuchsia-50'
+                              : 'border-white/10 bg-black/25 text-zinc-300 hover:border-white/20'
+                          }`}
+                        >
+                          <span className="text-xl leading-none">{sticker.value}</span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-xs font-black">Figurinha</span>
+                            <span className="mt-0.5 block text-[11px] font-semibold text-zinc-500">
+                              {sticker.startTime.toFixed(1)}s - {sticker.endTime.toFixed(1)}s
+                            </span>
+                          </span>
+                          {sticker.id === activeStickerId && <Check className="h-4 w-4 shrink-0" />}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs font-semibold text-zinc-600">Nenhuma figurinha adicionada.</p>
+                  )}
+                </div>
+
+                {activeSticker && (
+                  <div className="rounded-xl border border-fuchsia-300/20 bg-fuchsia-500/10 p-3 text-sm text-fuchsia-50">
+                    <div className="flex items-center justify-between gap-3 font-black">
+                      <span className="inline-flex items-center gap-2">
+                        <Move className="h-4 w-4" />
+                        Selecionada
+                      </span>
+                      <span className="text-xs text-fuchsia-100/60">
+                        X {Math.round(activeSticker.x)} / Y {Math.round(activeSticker.y)}
+                      </span>
+                    </div>
+
+                    <label className="mt-4 block">
+                      <span className="text-xs font-black text-fuchsia-100/80">Tamanho</span>
+                      <input
+                        type="range"
+                        min="28"
+                        max="180"
+                        value={activeSticker.size}
+                        onChange={(event) => updateActiveStickerStyle('size', Number(event.target.value))}
+                        className="mt-2 w-full accent-fuchsia-400"
+                      />
+                    </label>
+
+                    <label className="mt-3 block">
+                      <span className="text-xs font-black text-fuchsia-100/80">Rotacao</span>
+                      <input
+                        type="range"
+                        min="-45"
+                        max="45"
+                        value={activeSticker.rotation}
+                        onChange={(event) => updateActiveStickerStyle('rotation', Number(event.target.value))}
+                        className="mt-2 w-full accent-fuchsia-400"
+                      />
+                    </label>
+
+                    <div className="mt-4 rounded-xl border border-white/10 bg-black/25 p-3">
+                      <div className="mb-3 flex items-center justify-between gap-3 text-xs font-black text-fuchsia-100">
+                        <span>Tempo</span>
+                        <span>{activeSticker.startTime.toFixed(1)}s - {activeSticker.endTime.toFixed(1)}s</span>
+                      </div>
+
+                      <div className="relative mb-4 h-2 rounded-full bg-white/10">
+                        <div
+                          className="absolute top-0 h-full rounded-full bg-fuchsia-300"
+                          style={{
+                            left: `${duration > 0 ? (activeSticker.startTime / duration) * 100 : 0}%`,
+                            width: `${activeStickerTimelineWidth}%`,
+                          }}
+                        />
+                        <div
+                          className="absolute -top-1 h-4 w-1 rounded-full bg-sky-200"
+                          style={{ left: `${progressPercent}%` }}
+                        />
+                      </div>
+
+                      <label className="block">
+                        <span className="text-xs font-bold text-fuchsia-100/70">Entrada</span>
+                        <input
+                          type="range"
+                          min="0"
+                          max={duration}
+                          step="0.05"
+                          value={activeSticker.startTime}
+                          onChange={(event) => updateActiveStickerTiming('startTime', Number(event.target.value))}
+                          className="mt-2 w-full accent-fuchsia-400"
+                        />
+                      </label>
+
+                      <label className="mt-3 block">
+                        <span className="text-xs font-bold text-fuchsia-100/70">Saida</span>
+                        <input
+                          type="range"
+                          min="0"
+                          max={duration}
+                          step="0.05"
+                          value={activeSticker.endTime}
+                          onChange={(event) => updateActiveStickerTiming('endTime', Number(event.target.value))}
+                          className="mt-2 w-full accent-fuchsia-400"
+                        />
+                      </label>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={removeActiveSticker}
+                      className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-red-300/25 bg-red-500/10 px-4 py-2 text-xs font-black text-red-100 transition hover:bg-red-500/20"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Remover figurinha
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
             {activePanel === 'image' && (
               <div className="space-y-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <h3 className="text-base font-black">Imagem</h3>
                     <p className="mt-1 truncate text-sm text-zinc-500">
-                      {activeImageOverlay ? 'Figurinha selecionada' : 'Adicionar figurinha'}
+                      {activeImageOverlay ? 'Imagem sobreposta selecionada' : 'Adicionar imagem'}
                     </p>
                   </div>
                   {activeImageOverlay && (
