@@ -5,6 +5,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
+  BarChart3,
   Bell,
   Bookmark,
   Bug,
@@ -370,6 +371,15 @@ export default function MobileNavigation({
               )}
 
               <Link
+                href="/creator-dashboard"
+                onClick={closeMoreOptions}
+                className={drawerLinkClass('/creator-dashboard')}
+              >
+                <BarChart3 className={drawerIconClass('/creator-dashboard')} />
+                Creator Studio
+              </Link>
+
+              <Link
                 href="/lab"
                 onClick={closeMoreOptions}
                 className={drawerLinkClass('/lab')}
@@ -673,6 +683,15 @@ export default function MobileNavigation({
               >
                 <Video className={drawerIconClass('/meet')} />
                 Meet
+              </Link>
+
+              <Link
+                href="/creator-dashboard"
+                onClick={closeMenu}
+                className={drawerLinkClass('/creator-dashboard')}
+              >
+                <BarChart3 className={drawerIconClass('/creator-dashboard')} />
+                Creator Studio
               </Link>
 
               <Link

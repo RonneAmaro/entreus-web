@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
+  BarChart3,
   Bug,
   Coins,
   Crown,
@@ -98,6 +99,16 @@ export default function MoreMenu({
             )}
           </Link>
         )}
+
+        <Link href="/creator-dashboard" onClick={onClose} className={itemClass('/creator-dashboard')}>
+          <BarChart3 className={iconClass('/creator-dashboard')} />
+          <div className="min-w-0">
+            <p>Creator Studio</p>
+            <p className="mt-0.5 truncate text-xs font-medium opacity-70">
+              Analytics e ferramentas
+            </p>
+          </div>
+        </Link>
 
         <Link
           href="/lab"

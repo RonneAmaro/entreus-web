@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTheme } from 'next-themes'
 import Link from 'next/link'
 import {
   ArrowLeft,
@@ -13,6 +14,8 @@ import {
   MessageCircle,
   Share2,
 } from 'lucide-react'
+import AppSidebar from '../components/AppSidebar'
+import MobileNavigation from '../components/MobileNavigation'
 import { supabase } from '@/lib/supabase'
 
 type AnalyticsRow = {
@@ -80,6 +83,12 @@ type PostPerformance = {
 type PostSortMode = 'views' | 'likes' | 'recent'
 
 const REGION_FALLBACK = 'Nao informado'
+
+type CurrentProfile = {
+  username: string | null
+  display_name: string | null
+  avatar_url: string | null
+}
 
 function numberFrom(value: unknown, fallback = 0) {
   if (typeof value === 'number' && Number.isFinite(value)) return value
@@ -282,12 +291,21 @@ function KpiCard({ item }: { item: KpiCard }) {
 
 export default function CreatorDashboardPage() {
   const router = useRouter()
+  const { theme, setTheme } = useTheme()
 
+  const [mounted, setMounted] = useState(false)
+  const [email, setEmail] = useState('')
+  const [currentProfile, setCurrentProfile] = useState<CurrentProfile | null>(null)
+  const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState('')
   const [rows, setRows] = useState<AnalyticsRow[]>([])
   const [posts, setPosts] = useState<CreatorPost[]>([])
   const [postSortMode, setPostSortMode] = useState<PostSortMode>('views')
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   useEffect(() => {
     loadAnalytics()
@@ -307,6 +325,8 @@ export default function CreatorDashboardPage() {
       return
     }
 
+    setEmail(user.email || '')
+
     const [analyticsResult, postsResult] = await Promise.all([
       supabase
         .from('post_analytics')
@@ -318,6 +338,8 @@ export default function CreatorDashboardPage() {
         .select('id, content, image_url, video_url, created_at')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false }),
+      loadNavigationProfile(user.id),
+      loadUnreadNotificationsCount(user.id),
     ])
 
     if (analyticsResult.error || postsResult.error) {
@@ -334,6 +356,45 @@ export default function CreatorDashboardPage() {
     setRows((analyticsResult.data || []) as AnalyticsRow[])
     setPosts((postsResult.data || []) as CreatorPost[])
     setLoading(false)
+  }
+
+  async function loadNavigationProfile(currentUserId: string) {
+    const { data } = await supabase
+      .from('profiles')
+      .select('username, display_name, avatar_url')
+      .eq('id', currentUserId)
+      .maybeSingle()
+
+    if (!data) return
+
+    setCurrentProfile({
+      username: data.username,
+      display_name: data.display_name,
+      avatar_url: data.avatar_url,
+    })
+  }
+
+  async function loadUnreadNotificationsCount(currentUserId: string) {
+    const { count } = await supabase
+      .from('notifications')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', currentUserId)
+      .eq('read', false)
+
+    setUnreadNotificationsCount(count || 0)
+  }
+
+  async function handleLogout() {
+    await supabase.auth.signOut()
+    router.push('/login')
+  }
+
+  function handleToggleTheme() {
+    setTheme(theme === 'dark' ? 'light' : 'dark')
+  }
+
+  function handlePostClick() {
+    router.push('/feed')
   }
 
   const totals = useMemo(() => {
@@ -388,7 +449,31 @@ export default function CreatorDashboardPage() {
 
   return (
     <main className="min-h-screen overflow-hidden bg-black text-white">
-      <section className="relative mx-auto min-h-screen w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <AppSidebar
+        unreadNotificationsCount={unreadNotificationsCount}
+        mounted={mounted}
+        theme={theme}
+        displayName={currentProfile?.display_name || currentProfile?.username || undefined}
+        username={currentProfile?.username || null}
+        email={email}
+        avatarUrl={currentProfile?.avatar_url || null}
+        onToggleTheme={handleToggleTheme}
+        onLogout={handleLogout}
+      />
+
+      <MobileNavigation
+        email={email}
+        displayName={currentProfile?.display_name || currentProfile?.username || 'Minha conta'}
+        avatarUrl={currentProfile?.avatar_url || null}
+        unreadNotificationsCount={unreadNotificationsCount}
+        mounted={mounted}
+        theme={theme}
+        onToggleTheme={handleToggleTheme}
+        onLogout={handleLogout}
+        onPostClick={handlePostClick}
+      />
+
+      <section className="relative mx-auto min-h-screen w-full max-w-7xl px-4 py-20 pb-24 sm:px-6 lg:ml-[104px] lg:max-w-[calc(80rem-104px)] lg:px-8 lg:py-6">
         <div className="pointer-events-none absolute -right-24 top-20 h-80 w-80 rounded-full bg-blue-500/15 blur-3xl" />
         <div className="pointer-events-none absolute -left-24 top-96 h-72 w-72 rounded-full bg-emerald-400/10 blur-3xl" />
 
