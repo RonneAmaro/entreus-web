@@ -377,6 +377,23 @@ export default function VideoEditor() {
     })
   }
 
+  function clearVisualSelection() {
+    setActiveOverlayId(null)
+    setActiveStickerId(null)
+    setActiveImageId(null)
+    draggingLayerRef.current = null
+    pointerMovedRef.current = false
+    pointerStartedOnOverlayRef.current = false
+  }
+
+  function openEditorPanel(panel: EditorPanel, keepVisualSelection = false) {
+    if (!keepVisualSelection) {
+      clearVisualSelection()
+    }
+
+    setActivePanel(panel)
+  }
+
   useEffect(() => {
     return () => {
       if (videoUrl) URL.revokeObjectURL(videoUrl)
@@ -434,10 +451,11 @@ export default function VideoEditor() {
       const image = new Image()
       image.onload = drawCanvas
       image.onerror = () => {
+        URL.revokeObjectURL(overlay.url)
         imageElementsRef.current.delete(overlay.id)
         setImageOverlays((current) => current.filter((item) => item.id !== overlay.id))
         if (activeImageId === overlay.id) setActiveImageId(null)
-        setImageMessage('Nao foi possivel carregar esta imagem. Tente PNG, JPG ou WebP menor que 5 MB.')
+        setImageMessage('Nao foi possivel carregar esta imagem. Use PNG ou JPG para garantir imagem no video final.')
       }
       image.src = overlay.url
       imageElementsRef.current.set(overlay.id, image)
@@ -449,6 +467,24 @@ export default function VideoEditor() {
       }
     })
   }, [imageOverlays])
+
+  useEffect(() => {
+    if (activeOverlayId && !overlays.some((overlay) => overlay.id === activeOverlayId)) {
+      setActiveOverlayId(null)
+    }
+  }, [activeOverlayId, overlays])
+
+  useEffect(() => {
+    if (activeStickerId && !stickers.some((sticker) => sticker.id === activeStickerId)) {
+      setActiveStickerId(null)
+    }
+  }, [activeStickerId, stickers])
+
+  useEffect(() => {
+    if (activeImageId && !imageOverlays.some((overlay) => overlay.id === activeImageId)) {
+      setActiveImageId(null)
+    }
+  }, [activeImageId, imageOverlays])
 
   useEffect(() => {
     if (!isPlaying) return
@@ -500,13 +536,13 @@ export default function VideoEditor() {
     setActiveStickerId(null)
     setImageOverlays([])
     setActiveImageId(null)
-    setStickers([])
-    setActiveStickerId(null)
     setImageMessage('')
     setCompressionStats(null)
+    setRenderMessage('')
     setIsPlaying(false)
     setCurrentTime(0)
     syncPreviewAudioTracks(0, false)
+    setActivePanel('text')
   }
 
   function handlePhotoSlidesChange(event: ChangeEvent<HTMLInputElement>) {
@@ -651,7 +687,7 @@ export default function VideoEditor() {
       imageElementsRef.current.delete(overlay.id)
       setImageOverlays((current) => current.filter((item) => item.id !== overlay.id))
       setActiveImageId((current) => (current === overlay.id ? null : current))
-      setImageMessage('Nao foi possivel carregar esta imagem. Tente outro arquivo.')
+      setImageMessage('Nao foi possivel carregar esta imagem. Use PNG ou JPG para garantir imagem no video final.')
     }
     image.src = imageUrl
     imageElementsRef.current.set(overlay.id, image)
@@ -681,6 +717,7 @@ export default function VideoEditor() {
     setMusicStartTime(0)
     setAudioMessage('')
     setMusicVolumeTouched(false)
+    console.info('[VideoEditor] Music track removed')
   }
 
   function playMusicPreview() {
@@ -809,9 +846,16 @@ export default function VideoEditor() {
     setVoiceStartTime(0)
     setVoiceVolume(1)
     setVoiceMessage('')
+    console.info('[VideoEditor] Voice track removed')
   }
 
   function clearEditorAfterPublish() {
+    videoRef.current?.pause()
+    audioRef.current?.pause()
+    voicePlaybackRef.current?.pause()
+    voicePreviewRef.current?.pause()
+    voiceStreamRef.current?.getTracks().forEach((track) => track.stop())
+
     if (videoUrl) URL.revokeObjectURL(videoUrl)
     if (audioUrl) URL.revokeObjectURL(audioUrl)
     if (voiceUrl) URL.revokeObjectURL(voiceUrl)
@@ -844,8 +888,10 @@ export default function VideoEditor() {
     setCaption('')
     setTextValue('')
     setCompressionStats(null)
+    setRenderProgress(0)
     setCurrentTime(0)
     setIsPlaying(false)
+    setActivePanel('text')
   }
 
   function handleLoadedMetadata() {
@@ -3057,7 +3103,7 @@ export default function VideoEditor() {
                   <div className="sticky left-0 z-10 grid w-20 shrink-0 gap-1 bg-zinc-950/95 pr-1 text-[10px] font-black text-zinc-500">
                     <button
                       type="button"
-                      onClick={() => setActivePanel('add')}
+                      onClick={() => openEditorPanel('add')}
                       className="flex h-7 items-center justify-center rounded-lg bg-sky-500 text-white"
                       aria-label="Adicionar midia"
                     >
@@ -3120,7 +3166,7 @@ export default function VideoEditor() {
                       ) : (
                         <button
                           type="button"
-                          onClick={() => setActivePanel('text')}
+                          onClick={() => openEditorPanel('text')}
                           className="absolute left-2 top-1 inline-flex h-6 items-center gap-1 rounded-md border border-sky-300/20 bg-sky-500/10 px-2 text-[10px] font-black text-sky-100"
                         >
                           <Plus className="h-3 w-3" />
@@ -3153,7 +3199,7 @@ export default function VideoEditor() {
                       ) : (
                         <button
                           type="button"
-                          onClick={() => setActivePanel('sticker')}
+                          onClick={() => openEditorPanel('sticker')}
                           className="absolute left-2 top-1 inline-flex h-6 items-center gap-1 rounded-md border border-fuchsia-300/20 bg-fuchsia-500/10 px-2 text-[10px] font-black text-fuchsia-100"
                         >
                           <Plus className="h-3 w-3" />
@@ -3241,10 +3287,7 @@ export default function VideoEditor() {
                         <button
                           type="button"
                           onClick={() => {
-                            setActiveOverlayId(null)
-                            setActiveImageId(null)
-                            setActiveStickerId(null)
-                            setActivePanel('effects')
+                            openEditorPanel('effects')
                           }}
                           className={`grid h-full w-full grid-cols-12 gap-1 p-1 text-left transition ${
                             activePanel === 'effects' ? 'ring-2 ring-sky-300/60' : ''
@@ -3274,7 +3317,7 @@ export default function VideoEditor() {
                       {voiceUrl ? (
                         <button
                           type="button"
-                          onClick={() => setActivePanel('voice')}
+                          onClick={() => openEditorPanel('voice')}
                           className={`absolute top-1 flex h-6 min-w-12 items-center gap-2 overflow-hidden rounded-md px-2 text-left text-[10px] font-black text-violet-950 ring-1 transition ${
                             activePanel === 'voice'
                               ? 'bg-white ring-2 ring-violet-300'
@@ -3300,7 +3343,7 @@ export default function VideoEditor() {
                       ) : (
                         <button
                           type="button"
-                          onClick={() => setActivePanel('voice')}
+                          onClick={() => openEditorPanel('voice')}
                           className="absolute left-2 top-1 inline-flex h-6 items-center gap-1 rounded-md border border-violet-300/20 bg-violet-500/10 px-2 text-[10px] font-black text-violet-100"
                         >
                           <Mic className="h-3 w-3" />
@@ -3313,7 +3356,7 @@ export default function VideoEditor() {
                       {audioName ? (
                         <button
                           type="button"
-                          onClick={() => setActivePanel('audio')}
+                          onClick={() => openEditorPanel('audio')}
                           className={`absolute top-1 flex h-6 min-w-14 items-center gap-2 overflow-hidden rounded-md px-2 text-left text-[10px] font-black text-emerald-950 ring-1 transition ${
                             activePanel === 'audio'
                               ? 'bg-white ring-2 ring-emerald-300'
@@ -3342,7 +3385,7 @@ export default function VideoEditor() {
                       ) : (
                         <button
                           type="button"
-                          onClick={() => setActivePanel('audio')}
+                          onClick={() => openEditorPanel('audio')}
                           className="absolute left-2 top-1 inline-flex h-6 items-center gap-1 rounded-md border border-emerald-300/20 bg-emerald-500/10 px-2 text-[10px] font-black text-emerald-100"
                         >
                           <Plus className="h-3 w-3" />
@@ -3354,7 +3397,7 @@ export default function VideoEditor() {
                     <div className="relative mt-1 h-8 rounded-lg border border-blue-300/15 bg-blue-500/10">
                       <button
                         type="button"
-                        onClick={() => setActivePanel('audio')}
+                        onClick={() => openEditorPanel('audio')}
                         className={`absolute left-0 top-1 flex h-6 w-full items-center gap-2 overflow-hidden rounded-md px-2 text-left text-[10px] font-black text-blue-950 transition ${
                           activePanel === 'audio' && !audioName
                             ? 'bg-white ring-2 ring-blue-300'
@@ -3432,7 +3475,7 @@ export default function VideoEditor() {
               <button
                 key={item.id}
                 type="button"
-                onClick={() => setActivePanel(item.id)}
+                onClick={() => openEditorPanel(item.id, item.id === activePanel)}
                 className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl px-2 text-[11px] font-black transition ${
                   activePanel === item.id
                     ? 'bg-sky-500 text-white shadow-lg shadow-sky-950/30'
