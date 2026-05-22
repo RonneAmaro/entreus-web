@@ -444,7 +444,14 @@ export default function AppSidebar({
                   : 'text-zinc-500 hover:bg-white/5 hover:text-zinc-100 dark:text-zinc-400 dark:hover:bg-white/5 dark:hover:text-white',
               ].join(' ')}
             >
-              <MoreHorizontal className={`h-5 w-5 shrink-0 ${isMoreActive ? 'stroke-[2.45]' : ''}`} />
+              <span className="relative shrink-0">
+                <MoreHorizontal className={`h-5 w-5 ${isMoreActive ? 'stroke-[2.45]' : ''}`} />
+                {isAdmin && adminPendingCount > 0 && (
+                  <span className="absolute -right-2 -top-2 flex min-h-[18px] min-w-[18px] items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-black text-white ring-2 ring-black">
+                    {formatBadge(adminPendingCount)}
+                  </span>
+                )}
+              </span>
               <span className={navTextClass}>{t('nav.more')}</span>
             </button>
 

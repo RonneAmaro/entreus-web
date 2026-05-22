@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { isAdminRole } from '@/lib/admin'
 
 type FilterStatus = 'pending' | 'approved' | 'rejected' | 'all'
 
@@ -165,7 +166,7 @@ export default function AdminAgeVerificationsPage() {
 
     setAdminProfile(loadedAdminProfile)
 
-    if (loadedAdminProfile.role !== 'admin') {
+    if (!isAdminRole(loadedAdminProfile.role)) {
       setLoading(false)
       return
     }
@@ -418,7 +419,7 @@ export default function AdminAgeVerificationsPage() {
     )
   }
 
-  if (!adminProfile || adminProfile.role !== 'admin') {
+  if (!adminProfile || !isAdminRole(adminProfile.role)) {
     return (
       <main className="min-h-screen bg-black px-4 py-10 text-white">
         <section className="mx-auto max-w-xl rounded-[2rem] border border-red-300/20 bg-red-500/10 p-6 text-red-100">

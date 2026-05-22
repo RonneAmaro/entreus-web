@@ -112,7 +112,7 @@ export default function AdminPage() {
       count: adminPendingCounts.itacashPurchases,
       description: 'Compras manuais e Pix com comprovante aguardando analise.',
       href: '/admin/itacash-purchases',
-      action: 'Ver compras',
+      action: 'Revisar agora',
       icon: Coins,
     },
     {
@@ -121,7 +121,7 @@ export default function AdminPage() {
       count: adminPendingCounts.ageVerifications,
       description: 'Documentos e selfies aguardando revisao manual.',
       href: '/admin/age-verifications',
-      action: 'Ver verificacoes',
+      action: 'Revisar agora',
       icon: ShieldCheck,
     },
     {
@@ -130,7 +130,7 @@ export default function AdminPage() {
       count: adminPendingCounts.reports,
       description: 'Relatos de usuarios sobre posts ou perfis.',
       href: '/admin/reports',
-      action: 'Ver denuncias',
+      action: 'Revisar agora',
       icon: Flag,
     },
     {
@@ -139,7 +139,7 @@ export default function AdminPage() {
       count: adminPendingCounts.feedbackReports,
       description: 'Relatos internos abertos, triados ou em andamento.',
       href: '/admin/feedback',
-      action: 'Ver feedbacks',
+      action: 'Revisar agora',
       icon: Bug,
     },
   ]
@@ -276,13 +276,13 @@ export default function AdminPage() {
                   {adminPendingLoading
                     ? 'Verificando pendencias administrativas...'
                     : totalPending > 0
-                      ? `Voce tem ${totalPending} pendencias administrativas aguardando analise.`
-                      : 'Tudo certo por aqui. Nenhuma pendencia administrativa no momento.'}
+                      ? 'Voce tem pendencias administrativas para revisar.'
+                      : 'Tudo certo por enquanto.'}
                 </p>
                 <p className="mt-1 text-sm opacity-80">
                   {totalPending > 0
-                    ? 'Revise compras, verificacoes, denuncias e feedbacks antes que acumulem.'
-                    : 'As filas principais da administracao estao tranquilas agora.'}
+                    ? `${totalPending} itens aguardam analise nas filas principais.`
+                    : 'Nao ha pendencias administrativas no momento.'}
                 </p>
               </div>
             </div>

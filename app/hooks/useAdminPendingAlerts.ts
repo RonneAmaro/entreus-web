@@ -97,7 +97,7 @@ export function useAdminPendingAlerts({
     if (results[3].status === 'rejected') nextErrors.feedbackReports = 'Nao foi possivel carregar'
 
     Object.entries(nextErrors).forEach(([key, value]) => {
-      console.error('[AdminAlerts] Count failed:', { key, message: value })
+      console.warn('[AdminAlerts] Count unavailable:', { key, message: value })
     })
 
     const nextTotal = getAdminPendingTotal(nextCounts)
@@ -114,6 +114,28 @@ export function useAdminPendingAlerts({
   useEffect(() => {
     loadCounts()
   }, [loadCounts])
+
+  useEffect(() => {
+    if (!enabled || typeof window === 'undefined') return
+
+    function handleFocusRefresh() {
+      void loadCounts()
+    }
+
+    function handleVisibilityRefresh() {
+      if (document.visibilityState === 'visible') {
+        void loadCounts()
+      }
+    }
+
+    window.addEventListener('focus', handleFocusRefresh)
+    document.addEventListener('visibilitychange', handleVisibilityRefresh)
+
+    return () => {
+      window.removeEventListener('focus', handleFocusRefresh)
+      document.removeEventListener('visibilitychange', handleVisibilityRefresh)
+    }
+  }, [enabled, loadCounts])
 
   useEffect(() => {
     if (!enabled) return
