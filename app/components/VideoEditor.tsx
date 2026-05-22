@@ -58,6 +58,7 @@ type CanvasSize = {
 type EditorMode = 'video' | 'photos'
 type EditorPanel = 'add' | 'text' | 'image' | 'audio' | 'effects' | 'caption' | 'voice'
 type DraggingLayer = { type: 'text' | 'image'; id: string } | null
+type PhotoTransition = 'none' | 'fade'
 
 type PhotoSlide = {
   id: string
@@ -274,6 +275,8 @@ export default function VideoEditor() {
   const [compressionStats, setCompressionStats] = useState<CompressionStats | null>(null)
   const [imageMessage, setImageMessage] = useState('')
   const [photoSlides, setPhotoSlides] = useState<PhotoSlide[]>([])
+  const [activePhotoId, setActivePhotoId] = useState<string | null>(null)
+  const [photoTransition, setPhotoTransition] = useState<PhotoTransition>('fade')
   const [photoMessage, setPhotoMessage] = useState('')
 
   function setRenderStage(stage: string, message?: string) {
@@ -466,6 +469,7 @@ export default function VideoEditor() {
       setCurrentTime(0)
       setDuration((photoSlides.length + acceptedSlides.length) * DEFAULT_PHOTO_DURATION)
       setPhotoSlides((current) => [...current, ...acceptedSlides])
+      setActivePhotoId((current) => current || acceptedSlides[0]?.id || null)
     }
 
     event.target.value = ''
@@ -584,6 +588,8 @@ export default function VideoEditor() {
     setImageOverlays([])
     setActiveImageId(null)
     setPhotoSlides([])
+    setActivePhotoId(null)
+    setPhotoTransition('fade')
     setPhotoMessage('')
     setImageMessage('')
     setCaption('')
@@ -1046,10 +1052,61 @@ export default function VideoEditor() {
       const nextSlides = current
         .filter((item) => item.id !== slideId)
         .map((item, index) => ({ ...item, order: index }))
-      setDuration(Math.max(nextSlides.reduce((total, item) => total + item.duration, 0), DEFAULT_VIDEO_DURATION))
+      const nextDuration = nextSlides.reduce((total, item) => total + item.duration, 0)
+      setDuration(Math.max(nextDuration, DEFAULT_VIDEO_DURATION))
       setCurrentTime((currentTimeValue) =>
-        clamp(currentTimeValue, 0, Math.max(nextSlides.reduce((total, item) => total + item.duration, 0), 0))
+        clamp(currentTimeValue, 0, Math.max(nextDuration, 0))
       )
+      setActivePhotoId((currentActiveId) =>
+        currentActiveId === slideId ? nextSlides[0]?.id || null : currentActiveId
+      )
+      return nextSlides
+    })
+  }
+
+  function selectPhotoSlide(slideId: string) {
+    const orderedSlides = [...photoSlides].sort((a, b) => a.order - b.order)
+    const slideStart = orderedSlides
+      .filter((slide) => slide.order < (orderedSlides.find((slide) => slide.id === slideId)?.order ?? 0))
+      .reduce((total, slide) => total + slide.duration, 0)
+
+    setActivePhotoId(slideId)
+    setCurrentTime(slideStart)
+  }
+
+  function movePhotoSlide(slideId: string, direction: -1 | 1) {
+    setPhotoSlides((current) => {
+      const orderedSlides = [...current].sort((a, b) => a.order - b.order)
+      const currentIndex = orderedSlides.findIndex((slide) => slide.id === slideId)
+      const targetIndex = currentIndex + direction
+
+      if (currentIndex < 0 || targetIndex < 0 || targetIndex >= orderedSlides.length) {
+        return current
+      }
+
+      const nextSlides = [...orderedSlides]
+      const [slide] = nextSlides.splice(currentIndex, 1)
+      nextSlides.splice(targetIndex, 0, slide)
+
+      return nextSlides.map((item, index) => ({ ...item, order: index }))
+    })
+  }
+
+  function updatePhotoSlideDuration(slideId: string, value: number) {
+    const nextDuration = clamp(value, 1, 8)
+
+    setPhotoSlides((current) => {
+      const nextSlides = current.map((slide) =>
+        slide.id === slideId
+          ? {
+              ...slide,
+              duration: nextDuration,
+            }
+          : slide
+      )
+      const nextTotalDuration = nextSlides.reduce((total, slide) => total + slide.duration, 0)
+      setDuration(nextTotalDuration)
+      setCurrentTime((currentTimeValue) => clamp(currentTimeValue, 0, nextTotalDuration))
       return nextSlides
     })
   }
@@ -1472,9 +1529,12 @@ export default function VideoEditor() {
   }
 
   function getActivePhotoSlide() {
+    const selectedSlide = photoSlides.find((slide) => slide.id === activePhotoId)
+    if (selectedSlide) return selectedSlide
+
     let elapsed = 0
 
-    for (const slide of photoSlides) {
+    for (const slide of [...photoSlides].sort((a, b) => a.order - b.order)) {
       const start = elapsed
       const end = elapsed + slide.duration
       if (currentTime >= start && currentTime < end) return slide
@@ -1676,13 +1736,14 @@ export default function VideoEditor() {
         await ffmpeg.writeFile(inputAudioName, await fetchFile(audioFile))
       }
 
-      const renderArgs = buildPhotoRenderArgs(photoInputs, inputAudioName, true)
+      const useFadeTransition = photoTransition === 'fade'
+      const renderArgs = buildPhotoRenderArgs(photoInputs, inputAudioName, useFadeTransition)
       console.info('[VideoEditor] Photo FFmpeg command:', renderArgs.join(' '))
       setRenderStage('exec_photos', 'Renderizando fotos em video...')
 
       let exitCode = await ffmpeg.exec(renderArgs)
 
-      if (exitCode !== 0) {
+      if (exitCode !== 0 && useFadeTransition) {
         console.warn('[VideoEditor] Photo fade render failed:', { exitCode })
         setRenderStage('exec_photos_fallback', 'Tentando sem transicao...')
         await cleanupFfmpegFiles(ffmpeg, [outputName])
@@ -1702,6 +1763,7 @@ export default function VideoEditor() {
       console.error('[VideoEditor] Photo render failed:', {
         stage: renderStageRef.current,
         error,
+        transition: photoTransition,
         photos: orderedSlides.map((slide) => ({
           name: slide.file.name,
           type: slide.file.type,
@@ -1882,6 +1944,7 @@ export default function VideoEditor() {
   const editableTextColor = activeOverlay ? activeOverlay.color : textColor
   const timelineBlocks = Array.from({ length: 12 }, (_, index) => index)
   const photoSlidesDuration = getPhotoSlidesDuration()
+  const orderedPhotoSlides = [...photoSlides].sort((a, b) => a.order - b.order)
   const activePhotoSlide = getActivePhotoSlide()
   const timelineDuration = editorMode === 'photos' ? photoSlidesDuration : duration
   const hasEditorMedia = Boolean(videoUrl || photoSlides.length > 0)
@@ -2006,6 +2069,10 @@ export default function VideoEditor() {
                 <div className="absolute bottom-3 left-3 rounded-full bg-black/55 px-3 py-1 text-xs font-black text-white ring-1 ring-white/10">
                   {activePhotoSlide.order + 1} / {photoSlides.length}
                 </div>
+                <div className="absolute bottom-3 right-3 rounded-full bg-black/55 px-3 py-1 text-xs font-black text-white ring-1 ring-white/10">
+                  {formatEditorTime(photoSlidesDuration)}
+                  {audioName ? ' + audio' : ''}
+                </div>
               </div>
             ) : (
               <div className="flex min-h-[24rem] flex-col items-center justify-center px-6 text-center text-zinc-400 sm:min-h-[32rem]">
@@ -2077,24 +2144,43 @@ export default function VideoEditor() {
                     <div className="relative h-8 overflow-hidden rounded-lg border border-white/10 bg-zinc-900">
                       {editorMode === 'photos' ? (
                         <div className="relative h-full p-1">
-                          {photoSlides.map((slide) => {
-                            const slideStart = photoSlides
+                          {orderedPhotoSlides.map((slide, index) => {
+                            const slideStart = orderedPhotoSlides
                               .filter((item) => item.order < slide.order)
                               .reduce((total, item) => total + item.duration, 0)
 
                             return (
-                              <button
+                              <div
                                 key={slide.id}
-                                type="button"
-                                onClick={() => handleSeek(slideStart)}
-                                className="absolute top-1 h-6 min-w-10 overflow-hidden rounded-md border border-white/10 bg-zinc-800"
+                                className="absolute top-1 h-6 min-w-10"
                                 style={{
                                   left: `${timelineDuration > 0 ? (slideStart / timelineDuration) * 100 : 0}%`,
                                   width: `${timelineDuration > 0 ? Math.max((slide.duration / timelineDuration) * 100, 8) : 8}%`,
                                 }}
                               >
+                              <button
+                                type="button"
+                                onClick={() => selectPhotoSlide(slide.id)}
+                                className={`relative h-full w-full overflow-hidden rounded-md border text-left ${
+                                  slide.id === activePhotoId
+                                    ? 'border-white bg-sky-300 text-black ring-2 ring-sky-300'
+                                    : 'border-white/10 bg-zinc-800 text-white'
+                                }`}
+                              >
                                 <img src={slide.previewUrl} alt="" className="h-full w-full object-cover opacity-80" />
+                                <span className="absolute left-1 top-0.5 rounded bg-black/60 px-1 text-[9px] font-black text-white">
+                                  {index + 1}
+                                </span>
+                                <span className="absolute bottom-0.5 right-1 rounded bg-black/60 px-1 text-[9px] font-black text-white">
+                                  {slide.duration}s
+                                </span>
                               </button>
+                              {index < orderedPhotoSlides.length - 1 && (
+                                <span className="absolute -right-1 top-1/2 z-10 h-3 w-3 -translate-y-1/2 rounded-full border border-white/20 bg-sky-400 text-[8px] font-black text-black">
+                                  {photoTransition === 'fade' ? 'F' : ''}
+                                </span>
+                              )}
+                              </div>
                             )
                           })}
                         </div>
@@ -2326,16 +2412,89 @@ export default function VideoEditor() {
                   <div className="rounded-xl border border-white/10 bg-zinc-950 p-3">
                     <div className="mb-2 flex items-center justify-between gap-3">
                       <span className="text-xs font-black text-zinc-300">Fotos</span>
-                      <span className="text-xs font-semibold text-zinc-600">{formatEditorTime(photoSlidesDuration)}</span>
+                      <span className="text-xs font-semibold text-zinc-600">
+                        {photoSlides.length} / {MAX_PHOTO_SLIDES} - {formatEditorTime(photoSlidesDuration)}
+                      </span>
                     </div>
+
+                    <div className="mb-3 grid grid-cols-2 gap-2 rounded-lg border border-white/10 bg-black/25 p-1">
+                      {[
+                        { value: 'none' as PhotoTransition, label: 'Sem transicao' },
+                        { value: 'fade' as PhotoTransition, label: 'Fade suave' },
+                      ].map((item) => (
+                        <button
+                          key={item.value}
+                          type="button"
+                          onClick={() => setPhotoTransition(item.value)}
+                          className={`rounded-md px-2 py-2 text-xs font-black transition ${
+                            photoTransition === item.value
+                              ? 'bg-sky-500 text-white'
+                              : 'text-zinc-500 hover:bg-white/10 hover:text-white'
+                          }`}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+
                     <div className="grid gap-2">
-                      {photoSlides.map((slide) => (
-                        <div key={slide.id} className="flex items-center gap-2 rounded-lg border border-white/10 bg-black/25 p-2">
-                          <img src={slide.previewUrl} alt="" className="h-10 w-8 rounded object-cover" />
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate text-xs font-black text-white">{slide.file.name}</span>
-                            <span className="text-[11px] font-semibold text-zinc-500">{slide.duration}s</span>
+                      {orderedPhotoSlides.map((slide, index) => (
+                        <div
+                          key={slide.id}
+                          className={`grid gap-2 rounded-lg border p-2 ${
+                            slide.id === activePhotoId
+                              ? 'border-sky-300/60 bg-sky-500/15'
+                              : 'border-white/10 bg-black/25'
+                          }`}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => selectPhotoSlide(slide.id)}
+                            className="flex min-w-0 items-center gap-2 text-left"
+                          >
+                          <span className="flex h-10 w-8 shrink-0 items-center justify-center overflow-hidden rounded bg-zinc-900">
+                            <img src={slide.previewUrl} alt="" className="h-full w-full object-cover" />
                           </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-xs font-black text-white">
+                              {index + 1}. {slide.file.name}
+                            </span>
+                            <span className="text-[11px] font-semibold text-zinc-500">
+                              {slide.duration}s
+                            </span>
+                          </span>
+                          </button>
+
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => movePhotoSlide(slide.id, -1)}
+                              disabled={index === 0}
+                              className="h-8 rounded-lg border border-white/10 px-2 text-xs font-black text-zinc-300 disabled:opacity-30"
+                            >
+                              Antes
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => movePhotoSlide(slide.id, 1)}
+                              disabled={index === orderedPhotoSlides.length - 1}
+                              className="h-8 rounded-lg border border-white/10 px-2 text-xs font-black text-zinc-300 disabled:opacity-30"
+                            >
+                              Depois
+                            </button>
+                            <label className="flex min-w-0 flex-1 items-center gap-2 px-1 text-[11px] font-black text-zinc-500">
+                              <span>{slide.duration}s</span>
+                              <input
+                                type="range"
+                                min="1"
+                                max="8"
+                                step="1"
+                                value={slide.duration}
+                                onChange={(event) => updatePhotoSlideDuration(slide.id, Number(event.target.value))}
+                                className="min-w-0 flex-1 accent-sky-500"
+                                aria-label="Duracao da foto"
+                              />
+                            </label>
                           <button
                             type="button"
                             onClick={() => removePhotoSlide(slide.id)}
@@ -2344,6 +2503,7 @@ export default function VideoEditor() {
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>
+                          </div>
                         </div>
                       ))}
                     </div>
