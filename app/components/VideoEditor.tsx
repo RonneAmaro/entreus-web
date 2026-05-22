@@ -169,6 +169,13 @@ function getFileExtension(fileName: string, fallback: string) {
   return extension || fallback
 }
 
+function getVoiceInputExtension(blob: Blob) {
+  if (blob.type.includes('mp4')) return 'm4a'
+  if (blob.type.includes('ogg')) return 'ogg'
+  if (blob.type.includes('wav')) return 'wav'
+  return 'webm'
+}
+
 function escapeDrawTextValue(value: string) {
   return value
     .replace(/\\/g, '\\\\')
@@ -241,6 +248,7 @@ export default function VideoEditor() {
   const voiceStreamRef = useRef<MediaStream | null>(null)
   const voiceChunksRef = useRef<BlobPart[]>([])
   const voiceStartedAtRef = useRef(0)
+  const voicePreviewRef = useRef<HTMLAudioElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const imageElementsRef = useRef<Map<string, HTMLImageElement>>(new Map())
   const pointerMovedRef = useRef(false)
@@ -338,6 +346,15 @@ export default function VideoEditor() {
       if (voiceUrl) URL.revokeObjectURL(voiceUrl)
     }
   }, [voiceUrl])
+
+  useEffect(() => {
+    return () => {
+      if (voiceRecorderRef.current?.state === 'recording') {
+        voiceRecorderRef.current.stop()
+      }
+      voiceStreamRef.current?.getTracks().forEach((track) => track.stop())
+    }
+  }, [])
 
   useEffect(() => {
     if (videoRef.current) videoRef.current.volume = videoVolume
@@ -595,6 +612,12 @@ export default function VideoEditor() {
       return
     }
 
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setVoiceMessage('Este navegador nao permite acesso ao microfone aqui.')
+      console.info('[VideoEditor] getUserMedia support:', false)
+      return
+    }
+
     console.info('[VideoEditor] MediaRecorder support:', true)
 
     try {
@@ -652,6 +675,15 @@ export default function VideoEditor() {
     recorder.stop()
   }
 
+  function playVoicePreview() {
+    if (!voicePreviewRef.current) return
+    voicePreviewRef.current.currentTime = 0
+    voicePreviewRef.current.play().catch((error) => {
+      console.warn('[VideoEditor] Voice preview failed:', error)
+      setVoiceMessage('Nao foi possivel tocar a previa da voz.')
+    })
+  }
+
   function removeVoiceRecording() {
     if (voiceUrl) URL.revokeObjectURL(voiceUrl)
     setVoiceBlob(null)
@@ -665,6 +697,7 @@ export default function VideoEditor() {
   function clearEditorAfterPublish() {
     if (videoUrl) URL.revokeObjectURL(videoUrl)
     if (audioUrl) URL.revokeObjectURL(audioUrl)
+    if (voiceUrl) URL.revokeObjectURL(voiceUrl)
     imageOverlays.forEach((overlay) => URL.revokeObjectURL(overlay.url))
     photoSlides.forEach((slide) => URL.revokeObjectURL(slide.previewUrl))
     imageElementsRef.current.clear()
@@ -676,6 +709,12 @@ export default function VideoEditor() {
     setAudioFile(null)
     setAudioUrl('')
     setAudioName('')
+    setVoiceBlob(null)
+    setVoiceUrl('')
+    setVoiceDuration(0)
+    setVoiceStartTime(0)
+    setVoiceVolume(1)
+    setVoiceMessage('')
     setOverlays([])
     setActiveOverlayId(null)
     setImageOverlays([])
@@ -1294,12 +1333,104 @@ export default function VideoEditor() {
     ].join(';')
   }
 
+  function buildAudioMixFilters({
+    totalDuration,
+    musicInputIndex,
+    voiceInputIndex,
+    includeOriginalAudio,
+    mixDuration,
+  }: {
+    totalDuration: number
+    musicInputIndex: number | null
+    voiceInputIndex: number | null
+    includeOriginalAudio: boolean
+    mixDuration: 'first' | 'longest'
+  }) {
+    const filters: string[] = []
+    const labels: string[] = []
+
+    if (includeOriginalAudio) {
+      filters.push(`[0:a]volume=${videoVolume.toFixed(2)}[a0]`)
+      labels.push('[a0]')
+    }
+
+    if (musicInputIndex !== null) {
+      filters.push(
+        `[${musicInputIndex}:a]atrim=0:${totalDuration.toFixed(3)},asetpts=PTS-STARTPTS,volume=${musicVolume.toFixed(2)}[aMusic]`
+      )
+      labels.push('[aMusic]')
+    }
+
+    if (voiceInputIndex !== null) {
+      const voiceDelayMs = Math.max(Math.round(voiceStartTime * 1000), 0)
+      filters.push(
+        `[${voiceInputIndex}:a]adelay=${voiceDelayMs}:all=1,atrim=0:${totalDuration.toFixed(3)},asetpts=PTS-STARTPTS,volume=${voiceVolume.toFixed(2)}[aVoice]`
+      )
+      labels.push('[aVoice]')
+    }
+
+    if (labels.length === 0) return filters
+    if (labels.length === 1) return [...filters, `${labels[0]}anull[a]`]
+
+    return [
+      ...filters,
+      `${labels.join('')}amix=inputs=${labels.length}:duration=${mixDuration}:dropout_transition=0[a]`,
+    ]
+  }
+
   function buildRenderArgs(
     inputVideoName: string,
     inputAudioName: string | null,
+    inputVoiceName: string | null,
+    voiceInputIndex: number | null,
     renderImage?: { inputName: string; overlay: ImageOverlay; inputIndex: number } | null,
     includeImageTiming = true
   ) {
+    if (inputVoiceName) {
+      const inputArgs = [
+        '-i',
+        inputVideoName,
+        ...(inputAudioName ? ['-stream_loop', '-1', '-i', inputAudioName] : []),
+        ...(renderImage ? ['-i', renderImage.inputName] : []),
+        '-i',
+        inputVoiceName,
+      ]
+      const videoGraph = renderImage
+        ? buildImageVideoFilter(renderImage, includeImageTiming)
+        : `[0:v]${buildVideoFilter()}[v]`
+      const audioFilters = buildAudioMixFilters({
+        totalDuration: duration,
+        musicInputIndex: inputAudioName ? 1 : null,
+        voiceInputIndex,
+        includeOriginalAudio: true,
+        mixDuration: 'first',
+      })
+
+      return [
+        ...inputArgs,
+        '-filter_complex',
+        [videoGraph, ...audioFilters].join(';'),
+        '-map',
+        '[v]',
+        '-map',
+        '[a]',
+        '-c:v',
+        'libx264',
+        '-preset',
+        'veryfast',
+        '-crf',
+        '23',
+        '-c:a',
+        'aac',
+        '-b:a',
+        '192k',
+        '-movflags',
+        '+faststart',
+        '-shortest',
+        'entreus_output.mp4',
+      ]
+    }
+
     const videoFilter = renderImage
       ? buildImageVideoFilter(renderImage, includeImageTiming)
       : buildVideoFilter()
@@ -1407,9 +1538,57 @@ export default function VideoEditor() {
   function buildFallbackRenderArgs(
     inputVideoName: string,
     inputAudioName: string | null,
+    inputVoiceName: string | null,
+    voiceInputIndex: number | null,
     renderImage?: { inputName: string; overlay: ImageOverlay; inputIndex: number } | null,
     includeImageTiming = false
   ) {
+    if (inputVoiceName) {
+      const inputArgs = [
+        '-i',
+        inputVideoName,
+        ...(inputAudioName ? ['-stream_loop', '-1', '-i', inputAudioName] : []),
+        ...(renderImage ? ['-i', renderImage.inputName] : []),
+        '-i',
+        inputVoiceName,
+      ]
+      const videoGraph = renderImage
+        ? buildImageVideoFilter(renderImage, includeImageTiming)
+        : `[0:v]${buildVideoFilter()}[v]`
+      const audioFilters = buildAudioMixFilters({
+        totalDuration: duration,
+        musicInputIndex: inputAudioName ? 1 : null,
+        voiceInputIndex,
+        includeOriginalAudio: false,
+        mixDuration: 'longest',
+      })
+
+      return [
+        ...inputArgs,
+        '-filter_complex',
+        [videoGraph, ...audioFilters].join(';'),
+        '-map',
+        '[v]',
+        '-map',
+        '[a]',
+        '-c:v',
+        'libx264',
+        '-preset',
+        'veryfast',
+        '-crf',
+        '23',
+        '-c:a',
+        'aac',
+        '-b:a',
+        '192k',
+        '-movflags',
+        '+faststart',
+        '-t',
+        duration.toFixed(3),
+        'entreus_output.mp4',
+      ]
+    }
+
     const videoFilter = renderImage
       ? buildImageVideoFilter(renderImage, includeImageTiming)
       : buildVideoFilter()
@@ -1665,6 +1844,8 @@ export default function VideoEditor() {
   function buildPhotoRenderArgs(
     photoInputs: { name: string; slide: PhotoSlide }[],
     inputAudioName: string | null,
+    inputVoiceName: string | null,
+    voiceInputIndex: number | null,
     useFade: boolean
   ) {
     const totalDuration = getPhotoSlidesDuration(photoInputs.map((item) => item.slide))
@@ -1676,19 +1857,27 @@ export default function VideoEditor() {
       '-i',
       item.name,
     ])
+    const fullInputArgs = [
+      ...inputArgs,
+      ...(inputAudioName ? ['-stream_loop', '-1', '-i', inputAudioName] : []),
+      ...(inputVoiceName ? ['-i', inputVoiceName] : []),
+    ]
+    const musicInputIndex = inputAudioName ? photoInputs.length : null
+    const audioFilters = buildAudioMixFilters({
+      totalDuration,
+      musicInputIndex,
+      voiceInputIndex,
+      includeOriginalAudio: false,
+      mixDuration: 'longest',
+    })
 
-    if (inputAudioName) {
-      const audioInputIndex = photoInputs.length
+    if (inputAudioName || inputVoiceName) {
       return [
-        ...inputArgs,
-        '-stream_loop',
-        '-1',
-        '-i',
-        inputAudioName,
+        ...fullInputArgs,
         '-filter_complex',
         [
           buildPhotoVideoFilter(photoInputs.map((item) => item.slide), useFade),
-          `[${audioInputIndex}:a]atrim=0:${totalDuration.toFixed(3)},asetpts=PTS-STARTPTS,volume=${musicVolume.toFixed(2)}[a]`,
+          ...audioFilters,
         ].join(';'),
         '-map',
         '[v]',
@@ -1715,7 +1904,7 @@ export default function VideoEditor() {
     }
 
     return [
-      ...inputArgs,
+      ...fullInputArgs,
       '-filter_complex',
       buildPhotoVideoFilter(photoInputs.map((item) => item.slide), useFade),
       '-map',
@@ -1802,6 +1991,10 @@ export default function VideoEditor() {
       name: `photo_slide_${index}.${getPhotoInputExtension(slide.file)}`,
     }))
     const inputAudioName = audioFile ? `music.${getFileExtension(audioFile.name, 'mp3')}` : null
+    const inputVoiceName = voiceBlob ? `voice_track.${getVoiceInputExtension(voiceBlob)}` : null
+    const voiceInputIndex = inputVoiceName
+      ? photoInputs.length + (inputAudioName ? 1 : 0)
+      : null
     const outputName = 'entreus_output.mp4'
     const optimizedOutputName = 'entreus_output_optimized.mp4'
     const filesToClean = [
@@ -1809,6 +2002,7 @@ export default function VideoEditor() {
       outputName,
       optimizedOutputName,
       ...(inputAudioName ? [inputAudioName] : []),
+      ...(inputVoiceName ? [inputVoiceName] : []),
     ]
 
     try {
@@ -1829,8 +2023,21 @@ export default function VideoEditor() {
         await ffmpeg.writeFile(inputAudioName, await fetchFile(audioFile))
       }
 
+      if (voiceBlob && inputVoiceName) {
+        setRenderStage('write_voice', 'Preparando voz...')
+        console.info('[VideoEditor] Voice input for photo render:', {
+          size: voiceBlob.size,
+          type: voiceBlob.type,
+          duration: voiceDuration,
+          startTime: voiceStartTime,
+          volume: voiceVolume,
+          inputIndex: voiceInputIndex,
+        })
+        await ffmpeg.writeFile(inputVoiceName, await fetchFile(voiceBlob))
+      }
+
       const useFadeTransition = photoTransition === 'fade'
-      const renderArgs = buildPhotoRenderArgs(photoInputs, inputAudioName, useFadeTransition)
+      const renderArgs = buildPhotoRenderArgs(photoInputs, inputAudioName, inputVoiceName, voiceInputIndex, useFadeTransition)
       console.info('[VideoEditor] Photo FFmpeg command:', renderArgs.join(' '))
       setRenderStage('exec_photos', 'Renderizando fotos em video...')
 
@@ -1840,7 +2047,7 @@ export default function VideoEditor() {
         console.warn('[VideoEditor] Photo fade render failed:', { exitCode })
         setRenderStage('exec_photos_fallback', 'Tentando sem transicao...')
         await cleanupFfmpegFiles(ffmpeg, [outputName])
-        const fallbackArgs = buildPhotoRenderArgs(photoInputs, inputAudioName, false)
+        const fallbackArgs = buildPhotoRenderArgs(photoInputs, inputAudioName, inputVoiceName, voiceInputIndex, false)
         console.info('[VideoEditor] Photo fallback command:', fallbackArgs.join(' '))
         exitCode = await ffmpeg.exec(fallbackArgs)
       }
@@ -1864,6 +2071,7 @@ export default function VideoEditor() {
           duration: slide.duration,
         })),
         hasAudio: Boolean(audioFile),
+        hasVoice: Boolean(voiceBlob),
       })
       setRenderMessage('Nao foi possivel criar o video com fotos neste navegador. Tente menos fotos ou imagens menores.')
     } finally {
@@ -1889,6 +2097,7 @@ export default function VideoEditor() {
 
     const inputVideoName = `input.${getFileExtension(videoFile.name, 'mp4')}`
     const inputAudioName = audioFile ? `music.${getFileExtension(audioFile.name, 'mp3')}` : null
+    const inputVoiceName = voiceBlob ? `voice_track.${getVoiceInputExtension(voiceBlob)}` : null
     const outputName = 'entreus_output.mp4'
     const optimizedOutputName = 'entreus_output_optimized.mp4'
     const renderableImageOverlay = getRenderableImageOverlay()
@@ -1902,11 +2111,15 @@ export default function VideoEditor() {
           inputIndex: inputAudioName ? 2 : 1,
         }
       : null
+    const voiceInputIndex = inputVoiceName
+      ? 1 + (inputAudioName ? 1 : 0) + (renderImageInput ? 1 : 0)
+      : null
     const filesToClean = [
       inputVideoName,
       outputName,
       optimizedOutputName,
       ...(inputAudioName ? [inputAudioName] : []),
+      ...(inputVoiceName ? [inputVoiceName] : []),
       ...(renderImageInputName ? [renderImageInputName] : []),
     ]
 
@@ -1919,6 +2132,7 @@ export default function VideoEditor() {
       logRenderContext('start', {
         inputVideoName,
         inputAudioName,
+        inputVoiceName,
         canvasSize,
         imageOverlay: renderImageInput
           ? {
@@ -1942,6 +2156,19 @@ export default function VideoEditor() {
         await ffmpeg.writeFile(inputAudioName, await fetchFile(audioFile))
       }
 
+      if (voiceBlob && inputVoiceName) {
+        setRenderStage('write_voice', 'Preparando voz...')
+        console.info('[VideoEditor] Voice input for video render:', {
+          size: voiceBlob.size,
+          type: voiceBlob.type,
+          duration: voiceDuration,
+          startTime: voiceStartTime,
+          volume: voiceVolume,
+          inputIndex: voiceInputIndex,
+        })
+        await ffmpeg.writeFile(inputVoiceName, await fetchFile(voiceBlob))
+      }
+
       if (renderImageInput) {
         const placement = getImageOverlayPlacement(renderImageInput.overlay)
         setRenderStage('write_image', 'Preparando imagem...')
@@ -1957,7 +2184,7 @@ export default function VideoEditor() {
         await ffmpeg.writeFile(renderImageInput.inputName, await fetchFile(renderImageInput.overlay.file))
       }
 
-      const renderArgs = buildRenderArgs(inputVideoName, inputAudioName, renderImageInput)
+      const renderArgs = buildRenderArgs(inputVideoName, inputAudioName, inputVoiceName, voiceInputIndex, renderImageInput)
       console.info('[VideoEditor] FFmpeg command:', renderArgs.join(' '))
       setRenderStage('exec_primary', 'Renderizando versao final...')
 
@@ -1967,7 +2194,7 @@ export default function VideoEditor() {
         console.warn('[VideoEditor] FFmpeg image timing render failed:', { exitCode })
         setRenderStage('exec_image_fallback', 'Ajustando imagem e tentando novamente...')
         await cleanupFfmpegFiles(ffmpeg, [outputName])
-        const imageFallbackArgs = buildRenderArgs(inputVideoName, inputAudioName, renderImageInput, false)
+        const imageFallbackArgs = buildRenderArgs(inputVideoName, inputAudioName, inputVoiceName, voiceInputIndex, renderImageInput, false)
         console.info('[VideoEditor] FFmpeg image fallback command:', imageFallbackArgs.join(' '))
         exitCode = await ffmpeg.exec(imageFallbackArgs)
       }
@@ -1976,7 +2203,7 @@ export default function VideoEditor() {
         console.warn('[VideoEditor] FFmpeg primary render failed:', { exitCode })
         setRenderStage('exec_fallback', 'Ajustando mixagem e tentando novamente...')
         await cleanupFfmpegFiles(ffmpeg, [outputName])
-        const fallbackArgs = buildFallbackRenderArgs(inputVideoName, inputAudioName, renderImageInput)
+        const fallbackArgs = buildFallbackRenderArgs(inputVideoName, inputAudioName, inputVoiceName, voiceInputIndex, renderImageInput)
         console.info('[VideoEditor] FFmpeg fallback command:', fallbackArgs.join(' '))
         exitCode = await ffmpeg.exec(fallbackArgs)
       }
@@ -2008,6 +2235,13 @@ export default function VideoEditor() {
               name: audioFile.name,
               type: audioFile.type,
               size: audioFile.size,
+            }
+          : null,
+        voice: voiceBlob
+          ? {
+              type: voiceBlob.type,
+              size: voiceBlob.size,
+              duration: voiceDuration,
             }
           : null,
         duration,
@@ -2213,7 +2447,7 @@ export default function VideoEditor() {
                     >
                       <Plus className="h-4 w-4" />
                     </button>
-                    {(editorMode === 'photos' ? ['Fotos', 'Audio'] : ['Video', 'Texto', 'Imagem', 'Audio', 'Voz']).map((track) => (
+                    {(editorMode === 'photos' ? ['Fotos', 'Audio', 'Voz'] : ['Video', 'Texto', 'Imagem', 'Audio', 'Voz']).map((track) => (
                       <span key={track} className="flex h-8 items-center justify-end pr-1">
                         {track}
                       </span>
@@ -2383,18 +2617,31 @@ export default function VideoEditor() {
                       )}
                     </div>
 
-                    {editorMode === 'video' && (
                     <div className="relative mt-1 h-8 rounded-lg border border-violet-300/15 bg-violet-500/10">
-                      <button
-                        type="button"
-                        onClick={() => setActivePanel('voice')}
-                        className="absolute left-2 top-1 inline-flex h-6 items-center gap-1 rounded-md border border-violet-300/20 bg-violet-500/10 px-2 text-[10px] font-black text-violet-100"
-                      >
-                        <Mic className="h-3 w-3" />
-                        Voz
-                      </button>
+                      {voiceUrl ? (
+                        <button
+                          type="button"
+                          onClick={() => setActivePanel('voice')}
+                          className="absolute top-1 flex h-6 min-w-12 items-center gap-2 rounded-md bg-violet-300/85 px-2 text-left text-[10px] font-black text-violet-950 ring-1 ring-violet-200"
+                          style={{
+                            left: `${timelineDuration > 0 ? Math.min((voiceStartTime / timelineDuration) * 100, 92) : 0}%`,
+                            width: `${timelineDuration > 0 ? Math.max((voiceDuration / timelineDuration) * 100, 10) : 18}%`,
+                          }}
+                        >
+                          <Mic className="h-3 w-3 shrink-0" />
+                          <span className="truncate">{formatEditorTime(voiceDuration)}</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setActivePanel('voice')}
+                          className="absolute left-2 top-1 inline-flex h-6 items-center gap-1 rounded-md border border-violet-300/20 bg-violet-500/10 px-2 text-[10px] font-black text-violet-100"
+                        >
+                          <Mic className="h-3 w-3" />
+                          Voz
+                        </button>
+                      )}
                     </div>
-                    )}
                   </div>
                 </div>
 
@@ -3105,12 +3352,105 @@ export default function VideoEditor() {
               <div className="space-y-4">
                 <div>
                   <h3 className="text-base font-black">Voz</h3>
-                  <p className="mt-1 text-sm text-zinc-500">Em breve.</p>
+                  <p className="mt-1 text-sm text-zinc-500">
+                    {isRecordingVoice ? 'Gravando...' : voiceUrl ? 'Voz pronta' : 'Grave uma narracao.'}
+                  </p>
                 </div>
 
-                <div className="rounded-2xl border border-white/10 bg-zinc-950 p-4 text-sm text-zinc-400">
-                  Grave narrações em uma proxima versao. O editor atual preserva audio original e musica.
+                {voiceMessage && (
+                  <div className="rounded-xl border border-violet-300/20 bg-violet-500/10 px-3 py-2 text-xs font-bold text-violet-100">
+                    {voiceMessage}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-3 gap-2">
+                  {isRecordingVoice ? (
+                    <button
+                      type="button"
+                      onClick={stopVoiceRecording}
+                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-red-500 px-3 py-2 text-sm font-black text-white transition hover:bg-red-400"
+                    >
+                      <Mic className="h-4 w-4" />
+                      Parar
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={startVoiceRecording}
+                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-violet-400 px-3 py-2 text-sm font-black text-violet-950 transition hover:bg-violet-300"
+                    >
+                      <Mic className="h-4 w-4" />
+                      Gravar
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={playVoicePreview}
+                    disabled={!voiceUrl}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-violet-300/20 bg-violet-500/10 px-3 py-2 text-sm font-black text-violet-100 transition hover:bg-violet-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <Play className="h-4 w-4" />
+                    Ouvir
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={removeVoiceRecording}
+                    disabled={!voiceUrl && !voiceBlob}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-zinc-950 px-3 py-2 text-sm font-black text-zinc-200 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Remover
+                  </button>
                 </div>
+
+                {voiceUrl && (
+                  <div className="space-y-4 rounded-2xl border border-white/10 bg-zinc-950 p-4">
+                    <audio ref={voicePreviewRef} src={voiceUrl} controls className="w-full" />
+
+                    <div className="grid grid-cols-3 gap-2 text-center text-[11px] font-black text-zinc-300">
+                      <div className="rounded-lg border border-white/10 bg-black/30 px-2 py-2">
+                        <span className="block text-zinc-500">Duracao</span>
+                        <span>{formatEditorTime(voiceDuration)}</span>
+                      </div>
+                      <div className="rounded-lg border border-white/10 bg-black/30 px-2 py-2">
+                        <span className="block text-zinc-500">Inicio</span>
+                        <span>{formatEditorTime(voiceStartTime)}</span>
+                      </div>
+                      <div className="rounded-lg border border-white/10 bg-black/30 px-2 py-2">
+                        <span className="block text-zinc-500">Arquivo</span>
+                        <span>{voiceBlob ? formatFileSize(voiceBlob.size) : '-'}</span>
+                      </div>
+                    </div>
+
+                    <label className="block text-xs font-black text-zinc-400">
+                      Inicio
+                      <input
+                        type="range"
+                        min="0"
+                        max={Math.max(timelineDuration - 0.1, 0)}
+                        step="0.1"
+                        value={voiceStartTime}
+                        onChange={(event) => setVoiceStartTime(Number(event.target.value))}
+                        className="mt-2 w-full accent-violet-400"
+                      />
+                    </label>
+
+                    <label className="block text-xs font-black text-zinc-400">
+                      Volume da voz
+                      <input
+                        type="range"
+                        min="0"
+                        max="1.5"
+                        step="0.05"
+                        value={voiceVolume}
+                        onChange={(event) => setVoiceVolume(Number(event.target.value))}
+                        className="mt-2 w-full accent-violet-400"
+                      />
+                    </label>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -3119,7 +3459,7 @@ export default function VideoEditor() {
             <button
               type="button"
               onClick={renderFinalVideo}
-              disabled={!videoFile || isRendering}
+              disabled={!canPublish || isRendering}
               className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-blue-500 px-5 py-3 text-sm font-black text-white shadow-lg shadow-blue-950/30 transition hover:bg-blue-400 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isRendering ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}
