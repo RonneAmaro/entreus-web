@@ -237,6 +237,10 @@ export default function VideoEditor() {
   const ffmpegRef = useRef<FFmpeg | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
+  const voiceRecorderRef = useRef<MediaRecorder | null>(null)
+  const voiceStreamRef = useRef<MediaStream | null>(null)
+  const voiceChunksRef = useRef<BlobPart[]>([])
+  const voiceStartedAtRef = useRef(0)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const imageElementsRef = useRef<Map<string, HTMLImageElement>>(new Map())
   const pointerMovedRef = useRef(false)
@@ -251,6 +255,13 @@ export default function VideoEditor() {
   const [audioFile, setAudioFile] = useState<File | null>(null)
   const [audioUrl, setAudioUrl] = useState('')
   const [audioName, setAudioName] = useState('')
+  const [voiceBlob, setVoiceBlob] = useState<Blob | null>(null)
+  const [voiceUrl, setVoiceUrl] = useState('')
+  const [voiceDuration, setVoiceDuration] = useState(0)
+  const [voiceStartTime, setVoiceStartTime] = useState(0)
+  const [voiceVolume, setVoiceVolume] = useState(1)
+  const [isRecordingVoice, setIsRecordingVoice] = useState(false)
+  const [voiceMessage, setVoiceMessage] = useState('')
   const [canvasSize, setCanvasSize] = useState<CanvasSize>({ width: 1280, height: 720 })
   const [textValue, setTextValue] = useState('')
   const [fontSize, setFontSize] = useState(DEFAULT_FONT_SIZE)
@@ -321,6 +332,12 @@ export default function VideoEditor() {
       if (audioUrl) URL.revokeObjectURL(audioUrl)
     }
   }, [audioUrl])
+
+  useEffect(() => {
+    return () => {
+      if (voiceUrl) URL.revokeObjectURL(voiceUrl)
+    }
+  }, [voiceUrl])
 
   useEffect(() => {
     if (videoRef.current) videoRef.current.volume = videoVolume
@@ -567,6 +584,82 @@ export default function VideoEditor() {
     setAudioFile(null)
     setAudioUrl('')
     setAudioName('')
+  }
+
+  async function startVoiceRecording() {
+    setVoiceMessage('')
+
+    if (typeof window === 'undefined' || typeof MediaRecorder === 'undefined') {
+      setVoiceMessage('Este navegador nao suporta gravacao de voz.')
+      console.info('[VideoEditor] MediaRecorder support:', false)
+      return
+    }
+
+    console.info('[VideoEditor] MediaRecorder support:', true)
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const recorder = new MediaRecorder(stream)
+
+      voiceChunksRef.current = []
+      voiceStreamRef.current = stream
+      voiceRecorderRef.current = recorder
+      voiceStartedAtRef.current = Date.now()
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) voiceChunksRef.current.push(event.data)
+      }
+
+      recorder.onstop = () => {
+        const blob = new Blob(voiceChunksRef.current, {
+          type: recorder.mimeType || 'audio/webm',
+        })
+        const nextUrl = URL.createObjectURL(blob)
+        const nextDuration = Math.max((Date.now() - voiceStartedAtRef.current) / 1000, 0.1)
+
+        if (voiceUrl) URL.revokeObjectURL(voiceUrl)
+        setVoiceBlob(blob)
+        setVoiceUrl(nextUrl)
+        setVoiceDuration(nextDuration)
+        setVoiceStartTime(0)
+        setVoiceMessage('Voz pronta')
+        setIsRecordingVoice(false)
+        voiceStreamRef.current?.getTracks().forEach((track) => track.stop())
+        voiceStreamRef.current = null
+        console.info('[VideoEditor] Voice recording done:', {
+          duration: nextDuration,
+          size: blob.size,
+          type: blob.type,
+        })
+      }
+
+      recorder.start()
+      setIsRecordingVoice(true)
+      setVoiceMessage('Gravando...')
+    } catch (error) {
+      console.warn('[VideoEditor] Voice recording failed:', error)
+      setIsRecordingVoice(false)
+      setVoiceMessage('Permissao de microfone negada.')
+      voiceStreamRef.current?.getTracks().forEach((track) => track.stop())
+      voiceStreamRef.current = null
+    }
+  }
+
+  function stopVoiceRecording() {
+    const recorder = voiceRecorderRef.current
+    if (!recorder || recorder.state === 'inactive') return
+
+    recorder.stop()
+  }
+
+  function removeVoiceRecording() {
+    if (voiceUrl) URL.revokeObjectURL(voiceUrl)
+    setVoiceBlob(null)
+    setVoiceUrl('')
+    setVoiceDuration(0)
+    setVoiceStartTime(0)
+    setVoiceVolume(1)
+    setVoiceMessage('')
   }
 
   function clearEditorAfterPublish() {
