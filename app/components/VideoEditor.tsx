@@ -2579,9 +2579,14 @@ export default function VideoEditor() {
     ]
 
     try {
-      const firstImageOverlay = imageOverlays[0]
-      if (firstImageOverlay?.file.type === 'image/webp') {
+      if (imageOverlays.some((overlay) => overlay.file.type === 'image/webp')) {
         setImageMessage('WebP aparece na previa, mas ainda nao entra no video final. Use PNG ou JPG.')
+      }
+      if (
+        imageOverlays.some((overlay) => Math.abs(overlay.rotation) > 0) ||
+        stickers.some((sticker) => Math.abs(sticker.rotation) > 0)
+      ) {
+        console.info('[VideoEditor] Rotation warning: rotation is preview-only for image/sticker final render.')
       }
 
       logRenderContext('start', {
@@ -2786,6 +2791,33 @@ export default function VideoEditor() {
   const activeStickerTimelineWidth = activeSticker && duration > 0
     ? ((activeSticker.endTime - activeSticker.startTime) / duration) * 100
     : 0
+  const hasWebPImageOverlay = imageOverlays.some((overlay) => overlay.file.type === 'image/webp')
+  const hasRotatedImageOverlay = imageOverlays.some((overlay) => Math.abs(overlay.rotation) > 0)
+  const hasRotatedSticker = stickers.some((sticker) => Math.abs(sticker.rotation) > 0)
+  const publishHints = [
+    ...(hasWebPImageOverlay ? ['Dica: para publicar com imagem, use PNG ou JPG. WebP fica apenas na previa.'] : []),
+    ...(hasRotatedImageOverlay || hasRotatedSticker
+      ? ['Rotacao aparece no preview, mas pode nao sair no video final.']
+      : []),
+  ]
+  const publishButtonLabel = isRendering
+    ? renderMessage.toLowerCase().includes('enviando') || renderMessage.toLowerCase().includes('publicando')
+      ? 'Enviando...'
+      : 'Renderizando...'
+    : 'Publicar'
+  const selectedLayerTitle = activeOverlay
+    ? 'Texto selecionado'
+    : activeSticker
+    ? 'Figurinha selecionada'
+    : activeImageOverlay
+    ? 'Imagem selecionada'
+    : activePanel === 'audio'
+    ? 'Audio selecionado'
+    : activePanel === 'voice'
+    ? 'Voz selecionada'
+    : activePanel === 'effects'
+    ? 'Video selecionado'
+    : 'Editor'
   const toolButtons = [
     { id: 'text' as EditorPanel, label: 'Texto', icon: <Type className="h-5 w-5" /> },
     { id: 'sticker' as EditorPanel, label: 'Figurinhas', icon: <Sparkles className="h-5 w-5" /> },
@@ -2795,6 +2827,15 @@ export default function VideoEditor() {
     { id: 'caption' as EditorPanel, label: 'Legenda', icon: <Captions className="h-5 w-5" /> },
     { id: 'voice' as EditorPanel, label: 'Voz', icon: <Mic className="h-5 w-5" /> },
     { id: 'add' as EditorPanel, label: 'Adicionar', icon: <Plus className="h-5 w-5" /> },
+  ]
+  const timelineTracks = [
+    { label: 'Texto', icon: <Type className="h-3 w-3" />, active: activePanel === 'text' || Boolean(activeOverlay) },
+    { label: 'Figurinha', icon: <Sparkles className="h-3 w-3" />, active: activePanel === 'sticker' || Boolean(activeSticker) },
+    { label: 'Imagem', icon: <ImageIcon className="h-3 w-3" />, active: activePanel === 'image' || Boolean(activeImageOverlay) },
+    { label: 'Video', icon: <Video className="h-3 w-3" />, active: activePanel === 'effects' },
+    { label: 'Voz', icon: <Mic className="h-3 w-3" />, active: activePanel === 'voice' },
+    { label: 'Musica', icon: <Music className="h-3 w-3" />, active: activePanel === 'audio' && Boolean(audioName) },
+    { label: 'Original', icon: <Video className="h-3 w-3" />, active: activePanel === 'audio' && !audioName },
   ]
 
   return (
@@ -2818,6 +2859,8 @@ export default function VideoEditor() {
                 {hasEditorMedia && (
                   <p className="mt-1 text-xs font-semibold text-zinc-500">
                     {formatEditorTime(currentTime)} / {formatEditorTime(editorMode === 'photos' ? photoSlidesDuration : duration)}
+                    <span className="mx-1 text-zinc-700">|</span>
+                    <span className="text-sky-200/80">{selectedLayerTitle}</span>
                   </p>
                 )}
               </div>
@@ -2831,7 +2874,7 @@ export default function VideoEditor() {
                 className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-sky-500 px-3 text-sm font-black text-white shadow-lg shadow-sky-950/30 transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-50 sm:px-4"
               >
                 {isRendering ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}
-                <span className="hidden sm:inline">Publicar</span>
+                <span>{publishButtonLabel}</span>
               </button>
             </div>
           </div>
@@ -2951,6 +2994,14 @@ export default function VideoEditor() {
                 <span className="text-zinc-600">{formatEditorTime(timelineDuration)}</span>
               </div>
 
+              {publishHints.length > 0 && (
+                <div className="mb-2 grid gap-1 rounded-xl border border-amber-300/15 bg-amber-500/10 px-3 py-2 text-[11px] font-semibold text-amber-100">
+                  {publishHints.map((hint) => (
+                    <span key={hint}>{hint}</span>
+                  ))}
+                </div>
+              )}
+
               <div className="relative rounded-2xl border border-white/10 bg-zinc-950/95 p-2 shadow-inner shadow-black">
                 <div className="pointer-events-none absolute left-1/2 top-2 z-20 h-[calc(100%-1rem)] w-0.5 -translate-x-1/2 rounded-full bg-sky-200 shadow-[0_0_18px_rgba(125,211,252,0.75)]" />
                 <div className="pointer-events-none absolute left-1/2 top-1 z-20 h-3 w-3 -translate-x-1/2 rounded-full bg-sky-200" />
@@ -2965,9 +3016,18 @@ export default function VideoEditor() {
                     >
                       <Plus className="h-4 w-4" />
                     </button>
-                    {['Texto', 'Figurinha', 'Imagem', 'Video', 'Voz', 'Musica', 'Original'].map((track) => (
-                      <span key={track} className="flex h-8 items-center justify-end pr-1">
-                        {track}
+                    {timelineTracks.map((track) => (
+                      <span
+                        key={track.label}
+                        className={`flex h-8 items-center justify-end gap-1 rounded-lg pr-1 transition ${
+                          track.active
+                            ? 'bg-white/10 text-white ring-1 ring-sky-300/20'
+                            : 'text-zinc-500'
+                        }`}
+                        title={track.label}
+                      >
+                        <span className="hidden sm:inline">{track.icon}</span>
+                        <span className="truncate">{track.label}</span>
                       </span>
                     ))}
                   </div>
@@ -3004,7 +3064,10 @@ export default function VideoEditor() {
                             }}
                             aria-label={`Selecionar ${getOverlayLabel(overlay, index)}`}
                           >
-                            <span className="block truncate">{getOverlayLabel(overlay, index)}</span>
+                            <span className="flex items-center gap-1 truncate">
+                              <Type className="h-3 w-3 shrink-0" />
+                              <span className="truncate">{getOverlayLabel(overlay, index)}</span>
+                            </span>
                           </button>
                         ))
                       ) : (
@@ -3069,7 +3132,10 @@ export default function VideoEditor() {
                               width: `${getTimelineWidth(overlay.startTime, overlay.endTime, 8)}%`,
                             }}
                           >
-                            <span className="block truncate">{overlay.name}</span>
+                            <span className="flex items-center gap-1 truncate">
+                              <ImageIcon className="h-3 w-3 shrink-0" />
+                              <span className="truncate">{overlay.name}</span>
+                            </span>
                           </button>
                         ))
                       ) : (
@@ -3130,9 +3196,12 @@ export default function VideoEditor() {
                           onClick={() => {
                             setActiveOverlayId(null)
                             setActiveImageId(null)
+                            setActiveStickerId(null)
                             setActivePanel('effects')
                           }}
-                          className="grid h-full w-full grid-cols-12 gap-1 p-1 text-left"
+                          className={`grid h-full w-full grid-cols-12 gap-1 p-1 text-left transition ${
+                            activePanel === 'effects' ? 'ring-2 ring-sky-300/60' : ''
+                          }`}
                         >
                           {timelineBlocks.map((item) => (
                             <span
@@ -3159,7 +3228,11 @@ export default function VideoEditor() {
                         <button
                           type="button"
                           onClick={() => setActivePanel('voice')}
-                          className="absolute top-1 flex h-6 min-w-12 items-center gap-2 overflow-hidden rounded-md bg-violet-300/85 px-2 text-left text-[10px] font-black text-violet-950 ring-1 ring-violet-200"
+                          className={`absolute top-1 flex h-6 min-w-12 items-center gap-2 overflow-hidden rounded-md px-2 text-left text-[10px] font-black text-violet-950 ring-1 transition ${
+                            activePanel === 'voice'
+                              ? 'bg-white ring-2 ring-violet-300'
+                              : 'bg-violet-300/85 ring-violet-200'
+                          }`}
                           style={{
                             left: `${getTimelineLeft(voiceStartTime)}%`,
                             width: `${getTimelineWidth(voiceStartTime, voiceTimelineEnd, 10)}%`,
@@ -3194,7 +3267,11 @@ export default function VideoEditor() {
                         <button
                           type="button"
                           onClick={() => setActivePanel('audio')}
-                          className="absolute top-1 flex h-6 min-w-14 items-center gap-2 overflow-hidden rounded-md bg-emerald-300/85 px-2 text-left text-[10px] font-black text-emerald-950 ring-1 ring-emerald-100"
+                          className={`absolute top-1 flex h-6 min-w-14 items-center gap-2 overflow-hidden rounded-md px-2 text-left text-[10px] font-black text-emerald-950 ring-1 transition ${
+                            activePanel === 'audio'
+                              ? 'bg-white ring-2 ring-emerald-300'
+                              : 'bg-emerald-300/85 ring-emerald-100'
+                          }`}
                           style={{
                             left: `${getTimelineLeft(musicStartTime)}%`,
                             width: `${getTimelineWidth(musicStartTime, musicTimelineEnd, 10)}%`,
@@ -3231,7 +3308,11 @@ export default function VideoEditor() {
                       <button
                         type="button"
                         onClick={() => setActivePanel('audio')}
-                        className="absolute left-0 top-1 flex h-6 w-full items-center gap-2 overflow-hidden rounded-md bg-blue-300/80 px-2 text-left text-[10px] font-black text-blue-950"
+                        className={`absolute left-0 top-1 flex h-6 w-full items-center gap-2 overflow-hidden rounded-md px-2 text-left text-[10px] font-black text-blue-950 transition ${
+                          activePanel === 'audio' && !audioName
+                            ? 'bg-white ring-2 ring-blue-300'
+                            : 'bg-blue-300/80'
+                        }`}
                       >
                         <Video className="h-3 w-3 shrink-0" />
                         <span className="truncate">Audio original do video</span>
@@ -3467,7 +3548,9 @@ export default function VideoEditor() {
                     <ImageIcon className="h-5 w-5" />
                   </span>
                   <span className="min-w-0">
-                    <span className="block text-sm font-black text-white">Adicionar imagem</span>
+                    <span className="block text-sm font-black text-white">
+                      {activeImageOverlay ? 'Adicionar/trocar imagem' : 'Adicionar imagem'}
+                    </span>
                     <span className="block truncate text-xs text-amber-100/60">PNG, JPG, WebP ate 5 MB</span>
                   </span>
                   <input
@@ -3775,6 +3858,10 @@ export default function VideoEditor() {
                       />
                     </label>
 
+                    <p className="mt-2 rounded-lg border border-fuchsia-200/15 bg-black/20 px-3 py-2 text-[11px] font-semibold text-fuchsia-100/70">
+                      Rotacao aparece no preview, mas pode nao sair no video final.
+                    </p>
+
                     <div className="mt-4 rounded-xl border border-white/10 bg-black/25 p-3">
                       <div className="mb-3 flex items-center justify-between gap-3 text-xs font-black text-fuchsia-100">
                         <span>Tempo</span>
@@ -3856,8 +3943,9 @@ export default function VideoEditor() {
                   )}
                 </div>
 
-                <div className="rounded-xl border border-amber-300/20 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-100">
-                  PNG/JPG sera incluido no video final. WebP ainda fica apenas na previa.
+                <div className="grid gap-1 rounded-xl border border-amber-300/20 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-100">
+                  <span>Dica: para publicar com imagem, use PNG ou JPG.</span>
+                  <span>WebP e rotacao podem ficar apenas no preview.</span>
                 </div>
 
                 {imageMessage && (
@@ -3955,6 +4043,10 @@ export default function VideoEditor() {
                       />
                     </label>
 
+                    <p className="mt-2 rounded-lg border border-amber-200/15 bg-black/20 px-3 py-2 text-[11px] font-semibold text-amber-100/70">
+                      Rotacao aparece no preview, mas pode nao sair no video final.
+                    </p>
+
                     <div className="mt-4 rounded-xl border border-white/10 bg-black/25 p-3">
                       <div className="mb-3 flex items-center justify-between gap-3 text-xs font-black text-amber-100">
                         <span>Tempo</span>
@@ -4019,7 +4111,9 @@ export default function VideoEditor() {
               <div className="space-y-4">
                 <div>
                   <h3 className="text-base font-black">Audio</h3>
-                  <p className="mt-1 text-sm text-zinc-500">Musica, inicio e volumes.</p>
+                  <p className="mt-1 text-sm text-zinc-500">
+                    {audioName ? 'Musica selecionada' : 'Troque musica, inicio e volumes.'}
+                  </p>
                 </div>
 
                 {audioMessage && (
@@ -4072,7 +4166,7 @@ export default function VideoEditor() {
                       className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-300 px-3 py-2 text-sm font-black text-emerald-950 transition hover:bg-emerald-200"
                     >
                       <Play className="h-4 w-4" />
-                      Ouvir previa
+                      Ouvir com video
                     </button>
                   </div>
                 )}
@@ -4181,7 +4275,7 @@ export default function VideoEditor() {
                 <div>
                   <h3 className="text-base font-black">Voz</h3>
                   <p className="mt-1 text-sm text-zinc-500">
-                    {isRecordingVoice ? 'Gravando...' : voiceUrl ? 'Voz pronta' : 'Grave uma narracao.'}
+                    {isRecordingVoice ? 'Gravando...' : voiceUrl ? 'Voz pronta para ouvir com o video' : 'Grave uma narracao.'}
                   </p>
                 </div>
 
@@ -4208,7 +4302,7 @@ export default function VideoEditor() {
                       className="inline-flex items-center justify-center gap-2 rounded-xl bg-violet-400 px-3 py-2 text-sm font-black text-violet-950 transition hover:bg-violet-300"
                     >
                       <Mic className="h-4 w-4" />
-                      Gravar
+                      {voiceUrl ? 'Regravar' : 'Gravar'}
                     </button>
                   )}
 
@@ -4291,7 +4385,7 @@ export default function VideoEditor() {
               className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-blue-500 px-5 py-3 text-sm font-black text-white shadow-lg shadow-blue-950/30 transition hover:bg-blue-400 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isRendering ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}
-              {isRendering ? 'Publicando...' : 'Avancar'}
+              {publishButtonLabel}
             </button>
           </div>
         </aside>
