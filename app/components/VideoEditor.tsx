@@ -1603,11 +1603,8 @@ export default function VideoEditor() {
     return ffmpeg
   }
 
-  function buildVideoFilter(includeOutputFormat = true) {
-    const filters = [getVisualFilter(filter)]
-
-    overlays.forEach((overlay) => {
-      filters.push(
+  function buildTextDrawFilters() {
+    return overlays.map((overlay) =>
         [
           'drawtext',
           `text='${escapeDrawTextValue(overlay.text)}'`,
@@ -1621,7 +1618,57 @@ export default function VideoEditor() {
           `enable='between(t,${overlay.startTime.toFixed(3)},${overlay.endTime.toFixed(3)})'`,
         ].join(':')
       )
+  }
+
+  function getStickerPlacement(sticker: StickerOverlay) {
+    const outputWidth = canvasSize.width || 1280
+    const outputHeight = canvasSize.height || 720
+    const size = clamp(Math.round(sticker.size), 16, Math.max(outputWidth, outputHeight))
+    const x = clamp(Math.round(sticker.x - size / 2), 0, Math.max(outputWidth - size, 0))
+    const y = clamp(Math.round(sticker.y - size / 2), 0, Math.max(outputHeight - size, 0))
+
+    return { x, y, size }
+  }
+
+  function buildStickerDrawFilters(includeStickers = true) {
+    if (!includeStickers) return []
+
+    return stickers.map((sticker) => {
+      const placement = getStickerPlacement(sticker)
+      const startTime = Number.isFinite(sticker.startTime) ? sticker.startTime : 0
+      const endTime = Number.isFinite(sticker.endTime) ? sticker.endTime : duration
+
+      return [
+        'drawtext',
+        `text='${escapeDrawTextValue(sticker.value)}'`,
+        `x=${placement.x}`,
+        `y=${placement.y}`,
+        `fontsize=${placement.size}`,
+        'fontcolor=white',
+        'shadowcolor=black@0.5',
+        'shadowx=2',
+        'shadowy=2',
+        `enable='between(t,${startTime.toFixed(3)},${endTime.toFixed(3)})'`,
+      ].join(':')
     })
+  }
+
+  function buildLayerDrawFilters(includeOutputFormat = true, includeStickers = true) {
+    const filters = [
+      ...buildStickerDrawFilters(includeStickers),
+      ...buildTextDrawFilters(),
+    ]
+
+    if (includeOutputFormat) filters.push('format=yuv420p')
+    return filters.join(',')
+  }
+
+  function buildVideoFilter(includeOutputFormat = true, includeStickers = true) {
+    const filters = [
+      getVisualFilter(filter),
+      ...buildStickerDrawFilters(includeStickers),
+      ...buildTextDrawFilters(),
+    ]
 
     if (includeOutputFormat) filters.push('format=yuv420p')
     return filters.join(',')
@@ -1649,17 +1696,21 @@ export default function VideoEditor() {
 
   function buildImageVideoFilter(
     renderImage: { overlay: ImageOverlay; inputIndex: number },
-    includeTiming: boolean
+    includeTiming: boolean,
+    includeStickers = true
   ) {
     const placement = getImageOverlayPlacement(renderImage.overlay)
     const timing = includeTiming
       ? `:enable='between(t,${renderImage.overlay.startTime.toFixed(3)},${renderImage.overlay.endTime.toFixed(3)})'`
       : ''
 
+    const layerFilters = buildLayerDrawFilters(true, includeStickers)
+
     return [
-      `[0:v]${buildVideoFilter(false)}[vbase]`,
+      `[0:v]${getVisualFilter(filter)}[vbase]`,
       `[${renderImage.inputIndex}:v]scale=${placement.width}:${placement.height}[img0]`,
-      `[vbase][img0]overlay=${placement.x}:${placement.y}${timing},format=yuv420p[v]`,
+      `[vbase][img0]overlay=${placement.x}:${placement.y}${timing}[vimg]`,
+      `[vimg]${layerFilters}[v]`,
     ].join(';')
   }
 
@@ -1715,7 +1766,8 @@ export default function VideoEditor() {
     inputVoiceName: string | null,
     voiceInputIndex: number | null,
     renderImage?: { inputName: string; overlay: ImageOverlay; inputIndex: number } | null,
-    includeImageTiming = true
+    includeImageTiming = true,
+    includeStickers = true
   ) {
     if (inputVoiceName) {
       const inputArgs = [
@@ -1727,8 +1779,8 @@ export default function VideoEditor() {
         inputVoiceName,
       ]
       const videoGraph = renderImage
-        ? buildImageVideoFilter(renderImage, includeImageTiming)
-        : `[0:v]${buildVideoFilter()}[v]`
+        ? buildImageVideoFilter(renderImage, includeImageTiming, includeStickers)
+        : `[0:v]${buildVideoFilter(true, includeStickers)}[v]`
       const audioFilters = buildAudioMixFilters({
         totalDuration: duration,
         musicInputIndex: inputAudioName ? 1 : null,
@@ -1763,8 +1815,8 @@ export default function VideoEditor() {
     }
 
     const videoFilter = renderImage
-      ? buildImageVideoFilter(renderImage, includeImageTiming)
-      : buildVideoFilter()
+      ? buildImageVideoFilter(renderImage, includeImageTiming, includeStickers)
+      : buildVideoFilter(true, includeStickers)
 
     if (!inputAudioName) {
       if (renderImage) {
@@ -1874,7 +1926,8 @@ export default function VideoEditor() {
     inputVoiceName: string | null,
     voiceInputIndex: number | null,
     renderImage?: { inputName: string; overlay: ImageOverlay; inputIndex: number } | null,
-    includeImageTiming = false
+    includeImageTiming = false,
+    includeStickers = true
   ) {
     if (inputVoiceName) {
       const inputArgs = [
@@ -1886,8 +1939,8 @@ export default function VideoEditor() {
         inputVoiceName,
       ]
       const videoGraph = renderImage
-        ? buildImageVideoFilter(renderImage, includeImageTiming)
-        : `[0:v]${buildVideoFilter()}[v]`
+        ? buildImageVideoFilter(renderImage, includeImageTiming, includeStickers)
+        : `[0:v]${buildVideoFilter(true, includeStickers)}[v]`
       const audioFilters = buildAudioMixFilters({
         totalDuration: duration,
         musicInputIndex: inputAudioName ? 1 : null,
@@ -1923,8 +1976,8 @@ export default function VideoEditor() {
     }
 
     const videoFilter = renderImage
-      ? buildImageVideoFilter(renderImage, includeImageTiming)
-      : buildVideoFilter()
+      ? buildImageVideoFilter(renderImage, includeImageTiming, includeStickers)
+      : buildVideoFilter(true, includeStickers)
 
     if (!inputAudioName) {
       if (renderImage) {
@@ -2477,6 +2530,13 @@ export default function VideoEditor() {
               placement: getImageOverlayPlacement(renderImageInput.overlay),
             }
           : null,
+        stickers: stickers.map((sticker) => ({
+          value: sticker.value,
+          placement: getStickerPlacement(sticker),
+          startTime: sticker.startTime,
+          endTime: sticker.endTime,
+          rotation: sticker.rotation,
+        })),
       })
       const ffmpeg = await getFFmpeg()
 
@@ -2534,11 +2594,31 @@ export default function VideoEditor() {
         exitCode = await ffmpeg.exec(imageFallbackArgs)
       }
 
+      if (exitCode !== 0 && stickers.length > 0) {
+        console.warn('[VideoEditor] FFmpeg sticker render failed, retrying without stickers:', {
+          exitCode,
+          stickers: stickers.length,
+        })
+        setRenderStage('exec_sticker_fallback', 'Ajustando figurinhas e tentando novamente...')
+        await cleanupFfmpegFiles(ffmpeg, [outputName])
+        const stickerFallbackArgs = buildRenderArgs(
+          inputVideoName,
+          inputAudioName,
+          inputVoiceName,
+          voiceInputIndex,
+          renderImageInput,
+          false,
+          false
+        )
+        console.info('[VideoEditor] FFmpeg sticker fallback command:', stickerFallbackArgs.join(' '))
+        exitCode = await ffmpeg.exec(stickerFallbackArgs)
+      }
+
       if (exitCode !== 0) {
         console.warn('[VideoEditor] FFmpeg primary render failed:', { exitCode })
         setRenderStage('exec_fallback', 'Ajustando mixagem e tentando novamente...')
         await cleanupFfmpegFiles(ffmpeg, [outputName])
-        const fallbackArgs = buildFallbackRenderArgs(inputVideoName, inputAudioName, inputVoiceName, voiceInputIndex, renderImageInput)
+        const fallbackArgs = buildFallbackRenderArgs(inputVideoName, inputAudioName, inputVoiceName, voiceInputIndex, renderImageInput, false, stickers.length === 0)
         console.info('[VideoEditor] FFmpeg fallback command:', fallbackArgs.join(' '))
         exitCode = await ffmpeg.exec(fallbackArgs)
       }
