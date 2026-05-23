@@ -2940,8 +2940,6 @@ export default function VideoEditor() {
     : 'Editor'
   const toolButtons = [
     { id: 'text' as EditorPanel, label: 'Texto', icon: <Type className="h-5 w-5" /> },
-    { id: 'sticker' as EditorPanel, label: 'Figurinhas', icon: <Sparkles className="h-5 w-5" /> },
-    { id: 'image' as EditorPanel, label: 'Imagem', icon: <ImageIcon className="h-5 w-5" /> },
     { id: 'audio' as EditorPanel, label: 'Audio', icon: <Music className="h-5 w-5" /> },
     { id: 'effects' as EditorPanel, label: 'Efeitos', icon: <SlidersHorizontal className="h-5 w-5" /> },
     { id: 'caption' as EditorPanel, label: 'Legenda', icon: <Captions className="h-5 w-5" /> },
@@ -2950,12 +2948,11 @@ export default function VideoEditor() {
   ]
   const timelineTracks = [
     { label: 'Texto', icon: <Type className="h-3 w-3" />, active: activePanel === 'text' || Boolean(activeOverlay) },
-    { label: 'Figurinha', icon: <Sparkles className="h-3 w-3" />, active: activePanel === 'sticker' || Boolean(activeSticker) },
-    { label: 'Imagem', icon: <ImageIcon className="h-3 w-3" />, active: activePanel === 'image' || Boolean(activeImageOverlay) },
+    { label: 'Figurinhas', icon: <Sparkles className="h-3 w-3" />, active: activePanel === 'sticker' || Boolean(activeSticker) },
+    { label: 'Imagens', icon: <ImageIcon className="h-3 w-3" />, active: activePanel === 'image' || Boolean(activeImageOverlay) },
     { label: 'Video', icon: <Video className="h-3 w-3" />, active: activePanel === 'effects' },
     { label: 'Voz', icon: <Mic className="h-3 w-3" />, active: activePanel === 'voice' },
     { label: 'Musica', icon: <Music className="h-3 w-3" />, active: activePanel === 'audio' && Boolean(audioName) },
-    { label: 'Original', icon: <Video className="h-3 w-3" />, active: activePanel === 'audio' && !audioName },
   ]
   const compressionOptions: { id: CompressionPreset; label: string; description: string }[] = [
     { id: 'auto', label: 'Automatica', description: 'Recomendada' },
@@ -2964,8 +2961,8 @@ export default function VideoEditor() {
   ]
 
   return (
-    <section className="w-full overflow-hidden rounded-[1.25rem] border border-white/10 bg-black text-white shadow-2xl shadow-black/40 ring-1 ring-sky-400/10">
-      <div className="flex flex-col gap-0 lg:min-h-[82vh] lg:flex-row">
+    <section className="w-full overflow-hidden rounded-[1rem] border border-white/10 bg-black text-white shadow-2xl shadow-black/40 ring-1 ring-sky-400/10 sm:rounded-[1.25rem]">
+      <div className="flex min-h-[calc(100dvh-6.5rem)] flex-col gap-0 lg:min-h-[82vh] lg:flex-row">
         <div className="relative flex min-w-0 flex-1 flex-col bg-zinc-950">
           <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 px-3 py-2.5 sm:px-5">
             <div className="flex min-w-0 items-center gap-2">
@@ -2991,6 +2988,7 @@ export default function VideoEditor() {
               </div>
             </div>
 
+            {hasEditorMedia && (
             <div className="flex shrink-0 items-center gap-2">
               <button
                 type="button"
@@ -3002,9 +3000,10 @@ export default function VideoEditor() {
                 <span>{publishButtonLabel}</span>
               </button>
             </div>
+            )}
           </div>
 
-          <div className={`flex flex-1 items-center justify-center px-2 py-3 transition-all sm:px-5 ${hasEditorMedia ? 'min-h-[19rem] sm:min-h-[30rem]' : 'min-h-[24rem] sm:min-h-[34rem]'}`}>
+          <div className={`flex flex-1 items-center justify-center px-2 py-2 transition-all sm:px-5 sm:py-3 ${hasEditorMedia ? 'min-h-[min(52dvh,34rem)] sm:min-h-[30rem]' : 'min-h-[min(62dvh,34rem)] sm:min-h-[34rem]'}`}>
             <div className={`relative w-full overflow-hidden bg-black shadow-2xl shadow-black/40 ${hasEditorMedia ? 'rounded-xl sm:rounded-[1.25rem]' : 'rounded-[1.25rem] border border-white/10'}`}>
             {editorMode === 'video' && videoUrl ? (
               <div
@@ -3059,14 +3058,12 @@ export default function VideoEditor() {
                   style={{ zIndex: LAYER_ORDER.text }}
                 />
                 {!isPlaying && (
-                  <button
-                    type="button"
-                    onClick={togglePlayback}
-                    className="absolute left-1/2 top-1/2 z-10 flex h-20 w-20 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white shadow-2xl ring-1 ring-white/20 backdrop-blur-md transition hover:scale-105 hover:bg-blue-500/80"
-                    aria-label="Reproduzir video"
+                  <div
+                    className="pointer-events-none absolute left-1/2 top-1/2 z-[60] flex h-16 w-16 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white shadow-2xl ring-1 ring-white/25 backdrop-blur-md transition duration-200 sm:h-20 sm:w-20"
+                    aria-hidden="true"
                   >
-                    <Play className="ml-1 h-9 w-9 fill-current" />
-                  </button>
+                    <Play className="ml-1 h-8 w-8 fill-current sm:h-9 sm:w-9" />
+                  </div>
                 )}
               </div>
             ) : editorMode === 'photos' && activePhotoSlide ? (
@@ -3127,12 +3124,12 @@ export default function VideoEditor() {
                 </div>
               )}
 
-              <div className="relative rounded-2xl border border-white/10 bg-zinc-950/95 p-2 shadow-inner shadow-black">
+              <div className="relative rounded-xl border border-white/10 bg-zinc-950/95 p-2 shadow-inner shadow-black sm:rounded-2xl">
                 <div className="pointer-events-none absolute left-1/2 top-2 z-20 h-[calc(100%-1rem)] w-0.5 -translate-x-1/2 rounded-full bg-sky-200 shadow-[0_0_18px_rgba(125,211,252,0.75)]" />
                 <div className="pointer-events-none absolute left-1/2 top-1 z-20 h-3 w-3 -translate-x-1/2 rounded-full bg-sky-200" />
 
                 <div className="flex gap-2 overflow-x-auto scroll-smooth pb-1">
-                  <div className="sticky left-0 z-10 grid w-20 shrink-0 gap-1 bg-zinc-950/95 pr-1 text-[10px] font-black text-zinc-500">
+                  <div className="sticky left-0 z-10 grid w-[4.75rem] shrink-0 gap-1 bg-zinc-950/95 pr-1 text-[9px] font-black text-zinc-500 sm:w-20 sm:text-[10px]">
                     <button
                       type="button"
                       onClick={() => openEditorPanel('add')}
@@ -3157,7 +3154,7 @@ export default function VideoEditor() {
                     ))}
                   </div>
 
-                  <div className="min-w-[48rem] flex-1">
+                  <div className="min-w-[38rem] flex-1 sm:min-w-[48rem]">
                     <div className="mb-1 grid h-7 grid-cols-12 gap-1 px-1 text-[10px] font-black text-zinc-600">
                       {timelineBlocks.map((item) => (
                         <button
@@ -3426,21 +3423,6 @@ export default function VideoEditor() {
                       )}
                     </div>
 
-                    <div className="relative mt-1 h-8 rounded-lg border border-blue-300/15 bg-blue-500/10">
-                      <button
-                        type="button"
-                        onClick={() => openEditorPanel('audio')}
-                        className={`absolute left-0 top-1 flex h-6 w-full items-center gap-2 overflow-hidden rounded-md px-2 text-left text-[10px] font-black text-blue-950 transition ${
-                          activePanel === 'audio' && !audioName
-                            ? 'bg-white ring-2 ring-blue-300'
-                            : 'bg-blue-300/80'
-                        }`}
-                      >
-                        <Video className="h-3 w-3 shrink-0" />
-                        <span className="truncate">Audio original do video</span>
-                        <span className="ml-auto shrink-0">{Math.round(videoVolume * 100)}%</span>
-                      </button>
-                    </div>
                   </div>
                 </div>
 
@@ -3496,19 +3478,19 @@ export default function VideoEditor() {
 
         {hasEditorMedia && (
         <aside
-          className={`fixed inset-x-0 bottom-16 z-30 flex max-h-[56dvh] shrink-0 flex-col rounded-t-[1.25rem] border-t border-white/10 bg-black/95 shadow-2xl shadow-black/50 ring-1 ring-white/10 transition-all duration-300 lg:static lg:max-h-none lg:w-[22rem] lg:rounded-none lg:border-l lg:border-t-0 lg:bg-black/80 lg:shadow-none lg:ring-0 ${
+          className={`fixed inset-x-0 bottom-16 z-30 flex max-h-[48dvh] shrink-0 flex-col rounded-t-[1.25rem] border-t border-white/10 bg-black/95 shadow-2xl shadow-black/50 ring-1 ring-white/10 transition-all duration-300 sm:max-h-[52dvh] lg:static lg:max-h-none lg:w-[22rem] lg:rounded-none lg:border-l lg:border-t-0 lg:bg-black/80 lg:shadow-none lg:ring-0 ${
             controlsVisible
               ? 'translate-y-0 opacity-100'
               : 'pointer-events-none translate-y-full opacity-0 lg:translate-x-8 lg:translate-y-0'
           }`}
         >
-          <div className="grid grid-cols-4 gap-1 border-b border-white/10 p-2 sm:grid-cols-7 lg:grid-cols-3">
+          <div className="grid grid-cols-6 gap-1 border-b border-white/10 p-2 lg:grid-cols-3">
             {toolButtons.map((item) => (
               <button
                 key={item.id}
                 type="button"
                 onClick={() => openEditorPanel(item.id, item.id === activePanel)}
-                className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl px-2 text-[11px] font-black transition ${
+                className={`flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[10px] font-black transition sm:min-h-14 sm:px-2 sm:text-[11px] ${
                   activePanel === item.id
                     ? 'bg-sky-500 text-white shadow-lg shadow-sky-950/30'
                     : 'text-zinc-500 hover:bg-white/5 hover:text-zinc-100'
@@ -3520,12 +3502,41 @@ export default function VideoEditor() {
             ))}
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          <div className="min-h-0 flex-1 overflow-y-auto p-3 sm:p-4">
             {activePanel === 'add' && (
               <div className="space-y-4">
                 <div>
                   <h3 className="text-base font-black">Adicionar</h3>
                   <p className="mt-1 text-sm text-zinc-500">{editorMode === 'photos' ? 'Fotos em video' : 'Midias do editor'}</p>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => openEditorPanel('text')}
+                    className="flex min-h-16 flex-col items-center justify-center gap-1 rounded-xl border border-sky-300/20 bg-sky-500/10 px-2 text-xs font-black text-sky-50 transition hover:bg-sky-500/20"
+                  >
+                    <Type className="h-5 w-5" />
+                    Texto
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openEditorPanel('sticker')}
+                    className="flex min-h-16 flex-col items-center justify-center gap-1 rounded-xl border border-fuchsia-300/20 bg-fuchsia-500/10 px-2 text-xs font-black text-fuchsia-50 transition hover:bg-fuchsia-500/20"
+                  >
+                    <Sparkles className="h-5 w-5" />
+                    Figurinhas
+                  </button>
+                  <label className="flex min-h-16 cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border border-amber-300/20 bg-amber-500/10 px-2 text-xs font-black text-amber-50 transition hover:bg-amber-500/20">
+                    <ImageIcon className="h-5 w-5" />
+                    Imagem
+                    <input
+                      type="file"
+                      accept="image/*,.png,.jpg,.jpeg,.webp"
+                      onChange={handleImageChange}
+                      className="sr-only"
+                    />
+                  </label>
                 </div>
 
                 <label className="flex cursor-pointer items-center gap-3 rounded-2xl border border-dashed border-sky-300/30 bg-sky-500/10 px-4 py-4 transition hover:bg-sky-500/15">
@@ -3683,17 +3694,6 @@ export default function VideoEditor() {
                     type="file"
                     accept="image/*,.png,.jpg,.jpeg,.webp"
                     onChange={handleImageChange}
-                    className="sr-only"
-                  />
-                </label>
-                <label className="mt-3 inline-flex cursor-pointer items-center gap-2 rounded-full border border-white/10 bg-white/10 px-5 py-3 text-sm font-black text-white transition hover:bg-white/15">
-                  <ImageIcon className="h-4 w-4" />
-                  Criar com fotos
-                  <input
-                    type="file"
-                    accept="image/png,image/jpeg,.png,.jpg,.jpeg"
-                    multiple
-                    onChange={handlePhotoSlidesChange}
                     className="sr-only"
                   />
                 </label>
