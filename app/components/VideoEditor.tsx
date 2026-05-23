@@ -291,6 +291,7 @@ export default function VideoEditor() {
   const voiceStartedAtRef = useRef(0)
   const voicePreviewRef = useRef<HTMLAudioElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const timelineScrubRef = useRef<HTMLDivElement | null>(null)
   const imageElementsRef = useRef<Map<string, HTMLImageElement>>(new Map())
   const pointerMovedRef = useRef(false)
   const pointerStartedOnOverlayRef = useRef(false)
@@ -341,6 +342,8 @@ export default function VideoEditor() {
   const [renderMessage, setRenderMessage] = useState('')
   const [compressionPreset, setCompressionPreset] = useState<CompressionPreset>('auto')
   const [compressionStats, setCompressionStats] = useState<CompressionStats | null>(null)
+  const [isPublishStepOpen, setIsPublishStepOpen] = useState(false)
+  const [timelineExpanded, setTimelineExpanded] = useState(true)
   const [imageMessage, setImageMessage] = useState('')
   const [photoSlides, setPhotoSlides] = useState<PhotoSlide[]>([])
   const [activePhotoId, setActivePhotoId] = useState<string | null>(null)
@@ -898,6 +901,7 @@ export default function VideoEditor() {
     setCaption('')
     setTextValue('')
     setCompressionStats(null)
+    setIsPublishStepOpen(false)
     setRenderProgress(0)
     setCurrentTime(0)
     setIsPlaying(false)
@@ -925,11 +929,54 @@ export default function VideoEditor() {
 
   function handleSeek(value: number) {
     const video = videoRef.current
-    const nextTime = clamp(value, 0, duration)
+    const seekDuration = editorMode === 'photos' ? getPhotoSlidesDuration() : duration
+    const nextTime = clamp(value, 0, seekDuration)
 
     if (video) video.currentTime = nextTime
     syncPreviewAudioTracks(nextTime, isPlaying)
     setCurrentTime(nextTime)
+  }
+
+  function seekFromTimelinePointer(event: PointerEvent<HTMLDivElement>) {
+    if (timelineDuration <= 0) return
+
+    const rect = event.currentTarget.getBoundingClientRect()
+    const ratio = clamp((event.clientX - rect.left) / Math.max(rect.width, 1), 0, 1)
+    handleSeek(ratio * timelineDuration)
+  }
+
+  function handleTimelineScrubStart(event: PointerEvent<HTMLDivElement>) {
+    event.stopPropagation()
+    event.currentTarget.setPointerCapture(event.pointerId)
+
+    if (isPlaying) {
+      videoRef.current?.pause()
+      pauseBackgroundMusic()
+      setIsPlaying(false)
+    }
+
+    seekFromTimelinePointer(event)
+  }
+
+  function handleTimelineScrubMove(event: PointerEvent<HTMLDivElement>) {
+    if (!event.currentTarget.hasPointerCapture(event.pointerId)) return
+    event.stopPropagation()
+    seekFromTimelinePointer(event)
+  }
+
+  function handleTimelineScrubEnd(event: PointerEvent<HTMLDivElement>) {
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+  }
+
+  function handleAdvanceToPublish() {
+    if (!canPublish || isRendering) return
+
+    videoRef.current?.pause()
+    pauseBackgroundMusic()
+    setIsPlaying(false)
+    setIsPublishStepOpen(true)
   }
 
   function getSyncedAudioTime(targetTime: number) {
@@ -2883,6 +2930,7 @@ export default function VideoEditor() {
   const orderedPhotoSlides = [...photoSlides].sort((a, b) => a.order - b.order)
   const activePhotoSlide = getActivePhotoSlide()
   const timelineDuration = editorMode === 'photos' ? photoSlidesDuration : duration
+  const timelineProgressPercent = timelineDuration > 0 ? (currentTime / timelineDuration) * 100 : 0
   const hasEditorMedia = Boolean(videoUrl || photoSlides.length > 0)
   const canPublish = Boolean((editorMode === 'video' && videoFile) || (editorMode === 'photos' && photoSlides.length > 0))
   const controlsVisible = Boolean(hasEditorMedia && !isPlaying)
@@ -2925,6 +2973,7 @@ export default function VideoEditor() {
       ? 'Enviando...'
       : 'Renderizando...'
     : 'Publicar'
+  const advanceButtonLabel = isRendering ? publishButtonLabel : 'Avancar'
   const selectedLayerTitle = activeOverlay
     ? 'Texto selecionado'
     : activeSticker
@@ -2992,12 +3041,12 @@ export default function VideoEditor() {
             <div className="flex shrink-0 items-center gap-2">
               <button
                 type="button"
-                onClick={renderFinalVideo}
+                onClick={handleAdvanceToPublish}
                 disabled={!canPublish || isRendering}
                 className="inline-flex h-10 items-center justify-center gap-2 rounded-full bg-sky-500 px-3 text-sm font-black text-white shadow-lg shadow-sky-950/30 transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-50 sm:px-4"
               >
                 {isRendering ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}
-                <span>{publishButtonLabel}</span>
+                <span>{advanceButtonLabel}</span>
               </button>
             </div>
             )}
@@ -3065,6 +3114,55 @@ export default function VideoEditor() {
                     <Play className="ml-1 h-8 w-8 fill-current sm:h-9 sm:w-9" />
                   </div>
                 )}
+                {activeOverlay && controlsVisible && (
+                  <div
+                    className="absolute inset-x-3 bottom-3 z-[75] rounded-2xl border border-sky-300/25 bg-black/75 p-2 shadow-2xl shadow-black/40 ring-1 ring-white/10 backdrop-blur-xl"
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onPointerUp={(event) => event.stopPropagation()}
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={editableText}
+                        onChange={(event) => updateActiveOverlayText(event.target.value)}
+                        className="min-w-0 flex-1 rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-sm font-black text-white outline-none placeholder:text-zinc-500 focus:border-sky-300"
+                        aria-label="Editar texto selecionado"
+                      />
+                      <input
+                        type="color"
+                        value={editableTextColor}
+                        onChange={(event) => updateActiveOverlayStyle('color', event.target.value)}
+                        className="h-10 w-10 shrink-0 cursor-pointer rounded-xl border-0 bg-transparent p-0"
+                        aria-label="Cor do texto"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => updateActiveOverlayStyle('fontSize', Math.max(18, editableFontSize - 4))}
+                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/10 text-lg font-black text-white"
+                        aria-label="Diminuir texto"
+                      >
+                        -
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateActiveOverlayStyle('fontSize', Math.min(120, editableFontSize + 4))}
+                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/10 text-lg font-black text-white"
+                        aria-label="Aumentar texto"
+                      >
+                        +
+                      </button>
+                      <button
+                        type="button"
+                        onClick={removeActiveOverlay}
+                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-red-300/25 bg-red-500/15 text-red-100"
+                        aria-label="Remover texto"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             ) : editorMode === 'photos' && activePhotoSlide ? (
               <div
@@ -3113,7 +3211,16 @@ export default function VideoEditor() {
             >
               <div className="mb-2 flex items-center justify-between gap-3 text-xs font-black text-zinc-400">
                 <span>{formatEditorTime(currentTime)}</span>
-                <span className="text-zinc-600">{formatEditorTime(timelineDuration)}</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setTimelineExpanded((current) => !current)}
+                    className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-black text-zinc-300 transition hover:bg-white/10"
+                  >
+                    {timelineExpanded ? 'Compactar' : 'Camadas'}
+                  </button>
+                  <span className="text-zinc-600">{formatEditorTime(timelineDuration)}</span>
+                </div>
               </div>
 
               {publishHints.length > 0 && (
@@ -3125,8 +3232,26 @@ export default function VideoEditor() {
               )}
 
               <div className="relative rounded-xl border border-white/10 bg-zinc-950/95 p-2 shadow-inner shadow-black sm:rounded-2xl">
-                <div className="pointer-events-none absolute left-1/2 top-2 z-20 h-[calc(100%-1rem)] w-0.5 -translate-x-1/2 rounded-full bg-sky-200 shadow-[0_0_18px_rgba(125,211,252,0.75)]" />
-                <div className="pointer-events-none absolute left-1/2 top-1 z-20 h-3 w-3 -translate-x-1/2 rounded-full bg-sky-200" />
+                <div
+                  ref={timelineScrubRef}
+                  onPointerDown={handleTimelineScrubStart}
+                  onPointerMove={handleTimelineScrubMove}
+                  onPointerUp={handleTimelineScrubEnd}
+                  onPointerCancel={handleTimelineScrubEnd}
+                  className="mb-2 h-9 touch-none cursor-ew-resize rounded-xl border border-sky-300/15 bg-black/35 p-1.5"
+                  aria-label="Arrastar linha do tempo"
+                >
+                  <div className="relative h-full rounded-lg bg-white/10">
+                    <div
+                      className="absolute inset-y-0 left-0 rounded-lg bg-sky-400/45"
+                      style={{ width: `${timelineProgressPercent}%` }}
+                    />
+                    <div
+                      className="absolute top-1/2 h-6 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-sky-100 shadow-[0_0_18px_rgba(125,211,252,0.85)]"
+                      style={{ left: `${timelineProgressPercent}%` }}
+                    />
+                  </div>
+                </div>
 
                 <div className="flex gap-2 overflow-x-auto scroll-smooth pb-1">
                   <div className="sticky left-0 z-10 grid w-[4.75rem] shrink-0 gap-1 bg-zinc-950/95 pr-1 text-[9px] font-black text-zinc-500 sm:w-20 sm:text-[10px]">
@@ -3154,7 +3279,15 @@ export default function VideoEditor() {
                     ))}
                   </div>
 
-                  <div className="min-w-[38rem] flex-1 sm:min-w-[48rem]">
+                  <div className="relative min-w-[38rem] flex-1 sm:min-w-[48rem]">
+                    <div
+                      className="pointer-events-none absolute bottom-0 top-0 z-20 w-0.5 -translate-x-1/2 rounded-full bg-sky-200 shadow-[0_0_18px_rgba(125,211,252,0.75)]"
+                      style={{ left: `${timelineProgressPercent}%` }}
+                    />
+                    <div
+                      className="pointer-events-none absolute top-0 z-20 h-3 w-3 -translate-x-1/2 rounded-full bg-sky-200"
+                      style={{ left: `${timelineProgressPercent}%` }}
+                    />
                     <div className="mb-1 grid h-7 grid-cols-12 gap-1 px-1 text-[10px] font-black text-zinc-600">
                       {timelineBlocks.map((item) => (
                         <button
@@ -3204,7 +3337,7 @@ export default function VideoEditor() {
                       )}
                     </div>
 
-                    <div className="relative mt-1 h-8 rounded-lg border border-fuchsia-300/15 bg-fuchsia-500/10">
+                    <div className={`${timelineExpanded ? 'block' : 'hidden sm:block'} relative mt-1 h-8 rounded-lg border border-fuchsia-300/15 bg-fuchsia-500/10`}>
                       {editorMode === 'video' && stickers.length > 0 ? (
                         stickers.map((sticker) => (
                           <button
@@ -3237,7 +3370,7 @@ export default function VideoEditor() {
                       )}
                     </div>
 
-                    <div className="relative mt-1 h-8 rounded-lg border border-amber-300/15 bg-amber-500/10">
+                    <div className={`${timelineExpanded ? 'block' : 'hidden sm:block'} relative mt-1 h-8 rounded-lg border border-amber-300/15 bg-amber-500/10`}>
                       {editorMode === 'video' && imageOverlays.length > 0 ? (
                         imageOverlays.map((overlay) => (
                           <button
@@ -3342,7 +3475,7 @@ export default function VideoEditor() {
                       )}
                     </div>
 
-                    <div className="relative mt-1 h-8 rounded-lg border border-violet-300/15 bg-violet-500/10">
+                    <div className={`${timelineExpanded ? 'block' : 'hidden sm:block'} relative mt-1 h-8 rounded-lg border border-violet-300/15 bg-violet-500/10`}>
                       {voiceUrl ? (
                         <button
                           type="button"
@@ -3381,7 +3514,7 @@ export default function VideoEditor() {
                       )}
                     </div>
 
-                    <div className="relative mt-1 h-8 rounded-lg border border-emerald-300/15 bg-emerald-500/10">
+                    <div className={`${timelineExpanded ? 'block' : 'hidden sm:block'} relative mt-1 h-8 rounded-lg border border-emerald-300/15 bg-emerald-500/10`}>
                       {audioName ? (
                         <button
                           type="button"
@@ -4511,51 +4644,119 @@ export default function VideoEditor() {
           </div>
 
           <div className="border-t border-white/10 p-4">
-            <div className="mb-3 rounded-2xl border border-white/10 bg-zinc-950/80 p-3">
-              <div className="mb-2 flex items-center justify-between gap-3">
-                <span className="text-xs font-black text-zinc-200">Qualidade do video</span>
-                {sourceMediaBytes > 0 && (
-                  <span className="text-[11px] font-semibold text-zinc-500">
-                    Original {formatFileSize(sourceMediaBytes)}
-                  </span>
-                )}
-              </div>
-              <div className="grid grid-cols-3 gap-1 rounded-xl bg-black/35 p-1">
-                {compressionOptions.map((option) => (
-                  <button
-                    key={option.id}
-                    type="button"
-                    onClick={() => setCompressionPreset(option.id)}
-                    disabled={isRendering}
-                    className={`rounded-lg px-2 py-2 text-center transition disabled:cursor-not-allowed disabled:opacity-60 ${
-                      compressionPreset === option.id
-                        ? 'bg-sky-500 text-white'
-                        : 'text-zinc-500 hover:bg-white/10 hover:text-white'
-                    }`}
-                  >
-                    <span className="block truncate text-[11px] font-black">{option.label}</span>
-                    <span className="mt-0.5 block truncate text-[9px] font-semibold opacity-70">
-                      {option.description}
-                    </span>
-                  </button>
-                ))}
-              </div>
-              <p className="mt-2 text-[11px] font-semibold leading-relaxed text-zinc-500">
-                A EntreUS reduz o peso do video para carregar melhor no feed. Videos maiores podem demorar mais para otimizar.
-              </p>
-            </div>
-
             <button
               type="button"
-              onClick={renderFinalVideo}
+              onClick={handleAdvanceToPublish}
               disabled={!canPublish || isRendering}
               className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-blue-500 px-5 py-3 text-sm font-black text-white shadow-lg shadow-blue-950/30 transition hover:bg-blue-400 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isRendering ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}
-              {publishButtonLabel}
+              {advanceButtonLabel}
             </button>
           </div>
         </aside>
+        )}
+
+        {isPublishStepOpen && hasEditorMedia && (
+          <div className="fixed inset-0 z-[120] flex items-end justify-center bg-black/70 px-3 py-4 backdrop-blur-md sm:items-center">
+            <button
+              type="button"
+              onClick={() => {
+                if (!isRendering) setIsPublishStepOpen(false)
+              }}
+              className="absolute inset-0 cursor-default"
+              aria-label="Fechar etapa de publicacao"
+            />
+
+            <div className="relative z-[121] flex max-h-[88dvh] w-full max-w-xl flex-col overflow-hidden rounded-[1.5rem] border border-white/10 bg-zinc-950 text-white shadow-2xl shadow-black/50 ring-1 ring-sky-300/15">
+              <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
+                <div className="min-w-0">
+                  <p className="text-base font-black">Publicar video</p>
+                  <p className="mt-0.5 text-xs font-semibold text-zinc-500">Legenda, qualidade e confirmacao final</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsPublishStepOpen(false)}
+                  disabled={isRendering}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-zinc-400 transition hover:bg-white/10 hover:text-white disabled:opacity-40"
+                  aria-label="Voltar para edicao"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="min-h-0 flex-1 overflow-y-auto p-4">
+                <label className="block">
+                  <span className="text-xs font-black text-zinc-300">Descricao do post</span>
+                  <textarea
+                    value={caption}
+                    onChange={(event) => setCaption(event.target.value)}
+                    rows={5}
+                    placeholder="Escreva uma legenda para o feed..."
+                    className="mt-2 w-full resize-none rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm font-semibold text-white outline-none placeholder:text-zinc-600 focus:border-sky-300"
+                  />
+                </label>
+
+                <div className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-3">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <span className="text-xs font-black text-zinc-200">Qualidade do video</span>
+                    {sourceMediaBytes > 0 && (
+                      <span className="text-[11px] font-semibold text-zinc-500">
+                        Original {formatFileSize(sourceMediaBytes)}
+                      </span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-3 gap-1 rounded-xl bg-black/35 p-1">
+                    {compressionOptions.map((option) => (
+                      <button
+                        key={option.id}
+                        type="button"
+                        onClick={() => setCompressionPreset(option.id)}
+                        disabled={isRendering}
+                        className={`rounded-lg px-2 py-2 text-center transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                          compressionPreset === option.id
+                            ? 'bg-sky-500 text-white'
+                            : 'text-zinc-500 hover:bg-white/10 hover:text-white'
+                        }`}
+                      >
+                        <span className="block truncate text-[11px] font-black">{option.label}</span>
+                        <span className="mt-0.5 block truncate text-[9px] font-semibold opacity-70">
+                          {option.description}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="mt-4 grid grid-cols-3 gap-2 text-center text-[11px] font-black text-zinc-300">
+                  <div className="rounded-xl border border-white/10 bg-black/30 px-2 py-3">
+                    <span className="block text-zinc-500">Duracao</span>
+                    <span>{formatEditorTime(timelineDuration)}</span>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-black/30 px-2 py-3">
+                    <span className="block text-zinc-500">Camadas</span>
+                    <span>{overlays.length + stickers.length + imageOverlays.length}</span>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-black/30 px-2 py-3">
+                    <span className="block text-zinc-500">Audio</span>
+                    <span>{audioName || voiceUrl ? 'Sim' : 'Nao'}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="shrink-0 border-t border-white/10 p-4">
+                <button
+                  type="button"
+                  onClick={renderFinalVideo}
+                  disabled={!canPublish || isRendering}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-sky-500 px-5 py-3 text-sm font-black text-white shadow-lg shadow-sky-950/30 transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isRendering ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}
+                  {publishButtonLabel}
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </section>
