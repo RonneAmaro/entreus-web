@@ -448,6 +448,7 @@ export default function VideoEditor() {
   const [videoVolume, setVideoVolume] = useState(1)
   const [musicVolume, setMusicVolume] = useState(0.45)
   const [musicStartTime, setMusicStartTime] = useState(0)
+  const [musicTrimStart, setMusicTrimStart] = useState(0)
   const [audioDuration, setAudioDuration] = useState(0)
   const [audioMessage, setAudioMessage] = useState('')
   const [musicVolumeTouched, setMusicVolumeTouched] = useState(false)
@@ -753,6 +754,7 @@ export default function VideoEditor() {
     setAudioName(file.name)
     setAudioDuration(0)
     setMusicStartTime(0)
+    setMusicTrimStart(0)
     setAudioMessage('Musica adicionada')
     event.target.value = ''
   }
@@ -845,6 +847,7 @@ export default function VideoEditor() {
     setAudioName('')
     setAudioDuration(0)
     setMusicStartTime(0)
+    setMusicTrimStart(0)
     setAudioMessage('')
     setMusicVolumeTouched(false)
     console.info('[VideoEditor] Music track removed')
@@ -1006,6 +1009,9 @@ export default function VideoEditor() {
     setVoiceStartTime(0)
     setVoiceVolume(1)
     setVoiceMessage('')
+    setMusicStartTime(0)
+    setMusicTrimStart(0)
+    setAudioDuration(0)
     setOverlays([])
     setActiveOverlayId(null)
     setImageOverlays([])
@@ -1104,9 +1110,9 @@ export default function VideoEditor() {
       return 0
     }
 
-    if (targetTime < musicStartTime) return 0
+    if (targetTime < musicStartTime) return musicTrimStart
 
-    return (targetTime - musicStartTime) % audioDuration
+    return (musicTrimStart + targetTime - musicStartTime) % audioDuration
   }
 
   function syncBackgroundMusic(targetTime: number) {
@@ -1199,7 +1205,7 @@ export default function VideoEditor() {
 
     if (video.currentTime < musicStartTime) {
       audio.pause()
-      audio.currentTime = 0
+      audio.currentTime = musicTrimStart
       return
     }
 
@@ -1792,6 +1798,11 @@ export default function VideoEditor() {
     )
   }
 
+  function nudgeActiveOverlayTiming(key: 'startTime' | 'endTime', delta: number) {
+    if (!activeOverlay) return
+    updateActiveOverlayTiming(key, activeOverlay[key] + delta)
+  }
+
   function applyTextBackgroundPreset(preset: typeof TEXT_BACKGROUND_PRESETS[number]) {
     updateActiveOverlayStyle('backgroundEnabled', preset.enabled)
     updateActiveOverlayStyle('backgroundColor', preset.color)
@@ -2120,7 +2131,7 @@ export default function VideoEditor() {
     if (musicInputIndex !== null) {
       const musicDelayMs = Math.max(Math.round(musicStartTime * 1000), 0)
       filters.push(
-        `[${musicInputIndex}:a]adelay=${musicDelayMs}:all=1,atrim=0:${totalDuration.toFixed(3)},asetpts=PTS-STARTPTS,volume=${musicVolume.toFixed(2)}[aMusic]`
+        `[${musicInputIndex}:a]atrim=start=${musicTrimStart.toFixed(3)}:duration=${totalDuration.toFixed(3)},asetpts=PTS-STARTPTS,adelay=${musicDelayMs}:all=1,volume=${musicVolume.toFixed(2)}[aMusic]`
       )
       labels.push('[aMusic]')
     }
@@ -2272,13 +2283,13 @@ export default function VideoEditor() {
         ? [
             videoFilter,
             `[0:a]volume=${videoVolume.toFixed(2)}[a0]`,
-            `[1:a]adelay=${musicDelayMs}:all=1,atrim=0:${duration.toFixed(3)},asetpts=PTS-STARTPTS,volume=${musicVolume.toFixed(2)}[a1]`,
+            `[1:a]atrim=start=${musicTrimStart.toFixed(3)}:duration=${duration.toFixed(3)},asetpts=PTS-STARTPTS,adelay=${musicDelayMs}:all=1,volume=${musicVolume.toFixed(2)}[a1]`,
             '[a0][a1]amix=inputs=2:duration=first:dropout_transition=0[a]',
           ].join(';')
         : [
             `[0:v]${videoFilter}[v]`,
             `[0:a]volume=${videoVolume.toFixed(2)}[a0]`,
-            `[1:a]adelay=${musicDelayMs}:all=1,atrim=0:${duration.toFixed(3)},asetpts=PTS-STARTPTS,volume=${musicVolume.toFixed(2)}[a1]`,
+            `[1:a]atrim=start=${musicTrimStart.toFixed(3)}:duration=${duration.toFixed(3)},asetpts=PTS-STARTPTS,adelay=${musicDelayMs}:all=1,volume=${musicVolume.toFixed(2)}[a1]`,
             '[a0][a1]amix=inputs=2:duration=first:dropout_transition=0[a]',
           ].join(';'),
       '-map',
@@ -2421,11 +2432,11 @@ export default function VideoEditor() {
       hasRenderImages
         ? [
             videoFilter,
-            `[1:a]adelay=${musicDelayMs}:all=1,atrim=0:${duration.toFixed(3)},asetpts=PTS-STARTPTS,volume=${musicVolume.toFixed(2)}[a]`,
+            `[1:a]atrim=start=${musicTrimStart.toFixed(3)}:duration=${duration.toFixed(3)},asetpts=PTS-STARTPTS,adelay=${musicDelayMs}:all=1,volume=${musicVolume.toFixed(2)}[a]`,
           ].join(';')
         : [
             `[0:v]${videoFilter}[v]`,
-            `[1:a]adelay=${musicDelayMs}:all=1,atrim=0:${duration.toFixed(3)},asetpts=PTS-STARTPTS,volume=${musicVolume.toFixed(2)}[a]`,
+            `[1:a]atrim=start=${musicTrimStart.toFixed(3)}:duration=${duration.toFixed(3)},asetpts=PTS-STARTPTS,adelay=${musicDelayMs}:all=1,volume=${musicVolume.toFixed(2)}[a]`,
           ].join(';'),
       '-map',
       '[v]',
@@ -3123,15 +3134,12 @@ export default function VideoEditor() {
       ? clamp(((endTime - startTime) / timelineDuration) * 100, minWidth, 100 - getTimelineLeft(startTime))
       : minWidth
   const musicTimelineEnd = audioDuration > 0
-    ? Math.min(musicStartTime + audioDuration, timelineDuration)
+    ? Math.min(musicStartTime + Math.max(audioDuration - musicTrimStart, 0), timelineDuration)
     : timelineDuration
   const voiceTimelineEnd = voiceDuration > 0
     ? Math.min(voiceStartTime + voiceDuration, timelineDuration)
     : voiceStartTime
   const waveformBars = Array.from({ length: 18 }, (_, index) => 35 + ((index * 17) % 55))
-  const activeTimelineWidth = activeOverlay && duration > 0
-    ? ((activeOverlay.endTime - activeOverlay.startTime) / duration) * 100
-    : 0
   const activeImageTimelineWidth = activeImageOverlay && duration > 0
     ? ((activeImageOverlay.endTime - activeImageOverlay.startTime) / duration) * 100
     : 0
@@ -3595,6 +3603,40 @@ export default function VideoEditor() {
                       )}
                     </div>
 
+                    {activeOverlay && (
+                      <div className="mt-1 flex h-8 items-center gap-1 rounded-lg border border-sky-300/20 bg-sky-500/15 px-2 text-[10px] font-black text-sky-50">
+                        <span className="mr-1 shrink-0">Texto {activeOverlay.startTime.toFixed(1)}s-{activeOverlay.endTime.toFixed(1)}s</span>
+                        <button
+                          type="button"
+                          onClick={() => nudgeActiveOverlayTiming('startTime', -0.25)}
+                          className="h-6 rounded-md border border-white/10 bg-black/20 px-2"
+                        >
+                          Entrada -
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => nudgeActiveOverlayTiming('startTime', 0.25)}
+                          className="h-6 rounded-md border border-white/10 bg-black/20 px-2"
+                        >
+                          Entrada +
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => nudgeActiveOverlayTiming('endTime', -0.25)}
+                          className="h-6 rounded-md border border-white/10 bg-black/20 px-2"
+                        >
+                          Saida -
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => nudgeActiveOverlayTiming('endTime', 0.25)}
+                          className="h-6 rounded-md border border-white/10 bg-black/20 px-2"
+                        >
+                          Saida +
+                        </button>
+                      </div>
+                    )}
+
                     <div className={`${timelineExpanded ? 'block' : 'hidden sm:block'} relative mt-1 h-8 rounded-lg border border-fuchsia-300/15 bg-fuchsia-500/10`}>
                       {editorMode === 'video' && stickers.length > 0 ? (
                         stickers.map((sticker) => (
@@ -3790,7 +3832,7 @@ export default function VideoEditor() {
                           <Music className="h-3 w-3 shrink-0" />
                           <span className="truncate">{audioName}</span>
                           <span className="ml-auto shrink-0 text-[9px] opacity-70">
-                            {audioDuration > 0 ? formatEditorTime(audioDuration) : formatEditorTime(timelineDuration)}
+                            {audioDuration > 0 ? `+${formatEditorTime(musicTrimStart)}` : formatEditorTime(timelineDuration)}
                           </span>
                           <span className="pointer-events-none absolute inset-x-8 bottom-0.5 flex h-2 items-end gap-0.5 opacity-35">
                             {waveformBars.map((height, index) => (
@@ -4206,72 +4248,8 @@ export default function VideoEditor() {
                 </label>
 
                 {activeOverlay && (
-                  <div className="rounded-xl border border-sky-300/20 bg-sky-500/10 p-3 text-sm text-sky-50">
-                    <div className="flex items-center justify-between gap-3 font-black">
-                      <span className="inline-flex items-center gap-2">
-                        <Move className="h-4 w-4" />
-                        Selecionado
-                      </span>
-                      <span className="text-xs text-sky-100/60">
-                        X {Math.round(activeOverlay.x)} / Y {Math.round(activeOverlay.y)}
-                      </span>
-                    </div>
-
-                    <div className="mt-4 rounded-xl border border-white/10 bg-black/25 p-3">
-                      <div className="mb-3 flex items-center justify-between gap-3 text-xs font-black text-sky-100">
-                        <span>Tempo</span>
-                        <span>{activeOverlay.startTime.toFixed(1)}s - {activeOverlay.endTime.toFixed(1)}s</span>
-                      </div>
-
-                      <div className="relative mb-4 h-2 rounded-full bg-white/10">
-                        <div
-                          className="absolute top-0 h-full rounded-full bg-emerald-400"
-                          style={{
-                            left: `${duration > 0 ? (activeOverlay.startTime / duration) * 100 : 0}%`,
-                            width: `${activeTimelineWidth}%`,
-                          }}
-                        />
-                        <div
-                          className="absolute -top-1 h-4 w-1 rounded-full bg-sky-200"
-                          style={{ left: `${progressPercent}%` }}
-                        />
-                      </div>
-
-                      <label className="block">
-                        <span className="text-xs font-bold text-sky-100/70">Entrada</span>
-                        <input
-                          type="range"
-                          min="0"
-                          max={duration}
-                          step="0.05"
-                          value={activeOverlay.startTime}
-                          onChange={(event) => updateActiveOverlayTiming('startTime', Number(event.target.value))}
-                          className="mt-2 w-full accent-emerald-400"
-                        />
-                      </label>
-
-                      <label className="mt-3 block">
-                        <span className="text-xs font-bold text-sky-100/70">Saida</span>
-                        <input
-                          type="range"
-                          min="0"
-                          max={duration}
-                          step="0.05"
-                          value={activeOverlay.endTime}
-                          onChange={(event) => updateActiveOverlayTiming('endTime', Number(event.target.value))}
-                          className="mt-2 w-full accent-emerald-400"
-                        />
-                      </label>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={removeActiveOverlay}
-                      className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-red-300/25 bg-red-500/10 px-4 py-2 text-xs font-black text-red-100 transition hover:bg-red-500/20"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      Remover texto
-                    </button>
+                  <div className="rounded-xl border border-sky-300/15 bg-sky-500/10 px-3 py-2 text-xs font-semibold text-sky-100">
+                    Tempo do texto agora fica na camada Texto da timeline. Selecione o bloco e ajuste entrada/saida ali.
                   </div>
                 )}
               </div>
@@ -4747,6 +4725,33 @@ export default function VideoEditor() {
                     className="mt-2 w-full accent-emerald-400 disabled:opacity-40"
                   />
                 </label>
+
+                <label className="block">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-xs font-black text-zinc-300">Trecho usado da musica</span>
+                    <span className="text-xs font-semibold text-zinc-500">{formatEditorTime(musicTrimStart)}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max={Math.max(audioDuration - 0.1, 0)}
+                    step="0.1"
+                    value={musicTrimStart}
+                    onChange={(event) => {
+                      const nextOffset = Number(event.target.value)
+                      setMusicTrimStart(nextOffset)
+                      if (audioRef.current) {
+                        audioRef.current.currentTime = nextOffset
+                      }
+                      syncPreviewAudioTracks(currentTime, isPlaying)
+                    }}
+                    disabled={!audioUrl || audioDuration <= 0}
+                    className="mt-2 w-full accent-emerald-400 disabled:opacity-40"
+                  />
+                  <p className="mt-1 text-[11px] font-semibold text-zinc-600">
+                    Use para pular introducoes e comecar no meio da faixa.
+                  </p>
+                </label>
               </div>
             )}
 
@@ -4916,7 +4921,7 @@ export default function VideoEditor() {
         )}
 
         {isPublishStepOpen && hasEditorMedia && (
-          <div className="fixed inset-0 z-[120] flex items-end justify-center bg-black/70 px-3 py-4 backdrop-blur-md sm:items-center">
+          <div className="fixed inset-0 z-[120] flex items-end justify-center bg-black/70 px-3 pb-[calc(5rem+env(safe-area-inset-bottom))] pt-4 backdrop-blur-md sm:items-center sm:pb-4">
             <button
               type="button"
               onClick={() => {
@@ -4926,7 +4931,7 @@ export default function VideoEditor() {
               aria-label="Fechar etapa de publicacao"
             />
 
-            <div className="relative z-[121] flex max-h-[88dvh] w-full max-w-xl flex-col overflow-hidden rounded-[1.5rem] border border-white/10 bg-zinc-950 text-white shadow-2xl shadow-black/50 ring-1 ring-sky-300/15">
+            <div className="relative z-[121] flex max-h-[calc(100dvh-6rem)] w-full max-w-xl flex-col overflow-hidden rounded-[1.5rem] border border-white/10 bg-zinc-950 text-white shadow-2xl shadow-black/50 ring-1 ring-sky-300/15 sm:max-h-[88dvh]">
               <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
                 <div className="min-w-0">
                   <p className="text-base font-black">Publicar video</p>
@@ -5002,7 +5007,7 @@ export default function VideoEditor() {
                 </div>
               </div>
 
-              <div className="shrink-0 border-t border-white/10 p-4">
+              <div className="shrink-0 border-t border-white/10 bg-zinc-950 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
                 <button
                   type="button"
                   onClick={renderFinalVideo}
