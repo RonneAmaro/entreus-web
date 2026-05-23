@@ -607,10 +607,12 @@ export default function NotificationsPage() {
 
         <div className="mt-5 space-y-4">
           {notifications.length === 0 && (
-            <div className="rounded-2xl border border-zinc-200 bg-white p-6 text-center text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
-              <Bell className="mx-auto mb-3 h-10 w-10 text-zinc-400" />
+            <div className="rounded-[1.75rem] border border-blue-200/70 bg-white/90 p-7 text-center text-zinc-500 shadow-sm shadow-blue-500/5 ring-1 ring-black/5 backdrop-blur dark:border-blue-400/15 dark:bg-slate-950/80 dark:text-zinc-400 dark:ring-white/10">
+              <span className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-blue-50 text-blue-600 ring-1 ring-blue-200/70 dark:bg-blue-950/35 dark:text-blue-300 dark:ring-blue-900/60">
+                <Bell className="h-7 w-7" />
+              </span>
 
-              <p className="font-medium text-zinc-800 dark:text-zinc-200">
+              <p className="font-black text-zinc-900 dark:text-white">
                 Nenhuma notificação ainda.
               </p>
 
@@ -620,7 +622,7 @@ export default function NotificationsPage() {
 
               <Link
                 href="/feed"
-                className="mt-5 inline-flex rounded-full bg-black px-5 py-2 text-sm font-semibold text-white transition hover:opacity-90 dark:bg-white dark:text-black"
+                className="mt-5 inline-flex rounded-full bg-blue-500 px-5 py-2 text-sm font-black text-white shadow-sm shadow-blue-500/25 transition hover:-translate-y-0.5 hover:bg-blue-400 active:scale-95"
               >
                 Voltar para o feed
               </Link>

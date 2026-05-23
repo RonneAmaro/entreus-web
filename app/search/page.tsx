@@ -264,7 +264,7 @@ export default function SearchPage() {
 
         <form
           onSubmit={handleSearch}
-          className="mt-5 rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900 sm:p-6"
+          className="mt-5 rounded-[1.75rem] border border-zinc-200/70 bg-white/90 p-5 shadow-sm shadow-black/5 ring-1 ring-black/5 backdrop-blur dark:border-zinc-800/70 dark:bg-slate-950/80 dark:ring-white/10 sm:p-6"
         >
           <label className="mb-3 flex items-center gap-2 text-sm font-medium text-zinc-700 dark:text-zinc-300">
             <Search className="h-4 w-4" />
@@ -277,7 +277,7 @@ export default function SearchPage() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Ex.: Ronne ou @ronneamaro"
-              className="flex-1 rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 outline-none transition focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800"
+              className="flex-1 rounded-2xl border border-zinc-300/80 bg-zinc-50/80 px-4 py-3 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-700/80 dark:bg-black/30 dark:focus:bg-zinc-950"
             />
 
             <button
@@ -286,7 +286,7 @@ export default function SearchPage() {
               className={`rounded-xl px-6 py-3 font-medium transition ${
                 searching
                   ? 'cursor-not-allowed bg-zinc-300 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300'
-                  : 'bg-black text-white hover:opacity-90 dark:bg-white dark:text-black'
+                  : 'bg-blue-500 text-white shadow-sm shadow-blue-500/25 hover:-translate-y-0.5 hover:bg-blue-400 active:scale-95'
               }`}
             >
               {searching ? 'Buscando...' : 'Buscar'}
@@ -294,7 +294,7 @@ export default function SearchPage() {
           </div>
 
           {message && (
-            <p className="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-700 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300">
+            <p className="mt-4 rounded-2xl border border-zinc-200/70 bg-zinc-50/80 px-4 py-3 text-sm text-zinc-700 dark:border-zinc-800/70 dark:bg-black/30 dark:text-zinc-300">
               {message}
             </p>
           )}
@@ -302,7 +302,12 @@ export default function SearchPage() {
 
         <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
           {profiles.length === 0 && !message && (
-            <div className="rounded-2xl border border-zinc-200 bg-white p-6 text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
+            <div className="rounded-[1.75rem] border border-blue-200/70 bg-white/90 p-7 text-center text-zinc-500 shadow-sm shadow-blue-500/5 ring-1 ring-black/5 backdrop-blur dark:border-blue-400/15 dark:bg-slate-950/80 dark:text-zinc-400 dark:ring-white/10 md:col-span-2">
+              <span className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-blue-50 text-blue-600 ring-1 ring-blue-200/70 dark:bg-blue-950/35 dark:text-blue-300 dark:ring-blue-900/60">
+                <Search className="h-7 w-7" />
+              </span>
+              <p className="font-black text-zinc-900 dark:text-white">Comece uma busca</p>
+              <p className="mt-1 text-sm">Digite um nome ou @username para encontrar pessoas na EntreUS.</p>
               Nenhum usuário para mostrar.
             </div>
           )}
@@ -314,7 +319,7 @@ export default function SearchPage() {
               <Link
                 key={profile.id}
                 href={`/u/${profile.username}`}
-                className="group rounded-2xl border border-zinc-200 bg-white p-5 transition hover:-translate-y-[1px] hover:shadow-sm dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-900"
+                className="group rounded-[1.5rem] border border-zinc-200/70 bg-white/90 p-5 shadow-sm shadow-black/5 transition hover:-translate-y-0.5 hover:border-blue-300/70 hover:shadow-lg hover:shadow-blue-500/10 dark:border-zinc-800/70 dark:bg-slate-950/80 dark:hover:border-blue-400/30"
               >
                 <div className="flex items-start gap-4">
                   {profile.avatar_url ? (

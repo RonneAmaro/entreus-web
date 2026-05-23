@@ -189,7 +189,7 @@ function MediaThumb({
   const imageClassName =
     fit === 'contain'
       ? 'block h-full max-h-[720px] w-full object-contain transition duration-300 md:group-hover:scale-[1.01]'
-      : 'block h-full w-full object-cover transition duration-300 md:group-hover:scale-[1.03]'
+      : 'block h-full w-full object-cover transition duration-300 md:group-hover:scale-[1.02]'
 
   const videoClassName =
     fit === 'contain'
@@ -200,7 +200,7 @@ function MediaThumb({
     <button
       type="button"
       onClick={() => onOpen(index)}
-      className={`group relative overflow-hidden bg-zinc-100 text-left outline-none ring-1 ring-inset ring-zinc-200/70 transition duration-300 focus-visible:ring-2 focus-visible:ring-blue-500 dark:bg-zinc-950 dark:ring-zinc-800/80 ${className}`}
+      className={`group relative overflow-hidden bg-zinc-100 text-left outline-none ring-1 ring-inset ring-zinc-200/60 transition duration-300 hover:ring-blue-300/70 focus-visible:ring-2 focus-visible:ring-blue-500 dark:bg-zinc-950 dark:ring-zinc-800/70 dark:hover:ring-blue-400/50 ${className}`}
     >
       {item.media_type === 'image' ? (
         <img
@@ -283,7 +283,7 @@ export default function PostMediaGallery({ media }: PostMediaGalleryProps) {
           : 'max-h-[72vh] min-h-[220px] w-full rounded-[1.5rem] sm:rounded-[1.75rem]'
 
       return (
-        <div className="mb-4 w-full overflow-hidden rounded-[1.65rem] bg-zinc-100/80 p-1 ring-1 ring-zinc-200/70 shadow-sm shadow-black/5 dark:bg-zinc-950/80 dark:ring-zinc-800/80 sm:rounded-[2rem]">
+        <div className="mb-4 w-full overflow-hidden rounded-[1.65rem] bg-zinc-100/70 p-1 ring-1 ring-zinc-200/60 shadow-sm shadow-black/5 dark:bg-zinc-950/70 dark:ring-zinc-800/70 sm:rounded-[2rem]">
           <MediaThumb
             item={singleItem}
             index={0}
@@ -298,7 +298,7 @@ export default function PostMediaGallery({ media }: PostMediaGalleryProps) {
 
     if (visibleMedia.length === 2) {
       return (
-        <div className="mb-4 grid overflow-hidden rounded-[1.65rem] bg-zinc-100/80 p-1 ring-1 ring-zinc-200/70 shadow-sm shadow-black/5 dark:bg-zinc-950/80 dark:ring-zinc-800/80 sm:grid-cols-2 sm:rounded-[2rem]">
+        <div className="mb-4 grid overflow-hidden rounded-[1.65rem] bg-zinc-100/70 p-1 ring-1 ring-zinc-200/60 shadow-sm shadow-black/5 dark:bg-zinc-950/70 dark:ring-zinc-800/70 sm:grid-cols-2 sm:rounded-[2rem]">
           {visibleMedia.map((item, index) => (
             <MediaThumb
               key={item.id}
@@ -319,7 +319,7 @@ export default function PostMediaGallery({ media }: PostMediaGalleryProps) {
 
     if (visibleMedia.length === 3) {
       return (
-        <div className="mb-4 grid overflow-hidden rounded-[1.65rem] bg-zinc-100/80 p-1 ring-1 ring-zinc-200/70 shadow-sm shadow-black/5 dark:bg-zinc-950/80 dark:ring-zinc-800/80 sm:grid-cols-2 sm:rounded-[2rem]">
+        <div className="mb-4 grid overflow-hidden rounded-[1.65rem] bg-zinc-100/70 p-1 ring-1 ring-zinc-200/60 shadow-sm shadow-black/5 dark:bg-zinc-950/70 dark:ring-zinc-800/70 sm:grid-cols-2 sm:rounded-[2rem]">
           <MediaThumb
             item={visibleMedia[0]}
             index={0}
@@ -351,7 +351,7 @@ export default function PostMediaGallery({ media }: PostMediaGalleryProps) {
 
     if (visibleMedia.length === 4) {
       return (
-        <div className="mb-4 grid grid-cols-2 gap-1 overflow-hidden rounded-[1.65rem] bg-zinc-100/80 p-1 ring-1 ring-zinc-200/70 shadow-sm shadow-black/5 dark:bg-zinc-950/80 dark:ring-zinc-800/80 sm:rounded-[2rem]">
+        <div className="mb-4 grid grid-cols-2 gap-1 overflow-hidden rounded-[1.65rem] bg-zinc-100/70 p-1 ring-1 ring-zinc-200/60 shadow-sm shadow-black/5 dark:bg-zinc-950/70 dark:ring-zinc-800/70 sm:rounded-[2rem]">
           {visibleMedia.map((item, index) => (
             <MediaThumb
               key={item.id}
@@ -367,7 +367,7 @@ export default function PostMediaGallery({ media }: PostMediaGalleryProps) {
     }
 
     return (
-      <div className="mb-4 grid overflow-hidden rounded-[1.65rem] bg-zinc-100/80 p-1 ring-1 ring-zinc-200/70 shadow-sm shadow-black/5 dark:bg-zinc-950/80 dark:ring-zinc-800/80 sm:grid-cols-2 sm:rounded-[2rem]">
+      <div className="mb-4 grid overflow-hidden rounded-[1.65rem] bg-zinc-100/70 p-1 ring-1 ring-zinc-200/60 shadow-sm shadow-black/5 dark:bg-zinc-950/70 dark:ring-zinc-800/70 sm:grid-cols-2 sm:rounded-[2rem]">
         <MediaThumb
           item={visibleMedia[0]}
           index={0}

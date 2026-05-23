@@ -720,9 +720,9 @@ export default function SavedPage() {
       />
 
       <section className="w-full max-w-2xl overflow-x-hidden px-4 py-20 pb-24 sm:px-6 lg:ml-[calc(104px+((100vw-104px-42rem)/2))] lg:py-8">
-        <div className="mb-6 rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="mb-6 rounded-[1.75rem] border border-zinc-200/70 bg-white/90 p-5 shadow-sm shadow-black/5 ring-1 ring-black/5 backdrop-blur dark:border-zinc-800/70 dark:bg-slate-950/80 dark:ring-white/10">
           <div className="mb-2 flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-full bg-yellow-50 text-yellow-600 dark:bg-yellow-950/40 dark:text-yellow-300">
+            <div className="flex h-11 w-11 items-center justify-center rounded-full bg-yellow-50 text-yellow-600 ring-1 ring-yellow-200/70 dark:bg-yellow-950/40 dark:text-yellow-300 dark:ring-yellow-900/60">
               <Bookmark className="h-6 w-6 fill-current" />
             </div>
 
@@ -738,7 +738,7 @@ export default function SavedPage() {
           </div>
 
           {message && (
-            <p className="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-700 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300">
+            <p className="mt-4 rounded-2xl border border-zinc-200/70 bg-zinc-50/80 px-4 py-3 text-sm text-zinc-700 dark:border-zinc-800/70 dark:bg-black/30 dark:text-zinc-300">
               {message}
             </p>
           )}
@@ -746,8 +746,10 @@ export default function SavedPage() {
 
         <div className="space-y-4 sm:space-y-5">
           {posts.length === 0 && (
-            <div className="rounded-2xl border border-zinc-200 bg-white p-6 text-center text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
-              <Bookmark className="mx-auto mb-3 h-10 w-10 text-zinc-400" />
+            <div className="rounded-[1.75rem] border border-blue-200/70 bg-white/90 p-7 text-center text-zinc-500 shadow-sm shadow-blue-500/5 ring-1 ring-black/5 backdrop-blur dark:border-blue-400/15 dark:bg-slate-950/80 dark:text-zinc-400 dark:ring-white/10">
+              <span className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-yellow-50 text-yellow-600 ring-1 ring-yellow-200/70 dark:bg-yellow-950/35 dark:text-yellow-300 dark:ring-yellow-900/60">
+                <Bookmark className="h-7 w-7 fill-current" />
+              </span>
 
               <p className="font-medium text-zinc-800 dark:text-zinc-200">
                 {t('saved.emptyTitle')}
@@ -759,7 +761,7 @@ export default function SavedPage() {
 
               <Link
                 href="/feed"
-                className="mt-5 inline-flex rounded-full bg-black px-5 py-2 text-sm font-semibold text-white transition hover:opacity-90 dark:bg-white dark:text-black"
+                className="mt-5 inline-flex rounded-full bg-blue-500 px-5 py-2 text-sm font-black text-white shadow-sm shadow-blue-500/25 transition hover:-translate-y-0.5 hover:bg-blue-400 active:scale-95"
               >
                 {t('saved.backToFeed')}
               </Link>

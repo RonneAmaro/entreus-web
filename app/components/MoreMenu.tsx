@@ -63,10 +63,10 @@ export default function MoreMenu({
     const active = path ? isActive(path) : false
 
     return [
-      'flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition',
+      'group flex w-full items-center gap-3 rounded-2xl px-3.5 py-2.5 text-left text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300',
       active
         ? 'bg-blue-500/15 text-blue-50 ring-1 ring-blue-300/20'
-        : 'text-zinc-200 hover:bg-white/10 hover:text-white',
+        : 'text-zinc-300 hover:bg-white/10 hover:text-white',
     ].join(' ')
   }
 
@@ -83,7 +83,7 @@ export default function MoreMenu({
 
   return (
     <div
-      className={`${position ? 'fixed' : 'absolute bottom-full left-0 mb-3'} z-[10000] max-h-[calc(100vh-24px)] w-72 overflow-y-auto overscroll-contain rounded-3xl border border-blue-400/15 bg-zinc-950/98 p-2 text-white shadow-2xl shadow-black/40 ring-1 ring-white/10 [scrollbar-color:rgba(96,165,250,0.45)_transparent] [scrollbar-width:thin]`}
+      className={`${position ? 'fixed' : 'absolute bottom-full left-0 mb-3'} z-[10000] max-h-[calc(100vh-24px)] w-72 overflow-y-auto overscroll-contain rounded-3xl border border-blue-400/15 bg-zinc-950/95 p-2 text-white shadow-2xl shadow-black/40 ring-1 ring-white/10 backdrop-blur-xl [scrollbar-color:rgba(96,165,250,0.45)_transparent] [scrollbar-width:thin]`}
       style={position}
     >
       <div className="sticky top-0 z-10 rounded-2xl bg-zinc-950/95 px-3 py-3 backdrop-blur-xl">
@@ -107,9 +107,9 @@ export default function MoreMenu({
 
         <Link href="/creator-dashboard" onClick={onClose} className={itemClass('/creator-dashboard')}>
           <BarChart3 className={iconClass('/creator-dashboard')} />
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p>Creator Studio</p>
-            <p className="mt-0.5 truncate text-xs font-medium opacity-70">
+            <p className="mt-0.5 truncate text-[11px] font-medium opacity-60">
               Analytics e ferramentas
             </p>
           </div>
@@ -121,9 +121,9 @@ export default function MoreMenu({
           className={itemClass('/lab')}
         >
           <FlaskConical className={iconClass('/lab')} />
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p>{t('lab.name')}</p>
-            <p className="mt-0.5 truncate text-xs font-medium opacity-70">
+            <p className="mt-0.5 truncate text-[11px] font-medium opacity-60">
               {t('lab.subtitle')}
             </p>
           </div>
@@ -136,9 +136,9 @@ export default function MoreMenu({
 
         <Link href="/instalar" onClick={onClose} className={itemClass('/instalar')}>
           <Download className={iconClass('/instalar')} />
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p>Instalar app</p>
-            <p className="mt-0.5 truncate text-xs font-medium opacity-70">
+            <p className="mt-0.5 truncate text-[11px] font-medium opacity-60">
               EntreUS na tela inicial
             </p>
           </div>
@@ -179,7 +179,7 @@ export default function MoreMenu({
           <span>Reportar bug</span>
         </Link>
 
-        <div className="rounded-2xl px-4 py-3 text-sm text-zinc-200">
+        <div className="rounded-2xl px-3.5 py-2.5 text-sm text-zinc-200">
           <div className="mb-2 flex items-center gap-3 font-semibold">
             <Languages className="h-5 w-5 shrink-0" />
             <span>{t('language.label')}</span>
@@ -188,7 +188,7 @@ export default function MoreMenu({
           <select
             value={language}
             onChange={(event) => setLanguage(event.target.value as LanguageCode)}
-            className="w-full rounded-xl border border-white/10 bg-black px-3 py-2 text-sm text-white outline-none transition focus:border-blue-400"
+            className="w-full rounded-xl border border-white/10 bg-black/70 px-3 py-2 text-sm text-white outline-none transition focus:border-blue-400"
           >
             {languages.map((item) => (
               <option key={item.code} value={item.code}>
@@ -197,7 +197,7 @@ export default function MoreMenu({
             ))}
           </select>
 
-          <p className="mt-2 text-xs text-zinc-500">
+          <p className="mt-2 line-clamp-2 text-xs text-zinc-500">
             {t('language.helper')}
           </p>
         </div>
@@ -244,7 +244,7 @@ export default function MoreMenu({
             onClose()
             onLogout()
           }}
-          className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold text-red-300 transition hover:bg-red-500/10 hover:text-red-200"
+          className="flex w-full items-center gap-3 rounded-2xl px-3.5 py-2.5 text-left text-sm font-semibold text-red-300 transition hover:bg-red-500/10 hover:text-red-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300/60"
         >
           <LogOut className="h-5 w-5 shrink-0" />
           <span>{t('auth.logout')}</span>
