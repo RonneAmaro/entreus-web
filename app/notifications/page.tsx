@@ -97,11 +97,58 @@ function getNotificationIcon(type: string) {
   if (type === 'follow') return <UserPlus className="h-5 w-5 text-green-500" />
   if (type === 'gift_received') return <Gift className="h-5 w-5 text-blue-500" />
   if (type === 'tip_received') return <Coins className="h-5 w-5 text-emerald-500" />
-  if (type === 'promotional_itacash') return <Coins className="h-5 w-5 text-blue-500" />
+  if (isPromotionalItaCashNotification(type)) return <Coins className="h-5 w-5 text-blue-500" />
   if (type === 'itacash_purchase_approved') return <CheckCircle2 className="h-5 w-5 text-emerald-500" />
   if (type === 'itacash_purchase_rejected') return <AlertTriangle className="h-5 w-5 text-red-500" />
 
   return <Bell className="h-5 w-5 text-zinc-500" />
+}
+
+function getNotificationAmount(notification: NotificationView) {
+  const value = notification.amount || notification.itacashPurchaseRequest?.amount_itacash || 0
+  return Number.isFinite(value) && value > 0 ? value : null
+}
+
+function isPromotionalItaCashNotification(type: string) {
+  return type === 'promotional_itacash' ||
+    type === 'promotional_itacash_credit' ||
+    type === 'itacash_promotional_credit'
+}
+
+function isItaCashPurchaseStatusNotification(type: string) {
+  return type === 'itacash_purchase_approved' || type === 'itacash_purchase_rejected'
+}
+
+function isItaCashFinancialNotification(type: string) {
+  return isPromotionalItaCashNotification(type) || isItaCashPurchaseStatusNotification(type)
+}
+
+function getItaCashNotificationText(notification: NotificationView) {
+  if (isPromotionalItaCashNotification(notification.type)) {
+    const amount = getNotificationAmount(notification)
+    return amount
+      ? `Voce recebeu ${amount} ItaCash promocional da equipe EntreUS.`
+      : 'Voce recebeu ItaCash promocional da equipe EntreUS.'
+  }
+
+  if (notification.type === 'itacash_purchase_approved') {
+    const amount = getNotificationAmount(notification)
+    return amount
+      ? `Sua compra de ${amount} ItaCash foi aprovada e o saldo ja esta na sua carteira.`
+      : 'Sua compra de ItaCash foi aprovada e o saldo ja esta na sua carteira.'
+  }
+
+  if (notification.type === 'itacash_purchase_rejected') {
+    const amount = getNotificationAmount(notification)
+    const reason = notification.itacashPurchaseRequest?.rejection_reason?.trim()
+    const baseMessage = amount
+      ? `Sua compra de ${amount} ItaCash foi recusada.`
+      : 'Sua compra de ItaCash foi recusada.'
+
+    return reason ? `${baseMessage} Motivo: ${reason}` : baseMessage
+  }
+
+  return 'Atualizacao ItaCash disponivel na sua carteira.'
 }
 
 function getNotificationActionText(type: string) {
@@ -160,9 +207,7 @@ function getNotificationHref(notification: NotificationView) {
 
   if (
     notification.type === 'gift_received' ||
-    notification.type === 'promotional_itacash' ||
-    notification.type === 'itacash_purchase_approved' ||
-    notification.type === 'itacash_purchase_rejected'
+    isItaCashFinancialNotification(notification.type)
   ) {
     return '/wallet'
   }
@@ -583,16 +628,16 @@ export default function NotificationsPage() {
           )}
 
           {notifications.map((notification) => {
-            const isItaCashPurchaseStatus =
-              notification.type === 'itacash_purchase_approved' ||
-              notification.type === 'itacash_purchase_rejected'
-            const actorName =
-              notification.actor?.display_name ||
-              notification.actor?.username ||
-              (isItaCashPurchaseStatus ? 'EntreUS' : 'Usuário')
+            const isItaCashPurchaseStatus = isItaCashPurchaseStatusNotification(notification.type)
+            const isItaCashFinancial = isItaCashFinancialNotification(notification.type)
+            const actorName = isItaCashFinancial
+              ? 'EntreUS'
+              : notification.actor?.display_name ||
+                notification.actor?.username ||
+                'Usuario'
 
             const actorUsername = notification.actor?.username || 'usuario'
-            const actorAvatar = isItaCashPurchaseStatus ? '' : notification.actor?.avatar_url || ''
+            const actorAvatar = isItaCashFinancial ? '' : notification.actor?.avatar_url || ''
             const href = getNotificationHref(notification)
             const unread = !notification.read
 
@@ -630,18 +675,18 @@ export default function NotificationsPage() {
                     <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
                       <div>
                         <p className="inline-flex max-w-full items-center gap-1 break-words font-semibold text-zinc-950 dark:text-white">
-                          {notification.actor_id && !isItaCashPurchaseStatus && (
+                          {notification.actor_id && !isItaCashFinancial && (
                             <UserBadges userId={notification.actor_id} size="sm" max={1} />
                           )}
 
                           <span className="min-w-0 break-words">
-                            {isItaCashPurchaseStatus
-                              ? getNotificationActionTextView(notification)
+                            {isItaCashFinancial
+                              ? getItaCashNotificationText(notification)
                               : `${actorName} ${getNotificationActionTextView(notification)}`}
                           </span>
                         </p>
 
-                        {notification.actor?.username && !isItaCashPurchaseStatus && (
+                        {notification.actor?.username && !isItaCashFinancial && (
                           <p className="mt-0.5 text-sm text-zinc-500">
                             @{actorUsername}
                           </p>
@@ -675,25 +720,27 @@ export default function NotificationsPage() {
 
                     {notification.type === 'tip_received' && (
                       <p className="mt-3 rounded-xl bg-emerald-100 px-3 py-2 text-sm font-semibold text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100">
-                        Voce recebeu apoio em ItaCash! {notification.amount || 0} ItaCash recebidos.
+                        {notification.amount && notification.amount > 0
+                          ? `Voce recebeu apoio em ItaCash! ${notification.amount} ItaCash recebidos.`
+                          : 'Voce recebeu apoio em ItaCash.'}
                       </p>
                     )}
 
-                    {notification.type === 'promotional_itacash' && (
+                    {isPromotionalItaCashNotification(notification.type) && (
                       <p className="mt-3 rounded-xl bg-blue-100 px-3 py-2 text-sm font-semibold text-blue-800 dark:bg-blue-950/40 dark:text-blue-100">
-                        Voce recebeu ItaCash promocional! {notification.amount || 0} ItaCash para usar na plataforma.
+                        {getItaCashNotificationText(notification)}
                       </p>
                     )}
 
                     {notification.type === 'itacash_purchase_approved' && (
                       <p className="mt-3 rounded-xl bg-emerald-100 px-3 py-2 text-sm font-semibold text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100">
-                        {getNotificationActionTextView(notification)}
+                        {getItaCashNotificationText(notification)}
                       </p>
                     )}
 
                     {notification.type === 'itacash_purchase_rejected' && (
                       <p className="mt-3 rounded-xl bg-red-100 px-3 py-2 text-sm font-semibold text-red-800 dark:bg-red-950/40 dark:text-red-100">
-                        {getNotificationActionTextView(notification)}
+                        {getItaCashNotificationText(notification)}
                       </p>
                     )}
 

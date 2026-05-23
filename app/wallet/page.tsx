@@ -115,7 +115,10 @@ const transactionLabels: Record<string, string> = {
   gift_received: 'Presente recebido',
   tip_sent: 'Apoio enviado',
   tip_received: 'Apoio recebido',
-  purchase_confirmed: 'Compra confirmada',
+  support_sent: 'Apoio enviado',
+  support_received: 'Apoio recebido',
+  purchase_confirmed: 'Compra de ItaCash',
+  promotional_credit: 'Credito promocional',
   refund: 'Reembolso',
   adjustment: 'Ajuste',
 }
@@ -145,43 +148,83 @@ function formatDate(value: string) {
 }
 
 function formatBRLFromCents(value: number) {
-  return (value / 100).toLocaleString('pt-BR', {
+  const safeValue = Number.isFinite(value) ? value : 0
+
+  return (safeValue / 100).toLocaleString('pt-BR', {
     style: 'currency',
     currency: 'BRL',
   })
 }
 
 function purchaseStatusLabel(status: string) {
-  if (status === 'paid') return 'Compra aprovada e saldo creditado'
-  if (status === 'approved') return 'Compra aprovada e saldo creditado'
-  if (status === 'rejected') return 'Compra recusada'
-  if (status === 'canceled') return 'Cancelada'
-  if (status === 'cancelled') return 'Cancelada'
-  if (status === 'pending') return 'Aguardando analise'
-  if (status === 'failed') return 'Falhou'
-  if (status === 'expired') return 'Expirada'
-  return 'Aguardando analise'
+  const normalizedStatus = (status || '').toLowerCase()
+
+  if (normalizedStatus === 'paid') return 'Compra aprovada e saldo creditado'
+  if (normalizedStatus === 'approved') return 'Compra aprovada e saldo creditado'
+  if (normalizedStatus === 'processed') return 'Saldo creditado'
+  if (normalizedStatus === 'rejected') return 'Compra recusada'
+  if (normalizedStatus === 'canceled') return 'Cancelada'
+  if (normalizedStatus === 'cancelled') return 'Cancelada'
+  if (normalizedStatus === 'pending') return 'Aguardando analise'
+  if (normalizedStatus === 'in_process') return 'Aguardando pagamento'
+  if (normalizedStatus === 'authorized') return 'Aguardando confirmacao'
+  if (normalizedStatus === 'failed') return 'Falhou'
+  if (normalizedStatus === 'expired') return 'Expirada'
+  return 'Status em analise'
 }
 
 function purchaseStatusClass(status: string) {
-  if (status === 'paid') return 'bg-emerald-500/10 text-emerald-200 ring-emerald-300/15'
-  if (status === 'approved') return 'bg-emerald-500/10 text-emerald-200 ring-emerald-300/15'
-  if (status === 'rejected') return 'bg-red-500/10 text-red-200 ring-red-300/15'
-  if (status === 'canceled') return 'bg-zinc-500/10 text-zinc-300 ring-white/10'
-  if (status === 'cancelled') return 'bg-zinc-500/10 text-zinc-300 ring-white/10'
-  if (status === 'failed') return 'bg-red-500/10 text-red-200 ring-red-300/15'
-  if (status === 'expired') return 'bg-zinc-500/10 text-zinc-300 ring-white/10'
+  const normalizedStatus = (status || '').toLowerCase()
+
+  if (normalizedStatus === 'paid') return 'bg-emerald-500/10 text-emerald-200 ring-emerald-300/15'
+  if (normalizedStatus === 'approved') return 'bg-emerald-500/10 text-emerald-200 ring-emerald-300/15'
+  if (normalizedStatus === 'processed') return 'bg-emerald-500/10 text-emerald-200 ring-emerald-300/15'
+  if (normalizedStatus === 'rejected') return 'bg-red-500/10 text-red-200 ring-red-300/15'
+  if (normalizedStatus === 'canceled') return 'bg-zinc-500/10 text-zinc-300 ring-white/10'
+  if (normalizedStatus === 'cancelled') return 'bg-zinc-500/10 text-zinc-300 ring-white/10'
+  if (normalizedStatus === 'failed') return 'bg-red-500/10 text-red-200 ring-red-300/15'
+  if (normalizedStatus === 'expired') return 'bg-zinc-500/10 text-zinc-300 ring-white/10'
   return 'bg-amber-500/10 text-amber-100 ring-amber-300/15'
 }
 
-function paymentMethodLabel(method: string) {
-  if (method === 'mercadopago_manual') return 'Mercado Pago manual'
-  if (method === 'mercadopago_auto') return 'Mercado Pago automatico'
+function paymentMethodLabel(method: string | null) {
+  if (method === 'manual_pix') return 'Pix manual'
+  if (method === 'pix_manual') return 'Pix manual'
+  if (method === 'mercadopago_manual') return 'Compra Mercado Pago'
+  if (method === 'mercadopago_auto') return 'Compra Mercado Pago'
   if (method === 'mercadopago_pix') return 'Mercado Pago Pix'
   if (method === 'mercadopago_credit_30d') return 'Mercado Pago credito 30 dias'
   if (method === 'mercadopago_credit_instant') return 'Mercado Pago credito'
   if (method === 'open_finance') return 'Open Finance'
   return 'Pix manual'
+}
+
+function providerStatusLabel(status: string | null) {
+  const normalizedStatus = (status || '').toLowerCase()
+
+  if (!normalizedStatus) return ''
+  if (normalizedStatus === 'approved') return 'Pagamento aprovado'
+  if (normalizedStatus === 'pending') return 'Pagamento pendente'
+  if (normalizedStatus === 'in_process') return 'Pagamento em analise'
+  if (normalizedStatus === 'authorized') return 'Pagamento autorizado'
+  if (normalizedStatus === 'rejected') return 'Pagamento recusado'
+  if (normalizedStatus === 'cancelled' || normalizedStatus === 'canceled') return 'Pagamento cancelado'
+  if (normalizedStatus === 'expired') return 'Pagamento expirado'
+  return 'Status do pagamento em analise'
+}
+
+function purchaseStatusHelp(status: string) {
+  const normalizedStatus = (status || '').toLowerCase()
+
+  if (normalizedStatus === 'pending') return 'A equipe EntreUS ainda precisa analisar esta compra.'
+  if (normalizedStatus === 'approved' || normalizedStatus === 'paid' || normalizedStatus === 'processed') {
+    return 'O saldo desta compra ja foi creditado.'
+  }
+  if (normalizedStatus === 'rejected') return 'Esta compra nao foi creditada.'
+  if (normalizedStatus === 'expired') return 'O prazo de pagamento terminou.'
+  if (normalizedStatus === 'failed') return 'O pagamento nao foi concluido.'
+  if (normalizedStatus === 'canceled' || normalizedStatus === 'cancelled') return 'Esta compra foi cancelada.'
+  return 'Acompanhe os detalhes desta compra aqui.'
 }
 
 function getGiftNameFromDescription(description: string | null) {
@@ -381,7 +424,7 @@ export default function WalletPage() {
       }
     }
 
-    if (transaction.type === 'tip_sent') {
+    if (transaction.type === 'tip_sent' || transaction.type === 'support_sent') {
       return {
         title: 'Voce enviou apoio em ItaCash',
         detail: transaction.description || 'Apoio enviado para criador',
@@ -389,7 +432,7 @@ export default function WalletPage() {
       }
     }
 
-    if (transaction.type === 'tip_received') {
+    if (transaction.type === 'tip_received' || transaction.type === 'support_received') {
       return {
         title: 'Voce recebeu apoio em ItaCash',
         detail: transaction.description || 'Apoio recebido na carteira',
@@ -401,16 +444,19 @@ export default function WalletPage() {
       const isPaymentOrder = transaction.reference_type === 'payment_order'
 
       return {
-        title: isPaymentOrder ? 'Compra de ItaCash confirmada' : 'Compra manual de ItaCash confirmada',
+        title: isPaymentOrder ? 'Compra Mercado Pago creditada' : 'Compra de ItaCash creditada',
         detail: transaction.description || (isPaymentOrder ? 'Saldo creditado automaticamente' : 'Credito aprovado pela equipe'),
         tone: 'in',
       }
     }
 
-    if (transaction.type === 'admin_credit' && transaction.metadata?.promotional) {
+    if (
+      (transaction.type === 'admin_credit' && transaction.metadata?.promotional) ||
+      transaction.type === 'promotional_credit'
+    ) {
       const details = [
-        transaction.metadata.reason ? `Motivo: ${transaction.metadata.reason}` : '',
-        transaction.metadata.campaign ? `Campanha: ${transaction.metadata.campaign}` : '',
+        transaction.metadata?.reason ? `Motivo: ${transaction.metadata.reason}` : '',
+        transaction.metadata?.campaign ? `Campanha: ${transaction.metadata.campaign}` : '',
       ].filter(Boolean)
 
       return {
@@ -700,6 +746,10 @@ export default function WalletPage() {
                             </span>
                           </div>
 
+                          <p className="mt-2 text-xs font-semibold leading-5 text-zinc-400">
+                            {purchaseStatusHelp(request.status)}
+                          </p>
+
                           {request.status === 'rejected' && request.rejection_reason && (
                             <p className="mt-3 rounded-xl bg-red-500/10 px-3 py-2 text-xs font-semibold leading-5 text-red-100 ring-1 ring-red-300/15">
                               Motivo da recusa: {request.rejection_reason}
@@ -720,7 +770,11 @@ export default function WalletPage() {
                       <div key={order.id} className="rounded-2xl border border-white/10 bg-black/35 p-3 text-sm text-zinc-300">
                         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                           <div>
-                            <p className="font-black text-white">{order.amount_itacash || 0} ItaCash</p>
+                            <p className="font-black text-white">
+                              {order.amount_itacash && order.amount_itacash > 0
+                                ? `${order.amount_itacash} ItaCash`
+                                : 'Compra de ItaCash'}
+                            </p>
                             <p className="mt-1 text-xs font-semibold text-zinc-500">{formatDate(order.created_at)}</p>
                           </div>
 
@@ -730,11 +784,12 @@ export default function WalletPage() {
                         </div>
 
                         <div className="mt-3 grid gap-2 text-xs font-semibold text-zinc-400 sm:grid-cols-2">
-                          <p>Metodo: <span className="text-zinc-200">{order.provider_payment_method === 'pix' ? 'Mercado Pago Pix' : 'Mercado Pago'}</span></p>
+                          <p>Metodo: <span className="text-zinc-200">{paymentMethodLabel(order.provider_payment_method || 'mercadopago_auto')}</span></p>
                           <p>Total pago: <span className="text-zinc-200">{formatBRLFromCents(order.total_brl_cents)}</span></p>
                           {order.provider_status && (
-                            <p>Status MP: <span className="text-zinc-200">{order.provider_status}</span></p>
+                            <p>Status Mercado Pago: <span className="text-zinc-200">{providerStatusLabel(order.provider_status)}</span></p>
                           )}
+                          <p className="sm:col-span-2">{purchaseStatusHelp(order.status)}</p>
                           {order.expires_at && order.status === 'pending' && (
                             <p>Expira: <span className="text-zinc-200">{formatDate(order.expires_at)}</span></p>
                           )}
@@ -797,6 +852,9 @@ export default function WalletPage() {
                 {transactions.map((transaction) => {
                   const context = renderTransactionContext(transaction)
                   const isIncome = transaction.amount >= 0
+                  const transactionLabel = context.promotional
+                    ? 'Credito promocional'
+                    : transactionLabels[transaction.type] || 'Movimentacao ItaCash'
 
                   return (
                     <article key={transaction.id} className="rounded-3xl border border-white/10 bg-black/35 p-4 transition hover:border-blue-300/20 hover:bg-blue-950/10">
@@ -815,7 +873,7 @@ export default function WalletPage() {
                                 <span className={`rounded-full px-2.5 py-1 text-[11px] font-black ${
                                   isIncome ? 'bg-emerald-500/10 text-emerald-200' : 'bg-red-500/10 text-red-200'
                                 }`}>
-                                  {transactionLabels[transaction.type] || transaction.type}
+                                  {transactionLabel}
                                 </span>
                               </div>
                               <p className="mt-1 text-sm leading-6 text-zinc-300">{context.detail}</p>
