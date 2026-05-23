@@ -24,6 +24,16 @@ const emptyCounts: AdminPendingAlerts = {
   feedbackReports: 0,
 }
 
+const ADMIN_PENDING_CACHE_MS = 15000
+
+let cachedCounts: AdminPendingAlerts | null = null
+let cachedErrors: Partial<Record<AdminPendingAlertKey, string>> = {}
+let cachedAt = 0
+let pendingCountsRequest: Promise<{
+  counts: AdminPendingAlerts
+  errors: Partial<Record<AdminPendingAlertKey, string>>
+}> | null = null
+
 export function getAdminPendingTotal(counts: AdminPendingAlerts) {
   return counts.itacashPurchases + counts.ageVerifications + counts.reports + counts.feedbackReports
 }
@@ -55,27 +65,21 @@ async function countReports() {
   }
 }
 
-export function useAdminPendingAlerts({
-  enabled = true,
-  onNewPending,
-}: UseAdminPendingAlertsOptions = {}) {
-  const [counts, setCounts] = useState<AdminPendingAlerts>(emptyCounts)
-  const [errors, setErrors] = useState<Partial<Record<AdminPendingAlertKey, string>>>({})
-  const [loading, setLoading] = useState(false)
-  const previousTotalRef = useRef(0)
-  const channelNameRef = useRef(`admin-pending-alerts-${Math.random().toString(36).slice(2)}`)
+async function loadAdminPendingCounts() {
+  const now = Date.now()
 
-  const loadCounts = useCallback(async () => {
-    if (!enabled) {
-      setCounts(emptyCounts)
-      setErrors({})
-      setLoading(false)
-      previousTotalRef.current = 0
-      return
+  if (cachedCounts && now - cachedAt < ADMIN_PENDING_CACHE_MS) {
+    return {
+      counts: cachedCounts,
+      errors: cachedErrors,
     }
+  }
 
-    setLoading(true)
+  if (pendingCountsRequest) {
+    return pendingCountsRequest
+  }
 
+  pendingCountsRequest = (async () => {
     const results = await Promise.allSettled([
       countRows('itacash_purchase_requests', (query) => query.eq('status', 'pending')),
       countRows('age_verification_requests', (query) => query.eq('status', 'pending')),
@@ -100,6 +104,47 @@ export function useAdminPendingAlerts({
       console.warn('[AdminAlerts] Count unavailable:', { key, message: value })
     })
 
+    cachedCounts = nextCounts
+    cachedErrors = nextErrors
+    cachedAt = Date.now()
+
+    return {
+      counts: nextCounts,
+      errors: nextErrors,
+    }
+  })()
+
+  try {
+    return await pendingCountsRequest
+  } finally {
+    pendingCountsRequest = null
+  }
+}
+
+export function useAdminPendingAlerts({
+  enabled = true,
+  onNewPending,
+}: UseAdminPendingAlertsOptions = {}) {
+  const [counts, setCounts] = useState<AdminPendingAlerts>(emptyCounts)
+  const [errors, setErrors] = useState<Partial<Record<AdminPendingAlertKey, string>>>({})
+  const [loading, setLoading] = useState(false)
+  const previousTotalRef = useRef(0)
+  const refreshTimerRef = useRef<number | null>(null)
+  const channelNameRef = useRef(`admin-pending-alerts-${Math.random().toString(36).slice(2)}`)
+
+  const loadCounts = useCallback(async () => {
+    if (!enabled) {
+      setCounts(emptyCounts)
+      setErrors({})
+      setLoading(false)
+      previousTotalRef.current = 0
+      return
+    }
+
+    setLoading(true)
+
+    const { counts: nextCounts, errors: nextErrors } = await loadAdminPendingCounts()
+
     const nextTotal = getAdminPendingTotal(nextCounts)
     if (previousTotalRef.current > 0 && nextTotal > previousTotalRef.current) {
       onNewPending?.()
@@ -111,6 +156,17 @@ export function useAdminPendingAlerts({
     setLoading(false)
   }, [enabled, onNewPending])
 
+  const scheduleCountsRefresh = useCallback(() => {
+    if (refreshTimerRef.current) {
+      window.clearTimeout(refreshTimerRef.current)
+    }
+
+    refreshTimerRef.current = window.setTimeout(() => {
+      cachedAt = 0
+      void loadCounts()
+    }, 250)
+  }, [loadCounts])
+
   useEffect(() => {
     loadCounts()
   }, [loadCounts])
@@ -119,12 +175,12 @@ export function useAdminPendingAlerts({
     if (!enabled || typeof window === 'undefined') return
 
     function handleFocusRefresh() {
-      void loadCounts()
+      scheduleCountsRefresh()
     }
 
     function handleVisibilityRefresh() {
       if (document.visibilityState === 'visible') {
-        void loadCounts()
+        scheduleCountsRefresh()
       }
     }
 
@@ -134,24 +190,27 @@ export function useAdminPendingAlerts({
     return () => {
       window.removeEventListener('focus', handleFocusRefresh)
       document.removeEventListener('visibilitychange', handleVisibilityRefresh)
+      if (refreshTimerRef.current) {
+        window.clearTimeout(refreshTimerRef.current)
+      }
     }
-  }, [enabled, loadCounts])
+  }, [enabled, scheduleCountsRefresh])
 
   useEffect(() => {
     if (!enabled) return
 
     const channel = supabase
       .channel(channelNameRef.current)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'itacash_purchase_requests' }, loadCounts)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'age_verification_requests' }, loadCounts)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'reports' }, loadCounts)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'internal_feedback_reports' }, loadCounts)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'itacash_purchase_requests' }, scheduleCountsRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'age_verification_requests' }, scheduleCountsRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'reports' }, scheduleCountsRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'internal_feedback_reports' }, scheduleCountsRefresh)
       .subscribe()
 
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [enabled, loadCounts])
+  }, [enabled, scheduleCountsRefresh])
 
   return {
     counts,

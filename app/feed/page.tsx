@@ -186,6 +186,11 @@ type Repost = {
   profiles: ProfileSummary | null
 }
 
+const FEED_INITIAL_POST_LIMIT = 40
+const FEED_INITIAL_COMMENT_LIMIT = 240
+const FEED_INITIAL_REACTION_LIMIT = 800
+const FEED_INITIAL_REPOST_LIMIT = 160
+
 type FeedTexts = {
   tabs: {
     posts: string
@@ -744,13 +749,16 @@ function FeedContent() {
       const followsData = await loadFollows()
       setFollows(followsData)
 
+      const loadedPosts = await loadPosts(user.id, blockedIds, followsData, allowSensitiveContent)
+      const loadedPostIds = loadedPosts.map((post) => post.id)
+      const loadedComments = await loadComments(blockedIds, loadedPostIds)
+      const loadedCommentIds = loadedComments.map((comment) => comment.id)
+
       await Promise.all([
-        loadPosts(user.id, blockedIds, followsData, allowSensitiveContent),
-        loadComments(blockedIds),
-        loadLikes(),
-        loadCommentLikes(),
+        loadLikes(loadedPostIds),
+        loadCommentLikes(loadedCommentIds),
         loadBookmarks(user.id),
-        loadReposts(blockedIds),
+        loadReposts(blockedIds, loadedPostIds),
         loadUnreadNotificationsCount(user.id),
         loadFeedHighlights(),
       ])
@@ -877,15 +885,25 @@ function FeedContent() {
     setBookmarks(data || [])
   }
 
-  async function loadReposts(currentBlockedIds: string[] = blockedUserIds) {
-    const { data, error } = await supabase
+  async function loadReposts(
+    currentBlockedIds: string[] = blockedUserIds,
+    currentPostIds: string[] = posts.map((post) => post.id)
+  ) {
+    let query = supabase
       .from('reposts')
       .select('id, post_id, user_id, created_at')
       .order('created_at', { ascending: false })
+      .limit(FEED_INITIAL_REPOST_LIMIT)
+
+    if (currentPostIds.length > 0) {
+      query = query.in('post_id', currentPostIds)
+    }
+
+    const { data, error } = await query
 
     if (error) {
       setMessage(t('feed.messages.loadRepostsError') + error.message)
-      return
+      return []
     }
 
     const rawReposts = (data || []) as Omit<Repost, 'profiles'>[]
@@ -928,6 +946,7 @@ function FeedContent() {
       }))
 
     setReposts(normalizedReposts)
+    return normalizedReposts
   }
 
   function canSeePost(post: Post, currentUserId: string, currentFollows: Follow[]) {
@@ -961,7 +980,7 @@ function FeedContent() {
     currentBlockedIds: string[] = blockedUserIds,
     currentFollows: Follow[] = follows,
     allowSensitiveContent: boolean = currentProfile?.show_sensitive_content || false
-  ) {
+  ): Promise<Post[]> {
     const { data, error } = await supabase
       .from('posts')
       .select(`
@@ -981,10 +1000,11 @@ function FeedContent() {
         )
       `)
       .order('created_at', { ascending: false })
+      .limit(FEED_INITIAL_POST_LIMIT)
 
     if (error) {
       setMessage(t('feed.messages.loadPostsError') + error.message)
-      return
+      return []
     }
 
     const rawPosts = (data || []).map((post: any) => ({
@@ -1030,9 +1050,18 @@ function FeedContent() {
       .filter((post) => canSeePost(post, currentUserId, currentFollows))
 
     setPosts(normalizedPosts)
+    return normalizedPosts
   }
 
-  async function loadComments(currentBlockedIds: string[] = blockedUserIds) {
+  async function loadComments(
+    currentBlockedIds: string[] = blockedUserIds,
+    currentPostIds: string[] = posts.map((post) => post.id)
+  ): Promise<Comment[]> {
+    if (currentPostIds.length === 0) {
+      setComments([])
+      return []
+    }
+
     const { data, error } = await supabase
       .from('comments')
       .select(`
@@ -1047,11 +1076,13 @@ function FeedContent() {
           avatar_url
         )
       `)
+      .in('post_id', currentPostIds)
       .order('created_at', { ascending: true })
+      .limit(FEED_INITIAL_COMMENT_LIMIT)
 
     if (error) {
       setMessage(t('feed.messages.loadCommentsError') + error.message)
-      return
+      return []
     }
 
     const normalizedComments = (data || [])
@@ -1086,16 +1117,26 @@ function FeedContent() {
       }
     }
 
-    setComments(
-      normalizedComments.map((comment: Comment) => ({
+    const commentsWithMedia = normalizedComments.map((comment: Comment) => ({
         ...comment,
         media: mediaByComment[comment.id] || [],
       }))
-    )
+
+    setComments(commentsWithMedia)
+    return commentsWithMedia
   }
 
-  async function loadLikes() {
-    const { data, error } = await supabase.from('likes').select('*')
+  async function loadLikes(currentPostIds: string[] = posts.map((post) => post.id)) {
+    let query = supabase
+      .from('likes')
+      .select('id, post_id, user_id')
+      .limit(FEED_INITIAL_REACTION_LIMIT)
+
+    if (currentPostIds.length > 0) {
+      query = query.in('post_id', currentPostIds)
+    }
+
+    const { data, error } = await query
 
     if (error) {
       setMessage(t('feed.messages.loadLikesError') + error.message)
@@ -1105,10 +1146,17 @@ function FeedContent() {
     setLikes(data || [])
   }
 
-  async function loadCommentLikes() {
+  async function loadCommentLikes(currentCommentIds: string[] = comments.map((comment) => comment.id)) {
+    if (currentCommentIds.length === 0) {
+      setCommentLikes([])
+      return
+    }
+
     const { data, error } = await supabase
       .from('comment_likes')
       .select('id, comment_id, user_id')
+      .in('comment_id', currentCommentIds)
+      .limit(FEED_INITIAL_REACTION_LIMIT)
 
     if (error) {
       setMessage(t('feed.messages.loadCommentLikesError') + error.message)

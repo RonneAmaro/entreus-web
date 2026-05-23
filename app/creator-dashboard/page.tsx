@@ -332,12 +332,14 @@ export default function CreatorDashboardPage() {
         .from('post_analytics')
         .select('*')
         .eq('creator_id', user.id)
-        .order('created_at', { ascending: false }),
+        .order('created_at', { ascending: false })
+        .limit(500),
       supabase
         .from('posts')
         .select('id, content, image_url, video_url, created_at')
         .eq('user_id', user.id)
-        .order('created_at', { ascending: false }),
+        .order('created_at', { ascending: false })
+        .limit(80),
       loadNavigationProfile(user.id),
       loadUnreadNotificationsCount(user.id),
     ])

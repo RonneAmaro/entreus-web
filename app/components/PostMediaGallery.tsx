@@ -206,6 +206,8 @@ function MediaThumb({
         <img
           src={item.media_url}
           alt="Imagem da publicação"
+          loading="lazy"
+          decoding="async"
           className={imageClassName}
         />
       ) : (
@@ -438,6 +440,7 @@ export default function PostMediaGallery({ media }: PostMediaGalleryProps) {
               <img
                 src={activeMedia.media_url}
                 alt="Imagem ampliada"
+                decoding="async"
                 className="max-h-[88dvh] max-w-full rounded-2xl object-contain shadow-2xl shadow-black/40 sm:rounded-3xl"
               />
             ) : (

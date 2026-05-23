@@ -94,8 +94,9 @@ export default function MobileNavigation({
   const [openPostMenu, setOpenPostMenu] = useState(false)
   const [internalUnreadMessagesCount, setInternalUnreadMessagesCount] = useState(0)
   const [isAdmin, setIsAdmin] = useState(false)
+  const [isMobileNavActive, setIsMobileNavActive] = useState(false)
   const { totalPending: adminPendingCount } = useAdminPendingAlerts({
-    enabled: isAdmin,
+    enabled: isAdmin && isMobileNavActive,
   })
 
   const isMessagesPage = pathname === '/messages' || pathname.startsWith('/messages/')
@@ -104,6 +105,21 @@ export default function MobileNavigation({
     unreadMessagesCount ?? internalUnreadMessagesCount
 
   useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const query = window.matchMedia('(max-width: 1023px)')
+    const updateActiveState = () => setIsMobileNavActive(query.matches)
+
+    updateActiveState()
+    query.addEventListener('change', updateActiveState)
+
+    return () => {
+      query.removeEventListener('change', updateActiveState)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!isMobileNavActive) return
     if (typeof unreadMessagesCount === 'number') return
 
     loadUnreadMessagesCount()
@@ -115,11 +131,12 @@ export default function MobileNavigation({
     return () => {
       window.clearInterval(interval)
     }
-  }, [pathname, unreadMessagesCount])
+  }, [isMobileNavActive, pathname, unreadMessagesCount])
 
   useEffect(() => {
+    if (!isMobileNavActive) return
     loadAdminStatus()
-  }, [])
+  }, [isMobileNavActive])
 
   async function loadAdminStatus() {
     const {
@@ -178,8 +195,11 @@ export default function MobileNavigation({
       .from('messages')
       .select('id, conversation_id, sender_id, created_at, read_at, deleted_at')
       .in('conversation_id', conversationIds)
+      .is('read_at', null)
+      .is('deleted_at', null)
+      .neq('sender_id', user.id)
       .order('created_at', { ascending: false })
-      .limit(1000)
+      .limit(300)
 
     if (messagesError) {
       console.error('Erro ao carregar últimas mensagens:', messagesError.message)

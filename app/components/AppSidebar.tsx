@@ -72,14 +72,30 @@ export default function AppSidebar({
   const [moreMenuPosition, setMoreMenuPosition] = useState({ left: 96, top: 12 })
   const [internalUnreadMessagesCount, setInternalUnreadMessagesCount] = useState(0)
   const [isAdmin, setIsAdmin] = useState(false)
+  const [isDesktopNavActive, setIsDesktopNavActive] = useState(false)
   const { totalPending: adminPendingCount } = useAdminPendingAlerts({
-    enabled: isAdmin,
+    enabled: isAdmin && isDesktopNavActive,
   })
 
   const visibleUnreadMessagesCount =
     unreadMessagesCount ?? internalUnreadMessagesCount
 
   useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const query = window.matchMedia('(min-width: 1024px)')
+    const updateActiveState = () => setIsDesktopNavActive(query.matches)
+
+    updateActiveState()
+    query.addEventListener('change', updateActiveState)
+
+    return () => {
+      query.removeEventListener('change', updateActiveState)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!isDesktopNavActive) return
     if (typeof unreadMessagesCount === 'number') return
 
     loadUnreadMessagesCount()
@@ -91,11 +107,12 @@ export default function AppSidebar({
     return () => {
       window.clearInterval(interval)
     }
-  }, [pathname, unreadMessagesCount])
+  }, [isDesktopNavActive, pathname, unreadMessagesCount])
 
   useEffect(() => {
+    if (!isDesktopNavActive) return
     loadAdminStatus()
-  }, [])
+  }, [isDesktopNavActive])
 
   async function loadAdminStatus() {
     const {
@@ -154,8 +171,11 @@ export default function AppSidebar({
       .from('messages')
       .select('id, conversation_id, sender_id, created_at, read_at, deleted_at')
       .in('conversation_id', conversationIds)
+      .is('read_at', null)
+      .is('deleted_at', null)
+      .neq('sender_id', user.id)
       .order('created_at', { ascending: false })
-      .limit(1000)
+      .limit(300)
 
     if (messagesError) {
       console.error('Erro ao carregar últimas mensagens:', messagesError.message)
