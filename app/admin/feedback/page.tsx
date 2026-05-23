@@ -129,7 +129,7 @@ export default function AdminFeedbackPage() {
           Admin
         </Link>
 
-        <header className="mt-6 rounded-[2rem] border border-blue-300/25 bg-blue-500/10 p-6 ring-1 ring-blue-300/10">
+        <header className="mt-6 rounded-[2rem] border border-blue-300/25 bg-blue-500/10 p-6 ring-1 ring-blue-300/10 shadow-xl shadow-blue-950/10">
           <Bug className="h-9 w-9 text-blue-100" />
           <h1 className="mt-4 text-3xl font-black">Feedbacks e bugs</h1>
           <p className="mt-2 text-sm leading-6 text-blue-100/80">
@@ -145,12 +145,12 @@ export default function AdminFeedbackPage() {
 
         <div className="mt-5 grid gap-3">
           {reports.length === 0 ? (
-            <div className="rounded-3xl border border-emerald-300/20 bg-emerald-500/10 p-5 text-emerald-100">
+            <div className="rounded-3xl border border-emerald-300/20 bg-emerald-500/10 p-5 text-emerald-100 ring-1 ring-emerald-300/10">
               Nenhum feedback ou bug aberto no momento.
             </div>
           ) : (
             reports.map((report) => (
-              <article key={report.id} className="rounded-3xl border border-white/10 bg-zinc-950 p-4 ring-1 ring-white/5">
+              <article key={report.id} className="rounded-3xl border border-white/10 bg-zinc-950/80 p-4 ring-1 ring-white/5 transition hover:-translate-y-0.5 hover:border-blue-300/20">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">

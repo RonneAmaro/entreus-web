@@ -302,11 +302,11 @@ export default function VipPlusPage() {
             </p>
 
             <div className="mt-8 grid gap-3 sm:grid-cols-3">
-              <div className="rounded-3xl border border-blue-300/20 bg-blue-500/10 p-4">
+              <div className="rounded-3xl border border-blue-300/20 bg-blue-500/10 p-4 ring-1 ring-blue-300/10">
                 <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-200/70">Plano</p>
                 <p className="mt-2 text-2xl font-black">VIP Plus</p>
               </div>
-              <div className="rounded-3xl border border-white/10 bg-zinc-950/90 p-4">
+              <div className="rounded-3xl border border-white/10 bg-zinc-950/75 p-4 ring-1 ring-white/5">
                 <p className="text-xs font-black uppercase tracking-[0.2em] text-zinc-500">Preco base</p>
                 <p className="mt-2 text-2xl font-black">{formatBRLFromCents(VIP_PLUS_PRICE_BRL_CENTS)}</p>
               </div>
@@ -319,7 +319,7 @@ export default function VipPlusPage() {
 
           <div className="relative">
             <div className="absolute inset-8 rounded-full bg-blue-500/25 blur-3xl" />
-            <div className="relative overflow-hidden rounded-[2rem] border border-blue-300/20 bg-zinc-950/90 shadow-2xl shadow-blue-950/30 ring-1 ring-white/10">
+            <div className="relative overflow-hidden rounded-[2rem] border border-blue-300/20 bg-zinc-950/85 shadow-2xl shadow-blue-950/30 ring-1 ring-white/10 transition hover:-translate-y-0.5 hover:border-blue-300/35">
               {!videoFailed && (
                 <div className="aspect-square w-full rounded-[2rem] bg-[radial-gradient(circle_at_center,rgba(59,130,246,0.22),rgba(2,6,23,0.98)_68%)] p-4">
                   <video
@@ -387,7 +387,7 @@ export default function VipPlusPage() {
                 const Icon = benefit.icon
 
                 return (
-                  <article key={benefit.title} className="rounded-[2rem] border border-white/10 bg-zinc-950/90 p-5 ring-1 ring-white/5">
+                  <article key={benefit.title} className="rounded-[2rem] border border-white/10 bg-zinc-950/80 p-5 ring-1 ring-white/5 transition hover:-translate-y-0.5 hover:border-blue-300/25">
                     <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-500/15 text-blue-100">
                       <Icon className="h-5 w-5" />
                     </span>
@@ -409,7 +409,7 @@ export default function VipPlusPage() {
             </div>
           </div>
 
-          <aside className="rounded-[2rem] border border-blue-300/20 bg-zinc-950/90 p-5 shadow-2xl shadow-blue-950/20 ring-1 ring-white/10">
+          <aside className="rounded-[2rem] border border-blue-300/20 bg-zinc-950/85 p-5 shadow-2xl shadow-blue-950/20 ring-1 ring-white/10">
             <div className="flex items-center gap-3">
               <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-500/15 text-blue-100">
                 <ShieldCheck className="h-6 w-6" />
@@ -437,7 +437,7 @@ export default function VipPlusPage() {
                         if (method.available) setPaymentMethod(method.value)
                       }}
                       disabled={!method.available}
-                      className={`rounded-3xl border p-4 text-left transition ${
+                      className={`rounded-3xl border p-4 text-left transition hover:-translate-y-0.5 ${
                         active
                           ? 'border-blue-300/40 bg-blue-500/15 text-blue-50'
                           : 'border-white/10 bg-black/35 text-zinc-300 hover:border-blue-300/20 disabled:cursor-not-allowed disabled:opacity-60'
@@ -519,7 +519,7 @@ export default function VipPlusPage() {
               type="button"
               onClick={createMercadoPagoPayment}
               disabled={loadingPayment}
-              className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-black text-black transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
+              className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-black text-black shadow-sm shadow-blue-500/15 transition hover:-translate-y-0.5 hover:bg-blue-50 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {loadingPayment ? <Loader2 className="h-4 w-4 animate-spin" /> : <Crown className="h-4 w-4" />}
               Comprar VIP Plus

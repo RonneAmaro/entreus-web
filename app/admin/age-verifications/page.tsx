@@ -456,7 +456,7 @@ export default function AdminAgeVerificationsPage() {
             </p>
           </div>
 
-          <div className="rounded-3xl border border-blue-300/20 bg-blue-500/10 p-4 text-blue-100">
+          <div className="rounded-3xl border border-blue-300/20 bg-blue-500/10 p-4 text-blue-100 ring-1 ring-blue-300/10">
             <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-200/70">Admin</p>
             <p className="mt-1 font-black">{adminProfile.email || adminProfile.id}</p>
           </div>
@@ -487,7 +487,7 @@ export default function AdminAgeVerificationsPage() {
 
         <div className="grid gap-4">
           {visibleRequests.length === 0 ? (
-            <div className="rounded-[2rem] border border-white/10 bg-zinc-950 p-8 text-center text-zinc-400">
+            <div className="rounded-[2rem] border border-blue-300/15 bg-zinc-950/80 p-8 text-center text-zinc-400 ring-1 ring-blue-300/10">
               Nenhuma solicitacao encontrada.
             </div>
           ) : (
@@ -497,7 +497,7 @@ export default function AdminAgeVerificationsPage() {
               const age = calculateAge(birthDate)
 
               return (
-                <article key={request.id} className="rounded-[2rem] border border-white/10 bg-zinc-950 p-4 shadow-xl shadow-black/20 ring-1 ring-white/5">
+                <article key={request.id} className="rounded-[2rem] border border-white/10 bg-zinc-950/80 p-4 shadow-xl shadow-black/20 ring-1 ring-white/5 transition hover:-translate-y-0.5 hover:border-blue-300/20">
                   <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_repeat(5,minmax(0,1fr))_auto] lg:items-center">
                     <div className="min-w-0">
                       <p className="truncate font-black">

@@ -610,17 +610,18 @@ export default function WalletPage() {
             </p>
 
             <div className="mt-8 grid gap-4 sm:grid-cols-3">
-              <div className="rounded-3xl border border-blue-300/20 bg-blue-500/10 p-5">
+              <div className="relative overflow-hidden rounded-3xl border border-blue-300/25 bg-blue-500/15 p-5 shadow-xl shadow-blue-950/20 ring-1 ring-blue-300/10">
+                <span className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-blue-400/20 blur-2xl" />
                 <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-200/70">Disponivel</p>
-                <p className="mt-3 text-3xl font-black">{availableBalance}</p>
+                <p className="relative mt-3 text-4xl font-black">{availableBalance}</p>
                 <p className="text-sm font-bold text-blue-100/70">ItaCash</p>
               </div>
-              <div className="rounded-3xl border border-white/10 bg-zinc-950/80 p-5">
+              <div className="rounded-3xl border border-white/10 bg-zinc-950/70 p-5 ring-1 ring-white/5">
                 <p className="text-xs font-black uppercase tracking-[0.2em] text-zinc-500">Aproximado</p>
                 <p className="mt-3 text-2xl font-black">{formatBRLFromItaCash(availableBalance)}</p>
                 <p className="text-sm text-zinc-400">10 ItaCash = R$ 1,00</p>
               </div>
-              <div className="rounded-3xl border border-white/10 bg-zinc-950/80 p-5">
+              <div className="rounded-3xl border border-white/10 bg-zinc-950/70 p-5 ring-1 ring-white/5">
                 <p className="text-xs font-black uppercase tracking-[0.2em] text-zinc-500">Bloqueado</p>
                 <p className="mt-3 text-2xl font-black">{lockedBalance}</p>
                 <p className="text-sm text-zinc-400">Reservado</p>
@@ -630,7 +631,7 @@ export default function WalletPage() {
 
           <div className="relative">
             <div className="absolute inset-8 rounded-full bg-blue-500/20 blur-3xl" />
-            <div className="relative rounded-[2rem] border border-blue-300/20 bg-zinc-950/80 p-5 shadow-2xl shadow-blue-950/30 ring-1 ring-white/10">
+            <div className="relative rounded-[2rem] border border-blue-300/20 bg-zinc-950/80 p-5 shadow-2xl shadow-blue-950/30 ring-1 ring-white/10 transition hover:-translate-y-0.5 hover:border-blue-300/35">
               <img
                 src="/itacash.png"
                 alt="ItaCash"
@@ -655,7 +656,7 @@ export default function WalletPage() {
         </section>
 
         <section className="relative z-10 pb-10">
-          <div className="rounded-3xl border border-amber-300/20 bg-amber-500/10 p-5 text-sm leading-6 text-amber-50">
+          <div className="rounded-3xl border border-amber-300/20 bg-amber-500/10 p-4 text-sm leading-6 text-amber-50">
             <div className="mb-2 flex items-center gap-2 font-black">
               <ShieldAlert className="h-5 w-5" />
               Aviso importante
@@ -664,7 +665,7 @@ export default function WalletPage() {
           </div>
 
           <div className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
-            <div className="rounded-[2rem] border border-blue-300/20 bg-blue-500/10 p-5 ring-1 ring-blue-300/10">
+            <div className="rounded-[2rem] border border-blue-300/20 bg-blue-500/10 p-5 ring-1 ring-blue-300/10 transition hover:border-blue-300/35">
               <div className="flex items-start gap-3">
                 <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-blue-500/20 text-blue-100">
                   <Coins className="h-5 w-5" />
@@ -703,7 +704,7 @@ export default function WalletPage() {
               </div>
             </div>
 
-            <div className="rounded-[2rem] border border-white/10 bg-zinc-950/90 p-5 ring-1 ring-white/10">
+            <div className="rounded-[2rem] border border-white/10 bg-zinc-950/80 p-5 ring-1 ring-white/10">
               <h3 className="text-lg font-black">Presentes x Apoios</h3>
               <div className="mt-4 space-y-3 text-sm leading-6 text-zinc-300">
                 <p><span className="font-black text-blue-100">Presentear</span> envia um presente visual para a vitrine. Presentes nao aumentam saldo.</p>
@@ -715,7 +716,7 @@ export default function WalletPage() {
                   <p className="mb-3 text-sm font-black text-zinc-200">Solicitacoes recentes</p>
                   <div className="space-y-3">
                     {purchaseRequests.map((request) => (
-                      <div key={request.id} className="rounded-2xl border border-white/10 bg-black/35 p-3 text-sm text-zinc-300">
+                      <div key={request.id} className="rounded-2xl border border-white/10 bg-black/30 p-3 text-sm text-zinc-300 transition hover:border-blue-300/20 hover:bg-blue-950/10">
                         <div className="grid gap-3 sm:grid-cols-2">
                           <div>
                             <p className="text-[11px] font-black uppercase tracking-[0.16em] text-zinc-500">Metodo de pagamento</p>
@@ -767,7 +768,7 @@ export default function WalletPage() {
                   <p className="mb-3 text-sm font-black text-zinc-200">Pagamentos Mercado Pago</p>
                   <div className="space-y-3">
                     {paymentOrders.map((order) => (
-                      <div key={order.id} className="rounded-2xl border border-white/10 bg-black/35 p-3 text-sm text-zinc-300">
+                      <div key={order.id} className="rounded-2xl border border-white/10 bg-black/30 p-3 text-sm text-zinc-300 transition hover:border-blue-300/20 hover:bg-blue-950/10">
                         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                           <div>
                             <p className="font-black text-white">
@@ -802,7 +803,7 @@ export default function WalletPage() {
             </div>
           </div>
 
-          <div className="mt-8 rounded-[2rem] border border-white/10 bg-zinc-950/90 p-4 shadow-2xl shadow-black/20 ring-1 ring-white/10 sm:p-6">
+          <div className="mt-8 rounded-[2rem] border border-white/10 bg-zinc-950/80 p-4 shadow-2xl shadow-black/20 ring-1 ring-white/10 sm:p-6">
             <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <div className="flex items-center gap-3">
@@ -857,7 +858,7 @@ export default function WalletPage() {
                     : transactionLabels[transaction.type] || 'Movimentacao ItaCash'
 
                   return (
-                    <article key={transaction.id} className="rounded-3xl border border-white/10 bg-black/35 p-4 transition hover:border-blue-300/20 hover:bg-blue-950/10">
+                    <article key={transaction.id} className="rounded-3xl border border-white/10 bg-black/30 p-4 transition hover:-translate-y-0.5 hover:border-blue-300/20 hover:bg-blue-950/10">
                       <div className="flex items-start gap-4">
                         <span className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${
                           isIncome ? 'bg-emerald-500/15 text-emerald-200' : 'bg-red-500/15 text-red-200'

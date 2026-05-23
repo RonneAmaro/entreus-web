@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import Image from 'next/image'
+import Link from 'next/link'
 import InstitutionalPageLayout from '../components/InstitutionalPageLayout'
 
 export const metadata: Metadata = {
@@ -34,9 +35,9 @@ export default function ItaCashPage() {
       notice="ItaCash não é moeda oficial, não é investimento financeiro e será usada apenas dentro da plataforma EntreUS conforme regras próprias."
     >
       <div className="space-y-5">
-        <section className="overflow-hidden rounded-[1.9rem] border border-blue-300/20 bg-blue-500/10 shadow-2xl shadow-blue-950/20 ring-1 ring-white/10 backdrop-blur-xl">
+        <section className="overflow-hidden rounded-[2rem] border border-blue-300/20 bg-blue-500/10 shadow-2xl shadow-blue-950/20 ring-1 ring-white/10 backdrop-blur-xl">
           <div className="grid gap-5 p-6 sm:grid-cols-[10rem_1fr] sm:items-center">
-            <div className="mx-auto flex h-40 w-40 items-center justify-center rounded-[1.6rem] border border-blue-200/20 bg-black/35 p-4 shadow-2xl shadow-blue-500/10 ring-1 ring-white/10 sm:mx-0">
+            <div className="mx-auto flex h-40 w-40 items-center justify-center rounded-[1.6rem] border border-blue-200/20 bg-black/35 p-4 shadow-2xl shadow-blue-500/10 ring-1 ring-white/10 transition hover:scale-[1.02] sm:mx-0">
               <Image
                 src="/itacash.png"
                 alt="ItaCash"
@@ -61,11 +62,33 @@ export default function ItaCashPage() {
           </div>
         </section>
 
+        <section className="grid gap-3 sm:grid-cols-3">
+          {[
+            ['Conversao', '10 ItaCash = R$ 1,00'],
+            ['Apoios', 'Reconheca criadores'],
+            ['Presentes', 'Envie presentes digitais'],
+          ].map(([title, body]) => (
+            <article key={title} className="rounded-[1.5rem] border border-blue-300/15 bg-blue-500/10 p-4 ring-1 ring-blue-400/10 transition hover:-translate-y-0.5 hover:bg-blue-500/15">
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-200/70">{title}</p>
+              <p className="mt-2 text-sm font-bold leading-6 text-blue-50">{body}</p>
+            </article>
+          ))}
+        </section>
+
+        <div className="flex flex-wrap gap-2">
+          <Link href="/buy-itacash" className="inline-flex rounded-full bg-white px-4 py-2 text-sm font-black text-black transition hover:-translate-y-0.5 hover:bg-blue-50 active:scale-95">
+            Comprar ItaCash
+          </Link>
+          <Link href="/wallet" className="inline-flex rounded-full border border-blue-300/20 bg-blue-500/10 px-4 py-2 text-sm font-black text-blue-50 transition hover:-translate-y-0.5 hover:bg-blue-500/20 active:scale-95">
+            Abrir carteira
+          </Link>
+        </div>
+
         <section className="grid gap-4 sm:grid-cols-2">
           {itacashCards.map((card) => (
             <article
               key={card.title}
-              className="rounded-[1.5rem] border border-white/10 bg-white/[0.045] p-5 shadow-xl shadow-black/20 ring-1 ring-blue-400/10 backdrop-blur"
+              className="rounded-[1.5rem] border border-white/10 bg-white/[0.045] p-5 shadow-xl shadow-black/20 ring-1 ring-blue-400/10 backdrop-blur transition hover:-translate-y-0.5 hover:border-blue-300/25 hover:bg-blue-500/10"
             >
               <h2 className="text-lg font-black text-white">
                 {card.title}

@@ -259,11 +259,12 @@ export default function AdminPage() {
           </div>
         )}
 
-        <div className={`relative z-10 mb-6 rounded-[2rem] border p-5 shadow-xl ring-1 ${
+        <div className={`relative z-10 mb-6 overflow-hidden rounded-[2rem] border p-5 shadow-xl ring-1 ${
           totalPending > 0
             ? 'border-red-300/30 bg-red-500/15 text-red-50 shadow-red-950/20 ring-red-300/15'
             : 'border-emerald-300/20 bg-emerald-500/10 text-emerald-50 shadow-black/20 ring-emerald-300/10'
         }`}>
+          <span className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-white/10 blur-2xl" />
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">
               <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${
@@ -293,7 +294,7 @@ export default function AdminPage() {
                   <Link
                     key={item.key}
                     href={item.href}
-                    className="inline-flex items-center justify-center rounded-full bg-white px-4 py-2 text-xs font-black text-red-950 transition hover:bg-red-50"
+                    className="inline-flex items-center justify-center rounded-full bg-white px-4 py-2 text-xs font-black text-red-950 transition hover:-translate-y-0.5 hover:bg-red-50 active:scale-95"
                   >
                     {item.action}
                   </Link>
@@ -313,7 +314,7 @@ export default function AdminPage() {
               <Link
                 key={item.key}
                 href={item.href}
-                className={`rounded-[1.5rem] border p-4 shadow-xl shadow-black/20 ring-1 transition hover:-translate-y-0.5 ${
+                className={`rounded-[1.5rem] border p-4 shadow-xl shadow-black/20 ring-1 transition hover:-translate-y-1 ${
                   hasError
                     ? 'border-amber-300/25 bg-amber-500/10 text-amber-50 ring-amber-300/10'
                     : hasPending
@@ -341,7 +342,7 @@ export default function AdminPage() {
                 <p className="mt-2 min-h-10 text-sm leading-5 opacity-75">
                   {hasError ? adminPendingErrors[item.key] : item.description}
                 </p>
-                <span className="mt-4 inline-flex rounded-full bg-white px-4 py-2 text-xs font-black text-black">
+                <span className="mt-4 inline-flex rounded-full bg-white px-4 py-2 text-xs font-black text-black shadow-sm shadow-blue-500/10">
                   {item.action}
                 </span>
               </Link>
@@ -363,7 +364,7 @@ export default function AdminPage() {
               <Link
                 key={card.href}
                 href={card.href}
-                className="group rounded-[2rem] border border-white/10 bg-zinc-950/90 p-5 shadow-xl shadow-black/20 ring-1 ring-white/5 transition hover:-translate-y-1 hover:border-blue-300/30 hover:bg-blue-950/20 hover:shadow-blue-950/20"
+                className="group rounded-[2rem] border border-white/10 bg-zinc-950/80 p-5 shadow-xl shadow-black/20 ring-1 ring-white/5 transition hover:-translate-y-1 hover:border-blue-300/30 hover:bg-blue-950/20 hover:shadow-blue-950/20"
               >
                 <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-500/15 text-blue-100 ring-1 ring-blue-300/15 transition group-hover:bg-blue-500 group-hover:text-white">
                   <Icon className="h-6 w-6" />
@@ -381,7 +382,7 @@ export default function AdminPage() {
                   {card.description}
                 </p>
 
-                <span className="mt-5 inline-flex rounded-full bg-white px-4 py-2 text-xs font-black text-black transition group-hover:bg-blue-50">
+                <span className="mt-5 inline-flex rounded-full bg-white px-4 py-2 text-xs font-black text-black shadow-sm shadow-blue-500/10 transition group-hover:bg-blue-50">
                   Abrir
                 </span>
               </Link>

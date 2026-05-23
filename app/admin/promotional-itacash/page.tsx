@@ -303,7 +303,7 @@ export default function AdminPromotionalItaCashPage() {
           </div>
         </header>
 
-        <div className="relative z-10 mb-6 rounded-3xl border border-amber-300/20 bg-amber-500/10 p-4 text-sm leading-6 text-amber-50">
+        <div className="relative z-10 mb-6 rounded-3xl border border-amber-300/20 bg-amber-500/10 p-4 text-sm leading-6 text-amber-50 ring-1 ring-amber-300/10">
           Credito promocional nao representa moeda oficial e podera ter regras especificas de uso.
         </div>
 
@@ -314,7 +314,7 @@ export default function AdminPromotionalItaCashPage() {
         )}
 
         <div className="relative z-10 grid gap-6 lg:grid-cols-[minmax(0,1fr)_25rem]">
-          <section className="rounded-[2rem] border border-white/10 bg-zinc-950/90 p-5 ring-1 ring-white/10">
+          <section className="rounded-[2rem] border border-white/10 bg-zinc-950/80 p-5 ring-1 ring-white/10">
             <form onSubmit={searchUsers} className="flex flex-col gap-3 sm:flex-row">
               <label className="min-w-0 flex-1">
                 <span className="text-sm font-black text-zinc-200">Buscar usuario</span>
@@ -349,10 +349,10 @@ export default function AdminPromotionalItaCashPage() {
                     key={profile.id}
                     type="button"
                     onClick={() => setSelectedUser(profile)}
-                    className={`flex items-center gap-3 rounded-3xl border p-3 text-left transition ${
+                  className={`flex items-center gap-3 rounded-3xl border p-3 text-left transition hover:-translate-y-0.5 ${
                       active
                         ? 'border-blue-300/40 bg-blue-500/15'
-                        : 'border-white/10 bg-black/35 hover:border-blue-300/20'
+                        : 'border-white/10 bg-black/30 hover:border-blue-300/20'
                     }`}
                   >
                     {profile.avatar_url ? (
@@ -438,7 +438,7 @@ export default function AdminPromotionalItaCashPage() {
             </form>
           </section>
 
-          <aside className="rounded-[2rem] border border-white/10 bg-zinc-950/90 p-5 ring-1 ring-white/10">
+          <aside className="rounded-[2rem] border border-white/10 bg-zinc-950/80 p-5 ring-1 ring-white/10">
             <div className="flex items-center gap-3">
               <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-500/15 text-blue-100">
                 <Sparkles className="h-5 w-5" />
@@ -460,7 +460,7 @@ export default function AdminPromotionalItaCashPage() {
                   const name = profile?.display_name || profile?.username || 'Usuario'
 
                   return (
-                    <article key={grant.id} className="rounded-3xl border border-white/10 bg-black/35 p-4">
+                    <article key={grant.id} className="rounded-3xl border border-white/10 bg-black/30 p-4 transition hover:border-blue-300/20 hover:bg-blue-950/10">
                       <div className="flex items-start gap-3">
                         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-200">
                           <Coins className="h-5 w-5" />

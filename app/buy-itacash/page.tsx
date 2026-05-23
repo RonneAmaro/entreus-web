@@ -481,22 +481,22 @@ export default function BuyItaCashPage() {
               Escolha qualquer quantidade, veja as taxas separadas e use Mercado Pago automatico ou mantenha a solicitacao manual como alternativa.
             </p>
 
-            <div className="mt-6 rounded-3xl border border-blue-300/20 bg-blue-500/10 p-4 text-sm leading-6 text-blue-50">
+            <div className="mt-6 rounded-3xl border border-blue-300/20 bg-blue-500/10 p-4 text-sm leading-6 text-blue-50 ring-1 ring-blue-300/10">
               As taxas sao mostradas antes da confirmacao. A EntreUS cobra 2% de taxa de servico. A operadora de pagamento pode cobrar uma taxa propria conforme o metodo escolhido.
             </div>
 
             <div className="mt-5 grid gap-3 sm:grid-cols-3">
-              <div className="rounded-3xl border border-white/10 bg-zinc-950/90 p-4">
+              <div className="rounded-3xl border border-white/10 bg-zinc-950/75 p-4 ring-1 ring-white/5">
                 <p className="text-xs font-black uppercase tracking-[0.2em] text-zinc-500">Conversao</p>
                 <p className="mt-2 text-2xl font-black">10 = R$ 1,00</p>
                 <p className="text-sm text-zinc-400">ItaCash</p>
               </div>
-              <div className="rounded-3xl border border-blue-300/20 bg-blue-500/10 p-4">
+              <div className="rounded-3xl border border-blue-300/20 bg-blue-500/10 p-4 ring-1 ring-blue-300/10">
                 <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-200/70">Taxa EntreUS</p>
                 <p className="mt-2 text-2xl font-black">2%</p>
                 <p className="text-sm text-blue-100/70">Sempre separada</p>
               </div>
-              <div className="rounded-3xl border border-emerald-300/20 bg-emerald-500/10 p-4">
+              <div className="rounded-3xl border border-emerald-300/20 bg-emerald-500/10 p-4 ring-1 ring-emerald-300/10">
                 <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-200/70">Recomendado</p>
                 <p className="mt-2 text-2xl font-black">Pix MP</p>
                 <p className="text-sm text-emerald-100/70">Menor taxa</p>
@@ -506,7 +506,7 @@ export default function BuyItaCashPage() {
 
           <div className="relative">
             <div className="absolute inset-8 rounded-full bg-blue-500/20 blur-3xl" />
-            <div className="relative overflow-hidden rounded-[2rem] border border-blue-300/20 bg-zinc-950/90 p-5 shadow-2xl shadow-blue-950/20 ring-1 ring-white/10">
+            <div className="relative overflow-hidden rounded-[2rem] border border-blue-300/20 bg-zinc-950/85 p-5 shadow-2xl shadow-blue-950/20 ring-1 ring-white/10 transition hover:-translate-y-0.5 hover:border-blue-300/35">
               <img
                 src="/itacash.png"
                 alt="ItaCash"
@@ -547,7 +547,7 @@ export default function BuyItaCashPage() {
           onSubmit={createPurchaseRequest}
           className="relative z-10 grid gap-6 pb-10 lg:grid-cols-[minmax(0,1fr)_24rem]"
         >
-          <section className="rounded-[2rem] border border-white/10 bg-zinc-950/90 p-5 ring-1 ring-white/10">
+          <section className="rounded-[2rem] border border-white/10 bg-zinc-950/80 p-5 ring-1 ring-white/10">
             <label className="block">
               <span className="text-sm font-black text-zinc-200">Quantidade de ItaCash</span>
               <input
@@ -557,7 +557,7 @@ export default function BuyItaCashPage() {
                 inputMode="numeric"
                 value={amount}
                 onChange={(event) => setAmount(event.target.value)}
-                className="mt-2 w-full rounded-2xl border border-white/10 bg-black px-4 py-4 text-2xl font-black text-white outline-none transition placeholder:text-zinc-600 focus:border-blue-300"
+                className="mt-2 w-full rounded-2xl border border-white/10 bg-black/70 px-4 py-4 text-2xl font-black text-white outline-none transition placeholder:text-zinc-600 focus:border-blue-300 focus:ring-4 focus:ring-blue-500/10"
               />
             </label>
 
@@ -583,10 +583,10 @@ export default function BuyItaCashPage() {
                       if (method.available) setPaymentMethod(method.value)
                     }}
                     disabled={!method.available}
-                    className={`rounded-3xl border p-4 text-left transition ${
+                    className={`rounded-3xl border p-4 text-left transition hover:-translate-y-0.5 ${
                       active
                         ? 'border-blue-300/40 bg-blue-500/15 text-blue-50'
-                        : 'border-white/10 bg-black/35 text-zinc-300 hover:border-blue-300/20 disabled:cursor-not-allowed disabled:opacity-60'
+                        : 'border-white/10 bg-black/30 text-zinc-300 hover:border-blue-300/20 disabled:cursor-not-allowed disabled:opacity-60'
                     }`}
                   >
                     {method.recommended ? <Sparkles className="h-5 w-5" /> : <CreditCard className="h-5 w-5" />}

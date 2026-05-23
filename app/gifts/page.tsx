@@ -480,15 +480,15 @@ export default function GiftsPage() {
             </p>
 
             <div className="mt-8 grid gap-3 sm:grid-cols-3">
-              <div className="rounded-3xl border border-blue-300/20 bg-blue-500/10 p-5">
+              <div className="rounded-3xl border border-blue-300/20 bg-blue-500/10 p-5 ring-1 ring-blue-300/10">
                 <p className="text-2xl font-black">{gifts.length}</p>
                 <p className="text-sm font-bold text-blue-100/70">presentes ativos</p>
               </div>
-              <div className="rounded-3xl border border-white/10 bg-zinc-950/80 p-5">
+              <div className="rounded-3xl border border-white/10 bg-zinc-950/70 p-5 ring-1 ring-white/5">
                 <p className="text-2xl font-black">10 = R$ 1</p>
                 <p className="text-sm text-zinc-400">referencia ItaCash</p>
               </div>
-              <div className="rounded-3xl border border-white/10 bg-zinc-950/80 p-5">
+              <div className="rounded-3xl border border-white/10 bg-zinc-950/70 p-5 ring-1 ring-white/5">
                 <p className="text-2xl font-black">100%</p>
                 <p className="text-sm text-zinc-400">creditado ao destinatario</p>
               </div>
@@ -552,7 +552,7 @@ export default function GiftsPage() {
 
                 <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                   {categoryGifts.map((gift) => (
-                    <article key={gift.id} className="group relative overflow-hidden rounded-[2rem] border border-white/10 bg-zinc-950 p-5 shadow-xl shadow-black/20 transition hover:-translate-y-1 hover:border-blue-300/30 hover:shadow-blue-500/10">
+                    <article key={gift.id} className="group relative overflow-hidden rounded-[2rem] border border-white/10 bg-zinc-950/85 p-5 shadow-xl shadow-black/20 ring-1 ring-white/5 transition hover:-translate-y-1 hover:border-blue-300/30 hover:bg-blue-950/10 hover:shadow-blue-500/10">
                       <div className="pointer-events-none absolute -right-10 -top-10 h-28 w-28 rounded-full bg-blue-500/10 blur-2xl transition group-hover:bg-blue-500/20" />
                       <div className="relative">
                         <div className="flex items-start justify-between gap-3">
@@ -567,7 +567,7 @@ export default function GiftsPage() {
                           {gift.description || 'Presente digital EntreUS.'}
                         </p>
 
-                        <div className="mt-5 rounded-2xl border border-blue-300/15 bg-blue-500/10 p-4">
+                        <div className="mt-5 rounded-2xl border border-blue-300/15 bg-blue-500/10 p-4 ring-1 ring-blue-300/10">
                           <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-200/70">Preco</p>
                           <p className="mt-1 text-3xl font-black text-blue-100">
                             {gift.price_itacash} <span className="text-base text-blue-200/70">ItaCash</span>
@@ -577,7 +577,7 @@ export default function GiftsPage() {
                         <button
                           type="button"
                           onClick={() => openGiftModal(gift)}
-                          className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-full bg-white px-4 py-3 text-sm font-black text-black transition hover:bg-blue-50"
+                          className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-full bg-white px-4 py-3 text-sm font-black text-black shadow-sm shadow-blue-500/15 transition hover:-translate-y-0.5 hover:bg-blue-50 active:scale-95"
                         >
                           <Send className="h-4 w-4" />
                           Enviar presente

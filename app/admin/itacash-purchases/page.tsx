@@ -400,7 +400,7 @@ export default function AdminItaCashPurchasesPage() {
             </div>
           </div>
 
-          <div className="rounded-[2rem] border border-white/10 bg-zinc-950 p-5 ring-1 ring-white/5">
+          <div className="rounded-[2rem] border border-white/10 bg-zinc-950/80 p-5 ring-1 ring-white/5">
             <p className="text-xs font-black uppercase tracking-[0.2em] text-zinc-500">Pendentes</p>
             <p className={`mt-2 text-4xl font-black ${visiblePendingCount > 0 ? 'text-red-200' : 'text-emerald-200'}`}>
               {visiblePendingCount}
@@ -421,7 +421,7 @@ export default function AdminItaCashPurchasesPage() {
             <button
               type="button"
               onClick={() => setNewPendingAlert(false)}
-              className="rounded-full border border-red-200/20 px-4 py-2 text-sm font-black text-red-50 transition hover:bg-red-500/20"
+              className="rounded-full border border-red-200/20 px-4 py-2 text-sm font-black text-red-50 transition hover:-translate-y-0.5 hover:bg-red-500/20 active:scale-95"
             >
               Dispensar
             </button>
@@ -458,7 +458,7 @@ export default function AdminItaCashPurchasesPage() {
 
         <div className="grid gap-4">
           {visibleRequests.length === 0 ? (
-            <div className="rounded-[2rem] border border-white/10 bg-zinc-950 p-8 text-center text-zinc-400">
+            <div className="rounded-[2rem] border border-blue-300/15 bg-zinc-950/80 p-8 text-center text-zinc-400 ring-1 ring-blue-300/10">
               Nenhuma solicitacao encontrada.
             </div>
           ) : (
@@ -469,10 +469,10 @@ export default function AdminItaCashPurchasesPage() {
               return (
                 <article
                   key={request.id}
-                  className={`rounded-[2rem] border p-4 shadow-xl ring-1 ${
+                  className={`rounded-[2rem] border p-4 shadow-xl ring-1 transition hover:-translate-y-0.5 ${
                     isPending
                       ? 'border-red-300/30 bg-red-500/10 shadow-red-950/20 ring-red-300/15'
-                      : 'border-white/10 bg-zinc-950 shadow-black/20 ring-white/5'
+                      : 'border-white/10 bg-zinc-950/80 shadow-black/20 ring-white/5'
                   }`}
                 >
                   <div className="grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_repeat(7,minmax(0,1fr))_auto] xl:items-center">

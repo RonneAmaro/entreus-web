@@ -154,12 +154,12 @@ export default function AdminReportsPage() {
 
         <div className="mt-5 grid gap-3">
           {reports.length === 0 ? (
-            <div className="rounded-3xl border border-emerald-300/20 bg-emerald-500/10 p-5 text-emerald-100">
+            <div className="rounded-3xl border border-emerald-300/20 bg-emerald-500/10 p-5 text-emerald-100 ring-1 ring-emerald-300/10">
               Nenhuma denuncia pendente no momento.
             </div>
           ) : (
             reports.map((report) => (
-              <article key={report.id} className="rounded-3xl border border-white/10 bg-zinc-950 p-4 ring-1 ring-white/5">
+              <article key={report.id} className="rounded-3xl border border-white/10 bg-zinc-950/80 p-4 ring-1 ring-white/5 transition hover:-translate-y-0.5 hover:border-blue-300/20">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0">
                     <p className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-red-200">
