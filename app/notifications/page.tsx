@@ -307,7 +307,7 @@ export default function NotificationsPage() {
       .select('id, user_id, actor_id, type, post_id, comment_id, user_gift_id, itacash_purchase_request_id, amount, read, created_at')
       .eq('user_id', currentUserId)
       .order('created_at', { ascending: false })
-      .limit(80)
+      .limit(60)
 
     if (error && error.message.includes('itacash_purchase_request_id')) {
       console.warn('[Notifications] itacash_purchase_request_id unavailable, loading base notifications:', error.message)
@@ -316,7 +316,7 @@ export default function NotificationsPage() {
         .select('id, user_id, actor_id, type, post_id, comment_id, user_gift_id, amount, read, created_at')
         .eq('user_id', currentUserId)
         .order('created_at', { ascending: false })
-        .limit(80)
+        .limit(60)
 
       data = (fallback.data || []).map((item) => ({
         ...item,

@@ -211,11 +211,11 @@ function SharedGiftPostCard({ post }: { post: PostCardPost }) {
             <video
               src={media.media_url}
               poster={getGiftPoster(media.media_url)}
-              autoPlay
               muted
               loop
               playsInline
-              preload="metadata"
+              controls
+              preload="none"
               onError={() => setMediaFailed(true)}
               className="h-full w-full rounded-2xl object-contain"
             />
@@ -223,6 +223,8 @@ function SharedGiftPostCard({ post }: { post: PostCardPost }) {
             <img
               src={media.media_url}
               alt={details.giftName}
+              loading="lazy"
+              decoding="async"
               onError={() => setMediaFailed(true)}
               className="h-full w-full rounded-2xl object-contain"
             />

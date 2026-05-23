@@ -381,7 +381,7 @@ export default function WalletPage() {
       .select('id, wallet_id, user_id, type, amount, balance_after, description, reference_type, reference_id, metadata, created_at')
       .eq('wallet_id', loadedWallet.id)
       .order('created_at', { ascending: false })
-      .limit(80)
+      .limit(60)
 
     if (transactionError) {
       setMessage('Carteira carregada, mas o historico falhou: ' + transactionError.message)

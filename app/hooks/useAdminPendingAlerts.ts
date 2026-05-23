@@ -24,7 +24,7 @@ const emptyCounts: AdminPendingAlerts = {
   feedbackReports: 0,
 }
 
-const ADMIN_PENDING_CACHE_MS = 15000
+const ADMIN_PENDING_CACHE_MS = 30000
 
 let cachedCounts: AdminPendingAlerts | null = null
 let cachedErrors: Partial<Record<AdminPendingAlertKey, string>> = {}
@@ -125,8 +125,12 @@ export function useAdminPendingAlerts({
   enabled = true,
   onNewPending,
 }: UseAdminPendingAlertsOptions = {}) {
-  const [counts, setCounts] = useState<AdminPendingAlerts>(emptyCounts)
-  const [errors, setErrors] = useState<Partial<Record<AdminPendingAlertKey, string>>>({})
+  const [counts, setCounts] = useState<AdminPendingAlerts>(() =>
+    enabled && cachedCounts ? cachedCounts : emptyCounts
+  )
+  const [errors, setErrors] = useState<Partial<Record<AdminPendingAlertKey, string>>>(() =>
+    enabled ? cachedErrors : {}
+  )
   const [loading, setLoading] = useState(false)
   const previousTotalRef = useRef(0)
   const refreshTimerRef = useRef<number | null>(null)
@@ -164,7 +168,7 @@ export function useAdminPendingAlerts({
     refreshTimerRef.current = window.setTimeout(() => {
       cachedAt = 0
       void loadCounts()
-    }, 250)
+    }, 500)
   }, [loadCounts])
 
   useEffect(() => {

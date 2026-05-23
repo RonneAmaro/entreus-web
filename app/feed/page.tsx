@@ -186,10 +186,10 @@ type Repost = {
   profiles: ProfileSummary | null
 }
 
-const FEED_INITIAL_POST_LIMIT = 40
-const FEED_INITIAL_COMMENT_LIMIT = 240
-const FEED_INITIAL_REACTION_LIMIT = 800
-const FEED_INITIAL_REPOST_LIMIT = 160
+const FEED_INITIAL_POST_LIMIT = 24
+const FEED_INITIAL_COMMENT_LIMIT = 160
+const FEED_INITIAL_REACTION_LIMIT = 500
+const FEED_INITIAL_REPOST_LIMIT = 120
 
 type FeedTexts = {
   tabs: {
@@ -507,11 +507,11 @@ function SharedGiftFeedCard({ post }: { post: Post }) {
             <video
               src={mediaUrl}
               poster={getGiftPoster(mediaUrl)}
-              autoPlay
               muted
               loop
               playsInline
-              preload="metadata"
+              controls
+              preload="none"
               onError={() => setMediaFailed(true)}
               className="h-full w-full rounded-2xl object-contain"
             />
@@ -519,6 +519,8 @@ function SharedGiftFeedCard({ post }: { post: Post }) {
             <img
               src={mediaUrl}
               alt={details.giftName}
+              loading="lazy"
+              decoding="async"
               onError={() => setMediaFailed(true)}
               className="h-full w-full rounded-2xl object-contain"
             />
@@ -2391,8 +2393,33 @@ function FeedContent() {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-white text-black dark:bg-black dark:text-white flex items-center justify-center px-4">
-        <p>{t('feed.loading')}</p>
+      <main className="min-h-screen bg-zinc-50 px-4 py-6 text-black dark:bg-black dark:text-white">
+        <div className="mx-auto w-full max-w-2xl space-y-4">
+          <div className="h-24 rounded-[2rem] border border-zinc-200 bg-white/80 shadow-sm dark:border-zinc-800 dark:bg-zinc-950/80" />
+          {[0, 1, 2].map((item) => (
+            <div
+              key={item}
+              className="overflow-hidden rounded-[2rem] border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-950"
+            >
+              <div className="flex items-center gap-3 p-4">
+                <div className="h-11 w-11 animate-pulse rounded-full bg-zinc-200 dark:bg-zinc-800" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-3 w-36 animate-pulse rounded-full bg-zinc-200 dark:bg-zinc-800" />
+                  <div className="h-3 w-24 animate-pulse rounded-full bg-zinc-100 dark:bg-zinc-900" />
+                </div>
+              </div>
+              <div className="h-64 animate-pulse bg-zinc-100 dark:bg-zinc-900" />
+              <div className="flex gap-3 p-4">
+                <div className="h-9 flex-1 animate-pulse rounded-full bg-zinc-100 dark:bg-zinc-900" />
+                <div className="h-9 flex-1 animate-pulse rounded-full bg-zinc-100 dark:bg-zinc-900" />
+                <div className="h-9 flex-1 animate-pulse rounded-full bg-zinc-100 dark:bg-zinc-900" />
+              </div>
+            </div>
+          ))}
+          <p className="text-center text-sm font-semibold text-zinc-500 dark:text-zinc-400">
+            {t('feed.loading')}
+          </p>
+        </div>
       </main>
     )
   }
@@ -2543,12 +2570,14 @@ function FeedContent() {
                           src={commentMediaDrafts[replyModalPost.id]?.url}
                           controls
                           playsInline
-                          preload="metadata"
+                          preload="none"
                           className="max-h-72 w-full bg-black object-contain"
                         />
                       ) : (
                         <img
                           src={commentMediaDrafts[replyModalPost.id]?.url}
+                          loading="lazy"
+                          decoding="async"
                           alt="Prévia da mídia do comentário"
                           className="max-h-72 w-full object-contain"
                         />
@@ -3273,12 +3302,14 @@ function FeedContent() {
                                               src={mediaItem.media_url}
                                               controls
                                               playsInline
-                                              preload="metadata"
+                                              preload="none"
                                               className="max-h-80 w-full bg-black object-contain"
                                             />
                                           ) : (
                                             <img
                                               src={mediaItem.media_url}
+                                              loading="lazy"
+                                              decoding="async"
                                               alt={mediaItem.media_type === 'gif' ? 'GIF do comentário' : 'Imagem do comentário'}
                                               className="max-h-80 w-full object-contain"
                                             />
@@ -3447,7 +3478,7 @@ function FeedContent() {
                         muted
                         loop
                         playsInline
-                        preload="metadata"
+                        preload="none"
                         className="aspect-video max-h-40 w-full object-cover"
                       />
                     </div>

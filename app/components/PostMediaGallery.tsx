@@ -88,6 +88,9 @@ function AutoPlayVideo({
       if (!currentVideo) return
 
       currentVideo.muted = true
+      if (currentVideo.preload === 'none') {
+        currentVideo.preload = 'metadata'
+      }
       window.dispatchEvent(
         new CustomEvent<MediaAutoplayDetail>(AUTOPLAY_EVENT, {
           detail: { playerId },
@@ -118,7 +121,7 @@ function AutoPlayVideo({
 
     observedVideo.muted = true
     observedVideo.playsInline = true
-    observedVideo.preload = 'metadata'
+    observedVideo.preload = 'none'
 
     window.addEventListener(AUTOPLAY_EVENT, handleAutoplayEvent)
     document.addEventListener('visibilitychange', handleVisibilityChange)
@@ -161,7 +164,7 @@ function AutoPlayVideo({
       muted
       loop
       playsInline
-      preload="metadata"
+      preload={autoplayEnabled ? 'none' : 'metadata'}
       controls={controls}
       onClick={onClick}
       className={className}
