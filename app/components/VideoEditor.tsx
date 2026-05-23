@@ -2964,7 +2964,7 @@ export default function VideoEditor() {
     <section className="w-full overflow-hidden rounded-[1rem] border border-white/10 bg-black text-white shadow-2xl shadow-black/40 ring-1 ring-sky-400/10 sm:rounded-[1.25rem]">
       <div className="flex min-h-[calc(100dvh-6.5rem)] flex-col gap-0 lg:min-h-[82vh] lg:flex-row">
         <div className="relative flex min-w-0 flex-1 flex-col bg-zinc-950">
-          <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 px-3 py-2.5 sm:px-5">
+          <div className="relative z-[70] flex shrink-0 items-center justify-between gap-3 border-b border-white/10 bg-zinc-950 px-3 py-2.5 sm:px-5">
             <div className="flex min-w-0 items-center gap-2">
               <button
                 type="button"
@@ -3003,8 +3003,8 @@ export default function VideoEditor() {
             )}
           </div>
 
-          <div className={`flex flex-1 items-center justify-center px-2 py-2 transition-all sm:px-5 sm:py-3 ${hasEditorMedia ? 'min-h-[min(52dvh,34rem)] sm:min-h-[30rem]' : 'min-h-[min(62dvh,34rem)] sm:min-h-[34rem]'}`}>
-            <div className={`relative w-full overflow-hidden bg-black shadow-2xl shadow-black/40 ${hasEditorMedia ? 'rounded-xl sm:rounded-[1.25rem]' : 'rounded-[1.25rem] border border-white/10'}`}>
+          <div className={`relative z-0 flex flex-1 items-center justify-center px-2 py-2 transition-all sm:px-5 sm:py-3 ${hasEditorMedia ? 'min-h-[min(52dvh,34rem)] sm:min-h-[30rem]' : 'min-h-[min(62dvh,34rem)] sm:min-h-[34rem]'}`}>
+            <div className={`relative isolate w-full overflow-hidden bg-black shadow-2xl shadow-black/40 ${hasEditorMedia ? 'rounded-xl sm:rounded-[1.25rem]' : 'rounded-[1.25rem] border border-white/10'}`}>
             {editorMode === 'video' && videoUrl ? (
               <div
                 className="relative mx-auto w-full max-h-[68vh]"
@@ -3107,7 +3107,7 @@ export default function VideoEditor() {
 
           {hasEditorMedia && (
             <div
-              className={`shrink-0 border-t border-white/10 bg-black/85 px-3 py-3 transition-all duration-300 sm:px-5 ${
+              className={`relative z-20 shrink-0 border-t border-white/10 bg-black/85 px-3 py-3 transition-all duration-300 sm:px-5 ${
                 controlsVisible ? 'translate-y-0 opacity-100' : 'pointer-events-none -mb-48 translate-y-6 opacity-0'
               }`}
             >
@@ -3478,19 +3478,26 @@ export default function VideoEditor() {
 
         {hasEditorMedia && (
         <aside
-          className={`fixed inset-x-0 bottom-16 z-30 flex max-h-[48dvh] shrink-0 flex-col rounded-t-[1.25rem] border-t border-white/10 bg-black/95 shadow-2xl shadow-black/50 ring-1 ring-white/10 transition-all duration-300 sm:max-h-[52dvh] lg:static lg:max-h-none lg:w-[22rem] lg:rounded-none lg:border-l lg:border-t-0 lg:bg-black/80 lg:shadow-none lg:ring-0 ${
+          onPointerDown={(event) => event.stopPropagation()}
+          onPointerUp={(event) => event.stopPropagation()}
+          onClick={(event) => event.stopPropagation()}
+          className={`fixed inset-x-0 bottom-16 z-[90] flex max-h-[48dvh] shrink-0 flex-col rounded-t-[1.25rem] border-t border-white/10 bg-black/95 shadow-2xl shadow-black/50 ring-1 ring-white/10 transition-all duration-300 sm:max-h-[52dvh] lg:static lg:z-30 lg:max-h-none lg:w-[22rem] lg:rounded-none lg:border-l lg:border-t-0 lg:bg-black/80 lg:shadow-none lg:ring-0 ${
             controlsVisible
               ? 'translate-y-0 opacity-100'
               : 'pointer-events-none translate-y-full opacity-0 lg:translate-x-8 lg:translate-y-0'
           }`}
         >
-          <div className="grid grid-cols-6 gap-1 border-b border-white/10 p-2 lg:grid-cols-3">
+          <div className="relative z-[91] grid grid-cols-6 gap-1 border-b border-white/10 p-2 lg:z-auto lg:grid-cols-3">
             {toolButtons.map((item) => (
               <button
                 key={item.id}
                 type="button"
-                onClick={() => openEditorPanel(item.id, item.id === activePanel)}
-                className={`flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[10px] font-black transition sm:min-h-14 sm:px-2 sm:text-[11px] ${
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  openEditorPanel(item.id, item.id === activePanel)
+                }}
+                className={`relative z-[92] flex min-h-12 touch-manipulation flex-col items-center justify-center gap-1 rounded-xl px-1 text-[10px] font-black transition sm:min-h-14 sm:px-2 sm:text-[11px] ${
                   activePanel === item.id
                     ? 'bg-sky-500 text-white shadow-lg shadow-sky-950/30'
                     : 'text-zinc-500 hover:bg-white/5 hover:text-zinc-100'
@@ -3502,7 +3509,7 @@ export default function VideoEditor() {
             ))}
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto p-3 sm:p-4">
+          <div className="relative z-[91] min-h-0 flex-1 overflow-y-auto p-3 sm:z-auto sm:p-4">
             {activePanel === 'add' && (
               <div className="space-y-4">
                 <div>
