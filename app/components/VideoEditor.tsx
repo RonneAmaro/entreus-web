@@ -136,7 +136,9 @@ const LAYER_ORDER = {
   sticker: 30,
   text: 40,
 }
-const STICKER_LIBRARY = ['❤️', '🔥', '⭐', '✨', '😂', '👏', '🎉', '💎', '🚀', '👑']
+const STICKER_LIBRARY = ['⭐', '🔥', '❤️', '😂', '👏', '🎉', '💎', '🪙', '🏆', '✅', '⚠️', '➡️', '✨', '🚀', '👑']
+const SHAPE_STICKERS = ['⬆️', '⬇️', '⬅️', '➡️', '⭕', '🔵', '🟣', '🔶']
+const ENTREUS_STICKERS = ['🪙', '💎', '🏆', '✅']
 
 const TEXT_FONT_OPTIONS: { key: TextFontKey; label: string; family: string; weight: number }[] = [
   { key: 'system', label: 'Padrao', family: 'Inter, ui-sans-serif, system-ui, sans-serif', weight: 800 },
@@ -509,6 +511,11 @@ export default function VideoEditor() {
   }
 
   function openEditorPanel(panel: EditorPanel, keepVisualSelection = false) {
+    if (panel === 'text' && hasEditorMedia && !activeOverlayId) {
+      addTextOverlay()
+      return
+    }
+
     if (!keepVisualSelection) {
       clearVisualSelection()
     }
@@ -1801,6 +1808,16 @@ export default function VideoEditor() {
   function nudgeActiveOverlayTiming(key: 'startTime' | 'endTime', delta: number) {
     if (!activeOverlay) return
     updateActiveOverlayTiming(key, activeOverlay[key] + delta)
+  }
+
+  function nudgeActiveStickerTiming(key: 'startTime' | 'endTime', delta: number) {
+    if (!activeSticker) return
+    updateActiveStickerTiming(key, activeSticker[key] + delta)
+  }
+
+  function nudgeActiveImageTiming(key: 'startTime' | 'endTime', delta: number) {
+    if (!activeImageOverlay) return
+    updateActiveImageTiming(key, activeImageOverlay[key] + delta)
   }
 
   function applyTextBackgroundPreset(preset: typeof TEXT_BACKGROUND_PRESETS[number]) {
@@ -3429,6 +3446,120 @@ export default function VideoEditor() {
                     </div>
                   </div>
                 )}
+                {activeSticker && controlsVisible && !activeOverlay && (
+                  <div
+                    className="absolute inset-x-3 bottom-3 z-[75] rounded-2xl border border-fuchsia-300/25 bg-black/75 p-2 shadow-2xl shadow-black/40 ring-1 ring-white/10 backdrop-blur-xl"
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onPointerUp={(event) => event.stopPropagation()}
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-fuchsia-500/20 text-2xl">
+                        {activeSticker.value}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-xs font-black text-fuchsia-50">
+                        Arraste no video. Tempo na timeline.
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => updateActiveStickerStyle('size', Math.max(28, activeSticker.size - 10))}
+                        className="flex h-10 w-10 shrink-0 touch-manipulation items-center justify-center rounded-xl border border-white/10 bg-white/10 text-lg font-black text-white"
+                        aria-label="Diminuir figurinha"
+                      >
+                        -
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateActiveStickerStyle('size', Math.min(220, activeSticker.size + 10))}
+                        className="flex h-10 w-10 shrink-0 touch-manipulation items-center justify-center rounded-xl border border-white/10 bg-white/10 text-lg font-black text-white"
+                        aria-label="Aumentar figurinha"
+                      >
+                        +
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateActiveStickerStyle('rotation', clamp(activeSticker.rotation - 15, -45, 45))}
+                        className="flex h-10 w-10 shrink-0 touch-manipulation items-center justify-center rounded-xl border border-white/10 bg-white/10 text-xs font-black text-white"
+                        aria-label="Girar figurinha para esquerda"
+                      >
+                        -15
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateActiveStickerStyle('rotation', clamp(activeSticker.rotation + 15, -45, 45))}
+                        className="flex h-10 w-10 shrink-0 touch-manipulation items-center justify-center rounded-xl border border-white/10 bg-white/10 text-xs font-black text-white"
+                        aria-label="Girar figurinha para direita"
+                      >
+                        +15
+                      </button>
+                      <button
+                        type="button"
+                        onClick={removeActiveSticker}
+                        className="flex h-10 w-10 shrink-0 touch-manipulation items-center justify-center rounded-xl border border-red-300/25 bg-red-500/15 text-red-100"
+                        aria-label="Remover figurinha"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {activeImageOverlay && controlsVisible && !activeOverlay && !activeSticker && (
+                  <div
+                    className="absolute inset-x-3 bottom-3 z-[75] rounded-2xl border border-amber-300/25 bg-black/75 p-2 shadow-2xl shadow-black/40 ring-1 ring-white/10 backdrop-blur-xl"
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onPointerUp={(event) => event.stopPropagation()}
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/20 text-amber-100">
+                        <ImageIcon className="h-5 w-5" />
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-xs font-black text-amber-50">
+                        Arraste no video. Tempo na timeline.
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => updateActiveImageSize(Math.max(32, activeImageOverlay.width - 24))}
+                        className="flex h-10 w-10 shrink-0 touch-manipulation items-center justify-center rounded-xl border border-white/10 bg-white/10 text-lg font-black text-white"
+                        aria-label="Diminuir imagem"
+                      >
+                        -
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateActiveImageSize(Math.min(canvasSize.width, activeImageOverlay.width + 24))}
+                        className="flex h-10 w-10 shrink-0 touch-manipulation items-center justify-center rounded-xl border border-white/10 bg-white/10 text-lg font-black text-white"
+                        aria-label="Aumentar imagem"
+                      >
+                        +
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateActiveImageRotation(clamp(activeImageOverlay.rotation - 15, -45, 45))}
+                        className="flex h-10 w-10 shrink-0 touch-manipulation items-center justify-center rounded-xl border border-white/10 bg-white/10 text-xs font-black text-white"
+                        aria-label="Girar imagem para esquerda"
+                      >
+                        -15
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateActiveImageRotation(clamp(activeImageOverlay.rotation + 15, -45, 45))}
+                        className="flex h-10 w-10 shrink-0 touch-manipulation items-center justify-center rounded-xl border border-white/10 bg-white/10 text-xs font-black text-white"
+                        aria-label="Girar imagem para direita"
+                      >
+                        +15
+                      </button>
+                      <button
+                        type="button"
+                        onClick={removeActiveImageOverlay}
+                        className="flex h-10 w-10 shrink-0 touch-manipulation items-center justify-center rounded-xl border border-red-300/25 bg-red-500/15 text-red-100"
+                        aria-label="Remover imagem"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             ) : editorMode === 'photos' && activePhotoSlide ? (
               <div
@@ -3471,7 +3602,9 @@ export default function VideoEditor() {
 
           {hasEditorMedia && (
             <div
-              className={`relative z-20 shrink-0 border-t border-white/10 bg-black/85 px-3 py-3 transition-all duration-300 sm:px-5 ${
+              className={`relative z-20 shrink-0 border-t border-white/10 bg-black/85 px-3 pt-3 transition-all duration-300 sm:px-5 lg:pb-3 ${
+                activePanel === 'text' ? 'pb-[calc(6.5rem+env(safe-area-inset-bottom))]' : 'pb-3'
+              } ${
                 controlsVisible ? 'translate-y-0 opacity-100' : 'pointer-events-none -mb-48 translate-y-6 opacity-0'
               }`}
             >
@@ -3670,6 +3803,40 @@ export default function VideoEditor() {
                       )}
                     </div>
 
+                    {activeSticker && (
+                      <div className="mt-1 flex h-8 items-center gap-1 overflow-x-auto rounded-lg border border-fuchsia-300/20 bg-fuchsia-500/15 px-2 text-[10px] font-black text-fuchsia-50">
+                        <span className="mr-1 shrink-0">{activeSticker.value} {activeSticker.startTime.toFixed(1)}s-{activeSticker.endTime.toFixed(1)}s</span>
+                        <button
+                          type="button"
+                          onClick={() => nudgeActiveStickerTiming('startTime', -0.25)}
+                          className="h-6 shrink-0 rounded-md border border-white/10 bg-black/20 px-2"
+                        >
+                          Entrada -
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => nudgeActiveStickerTiming('startTime', 0.25)}
+                          className="h-6 shrink-0 rounded-md border border-white/10 bg-black/20 px-2"
+                        >
+                          Entrada +
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => nudgeActiveStickerTiming('endTime', -0.25)}
+                          className="h-6 shrink-0 rounded-md border border-white/10 bg-black/20 px-2"
+                        >
+                          Saida -
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => nudgeActiveStickerTiming('endTime', 0.25)}
+                          className="h-6 shrink-0 rounded-md border border-white/10 bg-black/20 px-2"
+                        >
+                          Saida +
+                        </button>
+                      </div>
+                    )}
+
                     <div className={`${timelineExpanded ? 'block' : 'hidden sm:block'} relative mt-1 h-8 rounded-lg border border-amber-300/15 bg-amber-500/10`}>
                       {editorMode === 'video' && imageOverlays.length > 0 ? (
                         imageOverlays.map((overlay) => (
@@ -3706,6 +3873,41 @@ export default function VideoEditor() {
                         </label>
                       )}
                     </div>
+
+                    {activeImageOverlay && (
+                      <div className="mt-1 flex h-8 items-center gap-1 overflow-x-auto rounded-lg border border-amber-300/20 bg-amber-500/15 px-2 text-[10px] font-black text-amber-50">
+                        <span className="mr-1 max-w-28 shrink-0 truncate">{activeImageOverlay.name}</span>
+                        <span className="mr-1 shrink-0">{activeImageOverlay.startTime.toFixed(1)}s-{activeImageOverlay.endTime.toFixed(1)}s</span>
+                        <button
+                          type="button"
+                          onClick={() => nudgeActiveImageTiming('startTime', -0.25)}
+                          className="h-6 shrink-0 rounded-md border border-white/10 bg-black/20 px-2"
+                        >
+                          Entrada -
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => nudgeActiveImageTiming('startTime', 0.25)}
+                          className="h-6 shrink-0 rounded-md border border-white/10 bg-black/20 px-2"
+                        >
+                          Entrada +
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => nudgeActiveImageTiming('endTime', -0.25)}
+                          className="h-6 shrink-0 rounded-md border border-white/10 bg-black/20 px-2"
+                        >
+                          Saida -
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => nudgeActiveImageTiming('endTime', 0.25)}
+                          className="h-6 shrink-0 rounded-md border border-white/10 bg-black/20 px-2"
+                        >
+                          Saida +
+                        </button>
+                      </div>
+                    )}
 
                     <div className="relative mt-1 h-8 overflow-hidden rounded-lg border border-white/10 bg-zinc-900">
                       {editorMode === 'photos' ? (
@@ -3914,7 +4116,9 @@ export default function VideoEditor() {
           onPointerDown={(event) => event.stopPropagation()}
           onPointerUp={(event) => event.stopPropagation()}
           onClick={(event) => event.stopPropagation()}
-          className={`fixed inset-x-0 bottom-16 z-[90] flex max-h-[48dvh] shrink-0 flex-col rounded-t-[1.25rem] border-t border-white/10 bg-black/95 shadow-2xl shadow-black/50 ring-1 ring-white/10 transition-all duration-300 sm:max-h-[52dvh] lg:static lg:z-30 lg:max-h-none lg:w-[22rem] lg:rounded-none lg:border-l lg:border-t-0 lg:bg-black/80 lg:shadow-none lg:ring-0 ${
+          className={`fixed inset-x-0 bottom-16 z-[90] flex shrink-0 flex-col rounded-t-[1.25rem] border-t border-white/10 bg-black/95 shadow-2xl shadow-black/50 ring-1 ring-white/10 transition-all duration-300 lg:static lg:z-30 lg:max-h-none lg:w-[22rem] lg:rounded-none lg:border-l lg:border-t-0 lg:bg-black/80 lg:shadow-none lg:ring-0 ${
+            activePanel === 'text' ? 'max-h-[4.75rem] sm:max-h-[5.25rem]' : 'max-h-[48dvh] sm:max-h-[52dvh]'
+          } ${
             controlsVisible
               ? 'translate-y-0 opacity-100'
               : 'pointer-events-none translate-y-full opacity-0 lg:translate-x-8 lg:translate-y-0'
@@ -3942,7 +4146,7 @@ export default function VideoEditor() {
             ))}
           </div>
 
-          <div className="relative z-[91] min-h-0 flex-1 overflow-y-auto p-3 sm:z-auto sm:p-4">
+          <div className={`relative z-[91] min-h-0 flex-1 overflow-y-auto p-3 sm:z-auto sm:p-4 ${activePanel === 'text' ? 'hidden lg:block' : ''}`}>
             {activePanel === 'add' && (
               <div className="space-y-4">
                 <div>
@@ -3951,23 +4155,7 @@ export default function VideoEditor() {
                 </div>
 
                 <div className="grid grid-cols-3 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => openEditorPanel('text')}
-                    className="flex min-h-16 flex-col items-center justify-center gap-1 rounded-xl border border-sky-300/20 bg-sky-500/10 px-2 text-xs font-black text-sky-50 transition hover:bg-sky-500/20"
-                  >
-                    <Type className="h-5 w-5" />
-                    Texto
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => openEditorPanel('sticker')}
-                    className="flex min-h-16 flex-col items-center justify-center gap-1 rounded-xl border border-fuchsia-300/20 bg-fuchsia-500/10 px-2 text-xs font-black text-fuchsia-50 transition hover:bg-fuchsia-500/20"
-                  >
-                    <Sparkles className="h-5 w-5" />
-                    Figurinhas
-                  </button>
-                  <label className="flex min-h-16 cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border border-amber-300/20 bg-amber-500/10 px-2 text-xs font-black text-amber-50 transition hover:bg-amber-500/20">
+                  <label className="flex min-h-16 cursor-pointer touch-manipulation flex-col items-center justify-center gap-1 rounded-xl border border-amber-300/20 bg-amber-500/10 px-2 text-xs font-black text-amber-50 transition hover:bg-amber-500/20">
                     <ImageIcon className="h-5 w-5" />
                     Imagem
                     <input
@@ -3977,6 +4165,75 @@ export default function VideoEditor() {
                       className="sr-only"
                     />
                   </label>
+                  <button
+                    type="button"
+                    onClick={() => openEditorPanel('sticker')}
+                    className="flex min-h-16 touch-manipulation flex-col items-center justify-center gap-1 rounded-xl border border-fuchsia-300/20 bg-fuchsia-500/10 px-2 text-xs font-black text-fuchsia-50 transition hover:bg-fuchsia-500/20"
+                  >
+                    <Sparkles className="h-5 w-5" />
+                    Figurinhas
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openEditorPanel('sticker')}
+                    className="flex min-h-16 touch-manipulation flex-col items-center justify-center gap-1 rounded-xl border border-violet-300/20 bg-violet-500/10 px-2 text-xs font-black text-violet-50 transition hover:bg-violet-500/20"
+                  >
+                    <span className="text-xl leading-none">😂</span>
+                    Emojis
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => addSticker('➡️')}
+                    className="flex min-h-16 touch-manipulation flex-col items-center justify-center gap-1 rounded-xl border border-blue-300/20 bg-blue-500/10 px-2 text-xs font-black text-blue-50 transition hover:bg-blue-500/20"
+                  >
+                    <span className="text-xl leading-none">➡️</span>
+                    Formas
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => addSticker('🪙')}
+                    className="flex min-h-16 touch-manipulation flex-col items-center justify-center gap-1 rounded-xl border border-yellow-300/20 bg-yellow-500/10 px-2 text-xs font-black text-yellow-50 transition hover:bg-yellow-500/20"
+                  >
+                    <span className="text-xl leading-none">🪙</span>
+                    Selos
+                  </button>
+                  <label className="flex min-h-16 cursor-pointer touch-manipulation flex-col items-center justify-center gap-1 rounded-xl border border-white/10 bg-white/5 px-2 text-xs font-black text-zinc-200 transition hover:bg-white/10">
+                    <Plus className="h-5 w-5" />
+                    Clipe
+                    <input
+                      type="file"
+                      accept="video/*,.mp4,.mov,.webm,.m4v"
+                      onChange={handleVideoChange}
+                      className="sr-only"
+                    />
+                  </label>
+                </div>
+
+                <div className="grid gap-2 rounded-xl border border-white/10 bg-zinc-950/70 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-xs font-black text-zinc-300">Elementos rapidos</span>
+                    <button
+                      type="button"
+                      onClick={() => openEditorPanel('text')}
+                      className="inline-flex h-7 items-center gap-1 rounded-lg border border-sky-300/20 bg-sky-500/10 px-2 text-[11px] font-black text-sky-100"
+                    >
+                      <Type className="h-3 w-3" />
+                      Texto
+                    </button>
+                  </div>
+                  <div className="flex gap-2 overflow-x-auto pb-1">
+                    {[...SHAPE_STICKERS, ...ENTREUS_STICKERS].map((sticker, index) => (
+                      <button
+                        key={`${sticker}-${index}`}
+                        type="button"
+                        onClick={() => addSticker(sticker)}
+                        className="flex h-10 w-10 shrink-0 touch-manipulation items-center justify-center rounded-xl border border-white/10 bg-white/5 text-xl transition hover:bg-white/10 active:scale-95"
+                        aria-label={`Adicionar elemento ${sticker}`}
+                      >
+                        {sticker}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 <label className="flex cursor-pointer items-center gap-3 rounded-2xl border border-dashed border-sky-300/30 bg-sky-500/10 px-4 py-4 transition hover:bg-sky-500/15">
