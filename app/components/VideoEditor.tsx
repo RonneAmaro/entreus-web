@@ -34,6 +34,13 @@ type TextOverlay = {
   y: number
   fontSize: number
   color: string
+  fontKey?: TextFontKey
+  fontWeight?: number
+  backgroundEnabled?: boolean
+  backgroundColor?: string
+  backgroundOpacity?: number
+  backgroundRadius?: number
+  textAlign?: CanvasTextAlign
   startTime: number
   endTime: number
 }
@@ -74,6 +81,7 @@ type EditorPanel = 'add' | 'text' | 'sticker' | 'image' | 'audio' | 'effects' | 
 type DraggingLayer = { type: 'text' | 'sticker' | 'image'; id: string } | null
 type PhotoTransition = 'none' | 'fade'
 type CompressionPreset = 'auto' | 'light' | 'high'
+type TextFontKey = 'system' | 'strong' | 'elegant' | 'condensed' | 'casual' | 'mono' | 'classic' | 'rounded'
 
 type PhotoSlide = {
   id: string
@@ -107,6 +115,9 @@ type RenderImageInput = {
 
 const DEFAULT_TEXT_COLOR = '#ffffff'
 const DEFAULT_FONT_SIZE = 42
+const DEFAULT_TEXT_FONT_KEY: TextFontKey = 'system'
+const DEFAULT_TEXT_BACKGROUND_COLOR = '#000000'
+const DEFAULT_TEXT_BACKGROUND_OPACITY = 0.55
 const DEFAULT_VIDEO_DURATION = 10
 const FFMPEG_CORE_VERSION = '0.12.10'
 const FFMPEG_CORE_BASE_URL = `https://unpkg.com/@ffmpeg/core@${FFMPEG_CORE_VERSION}/dist/umd`
@@ -126,6 +137,26 @@ const LAYER_ORDER = {
   text: 40,
 }
 const STICKER_LIBRARY = ['❤️', '🔥', '⭐', '✨', '😂', '👏', '🎉', '💎', '🚀', '👑']
+
+const TEXT_FONT_OPTIONS: { key: TextFontKey; label: string; family: string; weight: number }[] = [
+  { key: 'system', label: 'Padrao', family: 'Inter, ui-sans-serif, system-ui, sans-serif', weight: 800 },
+  { key: 'strong', label: 'Forte', family: 'Impact, Haettenschweiler, Arial Narrow Bold, sans-serif', weight: 800 },
+  { key: 'elegant', label: 'Elegante', family: 'Georgia, Times New Roman, serif', weight: 700 },
+  { key: 'condensed', label: 'Condensada', family: 'Arial Narrow, Arial, sans-serif', weight: 800 },
+  { key: 'casual', label: 'Manuscrita', family: 'Comic Sans MS, Trebuchet MS, cursive', weight: 700 },
+  { key: 'mono', label: 'Mono', family: 'Courier New, ui-monospace, monospace', weight: 800 },
+  { key: 'classic', label: 'Classica', family: 'Times New Roman, Georgia, serif', weight: 700 },
+  { key: 'rounded', label: 'Arredondada', family: 'Verdana, Geneva, sans-serif', weight: 800 },
+]
+
+const TEXT_COLOR_PRESETS = ['#ffffff', '#111827', '#facc15', '#38bdf8', '#ef4444', '#22c55e', '#a855f7']
+
+const TEXT_BACKGROUND_PRESETS = [
+  { label: 'Sem fundo', enabled: false, color: DEFAULT_TEXT_BACKGROUND_COLOR, opacity: DEFAULT_TEXT_BACKGROUND_OPACITY },
+  { label: 'Preto', enabled: true, color: '#000000', opacity: 0.55 },
+  { label: 'Branco', enabled: true, color: '#ffffff', opacity: 0.5 },
+  { label: 'Azul', enabled: true, color: '#0284c7', opacity: 0.55 },
+]
 
 const COMPRESSION_PROFILES: Record<CompressionPreset, CompressionProfile> = {
   auto: {
@@ -229,6 +260,92 @@ function escapeDrawTextValue(value: string) {
 
 function getFfmpegColor(hexColor: string) {
   return hexColor.replace('#', '0x')
+}
+
+function getFfmpegColorWithOpacity(hexColor: string, opacity: number) {
+  return `${getFfmpegColor(hexColor)}@${clamp(opacity, 0, 1).toFixed(2)}`
+}
+
+function getTextFontOption(fontKey?: TextFontKey) {
+  return TEXT_FONT_OPTIONS.find((item) => item.key === fontKey) || TEXT_FONT_OPTIONS[0]
+}
+
+function getTextFontCss(overlay: TextOverlay) {
+  const font = getTextFontOption(overlay.fontKey)
+  const weight = overlay.fontWeight || font.weight
+  return `${weight} ${overlay.fontSize}px ${font.family}`
+}
+
+function getHexRgb(hexColor: string) {
+  const clean = hexColor.replace('#', '')
+  const value = clean.length === 3
+    ? clean.split('').map((item) => item + item).join('')
+    : clean
+
+  const parsed = Number.parseInt(value, 16)
+  if (!Number.isFinite(parsed)) return { r: 0, g: 0, b: 0 }
+
+  return {
+    r: (parsed >> 16) & 255,
+    g: (parsed >> 8) & 255,
+    b: parsed & 255,
+  }
+}
+
+function getRgbaColor(hexColor: string, opacity: number) {
+  const { r, g, b } = getHexRgb(hexColor)
+  return `rgba(${r}, ${g}, ${b}, ${clamp(opacity, 0, 1)})`
+}
+
+function getOverlayTextBox(
+  context: CanvasRenderingContext2D,
+  overlay: TextOverlay,
+  padding = 12
+) {
+  context.font = getTextFontCss(overlay)
+  context.textAlign = overlay.textAlign || 'left'
+
+  const width = context.measureText(overlay.text).width
+  const height = overlay.fontSize
+  const align = overlay.textAlign || 'left'
+  const textX = align === 'center'
+    ? overlay.x - width / 2
+    : align === 'right'
+    ? overlay.x - width
+    : overlay.x
+
+  return {
+    x: textX - padding,
+    y: overlay.y - padding,
+    width: width + padding * 2,
+    height: height + padding * 2,
+    textX,
+    textY: overlay.y,
+  }
+}
+
+function fillRoundedRect(
+  context: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number
+) {
+  const safeRadius = clamp(radius, 0, Math.min(width, height) / 2)
+
+  context.beginPath()
+  context.moveTo(x + safeRadius, y)
+  context.lineTo(x + width - safeRadius, y)
+  context.quadraticCurveTo(x + width, y, x + width, y + safeRadius)
+  context.lineTo(x + width, y + height - safeRadius)
+  context.quadraticCurveTo(x + width, y + height, x + width - safeRadius, y + height)
+  context.lineTo(x + safeRadius, y + height)
+  context.quadraticCurveTo(x, y + height, x, y + height - safeRadius)
+  context.lineTo(x, y + safeRadius)
+  context.quadraticCurveTo(x, y, x + safeRadius, y)
+  context.closePath()
+  context.fill()
 }
 
 function getVisualFilter(value: VideoFilter) {
@@ -1173,20 +1290,39 @@ export default function VideoEditor() {
     overlays
       .filter((overlay) => currentTime >= overlay.startTime && currentTime <= overlay.endTime)
       .forEach((overlay) => {
-      context.font = `800 ${overlay.fontSize}px Inter, ui-sans-serif, system-ui, sans-serif`
+      context.save()
+      context.font = getTextFontCss(overlay)
+      context.textAlign = overlay.textAlign || 'left'
+      context.textBaseline = 'top'
+
+      const textBox = getOverlayTextBox(context, overlay)
+
+      if (overlay.backgroundEnabled) {
+        context.fillStyle = getRgbaColor(
+          overlay.backgroundColor || DEFAULT_TEXT_BACKGROUND_COLOR,
+          overlay.backgroundOpacity ?? DEFAULT_TEXT_BACKGROUND_OPACITY
+        )
+        fillRoundedRect(
+          context,
+          textBox.x,
+          textBox.y,
+          textBox.width,
+          textBox.height,
+          overlay.backgroundRadius ?? 18
+        )
+      }
+
       context.fillStyle = 'rgba(0, 0, 0, 0.5)'
       context.fillText(overlay.text, overlay.x + 3, overlay.y + 3)
       context.fillStyle = overlay.color
       context.fillText(overlay.text, overlay.x, overlay.y)
 
       if (overlay.id === activeOverlayId) {
-        const metrics = context.measureText(overlay.text)
-        const boxX = overlay.x - 10
-        const boxY = overlay.y - 10
-        const boxWidth = metrics.width + 20
-        const boxHeight = overlay.fontSize + 20
+        const boxX = textBox.x - 2
+        const boxY = textBox.y - 2
+        const boxWidth = textBox.width + 4
+        const boxHeight = textBox.height + 4
 
-        context.save()
         context.strokeStyle = 'rgba(125, 211, 252, 0.95)'
         context.lineWidth = 3
         context.setLineDash([10, 7])
@@ -1197,8 +1333,8 @@ export default function VideoEditor() {
         context.strokeStyle = 'rgba(255, 255, 255, 0.95)'
         context.lineWidth = 2
         context.strokeRect(boxX + boxWidth - 10, boxY + boxHeight - 10, 20, 20)
-        context.restore()
       }
+      context.restore()
       })
   }
 
@@ -1213,6 +1349,13 @@ export default function VideoEditor() {
       y: canvasSize.height * 0.12,
       fontSize,
       color: textColor,
+      fontKey: DEFAULT_TEXT_FONT_KEY,
+      fontWeight: getTextFontOption(DEFAULT_TEXT_FONT_KEY).weight,
+      backgroundEnabled: false,
+      backgroundColor: DEFAULT_TEXT_BACKGROUND_COLOR,
+      backgroundOpacity: DEFAULT_TEXT_BACKGROUND_OPACITY,
+      backgroundRadius: 18,
+      textAlign: 'left',
       startTime: timing.startTime,
       endTime: timing.endTime,
     }
@@ -1254,15 +1397,13 @@ export default function VideoEditor() {
     for (const overlay of [...overlays].reverse()) {
       if (currentTime < overlay.startTime || currentTime > overlay.endTime) continue
 
-      context.font = `800 ${overlay.fontSize}px Inter, ui-sans-serif, system-ui, sans-serif`
-      const width = context.measureText(overlay.text).width
-      const height = overlay.fontSize
+      const textBox = getOverlayTextBox(context, overlay)
 
       if (
-        point.x >= overlay.x - 10 &&
-        point.x <= overlay.x + width + 10 &&
-        point.y >= overlay.y - 10 &&
-        point.y <= overlay.y + height + 10
+        point.x >= textBox.x - 4 &&
+        point.x <= textBox.x + textBox.width + 4 &&
+        point.y >= textBox.y - 4 &&
+        point.y <= textBox.y + textBox.height + 4
       ) {
         return overlay
       }
@@ -1620,23 +1761,42 @@ export default function VideoEditor() {
     )
   }
 
-  function updateActiveOverlayStyle(key: 'fontSize' | 'color', value: number | string) {
+  function updateActiveOverlayStyle(
+    key: 'fontSize' | 'color' | 'fontKey' | 'fontWeight' | 'backgroundEnabled' | 'backgroundColor' | 'backgroundOpacity' | 'backgroundRadius' | 'textAlign',
+    value: number | string | boolean
+  ) {
     if (!activeOverlayId) {
       if (key === 'fontSize') setFontSize(Number(value))
       if (key === 'color') setTextColor(String(value))
       return
     }
 
+    const nextValue = key === 'fontSize' || key === 'fontWeight' || key === 'backgroundOpacity' || key === 'backgroundRadius'
+      ? Number(value)
+      : key === 'backgroundEnabled'
+      ? Boolean(value)
+      : String(value)
+
     setOverlays((current) =>
       current.map((overlay) =>
         overlay.id === activeOverlayId
           ? {
               ...overlay,
-              [key]: key === 'fontSize' ? Number(value) : String(value),
+              [key]: nextValue,
+              ...(key === 'fontKey'
+                ? { fontWeight: getTextFontOption(String(value) as TextFontKey).weight }
+                : {}),
             }
           : overlay
       )
     )
+  }
+
+  function applyTextBackgroundPreset(preset: typeof TEXT_BACKGROUND_PRESETS[number]) {
+    updateActiveOverlayStyle('backgroundEnabled', preset.enabled)
+    updateActiveOverlayStyle('backgroundColor', preset.color)
+    updateActiveOverlayStyle('backgroundOpacity', preset.opacity)
+    updateActiveOverlayStyle('backgroundRadius', 18)
   }
 
   function removeActiveOverlay() {
@@ -1799,8 +1959,8 @@ export default function VideoEditor() {
   }
 
   function buildTextDrawFilters() {
-    return overlays.map((overlay) =>
-        [
+    return overlays.map((overlay) => {
+      const drawTextOptions = [
           'drawtext',
           `text='${escapeDrawTextValue(overlay.text)}'`,
           `x=${Math.round(overlay.x)}`,
@@ -1810,9 +1970,23 @@ export default function VideoEditor() {
           'shadowcolor=black@0.55',
           'shadowx=3',
           'shadowy=3',
-          `enable='between(t,${overlay.startTime.toFixed(3)},${overlay.endTime.toFixed(3)})'`,
-        ].join(':')
-      )
+      ]
+
+      if (overlay.backgroundEnabled) {
+        drawTextOptions.push(
+          'box=1',
+          `boxcolor=${getFfmpegColorWithOpacity(
+            overlay.backgroundColor || DEFAULT_TEXT_BACKGROUND_COLOR,
+            overlay.backgroundOpacity ?? DEFAULT_TEXT_BACKGROUND_OPACITY
+          )}`,
+          'boxborderw=14'
+        )
+      }
+
+      drawTextOptions.push(`enable='between(t,${overlay.startTime.toFixed(3)},${overlay.endTime.toFixed(3)})'`)
+
+      return drawTextOptions.join(':')
+    })
   }
 
   function getStickerPlacement(sticker: StickerOverlay) {
@@ -2925,6 +3099,11 @@ export default function VideoEditor() {
   const editableText = activeOverlay ? activeOverlay.text : textValue
   const editableFontSize = activeOverlay ? activeOverlay.fontSize : fontSize
   const editableTextColor = activeOverlay ? activeOverlay.color : textColor
+  const editableFontKey = activeOverlay?.fontKey || DEFAULT_TEXT_FONT_KEY
+  const editableBackgroundEnabled = activeOverlay?.backgroundEnabled || false
+  const editableBackgroundColor = activeOverlay?.backgroundColor || DEFAULT_TEXT_BACKGROUND_COLOR
+  const editableBackgroundOpacity = activeOverlay?.backgroundOpacity ?? DEFAULT_TEXT_BACKGROUND_OPACITY
+  const editableTextAlign = activeOverlay?.textAlign || 'left'
   const timelineBlocks = Array.from({ length: 12 }, (_, index) => index)
   const photoSlidesDuration = getPhotoSlidesDuration()
   const orderedPhotoSlides = [...photoSlides].sort((a, b) => a.order - b.order)
@@ -3160,6 +3339,85 @@ export default function VideoEditor() {
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
+                    </div>
+                    <div className="mt-2 flex gap-1 overflow-x-auto pb-0.5">
+                      {TEXT_FONT_OPTIONS.map((fontOption) => (
+                        <button
+                          key={fontOption.key}
+                          type="button"
+                          onClick={() => updateActiveOverlayStyle('fontKey', fontOption.key)}
+                          className={`shrink-0 rounded-full border px-3 py-1.5 text-[11px] font-black transition ${
+                            editableFontKey === fontOption.key
+                              ? 'border-sky-200 bg-sky-500 text-white'
+                              : 'border-white/10 bg-white/5 text-zinc-300'
+                          }`}
+                          style={{ fontFamily: fontOption.family }}
+                        >
+                          {fontOption.label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="mt-2 flex items-center gap-1 overflow-x-auto pb-0.5">
+                      {TEXT_COLOR_PRESETS.map((color) => (
+                        <button
+                          key={color}
+                          type="button"
+                          onClick={() => updateActiveOverlayStyle('color', color)}
+                          className={`h-8 w-8 shrink-0 rounded-full border transition ${
+                            editableTextColor.toLowerCase() === color.toLowerCase()
+                              ? 'border-white ring-2 ring-sky-300'
+                              : 'border-white/20'
+                          }`}
+                          style={{ backgroundColor: color }}
+                          aria-label={`Cor ${color}`}
+                        />
+                      ))}
+                      <span className="mx-1 h-7 w-px shrink-0 bg-white/10" />
+                      {TEXT_BACKGROUND_PRESETS.map((preset) => (
+                        <button
+                          key={preset.label}
+                          type="button"
+                          onClick={() => applyTextBackgroundPreset(preset)}
+                          className={`shrink-0 rounded-full border px-3 py-1.5 text-[11px] font-black transition ${
+                            editableBackgroundEnabled === preset.enabled &&
+                            (!preset.enabled || editableBackgroundColor.toLowerCase() === preset.color.toLowerCase())
+                              ? 'border-sky-200 bg-sky-500 text-white'
+                              : 'border-white/10 bg-white/5 text-zinc-300'
+                          }`}
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                      {editableBackgroundEnabled && (
+                        <label className="ml-1 flex shrink-0 items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-black text-zinc-300">
+                          Fundo
+                          <input
+                            type="range"
+                            min="0.2"
+                            max="0.9"
+                            step="0.05"
+                            value={editableBackgroundOpacity}
+                            onChange={(event) => updateActiveOverlayStyle('backgroundOpacity', Number(event.target.value))}
+                            className="w-16 accent-sky-400"
+                            aria-label="Opacidade do fundo"
+                          />
+                        </label>
+                      )}
+                      <span className="mx-1 h-7 w-px shrink-0 bg-white/10" />
+                      {(['left', 'center', 'right'] as CanvasTextAlign[]).map((align) => (
+                        <button
+                          key={align}
+                          type="button"
+                          onClick={() => updateActiveOverlayStyle('textAlign', align)}
+                          className={`h-8 shrink-0 rounded-full border px-3 text-[11px] font-black transition ${
+                            editableTextAlign === align
+                              ? 'border-sky-200 bg-sky-500 text-white'
+                              : 'border-white/10 bg-white/5 text-zinc-300'
+                          }`}
+                        >
+                          {align === 'left' ? 'Esq' : align === 'center' ? 'Centro' : 'Dir'}
+                        </button>
+                      ))}
                     </div>
                   </div>
                 )}
