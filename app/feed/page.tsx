@@ -1645,6 +1645,39 @@ function FeedContent() {
     return 'Nao foi possivel enviar o video. Tente novamente, use outro navegador ou publique uma versao menor pelo editor.'
   }
 
+  async function getPresignAuthHeaders() {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+
+    if (!session?.access_token) return null
+
+    return {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session.access_token}`,
+    }
+  }
+
+  function getPresignFailureMessage(status: number, error?: string, message?: string) {
+    if (status === 401 || error === 'UNAUTHORIZED') {
+      return 'Sua sessao expirou. Entre novamente para enviar midia.'
+    }
+
+    if (status === 413 || error === 'FILE_TOO_LARGE') {
+      return 'Arquivo muito grande.'
+    }
+
+    if (status === 415 || error === 'INVALID_FILE_TYPE') {
+      return 'Formato de arquivo nao permitido.'
+    }
+
+    if (status === 429 || error === 'RATE_LIMITED') {
+      return 'Muitos uploads em pouco tempo. Aguarde um pouco.'
+    }
+
+    return message || error || 'Falha ao preparar upload para o R2.'
+  }
+
   async function uploadMediaFile(
     file: File
   ): Promise<{ url: string; type: 'image' | 'video' } | null> {
@@ -1683,11 +1716,16 @@ function FeedContent() {
     }
 
     try {
+      const authHeaders = await getPresignAuthHeaders()
+
+      if (!authHeaders) {
+        setMessage('Sua sessao expirou. Entre novamente para enviar midia.')
+        return null
+      }
+
       const presignResponse = await fetch('/api/r2/presign', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: authHeaders,
         body: JSON.stringify({
           fileName: file.name,
           contentType: file.type,
@@ -1705,8 +1743,11 @@ function FeedContent() {
       } | null
 
       if (!presignResponse.ok || !presignData?.ok || !presignData.uploadUrl || !presignData.publicUrl) {
-        const errorMessage =
-          presignData?.message || presignData?.error || 'Falha ao preparar upload para o R2.'
+        const errorMessage = getPresignFailureMessage(
+          presignResponse.status,
+          presignData?.error,
+          presignData?.message,
+        )
 
         setMessage(
           mediaType === 'image'
@@ -1814,11 +1855,16 @@ function FeedContent() {
     }
 
     try {
+      const authHeaders = await getPresignAuthHeaders()
+
+      if (!authHeaders) {
+        setMessage('Sua sessao expirou. Entre novamente para enviar midia.')
+        return null
+      }
+
       const presignResponse = await fetch('/api/r2/presign', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: authHeaders,
         body: JSON.stringify({
           fileName: file.name,
           contentType: file.type,
@@ -1836,7 +1882,13 @@ function FeedContent() {
       } | null
 
       if (!presignResponse.ok || !presignData?.ok || !presignData.uploadUrl || !presignData.publicUrl) {
-        setMessage(presignData?.message || presignData?.error || 'Falha ao preparar mídia do comentário.')
+        setMessage(
+          getPresignFailureMessage(
+            presignResponse.status,
+            presignData?.error,
+            presignData?.message,
+          ),
+        )
         return null
       }
 

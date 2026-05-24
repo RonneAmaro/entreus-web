@@ -1,5 +1,6 @@
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 
 export const runtime = 'nodejs'
@@ -16,10 +17,12 @@ const ACCEPTED_CONTENT_TYPES = new Set([
   'video/ogg',
 ])
 
-const ACCEPTED_FOLDERS = new Set(['posts', 'comments', 'avatars', 'banners', 'messages'])
+const ACCEPTED_FOLDERS = new Set(['posts', 'comments'])
 const PRESIGNED_URL_EXPIRES_IN_SECONDS = 60
 const IMAGE_MAX_SIZE_BYTES = 5 * 1024 * 1024
 const VIDEO_MAX_SIZE_BYTES = 30 * 1024 * 1024
+const RATE_LIMIT_WINDOW_MS = 60 * 1000
+const RATE_LIMIT_MAX_REQUESTS = 20
 
 type PresignBody = {
   fileName?: unknown
@@ -39,6 +42,13 @@ const EXTENSIONS_BY_CONTENT_TYPE: Record<string, string> = {
   'video/ogg': 'ogg',
 }
 
+type RateLimitEntry = {
+  count: number
+  resetAt: number
+}
+
+const rateLimitStore = new Map<string, RateLimitEntry>()
+
 function hasR2Config() {
   return Boolean(
     process.env.R2_ACCOUNT_ID &&
@@ -49,23 +59,41 @@ function hasR2Config() {
   )
 }
 
+function hasSupabaseConfig() {
+  return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
+}
+
+function getSupabaseForRequest(request: Request) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  const authorization = request.headers.get('authorization') || ''
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error('Supabase public environment variables are missing.')
+  }
+
+  return createClient(supabaseUrl, supabaseAnonKey, {
+    global: {
+      headers: authorization ? { Authorization: authorization } : {},
+    },
+  })
+}
+
 function getFolder(value: unknown) {
-  if (value === undefined || value === null) return 'posts'
+  if (value === undefined || value === null) return null
   if (typeof value !== 'string') return null
 
   const folder = value.trim()
-  if (!folder) return 'posts'
+  if (!folder || folder.includes('/') || folder.includes('\\') || folder.includes('..')) return null
 
   return ACCEPTED_FOLDERS.has(folder) ? folder : null
 }
 
-function buildObjectKey(folder: string, contentType: string) {
-  const now = new Date()
-  const year = now.getUTCFullYear()
-  const month = String(now.getUTCMonth() + 1).padStart(2, '0')
+function buildObjectKey(folder: string, userId: string, contentType: string) {
+  const timestamp = Date.now()
   const extension = EXTENSIONS_BY_CONTENT_TYPE[contentType] || 'bin'
 
-  return `${folder}/${year}/${month}/${crypto.randomUUID()}.${extension}`
+  return `${folder}/${userId}/${timestamp}-${crypto.randomUUID()}.${extension}`
 }
 
 function buildPublicUrl(baseUrl: string, key: string) {
@@ -76,6 +104,32 @@ function getMaxSize(contentType: string) {
   return contentType.startsWith('video/') ? VIDEO_MAX_SIZE_BYTES : IMAGE_MAX_SIZE_BYTES
 }
 
+function getRateLimitIp(request: Request) {
+  const forwardedFor = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+  return forwardedFor || request.headers.get('x-real-ip') || 'unknown'
+}
+
+function isRateLimited(request: Request, userId: string) {
+  const now = Date.now()
+  const rateLimitKey = `${userId}:${getRateLimitIp(request)}`
+  const current = rateLimitStore.get(rateLimitKey)
+
+  if (!current || current.resetAt <= now) {
+    rateLimitStore.set(rateLimitKey, {
+      count: 1,
+      resetAt: now + RATE_LIMIT_WINDOW_MS,
+    })
+    return false
+  }
+
+  if (current.count >= RATE_LIMIT_MAX_REQUESTS) {
+    return true
+  }
+
+  current.count += 1
+  return false
+}
+
 export async function POST(request: Request) {
   if (!hasR2Config()) {
     return NextResponse.json(
@@ -84,6 +138,46 @@ export async function POST(request: Request) {
         error: 'Configuracao Cloudflare R2 ausente no servidor.',
       },
       { status: 500 },
+    )
+  }
+
+  if (!hasSupabaseConfig()) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: 'SERVER_AUTH_CONFIG_MISSING',
+        message: 'Autenticacao indisponivel no servidor.',
+      },
+      { status: 500 },
+    )
+  }
+
+  const supabase = getSupabaseForRequest(request)
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser()
+
+  if (userError || !user) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: 'UNAUTHORIZED',
+        message: 'Voce precisa estar logado para enviar midia.',
+      },
+      { status: 401 },
+    )
+  }
+
+  // In-memory rate limiting is best-effort on serverless, but blocks bursts within a warm instance.
+  if (isRateLimited(request, user.id)) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: 'RATE_LIMITED',
+        message: 'Muitos uploads em pouco tempo. Tente novamente em instantes.',
+      },
+      { status: 429 },
     )
   }
 
@@ -115,7 +209,8 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         ok: false,
-        error: 'Tipo de arquivo invalido.',
+        error: 'INVALID_FILE_TYPE',
+        message: 'Tipo de arquivo nao permitido.',
       },
       { status: 415 },
     )
@@ -129,7 +224,8 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         ok: false,
-        error: 'Tamanho do arquivo invalido.',
+        error: 'INVALID_FILE_SIZE',
+        message: 'Tamanho do arquivo invalido.',
       },
       { status: 400 },
     )
@@ -139,10 +235,10 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         ok: false,
-        error: 'Arquivo muito grande.',
+        error: 'FILE_TOO_LARGE',
         message: body.contentType.startsWith('video/')
-          ? 'Esse video esta muito grande. Tente usar um video menor ou otimize no editor antes de publicar.'
-          : 'Essa imagem esta muito grande. Use uma imagem de ate 5 MB.',
+          ? 'Video muito grande. O limite atual e 30 MB.'
+          : 'Imagem muito grande. O limite atual e 5 MB.',
       },
       { status: 413 },
     )
@@ -154,7 +250,8 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         ok: false,
-        error: 'Pasta invalida.',
+        error: 'INVALID_FOLDER',
+        message: 'Pasta de upload invalida.',
       },
       { status: 400 },
     )
@@ -165,7 +262,7 @@ export async function POST(request: Request) {
   const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY as string
   const bucketName = process.env.R2_BUCKET_NAME as string
   const publicBaseUrl = process.env.R2_PUBLIC_BASE_URL as string
-  const key = buildObjectKey(folder, body.contentType)
+  const key = buildObjectKey(folder, user.id, body.contentType)
 
   const client = new S3Client({
     region: 'auto',
@@ -192,6 +289,7 @@ export async function POST(request: Request) {
       publicUrl: buildPublicUrl(publicBaseUrl, key),
       key,
       contentType: body.contentType,
+      expiresIn: PRESIGNED_URL_EXPIRES_IN_SECONDS,
     })
   } catch {
     return NextResponse.json(
