@@ -25,6 +25,7 @@ const emptyCounts: AdminPendingAlerts = {
 }
 
 const ADMIN_PENDING_CACHE_MS = 30000
+export const ADMIN_PENDING_ALERTS_CHANGED_EVENT = 'entreus:admin-pending-alerts-changed'
 
 let cachedCounts: AdminPendingAlerts | null = null
 let cachedErrors: Partial<Record<AdminPendingAlertKey, string>> = {}
@@ -55,13 +56,19 @@ async function countRows(
 }
 
 async function countReports() {
-  try {
-    return await countRows('reports', (query) =>
-      query.or('status.is.null,status.eq.pending')
-    )
-  } catch (error) {
-    console.warn('[AdminAlerts] Reports status filter unavailable, counting all reports:', error)
-    return countRows('reports')
+  return countRows('reports', (query) =>
+    query.or('status.is.null,status.eq.pending')
+  )
+}
+
+export function notifyAdminPendingAlertsChanged() {
+  cachedCounts = null
+  cachedErrors = {}
+  cachedAt = 0
+  pendingCountsRequest = null
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(ADMIN_PENDING_ALERTS_CHANGED_EVENT))
   }
 }
 
@@ -189,10 +196,12 @@ export function useAdminPendingAlerts({
     }
 
     window.addEventListener('focus', handleFocusRefresh)
+    window.addEventListener(ADMIN_PENDING_ALERTS_CHANGED_EVENT, handleFocusRefresh)
     document.addEventListener('visibilitychange', handleVisibilityRefresh)
 
     return () => {
       window.removeEventListener('focus', handleFocusRefresh)
+      window.removeEventListener(ADMIN_PENDING_ALERTS_CHANGED_EVENT, handleFocusRefresh)
       document.removeEventListener('visibilitychange', handleVisibilityRefresh)
       if (refreshTimerRef.current) {
         window.clearTimeout(refreshTimerRef.current)

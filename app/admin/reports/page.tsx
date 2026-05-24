@@ -7,6 +7,7 @@ import { AlertTriangle, ArrowLeft, Flag, Image as ImageIcon, Loader2, RotateCcw,
 import { isAdminRole } from '@/lib/admin'
 import { isMissingPostModerationColumnError, normalizeModerationStatus, type ModeratedPostFields } from '@/lib/post-moderation'
 import { supabase } from '@/lib/supabase'
+import { notifyAdminPendingAlertsChanged } from '@/app/hooks/useAdminPendingAlerts'
 
 type AdminProfile = {
   id: string
@@ -26,6 +27,7 @@ type ReportRow = {
 
 type ReportedPostContext = ModeratedPostFields & {
   id: string
+  user_id: string | null
   content: string | null
   category: string | null
   image_url: string | null
@@ -139,8 +141,8 @@ export default function AdminReportsPage() {
     }
 
     const selectWithModeration =
-      'id, content, category, image_url, video_url, is_sensitive, moderation_status, moderated_at, moderated_by, moderation_reason'
-    const selectFallback = 'id, content, category, image_url, video_url, is_sensitive'
+      'id, user_id, content, category, image_url, video_url, is_sensitive, moderation_status, moderated_at, moderated_by, moderation_reason'
+    const selectFallback = 'id, user_id, content, category, image_url, video_url, is_sensitive'
 
     let { data, error } = await supabase
       .from('posts')
@@ -207,6 +209,8 @@ export default function AdminReportsPage() {
   }
 
   async function updateReportStatus(reportId: string, status: ReportStatus) {
+    if (updatingReportId) return
+
     setUpdatingReportId(reportId)
     setMessage('')
 
@@ -233,7 +237,23 @@ export default function AdminReportsPage() {
           ? 'Denuncia arquivada.'
           : 'Denuncia marcada como em analise.',
     )
+    notifyAdminPendingAlertsChanged()
     setUpdatingReportId(null)
+  }
+
+  async function notifyPostOwnerAboutHiddenContent(postId: string, postOwnerId: string | null | undefined) {
+    if (!postOwnerId || !adminProfile) return
+
+    const { error } = await supabase.from('notifications').insert({
+      user_id: postOwnerId,
+      actor_id: adminProfile.id,
+      type: 'post_hidden',
+      post_id: postId,
+    })
+
+    if (error) {
+      console.warn('[AdminReports] Post hidden notification failed:', error.message)
+    }
   }
 
   async function moderatePost(report: ReportRow, nextStatus: 'active' | 'hidden') {
@@ -268,6 +288,11 @@ export default function AdminReportsPage() {
     }
 
     if (hiding) {
+      await notifyPostOwnerAboutHiddenContent(
+        report.reported_post_id,
+        postContextById[report.reported_post_id]?.user_id || report.reported_user_id,
+      )
+
       setReports((current) =>
         current.map((item) => (item.id === report.id ? { ...item, status: 'resolved' } : item)),
       )
@@ -282,6 +307,7 @@ export default function AdminReportsPage() {
         },
       }))
       setMessage('Conteudo ocultado e denuncia marcada como resolvida.')
+      notifyAdminPendingAlertsChanged()
     } else {
       setPostContextById((current) => ({
         ...current,

@@ -100,6 +100,7 @@ function getNotificationIcon(type: string) {
   if (isPromotionalItaCashNotification(type)) return <Coins className="h-5 w-5 text-blue-500" />
   if (type === 'itacash_purchase_approved') return <CheckCircle2 className="h-5 w-5 text-emerald-500" />
   if (type === 'itacash_purchase_rejected') return <AlertTriangle className="h-5 w-5 text-red-500" />
+  if (type === 'post_hidden' || type === 'moderation_warning') return <AlertTriangle className="h-5 w-5 text-amber-500" />
 
   return <Bell className="h-5 w-5 text-zinc-500" />
 }
@@ -121,6 +122,10 @@ function isItaCashPurchaseStatusNotification(type: string) {
 
 function isItaCashFinancialNotification(type: string) {
   return isPromotionalItaCashNotification(type) || isItaCashPurchaseStatusNotification(type)
+}
+
+function isModerationNotification(type: string) {
+  return type === 'post_hidden' || type === 'moderation_warning'
 }
 
 function getItaCashNotificationText(notification: NotificationView) {
@@ -168,6 +173,12 @@ function getNotificationActionTextView(notification: NotificationView) {
   if (notification.type === 'tip_received') {
     return `enviou apoio em ItaCash para voce.`
   }
+  if (notification.type === 'post_hidden') {
+    return 'Seu conteudo foi ocultado pela moderacao apos uma denuncia.'
+  }
+  if (notification.type === 'moderation_warning') {
+    return 'Voce recebeu um aviso da moderacao.'
+  }
   if (notification.type === 'promotional_itacash') {
     return `Voce recebeu ItaCash promocional.`
   }
@@ -210,6 +221,10 @@ function getNotificationHref(notification: NotificationView) {
     isItaCashFinancialNotification(notification.type)
   ) {
     return '/wallet'
+  }
+
+  if (isModerationNotification(notification.type) && notification.post_id) {
+    return `/post/${notification.post_id}`
   }
 
   if (notification.post_id) {
@@ -632,14 +647,15 @@ export default function NotificationsPage() {
           {notifications.map((notification) => {
             const isItaCashPurchaseStatus = isItaCashPurchaseStatusNotification(notification.type)
             const isItaCashFinancial = isItaCashFinancialNotification(notification.type)
-            const actorName = isItaCashFinancial
+            const isModeration = isModerationNotification(notification.type)
+            const actorName = isItaCashFinancial || isModeration
               ? 'EntreUS'
               : notification.actor?.display_name ||
                 notification.actor?.username ||
                 'Usuario'
 
             const actorUsername = notification.actor?.username || 'usuario'
-            const actorAvatar = isItaCashFinancial ? '' : notification.actor?.avatar_url || ''
+            const actorAvatar = isItaCashFinancial || isModeration ? '' : notification.actor?.avatar_url || ''
             const href = getNotificationHref(notification)
             const unread = !notification.read
 
@@ -677,18 +693,20 @@ export default function NotificationsPage() {
                     <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
                       <div>
                         <p className="inline-flex max-w-full items-center gap-1 break-words font-semibold text-zinc-950 dark:text-white">
-                          {notification.actor_id && !isItaCashFinancial && (
+                          {notification.actor_id && !isItaCashFinancial && !isModeration && (
                             <UserBadges userId={notification.actor_id} size="sm" max={1} />
                           )}
 
                           <span className="min-w-0 break-words">
                             {isItaCashFinancial
                               ? getItaCashNotificationText(notification)
+                              : isModeration
+                                ? getNotificationActionTextView(notification)
                               : `${actorName} ${getNotificationActionTextView(notification)}`}
                           </span>
                         </p>
 
-                        {notification.actor?.username && !isItaCashFinancial && (
+                        {notification.actor?.username && !isItaCashFinancial && !isModeration && (
                           <p className="mt-0.5 text-sm text-zinc-500">
                             @{actorUsername}
                           </p>
@@ -743,6 +761,12 @@ export default function NotificationsPage() {
                     {notification.type === 'itacash_purchase_rejected' && (
                       <p className="mt-3 rounded-xl bg-red-100 px-3 py-2 text-sm font-semibold text-red-800 dark:bg-red-950/40 dark:text-red-100">
                         {getItaCashNotificationText(notification)}
+                      </p>
+                    )}
+
+                    {isModeration && (
+                      <p className="mt-3 rounded-xl bg-amber-100 px-3 py-2 text-sm font-semibold text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
+                        Revise nossas regras. Novas violacoes podem gerar restricoes na conta.
                       </p>
                     )}
 
