@@ -131,6 +131,12 @@ type CompressionStats = {
   usedOptimizedFile: boolean
 }
 
+type VideoEditorMode = 'publish' | 'download'
+
+type VideoEditorProps = {
+  mode?: VideoEditorMode
+}
+
 type RenderImageInput = {
   inputName: string
   overlay: ImageOverlay
@@ -424,7 +430,8 @@ function getPhotoInputExtension(file: File) {
   return file.type === 'image/png' ? 'png' : 'jpg'
 }
 
-export default function VideoEditor() {
+export default function VideoEditor({ mode = 'publish' }: VideoEditorProps) {
+  const isDownloadMode = mode === 'download'
   const ffmpegRef = useRef<FFmpeg | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -2263,7 +2270,9 @@ export default function VideoEditor() {
 
   function getFriendlyRenderErrorMessage(error: unknown) {
     if (error instanceof Error && error.message === 'SEQUENCE_RENDER_FAILED') {
-      return 'Nao foi possivel renderizar a sequencia com fotos neste navegador. Tente menos fotos, reduza duracoes ou publique apenas o video principal.'
+      return isDownloadMode
+        ? 'Nao foi possivel exportar a sequencia com fotos neste navegador. Tente menos fotos, reduza duracoes ou use outro navegador.'
+        : 'Nao foi possivel renderizar a sequencia com fotos neste navegador. Tente menos fotos, reduza duracoes ou publique apenas o video principal.'
     }
 
     if (error instanceof Error && error.message === 'IMAGE_OVERLAY_RENDER_FAILED') {
@@ -2271,7 +2280,9 @@ export default function VideoEditor() {
     }
 
     if (renderStageRef.current === 'optimizing') {
-      return 'Nao foi possivel otimizar este video neste navegador. Vamos publicar a versao padrao quando possivel; se falhar de novo, tente um video menor.'
+      return isDownloadMode
+        ? 'Nao foi possivel otimizar este video neste navegador. Tente exportar com qualidade leve ou use um video menor.'
+        : 'Nao foi possivel otimizar este video neste navegador. Vamos publicar a versao padrao quando possivel; se falhar de novo, tente um video menor.'
     }
 
     if (renderStageRef.current === 'ffmpeg_loading') {
@@ -2282,7 +2293,9 @@ export default function VideoEditor() {
       return 'O video foi renderizado, mas o envio falhou. Verifique a conexao e tente publicar novamente.'
     }
 
-    return 'Nao foi possivel renderizar neste navegador. Tente um video menor, feche apps pesados ou use outro navegador. No celular, evite videos muito longos.'
+    return isDownloadMode
+      ? 'Nao foi possivel exportar o video neste navegador. Tente um video menor ou outro navegador. No celular, evite videos muito longos.'
+      : 'Nao foi possivel renderizar neste navegador. Tente um video menor, feche apps pesados ou use outro navegador. No celular, evite videos muito longos.'
   }
 
   function buildTextDrawFilters() {
@@ -3161,12 +3174,34 @@ export default function VideoEditor() {
     ]
   }
 
-  async function publishOutputArray(outputArray: Uint8Array) {
+  function getOutputBlob(outputArray: Uint8Array) {
     const outputBuffer = outputArray.buffer.slice(
       outputArray.byteOffset,
       outputArray.byteOffset + outputArray.byteLength
     ) as ArrayBuffer
-    const outputBlob = new Blob([outputBuffer], { type: 'video/mp4' })
+
+    return new Blob([outputBuffer], { type: 'video/mp4' })
+  }
+
+  function downloadOutputArray(outputArray: Uint8Array) {
+    const outputBlob = getOutputBlob(outputArray)
+    const downloadUrl = URL.createObjectURL(outputBlob)
+    const downloadLink = document.createElement('a')
+
+    downloadLink.href = downloadUrl
+    downloadLink.download = 'entreus-lab-video.mp4'
+    downloadLink.rel = 'noreferrer'
+    document.body.appendChild(downloadLink)
+    downloadLink.click()
+    downloadLink.remove()
+
+    window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 2000)
+    setRenderProgress(100)
+    setRenderStage('done', 'Download iniciado. Se o download nao comecar, tente novamente.')
+  }
+
+  async function publishOutputArray(outputArray: Uint8Array) {
+    const outputBlob = getOutputBlob(outputArray)
 
     setRenderStage('uploading', 'Enviando para a EntreUS...')
 
@@ -3210,6 +3245,16 @@ export default function VideoEditor() {
     setRenderProgress(100)
     setRenderStage('done', 'Publicado com sucesso!')
     clearEditorAfterPublish()
+  }
+
+  async function finishRenderedOutput(outputArray: Uint8Array) {
+    if (isDownloadMode) {
+      setRenderStage('downloading', 'Preparando download...')
+      downloadOutputArray(outputArray)
+      return
+    }
+
+    await publishOutputArray(outputArray)
   }
 
   async function renderPhotoVideo() {
@@ -3294,7 +3339,7 @@ export default function VideoEditor() {
       }
 
       const outputArray = await optimizeRenderedVideo(ffmpeg, outputName, optimizedOutputName)
-      await publishOutputArray(outputArray)
+      await finishRenderedOutput(outputArray)
       await cleanupFfmpegFiles(ffmpeg, filesToClean)
     } catch (error) {
       console.error('[VideoEditor] Photo render failed:', {
@@ -3534,7 +3579,7 @@ export default function VideoEditor() {
       }
 
       const outputArray = await optimizeRenderedVideo(ffmpeg, outputName, optimizedOutputName)
-      await publishOutputArray(outputArray)
+      await finishRenderedOutput(outputArray)
       await cleanupFfmpegFiles(ffmpeg, filesToClean)
     } catch (error) {
       console.error('[VideoEditor] Render failed:', {
@@ -3655,6 +3700,7 @@ export default function VideoEditor() {
   const hasRotatedImageOverlay = imageOverlays.some((overlay) => Math.abs(overlay.rotation) > 0)
   const hasRotatedSticker = stickers.some((sticker) => Math.abs(sticker.rotation) > 0)
   const publishHints = [
+    ...(isDownloadMode ? ['No Lab, o video final e baixado no navegador e nao cria post no feed. Em celulares, exportar pode demorar.'] : []),
     ...(hasAppendedPhotoClips ? ['Fotos na sequencia entram no render final; videos extras ainda ficam para uma etapa futura.'] : []),
     ...(hasWebPImageOverlay ? ['Dica: para publicar com imagem, use PNG ou JPG. WebP fica apenas na previa.'] : []),
     ...(hasRotatedImageOverlay || hasRotatedSticker
@@ -3662,11 +3708,15 @@ export default function VideoEditor() {
       : []),
   ]
   const publishButtonLabel = isRendering
-    ? renderMessage.toLowerCase().includes('enviando') || renderMessage.toLowerCase().includes('publicando')
-      ? 'Enviando...'
+    ? renderMessage.toLowerCase().includes('download')
+      ? 'Baixando...'
+      : renderMessage.toLowerCase().includes('enviando') || renderMessage.toLowerCase().includes('publicando')
+      ? isDownloadMode ? 'Exportando...' : 'Enviando...'
       : 'Renderizando...'
+    : isDownloadMode
+    ? 'Baixar video'
     : 'Publicar'
-  const advanceButtonLabel = isRendering ? publishButtonLabel : 'Avancar'
+  const advanceButtonLabel = isRendering ? publishButtonLabel : isDownloadMode ? 'Exportar video' : 'Avancar'
   const selectedLayerTitle = activeOverlay
     ? 'Texto selecionado'
     : activeSticker
@@ -3684,7 +3734,7 @@ export default function VideoEditor() {
     { id: 'text' as EditorPanel, label: 'Texto', icon: <Type className="h-5 w-5" /> },
     { id: 'audio' as EditorPanel, label: 'Audio', icon: <Music className="h-5 w-5" /> },
     { id: 'effects' as EditorPanel, label: 'Efeitos', icon: <SlidersHorizontal className="h-5 w-5" /> },
-    { id: 'caption' as EditorPanel, label: 'Legenda', icon: <Captions className="h-5 w-5" /> },
+    ...(isDownloadMode ? [] : [{ id: 'caption' as EditorPanel, label: 'Legenda', icon: <Captions className="h-5 w-5" /> }]),
     { id: 'voice' as EditorPanel, label: 'Voz', icon: <Mic className="h-5 w-5" /> },
     { id: 'add' as EditorPanel, label: 'Adicionar', icon: <Plus className="h-5 w-5" /> },
   ]
@@ -5927,8 +5977,10 @@ export default function VideoEditor() {
             <div className="relative z-[121] flex max-h-[calc(100dvh-6rem)] w-full max-w-xl flex-col overflow-hidden rounded-[1.5rem] border border-white/10 bg-zinc-950 text-white shadow-2xl shadow-black/50 ring-1 ring-sky-300/15 sm:max-h-[88dvh]">
               <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
                 <div className="min-w-0">
-                  <p className="text-base font-black">Publicar video</p>
-                  <p className="mt-0.5 text-xs font-semibold text-zinc-500">Legenda, qualidade e confirmacao final</p>
+                  <p className="text-base font-black">{isDownloadMode ? 'Exportar video' : 'Publicar video'}</p>
+                  <p className="mt-0.5 text-xs font-semibold text-zinc-500">
+                    {isDownloadMode ? 'Qualidade e download final' : 'Legenda, qualidade e confirmacao final'}
+                  </p>
                 </div>
                 <button
                   type="button"
@@ -5942,6 +5994,7 @@ export default function VideoEditor() {
               </div>
 
               <div className="min-h-0 flex-1 overflow-y-auto p-4">
+                {!isDownloadMode && (
                 <label className="block">
                   <span className="text-xs font-black text-zinc-300">Descricao do post</span>
                   <textarea
@@ -5952,8 +6005,9 @@ export default function VideoEditor() {
                     className="mt-2 w-full resize-none rounded-2xl border border-white/10 bg-black/40 px-4 py-3 text-sm font-semibold text-white outline-none placeholder:text-zinc-600 focus:border-sky-300"
                   />
                 </label>
+                )}
 
-                <div className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-3">
+                <div className={`${isDownloadMode ? '' : 'mt-4'} rounded-2xl border border-white/10 bg-black/30 p-3`}>
                   <div className="mb-2 flex items-center justify-between gap-3">
                     <span className="text-xs font-black text-zinc-200">Qualidade do video</span>
                     {sourceMediaBytes > 0 && (
@@ -6010,6 +6064,11 @@ export default function VideoEditor() {
                   {isRendering ? <Loader2 className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}
                   {publishButtonLabel}
                 </button>
+                {isDownloadMode && (
+                  <p className="mt-2 text-center text-[11px] font-semibold leading-5 text-zinc-500">
+                    O arquivo sera baixado no seu navegador. Nenhum post sera criado no feed.
+                  </p>
+                )}
               </div>
             </div>
           </div>
