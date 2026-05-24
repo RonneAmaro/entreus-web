@@ -121,7 +121,21 @@ export async function POST(request: Request) {
     )
   }
 
-  if (typeof body.fileSize === 'number' && body.fileSize > getMaxSize(body.contentType)) {
+  if (
+    typeof body.fileSize !== 'number' ||
+    !Number.isFinite(body.fileSize) ||
+    body.fileSize <= 0
+  ) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: 'Tamanho do arquivo invalido.',
+      },
+      { status: 400 },
+    )
+  }
+
+  if (body.fileSize > getMaxSize(body.contentType)) {
     return NextResponse.json(
       {
         ok: false,
