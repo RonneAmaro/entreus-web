@@ -41,12 +41,14 @@ function AutoPlayVideo({
   src,
   className,
   onClick,
+  onError,
   controls = false,
   autoplayEnabled = true,
 }: {
   src: string
   className?: string
   onClick?: () => void
+  onError?: () => void
   controls?: boolean
   autoplayEnabled?: boolean
 }) {
@@ -167,8 +169,17 @@ function AutoPlayVideo({
       preload={autoplayEnabled ? 'none' : 'metadata'}
       controls={controls}
       onClick={onClick}
+      onError={onError}
       className={className}
     />
+  )
+}
+
+function MediaFallback({ label }: { label: string }) {
+  return (
+    <div className="flex h-full min-h-[160px] w-full items-center justify-center bg-zinc-100 px-4 text-center text-sm font-medium text-zinc-500 dark:bg-zinc-950 dark:text-zinc-400">
+      {label}
+    </div>
   )
 }
 
@@ -189,6 +200,7 @@ function MediaThumb({
   fit?: MediaFit
   autoplayEnabled?: boolean
 }) {
+  const [failed, setFailed] = useState(false)
   const imageClassName =
     fit === 'contain'
       ? 'block h-full max-h-[720px] w-full object-contain transition duration-300 md:group-hover:scale-[1.01]'
@@ -205,12 +217,15 @@ function MediaThumb({
       onClick={() => onOpen(index)}
       className={`group relative overflow-hidden bg-zinc-100 text-left outline-none ring-1 ring-inset ring-zinc-200/60 transition duration-300 hover:ring-blue-300/70 focus-visible:ring-2 focus-visible:ring-blue-500 dark:bg-zinc-950 dark:ring-zinc-800/70 dark:hover:ring-blue-400/50 ${className}`}
     >
-      {item.media_type === 'image' ? (
+      {failed ? (
+        <MediaFallback label={item.media_type === 'video' ? 'Video indisponivel' : 'Imagem indisponivel'} />
+      ) : item.media_type === 'image' ? (
         <img
           src={item.media_url}
           alt="Imagem da publicação"
           loading="lazy"
           decoding="async"
+          onError={() => setFailed(true)}
           className={imageClassName}
         />
       ) : (
@@ -224,6 +239,7 @@ function MediaThumb({
           <AutoPlayVideo
             src={item.media_url}
             className={videoClassName}
+            onError={() => setFailed(true)}
             autoplayEnabled={autoplayEnabled && !showOverlayCount}
           />
 
@@ -247,6 +263,7 @@ function MediaThumb({
 export default function PostMediaGallery({ media }: PostMediaGalleryProps) {
   const [open, setOpen] = useState(false)
   const [activeIndex, setActiveIndex] = useState(0)
+  const [viewerFailed, setViewerFailed] = useState(false)
 
   if (!media || media.length === 0) return null
 
@@ -256,6 +273,7 @@ export default function PostMediaGallery({ media }: PostMediaGalleryProps) {
 
   function openViewer(index: number) {
     setActiveIndex(index)
+    setViewerFailed(false)
     setOpen(true)
   }
 
@@ -264,6 +282,7 @@ export default function PostMediaGallery({ media }: PostMediaGalleryProps) {
   }
 
   function goPrevious() {
+    setViewerFailed(false)
     setActiveIndex((current) => {
       if (current === 0) return media.length - 1
       return current - 1
@@ -271,6 +290,7 @@ export default function PostMediaGallery({ media }: PostMediaGalleryProps) {
   }
 
   function goNext() {
+    setViewerFailed(false)
     setActiveIndex((current) => {
       if (current === media.length - 1) return 0
       return current + 1
@@ -439,11 +459,16 @@ export default function PostMediaGallery({ media }: PostMediaGalleryProps) {
           )}
 
           <div className="flex h-full w-full max-w-6xl items-center justify-center">
-            {activeMedia.media_type === 'image' ? (
+            {viewerFailed ? (
+              <div className="h-[50dvh] w-full max-w-3xl overflow-hidden rounded-2xl">
+                <MediaFallback label={activeMedia.media_type === 'video' ? 'Video indisponivel' : 'Imagem indisponivel'} />
+              </div>
+            ) : activeMedia.media_type === 'image' ? (
               <img
                 src={activeMedia.media_url}
                 alt="Imagem ampliada"
                 decoding="async"
+                onError={() => setViewerFailed(true)}
                 className="max-h-[88dvh] max-w-full rounded-2xl object-contain shadow-2xl shadow-black/40 sm:rounded-3xl"
               />
             ) : (
@@ -455,6 +480,7 @@ export default function PostMediaGallery({ media }: PostMediaGalleryProps) {
                   muted
                   playsInline
                   preload="metadata"
+                  onError={() => setViewerFailed(true)}
                   className="h-auto max-h-[88dvh] w-full max-w-full rounded-2xl bg-black object-contain shadow-2xl shadow-black/40 sm:rounded-3xl"
                 />
               </div>

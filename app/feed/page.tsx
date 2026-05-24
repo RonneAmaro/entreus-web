@@ -708,6 +708,7 @@ function FeedContent() {
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({})
   const [commentMediaDrafts, setCommentMediaDrafts] = useState<Record<string, CommentMediaDraft | null>>({})
   const [commentGifInputs, setCommentGifInputs] = useState<Record<string, string>>({})
+  const [submittingCommentPostId, setSubmittingCommentPostId] = useState<string | null>(null)
   const [openGifPickerPostId, setOpenGifPickerPostId] = useState<string | null>(null)
   const [openCommentEmojiPickerPostId, setOpenCommentEmojiPickerPostId] = useState<string | null>(null)
   const [replyModalPostId, setReplyModalPostId] = useState<string | null>(null)
@@ -1678,6 +1679,44 @@ function FeedContent() {
     return message || error || 'Falha ao preparar upload para o R2.'
   }
 
+  function isSafeHttpMediaUrl(value: unknown) {
+    if (typeof value !== 'string') return false
+
+    const trimmedUrl = value.trim()
+
+    if (!trimmedUrl || /^(javascript|data|blob):/i.test(trimmedUrl)) return false
+
+    try {
+      const url = new URL(trimmedUrl)
+      return url.protocol === 'https:' || url.protocol === 'http:'
+    } catch {
+      return false
+    }
+  }
+
+  function isValidPresignData(
+    data: {
+      uploadUrl?: string
+      publicUrl?: string
+      key?: string
+      contentType?: string
+    } | null,
+    file: File,
+    folder: 'posts' | 'comments',
+  ): data is {
+    uploadUrl: string
+    publicUrl: string
+    key: string
+    contentType: string
+  } {
+    if (!data) return false
+    if (!isSafeHttpMediaUrl(data.uploadUrl) || !isSafeHttpMediaUrl(data.publicUrl)) return false
+    if (data.contentType !== file.type) return false
+    if (typeof data.key !== 'string' || !data.key.startsWith(`${folder}/${userId}/`)) return false
+
+    return true
+  }
+
   async function uploadMediaFile(
     file: File
   ): Promise<{ url: string; type: 'image' | 'video' } | null> {
@@ -1738,11 +1777,13 @@ function FeedContent() {
         ok?: boolean
         uploadUrl?: string
         publicUrl?: string
+        key?: string
+        contentType?: string
         message?: string
         error?: string
       } | null
 
-      if (!presignResponse.ok || !presignData?.ok || !presignData.uploadUrl || !presignData.publicUrl) {
+      if (!presignResponse.ok || !presignData?.ok) {
         const errorMessage = getPresignFailureMessage(
           presignResponse.status,
           presignData?.error,
@@ -1757,6 +1798,11 @@ function FeedContent() {
         return null
       }
 
+      if (!isValidPresignData(presignData, file, 'posts')) {
+        setMessage('Nao foi possivel preparar o upload da midia. Tente novamente.')
+        return null
+      }
+
       const uploadResponse = await fetch(presignData.uploadUrl, {
         method: 'PUT',
         headers: {
@@ -1766,6 +1812,8 @@ function FeedContent() {
       })
 
       if (!uploadResponse.ok) {
+        setMessage('Nao foi possivel enviar a midia. Verifique sua conexao e tente novamente.')
+        return null
         console.error('Falha ao enviar mídia para o R2:', {
           fileName: file.name,
           contentType: file.type,
@@ -1824,6 +1872,11 @@ function FeedContent() {
     draft: CommentMediaDraft
   ): Promise<{ url: string; type: 'image' | 'video' | 'gif' } | null> {
     if (draft.source === 'gif-url') {
+      if (!isSafeHttpMediaUrl(draft.url)) {
+        setMessage('Midia invalida. Envie o arquivo novamente.')
+        return null
+      }
+
       return {
         url: draft.url,
         type: 'gif',
@@ -1877,11 +1930,13 @@ function FeedContent() {
         ok?: boolean
         uploadUrl?: string
         publicUrl?: string
+        key?: string
+        contentType?: string
         message?: string
         error?: string
       } | null
 
-      if (!presignResponse.ok || !presignData?.ok || !presignData.uploadUrl || !presignData.publicUrl) {
+      if (!presignResponse.ok || !presignData?.ok) {
         setMessage(
           getPresignFailureMessage(
             presignResponse.status,
@@ -1889,6 +1944,11 @@ function FeedContent() {
             presignData?.message,
           ),
         )
+        return null
+      }
+
+      if (!isValidPresignData(presignData, file, 'comments')) {
+        setMessage('Nao foi possivel preparar o upload da midia. Tente novamente.')
         return null
       }
 
@@ -1910,7 +1970,7 @@ function FeedContent() {
         type: mediaType,
       }
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Erro inesperado no upload do comentário.')
+      setMessage('Nao foi possivel enviar a midia. Verifique sua conexao e tente novamente.')
       return null
     }
   }
@@ -2080,6 +2140,17 @@ function FeedContent() {
       return
     }
 
+    if (submittingCommentPostId === postId) return
+
+    setSubmittingCommentPostId(postId)
+
+    const uploadedCommentMedia = mediaDraft ? await uploadCommentMediaFile(mediaDraft) : null
+
+    if (mediaDraft && !uploadedCommentMedia) {
+      setSubmittingCommentPostId(null)
+      return
+    }
+
     const { data: insertedComment, error } = await supabase
       .from('comments')
       .insert({
@@ -2092,14 +2163,11 @@ function FeedContent() {
 
     if (error) {
       setMessage(t('feed.messages.commentError') + error.message)
+      setSubmittingCommentPostId(null)
       return
     }
 
-    if (insertedComment?.id && mediaDraft) {
-      const uploadedCommentMedia = await uploadCommentMediaFile(mediaDraft)
-
-      if (!uploadedCommentMedia) return
-
+    if (insertedComment?.id && uploadedCommentMedia) {
       const { error: mediaError } = await supabase
         .from('comment_media')
         .insert({
@@ -2112,6 +2180,7 @@ function FeedContent() {
       if (mediaError) {
         setMessage('Comentário criado, mas a mídia não foi salva. Aplique a migration de mídias de comentários no Supabase.')
         await loadComments()
+        setSubmittingCommentPostId(null)
         return
       }
     }
@@ -2145,6 +2214,7 @@ function FeedContent() {
 
     await loadComments()
     await loadCommentLikes()
+    setSubmittingCommentPostId(null)
   }
 
   async function handleToggleLike(postId: string) {
@@ -2429,7 +2499,7 @@ function FeedContent() {
   function handleAddGifUrl(postId: string) {
     const gifUrl = (commentGifInputs[postId] || '').trim()
 
-    if (!/^https?:\/\/.{1,500}$/i.test(gifUrl)) {
+    if (gifUrl.length > 500 || !isSafeHttpMediaUrl(gifUrl)) {
       setMessage('Cole um link de GIF válido começando com http:// ou https://.')
       return
     }
@@ -2979,10 +3049,13 @@ function FeedContent() {
                     <button
                       type="button"
                       onClick={() => handleSubmitReplyModal(replyModalPost.id)}
-                      disabled={!commentInputs[replyModalPost.id]?.trim() && !commentMediaDrafts[replyModalPost.id]}
+                      disabled={
+                        submittingCommentPostId === replyModalPost.id ||
+                        (!commentInputs[replyModalPost.id]?.trim() && !commentMediaDrafts[replyModalPost.id])
+                      }
                       className="rounded-full bg-blue-600 px-5 py-2.5 text-sm font-black text-white shadow-sm shadow-blue-600/20 transition hover:scale-[1.02] hover:bg-blue-700 active:scale-95 disabled:cursor-not-allowed disabled:bg-zinc-300 disabled:text-zinc-600 dark:disabled:bg-zinc-800 dark:disabled:text-zinc-500"
                     >
-                      Responder
+                      {submittingCommentPostId === replyModalPost.id ? 'Enviando...' : 'Responder'}
                     </button>
                   </div>
                 </div>

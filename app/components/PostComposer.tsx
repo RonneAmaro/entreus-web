@@ -110,7 +110,7 @@ function getInitial(name: string) {
 }
 
 function isImage(file: File) {
-  return ['image/jpeg', 'image/png', 'image/webp'].includes(file.type)
+  return ['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type)
 }
 
 function isVideo(file: File) {
@@ -493,7 +493,7 @@ export default function PostComposer({
                   <input
                     ref={mediaInputRef}
                     type="file"
-                    accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,video/ogg,video/quicktime"
+                    accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/ogg,video/quicktime"
                     multiple
                     className="hidden"
                     onChange={(event) => addFiles(event.target.files)}
