@@ -186,6 +186,11 @@ type Repost = {
   profiles: ProfileSummary | null
 }
 
+type FeedCursor = {
+  createdAt: string
+  id: string
+}
+
 const FEED_INITIAL_POST_LIMIT = 24
 const FEED_NEXT_POST_LIMIT = 12
 const FEED_INITIAL_COMMENT_LIMIT = 160
@@ -717,7 +722,7 @@ function FeedContent() {
   const [loading, setLoading] = useState(true)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [hasMorePosts, setHasMorePosts] = useState(true)
-  const [feedOffset, setFeedOffset] = useState(0)
+  const [feedCursor, setFeedCursor] = useState<FeedCursor | null>(null)
   const [loadMoreError, setLoadMoreError] = useState('')
   const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null)
   const loadingMoreRef = useRef(false)
@@ -773,7 +778,6 @@ function FeedContent() {
       setFollows(followsData)
 
       const loadedPosts = await loadPosts(user.id, blockedIds, followsData, allowSensitiveContent, {
-        offset: 0,
         limit: FEED_INITIAL_POST_LIMIT,
       })
 
@@ -1006,12 +1010,11 @@ function FeedContent() {
     currentBlockedIds: string[] = blockedUserIds,
     currentFollows: Follow[] = follows,
     allowSensitiveContent: boolean = currentProfile?.show_sensitive_content || false,
-    options: { offset?: number; limit?: number; append?: boolean } = {}
+    options: { cursor?: FeedCursor | null; limit?: number; append?: boolean } = {}
   ): Promise<Post[]> {
-    const offset = options.offset ?? 0
     const limit = options.limit ?? FEED_INITIAL_POST_LIMIT
 
-    const { data, error } = await supabase
+    let query = supabase
       .from('posts')
       .select(`
         id,
@@ -1031,17 +1034,40 @@ function FeedContent() {
       `)
       .order('created_at', { ascending: false })
       .order('id', { ascending: false })
-      .range(offset, offset + limit - 1)
+      .limit(limit)
+
+    if (options.cursor) {
+      query = query.or(
+        `created_at.lt.${options.cursor.createdAt},and(created_at.eq.${options.cursor.createdAt},id.lt.${options.cursor.id})`
+      )
+    }
+
+    const { data, error } = await query
 
     if (error) {
+      if (options.append) {
+        throw error
+      }
+
       setMessage(t('feed.messages.loadPostsError') + error.message)
+      setHasMorePosts(false)
       return []
     }
 
     const fetchedRows = data || []
+    const lastFetchedPost = fetchedRows[fetchedRows.length - 1] as
+      | { created_at: string; id: string }
+      | undefined
 
     setHasMorePosts(fetchedRows.length === limit)
-    setFeedOffset(offset + fetchedRows.length)
+    setFeedCursor(
+      lastFetchedPost
+        ? {
+          createdAt: lastFetchedPost.created_at,
+          id: lastFetchedPost.id,
+        }
+        : null
+    )
 
     const rawPosts = fetchedRows.map((post: any) => ({
       ...post,
@@ -1258,7 +1284,7 @@ function FeedContent() {
   }
 
   const loadMorePosts = useCallback(async () => {
-    if (loadingMoreRef.current || loading || !hasMorePosts || !userId) return
+    if (loadingMoreRef.current || loading || !hasMorePosts || !userId || !feedCursor) return
 
     loadingMoreRef.current = true
     setIsLoadingMore(true)
@@ -1271,7 +1297,7 @@ function FeedContent() {
         follows,
         currentProfile?.show_sensitive_content || false,
         {
-          offset: feedOffset,
+          cursor: feedCursor,
           limit: FEED_NEXT_POST_LIMIT,
           append: true,
         }
@@ -1288,7 +1314,7 @@ function FeedContent() {
   }, [
     blockedUserIds,
     currentProfile?.show_sensitive_content,
-    feedOffset,
+    feedCursor,
     follows,
     hasMorePosts,
     loading,
@@ -1304,7 +1330,6 @@ function FeedContent() {
       currentFollows,
       currentProfile?.show_sensitive_content || false,
       {
-        offset: 0,
         limit: FEED_INITIAL_POST_LIMIT,
       }
     )
