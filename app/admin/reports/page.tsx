@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { AlertTriangle, ArrowLeft, Flag, Loader2, ShieldAlert } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, Flag, Image as ImageIcon, Loader2, ShieldAlert, Video } from 'lucide-react'
 import { isAdminRole } from '@/lib/admin'
 import { supabase } from '@/lib/supabase'
 
@@ -23,12 +23,22 @@ type ReportRow = {
   created_at?: string | null
 }
 
+type ReportedPostContext = {
+  id: string
+  content: string | null
+  category: string | null
+  image_url: string | null
+  video_url: string | null
+  is_sensitive: boolean | null
+}
+
 export default function AdminReportsPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState('')
   const [adminProfile, setAdminProfile] = useState<AdminProfile | null>(null)
   const [reports, setReports] = useState<ReportRow[]>([])
+  const [postContextById, setPostContextById] = useState<Record<string, ReportedPostContext>>({})
 
   useEffect(() => {
     loadPage()
@@ -99,11 +109,59 @@ export default function AdminReportsPage() {
       console.error('[AdminReports] Load failed:', reportsError.message)
       setMessage('Nao foi possivel carregar denuncias agora.')
       setReports([])
+      setPostContextById({})
     } else {
-      setReports(reportsData || [])
+      const loadedReports = reportsData || []
+      setReports(loadedReports)
+      await loadReportedPostContext(loadedReports)
     }
 
     setLoading(false)
+  }
+
+  async function loadReportedPostContext(loadedReports: ReportRow[]) {
+    const postIds = Array.from(
+      new Set(
+        loadedReports
+          .map((report) => report.reported_post_id)
+          .filter((postId): postId is string => Boolean(postId)),
+      ),
+    )
+
+    if (postIds.length === 0) {
+      setPostContextById({})
+      return
+    }
+
+    const { data, error } = await supabase
+      .from('posts')
+      .select('id, content, category, image_url, video_url, is_sensitive')
+      .in('id', postIds)
+
+    if (error) {
+      console.warn('[AdminReports] Post context unavailable:', error.message)
+      setPostContextById({})
+      return
+    }
+
+    const nextContext = ((data || []) as ReportedPostContext[]).reduce<Record<string, ReportedPostContext>>(
+      (acc, post) => {
+        acc[post.id] = post
+        return acc
+      },
+      {},
+    )
+
+    setPostContextById(nextContext)
+  }
+
+  function isSensitivePost(post: ReportedPostContext | undefined) {
+    return Boolean(
+      post?.is_sensitive ||
+        post?.category === 'adulto' ||
+        post?.category === 'sensual' ||
+        post?.category === '18plus',
+    )
   }
 
   if (loading) {
@@ -158,7 +216,13 @@ export default function AdminReportsPage() {
               Nenhuma denuncia pendente no momento.
             </div>
           ) : (
-            reports.map((report) => (
+            reports.map((report) => {
+              const postContext = report.reported_post_id ? postContextById[report.reported_post_id] : undefined
+              const hasImage = Boolean(postContext?.image_url)
+              const hasVideo = Boolean(postContext?.video_url)
+              const sensitive = isSensitivePost(postContext)
+
+              return (
               <article key={report.id} className="rounded-3xl border border-white/10 bg-zinc-950/80 p-4 ring-1 ring-white/5 transition hover:-translate-y-0.5 hover:border-blue-300/20">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0">
@@ -170,6 +234,58 @@ export default function AdminReportsPage() {
                     <p className="mt-2 text-xs text-zinc-500">
                       Denunciado: {report.reported_user_id || '-'} · Autor: {report.reporter_id || '-'}
                     </p>
+                    {postContext && (
+                      <div className="mt-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+                        <div className="flex flex-wrap items-center gap-2 text-xs font-black text-zinc-300">
+                          {hasImage && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2.5 py-1 text-blue-100">
+                              <ImageIcon className="h-3.5 w-3.5" />
+                              imagem
+                            </span>
+                          )}
+                          {hasVideo && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-purple-500/10 px-2.5 py-1 text-purple-100">
+                              <Video className="h-3.5 w-3.5" />
+                              video
+                            </span>
+                          )}
+                          {sensitive && (
+                            <span className="rounded-full bg-yellow-500/10 px-2.5 py-1 text-yellow-100">
+                              conteudo sensivel / 18+
+                            </span>
+                          )}
+                          {!hasImage && !hasVideo && (
+                            <span className="rounded-full bg-white/10 px-2.5 py-1 text-zinc-300">
+                              sem midia anexada
+                            </span>
+                          )}
+                        </div>
+
+                        {postContext.content && (
+                          <p className="mt-2 line-clamp-2 text-sm leading-6 text-zinc-300">
+                            {postContext.content}
+                          </p>
+                        )}
+
+                        {hasImage && postContext.image_url && (
+                          <div className="mt-3 h-32 w-full overflow-hidden rounded-2xl border border-white/10 bg-black sm:max-w-xs">
+                            {sensitive ? (
+                              <div className="flex h-full items-center justify-center bg-zinc-900 px-4 text-center text-xs font-bold text-yellow-100">
+                                Preview protegido: conteudo sensivel
+                              </div>
+                            ) : (
+                              <img
+                                src={postContext.image_url}
+                                alt="Preview do post denunciado"
+                                loading="lazy"
+                                decoding="async"
+                                className="h-full w-full object-cover"
+                              />
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                   {report.reported_post_id && (
                     <Link href={`/post/${report.reported_post_id}`} className="shrink-0 rounded-full bg-white px-4 py-2 text-xs font-black text-black">
@@ -178,7 +294,8 @@ export default function AdminReportsPage() {
                   )}
                 </div>
               </article>
-            ))
+              )
+            })
           )}
         </div>
       </section>

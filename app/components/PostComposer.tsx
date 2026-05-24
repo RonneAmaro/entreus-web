@@ -637,6 +637,11 @@ export default function PostComposer({
 
               <div className="flex flex-wrap items-center gap-2 pl-1 text-xs text-zinc-500 dark:text-zinc-500">
                 <span>{t('postComposer.mediaCounter').replace('{current}', String(media.length)).replace('{max}', String(MAX_MEDIA_FILES))}</span>
+                {category === '18plus' && (
+                  <span className="rounded-full border border-yellow-300/40 bg-yellow-50 px-2 py-1 font-bold text-yellow-800 dark:bg-yellow-950/30 dark:text-yellow-200">
+                    Marcar como conteudo sensivel / 18+. Esse conteudo aparecera protegido por aviso.
+                  </span>
+                )}
               </div>
             </div>
           </div>

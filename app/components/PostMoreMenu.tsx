@@ -101,7 +101,7 @@ export default function PostMoreMenu({
                 } ${reporting ? 'cursor-not-allowed opacity-60' : ''}`}
               >
                 <ShieldAlert className="h-4 w-4" />
-                {reporting ? 'Enviando...' : reported ? 'Denunciado' : 'Denunciar'}
+                {reporting ? 'Enviando...' : reported ? 'Denunciado' : 'Denunciar conteudo'}
               </button>
             )}
           </div>
