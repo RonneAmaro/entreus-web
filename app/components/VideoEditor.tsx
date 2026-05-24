@@ -79,6 +79,19 @@ type CanvasSize = {
 type EditorMode = 'video' | 'photos'
 type EditorPanel = 'add' | 'text' | 'sticker' | 'image' | 'audio' | 'effects' | 'caption' | 'voice'
 type DraggingLayer = { type: 'text' | 'sticker' | 'image'; id: string } | null
+type TimelineEditableLayer = 'text' | 'sticker' | 'image'
+type TimelineDragMode = 'move' | 'trim-start' | 'trim-end'
+type TimelineDragState = {
+  type: TimelineEditableLayer
+  id: string
+  mode: TimelineDragMode
+  pointerId: number
+  trackLeft: number
+  trackWidth: number
+  startClientX: number
+  initialStartTime: number
+  initialEndTime: number
+}
 type PhotoTransition = 'none' | 'fade'
 type CompressionPreset = 'auto' | 'light' | 'high'
 type TextFontKey = 'system' | 'strong' | 'elegant' | 'condensed' | 'casual' | 'mono' | 'classic' | 'rounded'
@@ -130,6 +143,7 @@ const DEFAULT_TEXT_FONT_KEY: TextFontKey = 'system'
 const DEFAULT_TEXT_BACKGROUND_COLOR = '#000000'
 const DEFAULT_TEXT_BACKGROUND_OPACITY = 0.55
 const DEFAULT_VIDEO_DURATION = 10
+const MIN_TIMELINE_ITEM_DURATION = 0.5
 const FFMPEG_CORE_VERSION = '0.12.10'
 const FFMPEG_CORE_BASE_URL = `https://unpkg.com/@ffmpeg/core@${FFMPEG_CORE_VERSION}/dist/umd`
 const HEAVY_VIDEO_SIZE_BYTES = 30 * 1024 * 1024
@@ -426,6 +440,7 @@ export default function VideoEditor() {
   const pointerMovedRef = useRef(false)
   const pointerStartedOnOverlayRef = useRef(false)
   const draggingLayerRef = useRef<DraggingLayer>(null)
+  const timelineDragRef = useRef<TimelineDragState | null>(null)
   const renderStageRef = useRef('idle')
   const renderLockRef = useRef(false)
 
@@ -477,6 +492,7 @@ export default function VideoEditor() {
   const [compressionStats, setCompressionStats] = useState<CompressionStats | null>(null)
   const [isPublishStepOpen, setIsPublishStepOpen] = useState(false)
   const [timelineExpanded, setTimelineExpanded] = useState(true)
+  const [timelineDragTarget, setTimelineDragTarget] = useState<string | null>(null)
   const [imageMessage, setImageMessage] = useState('')
   const [photoSlides, setPhotoSlides] = useState<PhotoSlide[]>([])
   const [activePhotoId, setActivePhotoId] = useState<string | null>(null)
@@ -1745,13 +1761,13 @@ export default function VideoEditor() {
         if (key === 'startTime') {
           return {
             ...overlay,
-            startTime: Math.min(nextValue, overlay.endTime),
+            startTime: Math.min(nextValue, Math.max(overlay.endTime - MIN_TIMELINE_ITEM_DURATION, 0)),
           }
         }
 
         return {
           ...overlay,
-          endTime: Math.max(nextValue, overlay.startTime),
+          endTime: Math.max(nextValue, Math.min(overlay.startTime + MIN_TIMELINE_ITEM_DURATION, duration)),
         }
       })
     )
@@ -1769,13 +1785,13 @@ export default function VideoEditor() {
         if (key === 'startTime') {
           return {
             ...overlay,
-            startTime: Math.min(nextValue, overlay.endTime),
+            startTime: Math.min(nextValue, Math.max(overlay.endTime - MIN_TIMELINE_ITEM_DURATION, 0)),
           }
         }
 
         return {
           ...overlay,
-          endTime: Math.max(nextValue, overlay.startTime),
+          endTime: Math.max(nextValue, Math.min(overlay.startTime + MIN_TIMELINE_ITEM_DURATION, duration)),
         }
       })
     )
@@ -1832,16 +1848,189 @@ export default function VideoEditor() {
         if (key === 'startTime') {
           return {
             ...sticker,
-            startTime: Math.min(nextValue, sticker.endTime),
+            startTime: Math.min(nextValue, Math.max(sticker.endTime - MIN_TIMELINE_ITEM_DURATION, 0)),
           }
         }
 
         return {
           ...sticker,
-          endTime: Math.max(nextValue, sticker.startTime),
+          endTime: Math.max(nextValue, Math.min(sticker.startTime + MIN_TIMELINE_ITEM_DURATION, duration)),
         }
       })
     )
+  }
+
+  function normalizeTimelineTiming(startTime: number, endTime: number) {
+    const maxDuration = Math.max(timelineDuration, MIN_TIMELINE_ITEM_DURATION)
+    const nextStart = clamp(startTime, 0, Math.max(maxDuration - MIN_TIMELINE_ITEM_DURATION, 0))
+    const nextEnd = clamp(endTime, nextStart + MIN_TIMELINE_ITEM_DURATION, maxDuration)
+
+    return {
+      startTime: nextStart,
+      endTime: nextEnd,
+    }
+  }
+
+  function updateTimelineLayerTiming(type: TimelineEditableLayer, id: string, startTime: number, endTime: number) {
+    const timing = normalizeTimelineTiming(startTime, endTime)
+
+    if (type === 'text') {
+      setOverlays((current) =>
+        current.map((overlay) =>
+          overlay.id === id
+            ? {
+                ...overlay,
+                ...timing,
+              }
+            : overlay
+        )
+      )
+      return
+    }
+
+    if (type === 'sticker') {
+      setStickers((current) =>
+        current.map((sticker) =>
+          sticker.id === id
+            ? {
+                ...sticker,
+                ...timing,
+              }
+            : sticker
+        )
+      )
+      return
+    }
+
+    setImageOverlays((current) =>
+      current.map((overlay) =>
+        overlay.id === id
+          ? {
+              ...overlay,
+              ...timing,
+            }
+          : overlay
+      )
+    )
+  }
+
+  function selectTimelineLayer(type: TimelineEditableLayer, id: string) {
+    if (type === 'text') {
+      const overlay = overlays.find((item) => item.id === id)
+      if (overlay) selectOverlay(overlay)
+      return
+    }
+
+    if (type === 'sticker') {
+      const sticker = stickers.find((item) => item.id === id)
+      if (sticker) selectSticker(sticker)
+      return
+    }
+
+    const overlay = imageOverlays.find((item) => item.id === id)
+    if (overlay) selectImageOverlay(overlay)
+  }
+
+  function applyTimelineDrag(clientX: number) {
+    const dragState = timelineDragRef.current
+    if (!dragState || timelineDuration <= 0) return
+
+    const secondsPerPixel = timelineDuration / Math.max(dragState.trackWidth, 1)
+    const deltaSeconds = (clientX - dragState.startClientX) * secondsPerPixel
+    const originalDuration = Math.max(
+      dragState.initialEndTime - dragState.initialStartTime,
+      MIN_TIMELINE_ITEM_DURATION,
+    )
+    let nextStart = dragState.initialStartTime
+    let nextEnd = dragState.initialEndTime
+
+    if (dragState.mode === 'trim-start') {
+      nextStart = clamp(
+        dragState.initialStartTime + deltaSeconds,
+        0,
+        dragState.initialEndTime - MIN_TIMELINE_ITEM_DURATION,
+      )
+    } else if (dragState.mode === 'trim-end') {
+      nextEnd = clamp(
+        dragState.initialEndTime + deltaSeconds,
+        dragState.initialStartTime + MIN_TIMELINE_ITEM_DURATION,
+        timelineDuration,
+      )
+    } else {
+      nextStart = clamp(
+        dragState.initialStartTime + deltaSeconds,
+        0,
+        Math.max(timelineDuration - originalDuration, 0),
+      )
+      nextEnd = nextStart + originalDuration
+    }
+
+    updateTimelineLayerTiming(dragState.type, dragState.id, nextStart, nextEnd)
+  }
+
+  function handleTimelineLayerDragStart(
+    event: PointerEvent<HTMLElement>,
+    type: TimelineEditableLayer,
+    id: string,
+    mode: TimelineDragMode,
+    startTime: number,
+    endTime: number,
+  ) {
+    if (timelineDuration <= 0) return
+
+    event.preventDefault()
+    event.stopPropagation()
+
+    const track = event.currentTarget.closest('[data-timeline-track]')
+    if (!(track instanceof HTMLElement)) return
+
+    const trackRect = track.getBoundingClientRect()
+    event.currentTarget.setPointerCapture(event.pointerId)
+
+    selectTimelineLayer(type, id)
+    setTimelineDragTarget(`${type}:${id}:${mode}`)
+    timelineDragRef.current = {
+      type,
+      id,
+      mode,
+      pointerId: event.pointerId,
+      trackLeft: trackRect.left,
+      trackWidth: trackRect.width,
+      startClientX: event.clientX,
+      initialStartTime: startTime,
+      initialEndTime: endTime,
+    }
+
+    if (isPlaying) {
+      videoRef.current?.pause()
+      pauseBackgroundMusic()
+      setIsPlaying(false)
+    }
+  }
+
+  function handleTimelineLayerDragMove(event: PointerEvent<HTMLElement>) {
+    const dragState = timelineDragRef.current
+    if (!dragState || dragState.pointerId !== event.pointerId) return
+
+    event.preventDefault()
+    event.stopPropagation()
+    applyTimelineDrag(event.clientX)
+  }
+
+  function handleTimelineLayerDragEnd(event: PointerEvent<HTMLElement>) {
+    const dragState = timelineDragRef.current
+    if (!dragState || dragState.pointerId !== event.pointerId) return
+
+    event.preventDefault()
+    event.stopPropagation()
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+
+    applyTimelineDrag(event.clientX)
+    timelineDragRef.current = null
+    setTimelineDragTarget(null)
   }
 
   function updateActiveOverlayText(value: string) {
@@ -4007,29 +4196,61 @@ export default function VideoEditor() {
                       ))}
                     </div>
 
-                    <div className="relative mt-1 h-8 rounded-lg border border-sky-300/15 bg-sky-500/10">
+                    <div data-timeline-track className="relative mt-1 h-8 rounded-lg border border-sky-300/15 bg-sky-500/10">
                       {editorMode === 'video' && overlays.length > 0 ? (
                         overlays.map((overlay, index) => (
-                          <button
+                          <div
                             key={overlay.id}
-                            type="button"
+                            role="button"
+                            tabIndex={0}
                             onClick={() => selectOverlay(overlay)}
-                            className={`absolute top-1 h-6 min-w-8 rounded-md px-2 text-left text-[10px] font-black transition ${
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter' || event.key === ' ') {
+                                event.preventDefault()
+                                selectOverlay(overlay)
+                              }
+                            }}
+                            onPointerDown={(event) => handleTimelineLayerDragStart(event, 'text', overlay.id, 'move', overlay.startTime, overlay.endTime)}
+                            onPointerMove={handleTimelineLayerDragMove}
+                            onPointerUp={handleTimelineLayerDragEnd}
+                            onPointerCancel={handleTimelineLayerDragEnd}
+                            className={`absolute top-1 h-6 min-w-8 cursor-grab touch-manipulation rounded-md px-2 text-left text-[10px] font-black transition active:cursor-grabbing ${
                               overlay.id === activeOverlayId
                                 ? 'bg-white text-black ring-2 ring-sky-300'
                                 : 'bg-sky-300/75 text-sky-950 hover:bg-sky-200'
-                            }`}
+                            } ${timelineDragTarget?.startsWith(`text:${overlay.id}:`) ? 'scale-[1.02] shadow-lg shadow-sky-500/25' : ''}`}
                             style={{
                               left: `${getTimelineLeft(overlay.startTime)}%`,
                               width: `${getTimelineWidth(overlay.startTime, overlay.endTime, 7)}%`,
                             }}
                             aria-label={`Selecionar ${getOverlayLabel(overlay, index)}`}
                           >
+                            <button
+                              type="button"
+                              aria-label={`Ajustar entrada de ${getOverlayLabel(overlay, index)}`}
+                              onClick={(event) => event.stopPropagation()}
+                              onPointerDown={(event) => handleTimelineLayerDragStart(event, 'text', overlay.id, 'trim-start', overlay.startTime, overlay.endTime)}
+                              onPointerMove={handleTimelineLayerDragMove}
+                              onPointerUp={handleTimelineLayerDragEnd}
+                              onPointerCancel={handleTimelineLayerDragEnd}
+                              className="absolute inset-y-0 left-0 z-10 w-4 -translate-x-1 rounded-l-md border-r border-white/40 bg-white/35 cursor-ew-resize touch-manipulation"
+                            />
                             <span className="flex items-center gap-1 truncate">
                               <Type className="h-3 w-3 shrink-0" />
                               <span className="truncate">{getOverlayLabel(overlay, index)}</span>
                             </span>
-                          </button>
+                            <span className="pointer-events-none absolute inset-x-4 bottom-0.5 h-0.5 rounded-full bg-sky-950/20" />
+                            <button
+                              type="button"
+                              aria-label={`Ajustar saida de ${getOverlayLabel(overlay, index)}`}
+                              onClick={(event) => event.stopPropagation()}
+                              onPointerDown={(event) => handleTimelineLayerDragStart(event, 'text', overlay.id, 'trim-end', overlay.startTime, overlay.endTime)}
+                              onPointerMove={handleTimelineLayerDragMove}
+                              onPointerUp={handleTimelineLayerDragEnd}
+                              onPointerCancel={handleTimelineLayerDragEnd}
+                              className="absolute inset-y-0 right-0 z-10 w-4 translate-x-1 rounded-r-md border-l border-white/40 bg-white/35 cursor-ew-resize touch-manipulation"
+                            />
+                          </div>
                         ))
                       ) : (
                         <button
@@ -4084,26 +4305,58 @@ export default function VideoEditor() {
                       </div>
                     )}
 
-                    <div className={`${timelineExpanded ? 'block' : 'hidden sm:block'} relative mt-1 h-8 rounded-lg border border-fuchsia-300/15 bg-fuchsia-500/10`}>
+                    <div data-timeline-track className={`${timelineExpanded ? 'block' : 'hidden sm:block'} relative mt-1 h-8 rounded-lg border border-fuchsia-300/15 bg-fuchsia-500/10`}>
                       {editorMode === 'video' && stickers.length > 0 ? (
                         stickers.map((sticker) => (
-                          <button
+                          <div
                             key={sticker.id}
-                            type="button"
+                            role="button"
+                            tabIndex={0}
                             onClick={() => selectSticker(sticker)}
-                            className={`absolute top-1 flex h-6 min-w-8 items-center gap-1 rounded-md px-2 text-left text-[10px] font-black transition ${
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter' || event.key === ' ') {
+                                event.preventDefault()
+                                selectSticker(sticker)
+                              }
+                            }}
+                            onPointerDown={(event) => handleTimelineLayerDragStart(event, 'sticker', sticker.id, 'move', sticker.startTime, sticker.endTime)}
+                            onPointerMove={handleTimelineLayerDragMove}
+                            onPointerUp={handleTimelineLayerDragEnd}
+                            onPointerCancel={handleTimelineLayerDragEnd}
+                            className={`absolute top-1 flex h-6 min-w-8 cursor-grab touch-manipulation items-center gap-1 rounded-md px-2 text-left text-[10px] font-black transition active:cursor-grabbing ${
                               sticker.id === activeStickerId
                                 ? 'bg-white text-black ring-2 ring-fuchsia-300'
                                 : 'bg-fuchsia-300/80 text-fuchsia-950 hover:bg-fuchsia-200'
-                            }`}
+                            } ${timelineDragTarget?.startsWith(`sticker:${sticker.id}:`) ? 'scale-[1.02] shadow-lg shadow-fuchsia-500/25' : ''}`}
                             style={{
                               left: `${getTimelineLeft(sticker.startTime)}%`,
                               width: `${getTimelineWidth(sticker.startTime, sticker.endTime, 7)}%`,
                             }}
                           >
+                            <button
+                              type="button"
+                              aria-label="Ajustar entrada da figurinha"
+                              onClick={(event) => event.stopPropagation()}
+                              onPointerDown={(event) => handleTimelineLayerDragStart(event, 'sticker', sticker.id, 'trim-start', sticker.startTime, sticker.endTime)}
+                              onPointerMove={handleTimelineLayerDragMove}
+                              onPointerUp={handleTimelineLayerDragEnd}
+                              onPointerCancel={handleTimelineLayerDragEnd}
+                              className="absolute inset-y-0 left-0 z-10 w-4 -translate-x-1 rounded-l-md border-r border-white/40 bg-white/35 cursor-ew-resize touch-manipulation"
+                            />
                             <span className="text-sm leading-none">{sticker.value}</span>
                             <span className="truncate">Figurinha</span>
-                          </button>
+                            <span className="pointer-events-none absolute inset-x-4 bottom-0.5 h-0.5 rounded-full bg-fuchsia-950/20" />
+                            <button
+                              type="button"
+                              aria-label="Ajustar saida da figurinha"
+                              onClick={(event) => event.stopPropagation()}
+                              onPointerDown={(event) => handleTimelineLayerDragStart(event, 'sticker', sticker.id, 'trim-end', sticker.startTime, sticker.endTime)}
+                              onPointerMove={handleTimelineLayerDragMove}
+                              onPointerUp={handleTimelineLayerDragEnd}
+                              onPointerCancel={handleTimelineLayerDragEnd}
+                              className="absolute inset-y-0 right-0 z-10 w-4 translate-x-1 rounded-r-md border-l border-white/40 bg-white/35 cursor-ew-resize touch-manipulation"
+                            />
+                          </div>
                         ))
                       ) : (
                         <button
@@ -4158,28 +4411,60 @@ export default function VideoEditor() {
                       </div>
                     )}
 
-                    <div className={`${timelineExpanded ? 'block' : 'hidden sm:block'} relative mt-1 h-8 rounded-lg border border-amber-300/15 bg-amber-500/10`}>
+                    <div data-timeline-track className={`${timelineExpanded ? 'block' : 'hidden sm:block'} relative mt-1 h-8 rounded-lg border border-amber-300/15 bg-amber-500/10`}>
                       {editorMode === 'video' && imageOverlays.length > 0 ? (
                         imageOverlays.map((overlay) => (
-                          <button
+                          <div
                             key={overlay.id}
-                            type="button"
+                            role="button"
+                            tabIndex={0}
                             onClick={() => selectImageOverlay(overlay)}
-                            className={`absolute top-1 h-6 min-w-8 rounded-md px-2 text-left text-[10px] font-black transition ${
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter' || event.key === ' ') {
+                                event.preventDefault()
+                                selectImageOverlay(overlay)
+                              }
+                            }}
+                            onPointerDown={(event) => handleTimelineLayerDragStart(event, 'image', overlay.id, 'move', overlay.startTime, overlay.endTime)}
+                            onPointerMove={handleTimelineLayerDragMove}
+                            onPointerUp={handleTimelineLayerDragEnd}
+                            onPointerCancel={handleTimelineLayerDragEnd}
+                            className={`absolute top-1 h-6 min-w-8 cursor-grab touch-manipulation rounded-md px-2 text-left text-[10px] font-black transition active:cursor-grabbing ${
                               overlay.id === activeImageId
                                 ? 'bg-white text-black ring-2 ring-amber-300'
                                 : 'bg-amber-300/80 text-amber-950 hover:bg-amber-200'
-                            }`}
+                            } ${timelineDragTarget?.startsWith(`image:${overlay.id}:`) ? 'scale-[1.02] shadow-lg shadow-amber-500/25' : ''}`}
                             style={{
                               left: `${getTimelineLeft(overlay.startTime)}%`,
                               width: `${getTimelineWidth(overlay.startTime, overlay.endTime, 8)}%`,
                             }}
                           >
+                            <button
+                              type="button"
+                              aria-label={`Ajustar entrada de ${overlay.name}`}
+                              onClick={(event) => event.stopPropagation()}
+                              onPointerDown={(event) => handleTimelineLayerDragStart(event, 'image', overlay.id, 'trim-start', overlay.startTime, overlay.endTime)}
+                              onPointerMove={handleTimelineLayerDragMove}
+                              onPointerUp={handleTimelineLayerDragEnd}
+                              onPointerCancel={handleTimelineLayerDragEnd}
+                              className="absolute inset-y-0 left-0 z-10 w-4 -translate-x-1 rounded-l-md border-r border-white/40 bg-white/35 cursor-ew-resize touch-manipulation"
+                            />
                             <span className="flex items-center gap-1 truncate">
                               <ImageIcon className="h-3 w-3 shrink-0" />
                               <span className="truncate">{overlay.name}</span>
                             </span>
-                          </button>
+                            <span className="pointer-events-none absolute inset-x-4 bottom-0.5 h-0.5 rounded-full bg-amber-950/20" />
+                            <button
+                              type="button"
+                              aria-label={`Ajustar saida de ${overlay.name}`}
+                              onClick={(event) => event.stopPropagation()}
+                              onPointerDown={(event) => handleTimelineLayerDragStart(event, 'image', overlay.id, 'trim-end', overlay.startTime, overlay.endTime)}
+                              onPointerMove={handleTimelineLayerDragMove}
+                              onPointerUp={handleTimelineLayerDragEnd}
+                              onPointerCancel={handleTimelineLayerDragEnd}
+                              className="absolute inset-y-0 right-0 z-10 w-4 translate-x-1 rounded-r-md border-l border-white/40 bg-white/35 cursor-ew-resize touch-manipulation"
+                            />
+                          </div>
                         ))
                       ) : (
                         <label className="absolute left-2 top-1 inline-flex h-6 cursor-pointer items-center gap-1 rounded-md border border-amber-300/20 bg-amber-500/10 px-2 text-[10px] font-black text-amber-100">
