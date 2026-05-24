@@ -13,15 +13,19 @@ const ACCEPTED_CONTENT_TYPES = new Set([
   'video/mp4',
   'video/webm',
   'video/quicktime',
+  'video/ogg',
 ])
 
-const ACCEPTED_FOLDERS = new Set(['posts', 'avatars', 'banners', 'messages'])
+const ACCEPTED_FOLDERS = new Set(['posts', 'comments', 'avatars', 'banners', 'messages'])
 const PRESIGNED_URL_EXPIRES_IN_SECONDS = 60
+const IMAGE_MAX_SIZE_BYTES = 5 * 1024 * 1024
+const VIDEO_MAX_SIZE_BYTES = 30 * 1024 * 1024
 
 type PresignBody = {
   fileName?: unknown
   contentType?: unknown
   folder?: unknown
+  fileSize?: unknown
 }
 
 const EXTENSIONS_BY_CONTENT_TYPE: Record<string, string> = {
@@ -32,6 +36,7 @@ const EXTENSIONS_BY_CONTENT_TYPE: Record<string, string> = {
   'video/mp4': 'mp4',
   'video/webm': 'webm',
   'video/quicktime': 'mov',
+  'video/ogg': 'ogg',
 }
 
 function hasR2Config() {
@@ -65,6 +70,10 @@ function buildObjectKey(folder: string, contentType: string) {
 
 function buildPublicUrl(baseUrl: string, key: string) {
   return `${baseUrl.replace(/\/+$/, '')}/${key}`
+}
+
+function getMaxSize(contentType: string) {
+  return contentType.startsWith('video/') ? VIDEO_MAX_SIZE_BYTES : IMAGE_MAX_SIZE_BYTES
 }
 
 export async function POST(request: Request) {
@@ -109,6 +118,19 @@ export async function POST(request: Request) {
         error: 'Tipo de arquivo invalido.',
       },
       { status: 415 },
+    )
+  }
+
+  if (typeof body.fileSize === 'number' && body.fileSize > getMaxSize(body.contentType)) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: 'Arquivo muito grande.',
+        message: body.contentType.startsWith('video/')
+          ? 'Esse video esta muito grande. Tente usar um video menor ou otimize no editor antes de publicar.'
+          : 'Essa imagem esta muito grande. Use uma imagem de ate 5 MB.',
+      },
+      { status: 413 },
     )
   }
 

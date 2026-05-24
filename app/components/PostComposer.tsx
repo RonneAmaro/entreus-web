@@ -76,6 +76,7 @@ const VISIBILITY_OPTIONS: {
 const MAX_MEDIA_FILES = 5
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024
 const MAX_VIDEO_SIZE = 30 * 1024 * 1024
+const HEAVY_VIDEO_WARNING_SIZE = 20 * 1024 * 1024
 const POST_EMOJI_GROUPS = [
   {
     title: 'Populares',
@@ -113,7 +114,11 @@ function isImage(file: File) {
 }
 
 function isVideo(file: File) {
-  return ['video/mp4', 'video/webm', 'video/ogg'].includes(file.type)
+  return ['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime'].includes(file.type)
+}
+
+function getVideoSizeError() {
+  return 'Esse video esta muito grande para envio direto. Use um video de ate 30MB ou abra o editor para otimizar antes de publicar.'
 }
 
 export default function PostComposer({
@@ -207,8 +212,12 @@ export default function PostComposer({
       }
 
       if (isVideo(file) && file.size > MAX_VIDEO_SIZE) {
-        setError(t('postComposer.errors.videoTooLarge'))
+        setError(getVideoSizeError())
         continue
+      }
+
+      if (isVideo(file) && file.size > HEAVY_VIDEO_WARNING_SIZE) {
+        setError('Video pesado selecionado. Se o upload falhar no celular, reduza a duracao/qualidade ou use o editor para otimizar.')
       }
 
       newMedia.push({
@@ -443,6 +452,7 @@ export default function PostComposer({
                         className="h-40 w-full bg-black object-cover sm:h-56"
                         muted
                         playsInline
+                        preload="none"
                       />
 
                       <div className="absolute inset-0 flex items-center justify-center bg-black/20">
@@ -483,7 +493,7 @@ export default function PostComposer({
                   <input
                     ref={mediaInputRef}
                     type="file"
-                    accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,video/ogg"
+                    accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,video/ogg,video/quicktime"
                     multiple
                     className="hidden"
                     onChange={(event) => addFiles(event.target.files)}

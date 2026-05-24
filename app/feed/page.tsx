@@ -196,6 +196,8 @@ const FEED_NEXT_POST_LIMIT = 12
 const FEED_INITIAL_COMMENT_LIMIT = 160
 const FEED_INITIAL_REACTION_LIMIT = 500
 const FEED_INITIAL_REPOST_LIMIT = 120
+const POST_IMAGE_MAX_SIZE_BYTES = 5 * 1024 * 1024
+const POST_VIDEO_MAX_SIZE_BYTES = 30 * 1024 * 1024
 
 type FeedTexts = {
   tabs: {
@@ -1632,7 +1634,15 @@ function FeedContent() {
   }
 
   function isVideo(file: File) {
-    return ['video/mp4', 'video/webm', 'video/quicktime'].includes(file.type)
+    return ['video/mp4', 'video/webm', 'video/quicktime', 'video/ogg'].includes(file.type)
+  }
+
+  function getVideoTooLargeMessage() {
+    return `${t('feed.messages.videoTooLarge')} Esse video esta muito grande para envio direto. Tente usar um video menor ou abra o editor para otimizar antes de publicar.`
+  }
+
+  function getVideoUploadFailureMessage() {
+    return 'Nao foi possivel enviar o video. Tente novamente, use outro navegador ou publique uma versao menor pelo editor.'
   }
 
   async function uploadMediaFile(
@@ -1647,19 +1657,15 @@ function FeedContent() {
         : null
 
     if (mediaType === 'image') {
-      const maxSizeInBytes = 5 * 1024 * 1024
-
-      if (file.size > maxSizeInBytes) {
+      if (file.size > POST_IMAGE_MAX_SIZE_BYTES) {
         setMessage(t('feed.messages.imageTooLarge'))
         return null
       }
     }
 
     if (mediaType === 'video') {
-      const maxSizeInBytes = 30 * 1024 * 1024
-
-      if (file.size > maxSizeInBytes) {
-        setMessage(t('feed.messages.videoTooLarge'))
+      if (file.size > POST_VIDEO_MAX_SIZE_BYTES) {
+        setMessage(getVideoTooLargeMessage())
         return null
       }
     }
@@ -1673,6 +1679,7 @@ function FeedContent() {
       setUploadingPostImage(true)
     } else {
       setUploadingPostVideo(true)
+      setMessage('Enviando video direto para o storage. Mantenha esta aba aberta ate concluir.')
     }
 
     try {
@@ -1684,6 +1691,7 @@ function FeedContent() {
         body: JSON.stringify({
           fileName: file.name,
           contentType: file.type,
+          fileSize: file.size,
           folder: 'posts',
         }),
       })
@@ -1798,10 +1806,10 @@ function FeedContent() {
       return null
     }
 
-    const maxSizeInBytes = mediaType === 'video' ? 30 * 1024 * 1024 : 5 * 1024 * 1024
+    const maxSizeInBytes = mediaType === 'video' ? POST_VIDEO_MAX_SIZE_BYTES : POST_IMAGE_MAX_SIZE_BYTES
 
     if (file.size > maxSizeInBytes) {
-      setMessage(mediaType === 'video' ? t('feed.messages.videoTooLarge') : t('feed.messages.imageTooLarge'))
+      setMessage(mediaType === 'video' ? getVideoTooLargeMessage() : t('feed.messages.imageTooLarge'))
       return null
     }
 
@@ -1814,6 +1822,7 @@ function FeedContent() {
         body: JSON.stringify({
           fileName: file.name,
           contentType: file.type,
+          fileSize: file.size,
           folder: 'comments',
         }),
       })
