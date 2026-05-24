@@ -35,7 +35,7 @@ import {
   Trophy,
   Trash2,
 } from 'lucide-react'
-import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import { supabase } from '@/lib/supabase'
@@ -187,6 +187,7 @@ type Repost = {
 }
 
 const FEED_INITIAL_POST_LIMIT = 24
+const FEED_NEXT_POST_LIMIT = 12
 const FEED_INITIAL_COMMENT_LIMIT = 160
 const FEED_INITIAL_REACTION_LIMIT = 500
 const FEED_INITIAL_REPOST_LIMIT = 120
@@ -635,6 +636,20 @@ type FeedItem =
     repost: Repost
   }
 
+function mergeUniqueById<T extends { id: string }>(current: T[], incoming: T[]) {
+  const map = new Map<string, T>()
+
+  for (const item of current) {
+    map.set(item.id, item)
+  }
+
+  for (const item of incoming) {
+    map.set(item.id, item)
+  }
+
+  return Array.from(map.values())
+}
+
 function FeedContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -700,6 +715,12 @@ function FeedContent() {
 
   const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(true)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [hasMorePosts, setHasMorePosts] = useState(true)
+  const [feedOffset, setFeedOffset] = useState(0)
+  const [loadMoreError, setLoadMoreError] = useState('')
+  const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null)
+  const loadingMoreRef = useRef(false)
 
   useEffect(() => {
     setMounted(true)
@@ -751,16 +772,14 @@ function FeedContent() {
       const followsData = await loadFollows()
       setFollows(followsData)
 
-      const loadedPosts = await loadPosts(user.id, blockedIds, followsData, allowSensitiveContent)
-      const loadedPostIds = loadedPosts.map((post) => post.id)
-      const loadedComments = await loadComments(blockedIds, loadedPostIds)
-      const loadedCommentIds = loadedComments.map((comment) => comment.id)
+      const loadedPosts = await loadPosts(user.id, blockedIds, followsData, allowSensitiveContent, {
+        offset: 0,
+        limit: FEED_INITIAL_POST_LIMIT,
+      })
 
       await Promise.all([
-        loadLikes(loadedPostIds),
-        loadCommentLikes(loadedCommentIds),
+        loadRelatedDataForPosts(loadedPosts, blockedIds),
         loadBookmarks(user.id),
-        loadReposts(blockedIds, loadedPostIds),
         loadUnreadNotificationsCount(user.id),
         loadFeedHighlights(),
       ])
@@ -889,7 +908,8 @@ function FeedContent() {
 
   async function loadReposts(
     currentBlockedIds: string[] = blockedUserIds,
-    currentPostIds: string[] = posts.map((post) => post.id)
+    currentPostIds: string[] = posts.map((post) => post.id),
+    options: { append?: boolean } = {}
   ) {
     let query = supabase
       .from('reposts')
@@ -947,7 +967,11 @@ function FeedContent() {
         profiles: profilesById[repost.user_id] || null,
       }))
 
-    setReposts(normalizedReposts)
+    if (options.append) {
+      setReposts((current) => mergeUniqueById(current, normalizedReposts))
+    } else {
+      setReposts(normalizedReposts)
+    }
     return normalizedReposts
   }
 
@@ -981,8 +1005,12 @@ function FeedContent() {
     currentUserId: string = userId,
     currentBlockedIds: string[] = blockedUserIds,
     currentFollows: Follow[] = follows,
-    allowSensitiveContent: boolean = currentProfile?.show_sensitive_content || false
+    allowSensitiveContent: boolean = currentProfile?.show_sensitive_content || false,
+    options: { offset?: number; limit?: number; append?: boolean } = {}
   ): Promise<Post[]> {
+    const offset = options.offset ?? 0
+    const limit = options.limit ?? FEED_INITIAL_POST_LIMIT
+
     const { data, error } = await supabase
       .from('posts')
       .select(`
@@ -1002,14 +1030,20 @@ function FeedContent() {
         )
       `)
       .order('created_at', { ascending: false })
-      .limit(FEED_INITIAL_POST_LIMIT)
+      .order('id', { ascending: false })
+      .range(offset, offset + limit - 1)
 
     if (error) {
       setMessage(t('feed.messages.loadPostsError') + error.message)
       return []
     }
 
-    const rawPosts = (data || []).map((post: any) => ({
+    const fetchedRows = data || []
+
+    setHasMorePosts(fetchedRows.length === limit)
+    setFeedOffset(offset + fetchedRows.length)
+
+    const rawPosts = fetchedRows.map((post: any) => ({
       ...post,
       visibility: (post.visibility || 'public') as VisibilityType,
       is_sensitive: post.is_sensitive || false,
@@ -1051,16 +1085,23 @@ function FeedContent() {
       .filter((post) => !currentBlockedIds.includes(post.user_id))
       .filter((post) => canSeePost(post, currentUserId, currentFollows))
 
-    setPosts(normalizedPosts)
+    if (options.append) {
+      setPosts((current) => mergeUniqueById(current, normalizedPosts))
+    } else {
+      setPosts(normalizedPosts)
+    }
     return normalizedPosts
   }
 
   async function loadComments(
     currentBlockedIds: string[] = blockedUserIds,
-    currentPostIds: string[] = posts.map((post) => post.id)
+    currentPostIds: string[] = posts.map((post) => post.id),
+    options: { append?: boolean } = {}
   ): Promise<Comment[]> {
     if (currentPostIds.length === 0) {
-      setComments([])
+      if (!options.append) {
+        setComments([])
+      }
       return []
     }
 
@@ -1124,11 +1165,18 @@ function FeedContent() {
         media: mediaByComment[comment.id] || [],
       }))
 
-    setComments(commentsWithMedia)
+    if (options.append) {
+      setComments((current) => mergeUniqueById(current, commentsWithMedia))
+    } else {
+      setComments(commentsWithMedia)
+    }
     return commentsWithMedia
   }
 
-  async function loadLikes(currentPostIds: string[] = posts.map((post) => post.id)) {
+  async function loadLikes(
+    currentPostIds: string[] = posts.map((post) => post.id),
+    options: { append?: boolean } = {}
+  ) {
     let query = supabase
       .from('likes')
       .select('id, post_id, user_id')
@@ -1145,12 +1193,21 @@ function FeedContent() {
       return
     }
 
-    setLikes(data || [])
+    if (options.append) {
+      setLikes((current) => mergeUniqueById(current, data || []))
+    } else {
+      setLikes(data || [])
+    }
   }
 
-  async function loadCommentLikes(currentCommentIds: string[] = comments.map((comment) => comment.id)) {
+  async function loadCommentLikes(
+    currentCommentIds: string[] = comments.map((comment) => comment.id),
+    options: { append?: boolean } = {}
+  ) {
     if (currentCommentIds.length === 0) {
-      setCommentLikes([])
+      if (!options.append) {
+        setCommentLikes([])
+      }
       return
     }
 
@@ -1165,19 +1222,128 @@ function FeedContent() {
       return
     }
 
-    setCommentLikes(data || [])
+    if (options.append) {
+      setCommentLikes((current) => mergeUniqueById(current, data || []))
+    } else {
+      setCommentLikes(data || [])
+    }
   }
+
+  async function loadRelatedDataForPosts(
+    postRows: Post[],
+    currentBlockedIds: string[] = blockedUserIds,
+    options: { append?: boolean } = {}
+  ) {
+    const postIds = postRows.map((post) => post.id)
+
+    if (postIds.length === 0) {
+      if (!options.append) {
+        setComments([])
+        setLikes([])
+        setCommentLikes([])
+        setReposts([])
+      }
+
+      return
+    }
+
+    const loadedComments = await loadComments(currentBlockedIds, postIds, options)
+    const loadedCommentIds = loadedComments.map((comment) => comment.id)
+
+    await Promise.all([
+      loadLikes(postIds, options),
+      loadCommentLikes(loadedCommentIds, options),
+      loadReposts(currentBlockedIds, postIds, options),
+    ])
+  }
+
+  const loadMorePosts = useCallback(async () => {
+    if (loadingMoreRef.current || loading || !hasMorePosts || !userId) return
+
+    loadingMoreRef.current = true
+    setIsLoadingMore(true)
+    setLoadMoreError('')
+
+    try {
+      const nextPosts = await loadPosts(
+        userId,
+        blockedUserIds,
+        follows,
+        currentProfile?.show_sensitive_content || false,
+        {
+          offset: feedOffset,
+          limit: FEED_NEXT_POST_LIMIT,
+          append: true,
+        }
+      )
+
+      await loadRelatedDataForPosts(nextPosts, blockedUserIds, { append: true })
+    } catch (error) {
+      console.error('Erro ao carregar mais posts:', error)
+      setLoadMoreError('Nao foi possivel carregar mais posts agora.')
+    } finally {
+      loadingMoreRef.current = false
+      setIsLoadingMore(false)
+    }
+  }, [
+    blockedUserIds,
+    currentProfile?.show_sensitive_content,
+    feedOffset,
+    follows,
+    hasMorePosts,
+    loading,
+    userId,
+  ])
+
+  async function reloadInitialFeed(currentFollows: Follow[] = follows) {
+    if (!userId) return []
+
+    const freshPosts = await loadPosts(
+      userId,
+      blockedUserIds,
+      currentFollows,
+      currentProfile?.show_sensitive_content || false,
+      {
+        offset: 0,
+        limit: FEED_INITIAL_POST_LIMIT,
+      }
+    )
+
+    await loadRelatedDataForPosts(freshPosts, blockedUserIds)
+    return freshPosts
+  }
+
+  useEffect(() => {
+    const sentinel = loadMoreSentinelRef.current
+
+    if (!sentinel || typeof IntersectionObserver === 'undefined') return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0]
+
+        if (entry?.isIntersecting) {
+          void loadMorePosts()
+        }
+      },
+      {
+        rootMargin: '640px 0px 640px 0px',
+        threshold: 0,
+      }
+    )
+
+    observer.observe(sentinel)
+
+    return () => {
+      observer.disconnect()
+    }
+  }, [loadMorePosts])
 
   async function refreshAfterFollowChange() {
     const freshFollows = await loadFollows()
     setFollows(freshFollows)
 
-    await loadPosts(
-      userId,
-      blockedUserIds,
-      freshFollows,
-      currentProfile?.show_sensitive_content || false
-    )
+    await reloadInitialFeed(freshFollows)
   }
 
   async function handleToggleFollow(targetUserId: string) {
@@ -1741,17 +1907,8 @@ function FeedContent() {
       if (mediaError) {
         setMessage(t('feed.messages.mediaSavePartial') + mediaError.message)
 
-        await loadPosts(
-          userId,
-          blockedUserIds,
-          follows,
-          currentProfile?.show_sensitive_content || false
-        )
-        await loadComments()
-        await loadLikes()
-        await loadCommentLikes()
+        await reloadInitialFeed()
         await loadBookmarks(userId)
-        await loadReposts(blockedUserIds)
 
         return false
       }
@@ -1759,17 +1916,8 @@ function FeedContent() {
 
     setMessage(t('feed.messages.publishedSuccess'))
 
-    await loadPosts(
-      userId,
-      blockedUserIds,
-      follows,
-      currentProfile?.show_sensitive_content || false
-    )
-    await loadComments()
-    await loadLikes()
-    await loadCommentLikes()
+    await reloadInitialFeed()
     await loadBookmarks(userId)
-    await loadReposts(blockedUserIds)
 
     return true
   }
@@ -1792,17 +1940,8 @@ function FeedContent() {
 
     setMessage(t('feed.messages.postDeleted'))
 
-    await loadPosts(
-      userId,
-      blockedUserIds,
-      follows,
-      currentProfile?.show_sensitive_content || false
-    )
-    await loadComments()
-    await loadLikes()
-    await loadCommentLikes()
+    await reloadInitialFeed()
     await loadBookmarks(userId)
-    await loadReposts(blockedUserIds)
   }
 
   function handleStartEdit(post: Post) {
@@ -1843,12 +1982,7 @@ function FeedContent() {
     setEditContent('')
     setSavingEdit(false)
 
-    await loadPosts(
-      userId,
-      blockedUserIds,
-      follows,
-      currentProfile?.show_sensitive_content || false
-    )
+    await reloadInitialFeed()
   }
 
   async function handleCreateComment(postId: string) {
@@ -3357,6 +3491,42 @@ function FeedContent() {
                 )
               })}
             </div>
+
+            {!hasSearch && (
+              <div ref={loadMoreSentinelRef} className="py-5 text-center">
+                {isLoadingMore ? (
+                  <div className="mx-auto max-w-xl rounded-[1.5rem] border border-zinc-200/70 bg-white/85 p-4 shadow-sm dark:border-zinc-800/70 dark:bg-zinc-950/80">
+                    <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" />
+                    <p className="text-sm font-semibold text-zinc-500 dark:text-zinc-400">
+                      Carregando mais posts...
+                    </p>
+                  </div>
+                ) : loadMoreError ? (
+                  <div className="mx-auto max-w-xl rounded-[1.5rem] border border-red-200 bg-red-50/90 p-4 text-red-700 shadow-sm dark:border-red-900/70 dark:bg-red-950/25 dark:text-red-200">
+                    <p className="text-sm font-semibold">{loadMoreError}</p>
+                    <button
+                      type="button"
+                      onClick={loadMorePosts}
+                      className="mt-3 rounded-full bg-red-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-red-500"
+                    >
+                      Tentar novamente
+                    </button>
+                  </div>
+                ) : hasMorePosts ? (
+                  <button
+                    type="button"
+                    onClick={loadMorePosts}
+                    className="rounded-full border border-blue-300/30 bg-blue-500/10 px-5 py-2.5 text-sm font-bold text-blue-700 transition hover:bg-blue-500 hover:text-white dark:text-blue-200 dark:hover:text-white"
+                  >
+                    Carregar mais
+                  </button>
+                ) : posts.length > 0 ? (
+                  <p className="rounded-full border border-zinc-200/70 bg-white/75 px-4 py-2 text-sm font-semibold text-zinc-500 dark:border-zinc-800/70 dark:bg-zinc-950/70 dark:text-zinc-400">
+                    Voce chegou ao fim por enquanto.
+                  </p>
+                ) : null}
+              </div>
+            )}
 
           </div>
 
