@@ -13,6 +13,11 @@ import PostCard from '../components/PostCard'
 import UserBadges from '../components/UserBadges'
 import UserBadgesPanel from '../components/UserBadgesPanel'
 import { useLanguage } from '../components/LanguageProvider'
+import {
+  isMissingPostModerationColumnError,
+  isModeratedHidden,
+  type ModeratedPostFields,
+} from '@/lib/post-moderation'
 
 type VisibilityType = 'public' | 'followers' | 'private'
 
@@ -53,7 +58,7 @@ type PostMedia = {
   created_at?: string
 }
 
-type Post = {
+type Post = ModeratedPostFields & {
   id: string
   content: string | null
   category: string | null
@@ -521,22 +526,27 @@ export default function ProfilePage() {
   }
 
   async function loadProfileActivity(currentUserId: string, currentProfileData: Profile) {
-    const { data: myRepostsData, error: myRepostsError } = await supabase
-      .from('reposts')
-      .select('id, post_id, user_id, created_at')
-      .eq('user_id', currentUserId)
-      .order('created_at', { ascending: false })
-
-    if (myRepostsError) {
-      setMessage(t('profile.messages.loadYourRepostsError') + myRepostsError.message)
-      return
-    }
-
-    const repostPostIds = (myRepostsData || []).map((repost) => repost.post_id)
-
-    const { data: ownPostsData, error: ownPostsError } = await supabase
-      .from('posts')
-      .select(`
+    const postSelectWithModeration = `
+        id,
+        content,
+        category,
+        created_at,
+        user_id,
+        image_url,
+        video_url,
+        visibility,
+        is_sensitive,
+        moderation_status,
+        moderated_at,
+        moderated_by,
+        moderation_reason,
+        profiles (
+          username,
+          display_name,
+          avatar_url
+        )
+      `
+    const postSelectFallback = `
         id,
         content,
         category,
@@ -551,60 +561,86 @@ export default function ProfilePage() {
           display_name,
           avatar_url
         )
-      `)
+      `
+    const { data: myRepostsData, error: myRepostsError } = await supabase
+      .from('reposts')
+      .select('id, post_id, user_id, created_at')
       .eq('user_id', currentUserId)
       .order('created_at', { ascending: false })
+
+    if (myRepostsError) {
+      setMessage(t('profile.messages.loadYourRepostsError') + myRepostsError.message)
+      return
+    }
+
+    const repostPostIds = (myRepostsData || []).map((repost) => repost.post_id)
+
+    let { data: ownPostsData, error: ownPostsError } = await supabase
+      .from('posts')
+      .select(postSelectWithModeration)
+      .eq('user_id', currentUserId)
+      .order('created_at', { ascending: false })
+
+    if (ownPostsError && isMissingPostModerationColumnError(ownPostsError)) {
+      const fallback = await supabase
+        .from('posts')
+        .select(postSelectFallback)
+        .eq('user_id', currentUserId)
+        .order('created_at', { ascending: false })
+
+      ownPostsData = fallback.data as typeof ownPostsData
+      ownPostsError = fallback.error
+    }
 
     if (ownPostsError) {
       setMessage(t('profile.messages.loadYourPostsError') + ownPostsError.message)
       return
     }
 
-    const ownPosts = (ownPostsData || []).map((post: any) => ({
-      ...post,
-      visibility: (post.visibility || 'public') as VisibilityType,
-      is_sensitive: post.is_sensitive || false,
-      profiles: Array.isArray(post.profiles)
-        ? post.profiles[0] || null
-        : post.profiles,
-    })) as Post[]
-
-    let repostedPosts: Post[] = []
-
-    if (repostPostIds.length > 0) {
-      const { data: repostedPostsData, error: repostedPostsError } = await supabase
-        .from('posts')
-        .select(`
-          id,
-          content,
-          category,
-          created_at,
-          user_id,
-          image_url,
-          video_url,
-          visibility,
-          is_sensitive,
-          profiles (
-            username,
-            display_name,
-            avatar_url
-          )
-        `)
-        .in('id', repostPostIds)
-
-      if (repostedPostsError) {
-        setMessage(t('profile.messages.loadRepostedPostsError') + repostedPostsError.message)
-        return
-      }
-
-      repostedPosts = (repostedPostsData || []).map((post: any) => ({
+    const ownPosts = (ownPostsData || [])
+      .map((post: any) => ({
         ...post,
         visibility: (post.visibility || 'public') as VisibilityType,
         is_sensitive: post.is_sensitive || false,
         profiles: Array.isArray(post.profiles)
           ? post.profiles[0] || null
           : post.profiles,
-      })) as Post[]
+      }))
+      .filter((post: Post) => !isModeratedHidden(post)) as Post[]
+
+    let repostedPosts: Post[] = []
+
+    if (repostPostIds.length > 0) {
+      let { data: repostedPostsData, error: repostedPostsError } = await supabase
+        .from('posts')
+        .select(postSelectWithModeration)
+        .in('id', repostPostIds)
+
+      if (repostedPostsError && isMissingPostModerationColumnError(repostedPostsError)) {
+        const fallback = await supabase
+          .from('posts')
+          .select(postSelectFallback)
+          .in('id', repostPostIds)
+
+        repostedPostsData = fallback.data as typeof repostedPostsData
+        repostedPostsError = fallback.error
+      }
+
+      if (repostedPostsError) {
+        setMessage(t('profile.messages.loadRepostedPostsError') + repostedPostsError.message)
+        return
+      }
+
+      repostedPosts = (repostedPostsData || [])
+        .map((post: any) => ({
+          ...post,
+          visibility: (post.visibility || 'public') as VisibilityType,
+          is_sensitive: post.is_sensitive || false,
+          profiles: Array.isArray(post.profiles)
+            ? post.profiles[0] || null
+            : post.profiles,
+        }))
+        .filter((post: Post) => !isModeratedHidden(post)) as Post[]
     }
 
     const allPostsMap = new Map<string, Post>()

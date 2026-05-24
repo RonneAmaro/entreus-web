@@ -16,6 +16,11 @@ import GiftModal from "../../components/GiftModal";
 import TipModal from "../../components/TipModal";
 import GiftShowcase, { type GiftShowcaseItem } from "../../components/GiftShowcase";
 import { Coins, ExternalLink, Flag, Gift, Loader2, MapPin, Maximize2, Search, UserCheck, UserPlus, UserX, X } from "lucide-react";
+import {
+  isMissingPostModerationColumnError,
+  isModeratedHidden,
+  type ModeratedPostFields,
+} from "@/lib/post-moderation";
 
 type VisibilityType = "public" | "followers" | "private";
 type ProfileTab = "posts" | "replies" | "media";
@@ -53,7 +58,7 @@ type PostMedia = {
   created_at?: string;
 };
 
-type Post = {
+type Post = ModeratedPostFields & {
   id: string;
   content: string | null;
   category: string | null;
@@ -581,23 +586,27 @@ export default function PublicProfilePage() {
     currentIsFollowing: boolean,
     allowSensitiveContent: boolean,
   ) {
-    const { data: repostsData, error: repostsError } = await supabase
-      .from("reposts")
-      .select("id, post_id, user_id, created_at")
-      .eq("user_id", profileData.id)
-      .order("created_at", { ascending: false });
-
-    if (repostsError) {
-      setMessage("Erro ao carregar reposts do perfil: " + repostsError.message);
-      return;
-    }
-
-    const repostPostIds = (repostsData || []).map((repost) => repost.post_id);
-
-    const { data: ownPostsData, error: ownPostsError } = await supabase
-      .from("posts")
-      .select(
-        `
+    const postSelectWithModeration = `
+        id,
+        content,
+        category,
+        created_at,
+        user_id,
+        image_url,
+        video_url,
+        visibility,
+        is_sensitive,
+        moderation_status,
+        moderated_at,
+        moderated_by,
+        moderation_reason,
+        profiles (
+          username,
+          display_name,
+          avatar_url
+        )
+      `;
+    const postSelectFallback = `
         id,
         content,
         category,
@@ -612,10 +621,36 @@ export default function PublicProfilePage() {
           display_name,
           avatar_url
         )
-      `,
-      )
+      `;
+    const { data: repostsData, error: repostsError } = await supabase
+      .from("reposts")
+      .select("id, post_id, user_id, created_at")
       .eq("user_id", profileData.id)
       .order("created_at", { ascending: false });
+
+    if (repostsError) {
+      setMessage("Erro ao carregar reposts do perfil: " + repostsError.message);
+      return;
+    }
+
+    const repostPostIds = (repostsData || []).map((repost) => repost.post_id);
+
+    let { data: ownPostsData, error: ownPostsError } = await supabase
+      .from("posts")
+      .select(postSelectWithModeration)
+      .eq("user_id", profileData.id)
+      .order("created_at", { ascending: false });
+
+    if (ownPostsError && isMissingPostModerationColumnError(ownPostsError)) {
+      const fallback = await supabase
+        .from("posts")
+        .select(postSelectFallback)
+        .eq("user_id", profileData.id)
+        .order("created_at", { ascending: false });
+
+      ownPostsData = fallback.data as typeof ownPostsData;
+      ownPostsError = fallback.error;
+    }
 
     if (ownPostsError) {
       setMessage("Erro ao carregar publicações: " + ownPostsError.message);
@@ -632,34 +667,28 @@ export default function PublicProfilePage() {
           : post.profiles,
       }))
       .filter((post: Post) =>
+        !isModeratedHidden(post) &&
         canSeePost(post, currentUserId, isOwn, currentIsFollowing),
       );
 
     let repostedPosts: Post[] = [];
 
     if (repostPostIds.length > 0) {
-      const { data: repostedPostsData, error: repostedPostsError } =
+      let { data: repostedPostsData, error: repostedPostsError } =
         await supabase
           .from("posts")
-          .select(
-            `
-          id,
-          content,
-          category,
-          created_at,
-          user_id,
-          image_url,
-          video_url,
-          visibility,
-          is_sensitive,
-          profiles (
-            username,
-            display_name,
-            avatar_url
-          )
-        `,
-          )
+          .select(postSelectWithModeration)
           .in("id", repostPostIds);
+
+      if (repostedPostsError && isMissingPostModerationColumnError(repostedPostsError)) {
+        const fallback = await supabase
+          .from("posts")
+          .select(postSelectFallback)
+          .in("id", repostPostIds);
+
+        repostedPostsData = fallback.data as typeof repostedPostsData;
+        repostedPostsError = fallback.error;
+      }
 
       if (repostedPostsError) {
         setMessage(
@@ -677,6 +706,7 @@ export default function PublicProfilePage() {
             ? post.profiles[0] || null
             : post.profiles,
         }))
+        .filter((post: Post) => !isModeratedHidden(post))
         .filter((post: Post) =>
           canSeePost(
             post,

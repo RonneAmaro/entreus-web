@@ -40,6 +40,11 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import { supabase } from '@/lib/supabase'
 import { useLanguage } from '../components/LanguageProvider'
+import {
+  isMissingPostModerationColumnError,
+  isModeratedHidden,
+  type ModeratedPostFields,
+} from '@/lib/post-moderation'
 
 type VisibilityType = 'public' | 'followers' | 'private'
 type ComposerSubmitData = {
@@ -76,7 +81,7 @@ type PostMedia = {
   created_at?: string
 }
 
-type Post = {
+type Post = ModeratedPostFields & {
   id: string
   content: string | null
   category: string | null
@@ -1017,9 +1022,27 @@ function FeedContent() {
   ): Promise<Post[]> {
     const limit = options.limit ?? FEED_INITIAL_POST_LIMIT
 
-    let query = supabase
-      .from('posts')
-      .select(`
+    const postSelectWithModeration = `
+        id,
+        content,
+        category,
+        created_at,
+        user_id,
+        image_url,
+        video_url,
+        visibility,
+        is_sensitive,
+        moderation_status,
+        moderated_at,
+        moderated_by,
+        moderation_reason,
+        profiles (
+          username,
+          display_name,
+          avatar_url
+        )
+      `
+    const postSelectFallback = `
         id,
         content,
         category,
@@ -1034,18 +1057,32 @@ function FeedContent() {
           display_name,
           avatar_url
         )
-      `)
+      `
+
+    const buildPostsQuery = (selectFields: string) => {
+      let postsQuery = supabase
+      .from('posts')
+      .select(selectFields)
       .order('created_at', { ascending: false })
       .order('id', { ascending: false })
       .limit(limit)
 
-    if (options.cursor) {
-      query = query.or(
-        `created_at.lt.${options.cursor.createdAt},and(created_at.eq.${options.cursor.createdAt},id.lt.${options.cursor.id})`
-      )
+      if (options.cursor) {
+        postsQuery = postsQuery.or(
+          `created_at.lt.${options.cursor.createdAt},and(created_at.eq.${options.cursor.createdAt},id.lt.${options.cursor.id})`
+        )
+      }
+
+      return postsQuery
     }
 
-    const { data, error } = await query
+    let { data, error } = await buildPostsQuery(postSelectWithModeration)
+
+    if (error && isMissingPostModerationColumnError(error)) {
+      const fallback = await buildPostsQuery(postSelectFallback)
+      data = fallback.data as typeof data
+      error = fallback.error
+    }
 
     if (error) {
       if (options.append) {
@@ -1057,7 +1094,7 @@ function FeedContent() {
       return []
     }
 
-    const fetchedRows = data || []
+    const fetchedRows = (data || []) as any[]
     const lastFetchedPost = fetchedRows[fetchedRows.length - 1] as
       | { created_at: string; id: string }
       | undefined
@@ -1112,6 +1149,7 @@ function FeedContent() {
         media: mediaByPost[post.id] || [],
       }))
       .filter((post) => !currentBlockedIds.includes(post.user_id))
+      .filter((post) => !isModeratedHidden(post))
       .filter((post) => canSeePost(post, currentUserId, currentFollows))
 
     if (options.append) {

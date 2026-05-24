@@ -3,8 +3,9 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { AlertTriangle, ArrowLeft, Flag, Image as ImageIcon, Loader2, ShieldAlert, Video } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, Flag, Image as ImageIcon, Loader2, RotateCcw, ShieldAlert, ShieldOff, Video } from 'lucide-react'
 import { isAdminRole } from '@/lib/admin'
+import { isMissingPostModerationColumnError, normalizeModerationStatus, type ModeratedPostFields } from '@/lib/post-moderation'
 import { supabase } from '@/lib/supabase'
 
 type AdminProfile = {
@@ -23,7 +24,7 @@ type ReportRow = {
   created_at?: string | null
 }
 
-type ReportedPostContext = {
+type ReportedPostContext = ModeratedPostFields & {
   id: string
   content: string | null
   category: string | null
@@ -42,6 +43,7 @@ export default function AdminReportsPage() {
   const [reports, setReports] = useState<ReportRow[]>([])
   const [postContextById, setPostContextById] = useState<Record<string, ReportedPostContext>>({})
   const [updatingReportId, setUpdatingReportId] = useState<string | null>(null)
+  const [updatingPostId, setUpdatingPostId] = useState<string | null>(null)
 
   useEffect(() => {
     loadPage()
@@ -90,7 +92,7 @@ export default function AdminReportsPage() {
     const primaryResult = await supabase
       .from('reports')
       .select('id, reporter_id, reported_post_id, reported_user_id, reason, status, created_at')
-      .or('status.is.null,status.eq.pending,status.eq.in_review')
+      .or('status.is.null,status.eq.pending,status.eq.in_review,status.eq.resolved')
       .order('created_at', { ascending: false })
       .limit(50)
 
@@ -136,10 +138,24 @@ export default function AdminReportsPage() {
       return
     }
 
-    const { data, error } = await supabase
+    const selectWithModeration =
+      'id, content, category, image_url, video_url, is_sensitive, moderation_status, moderated_at, moderated_by, moderation_reason'
+    const selectFallback = 'id, content, category, image_url, video_url, is_sensitive'
+
+    let { data, error } = await supabase
       .from('posts')
-      .select('id, content, category, image_url, video_url, is_sensitive')
+      .select(selectWithModeration)
       .in('id', postIds)
+
+    if (error && isMissingPostModerationColumnError(error)) {
+      const fallback = await supabase
+        .from('posts')
+        .select(selectFallback)
+        .in('id', postIds)
+
+      data = fallback.data as typeof data
+      error = fallback.error
+    }
 
     if (error) {
       console.warn('[AdminReports] Post context unavailable:', error.message)
@@ -174,6 +190,22 @@ export default function AdminReportsPage() {
     return 'pendente'
   }
 
+  function getPostModerationLabel(post: ReportedPostContext | undefined) {
+    const status = normalizeModerationStatus(post?.moderation_status)
+    if (status === 'hidden') return 'conteudo oculto'
+    if (status === 'removed') return 'conteudo removido'
+    return 'conteudo ativo'
+  }
+
+  function getPostModerationClass(post: ReportedPostContext | undefined) {
+    const status = normalizeModerationStatus(post?.moderation_status)
+    if (status === 'hidden' || status === 'removed') {
+      return 'border-red-300/20 bg-red-500/10 text-red-100'
+    }
+
+    return 'border-emerald-300/20 bg-emerald-500/10 text-emerald-100'
+  }
+
   async function updateReportStatus(reportId: string, status: ReportStatus) {
     setUpdatingReportId(reportId)
     setMessage('')
@@ -190,7 +222,7 @@ export default function AdminReportsPage() {
     }
 
     setReports((current) =>
-      status === 'resolved' || status === 'rejected'
+      status === 'rejected'
         ? current.filter((report) => report.id !== reportId)
         : current.map((report) => (report.id === reportId ? { ...report, status } : report)),
     )
@@ -202,6 +234,69 @@ export default function AdminReportsPage() {
           : 'Denuncia marcada como em analise.',
     )
     setUpdatingReportId(null)
+  }
+
+  async function moderatePost(report: ReportRow, nextStatus: 'active' | 'hidden') {
+    if (!report.reported_post_id || !adminProfile || updatingPostId) return
+
+    const hiding = nextStatus === 'hidden'
+    const confirmText = hiding
+      ? 'Tem certeza que deseja ocultar este conteudo? Ele deixara de aparecer para usuarios comuns, mas continuara registrado para moderacao.'
+      : 'Tem certeza que deseja restaurar este conteudo? Ele voltara a aparecer para usuarios comuns conforme a visibilidade original.'
+
+    if (!window.confirm(confirmText)) return
+
+    const reason = hiding
+      ? window.prompt('Motivo da ocultacao:', 'Conteudo ocultado pela moderacao.') || 'Conteudo ocultado pela moderacao.'
+      : window.prompt('Motivo da restauracao:', 'Conteudo restaurado pela moderacao.') || 'Conteudo restaurado pela moderacao.'
+
+    setUpdatingPostId(report.reported_post_id)
+    setMessage('')
+
+    const { error } = await supabase.rpc('moderate_reported_post', {
+      p_post_id: report.reported_post_id,
+      p_status: nextStatus,
+      p_reason: reason.trim() || (hiding ? 'Conteudo ocultado pela moderacao.' : 'Conteudo restaurado pela moderacao.'),
+      p_report_id: report.id,
+      p_resolve_report: hiding,
+    })
+
+    if (error) {
+      setMessage('Nao foi possivel moderar o conteudo: ' + error.message)
+      setUpdatingPostId(null)
+      return
+    }
+
+    if (hiding) {
+      setReports((current) =>
+        current.map((item) => (item.id === report.id ? { ...item, status: 'resolved' } : item)),
+      )
+      setPostContextById((current) => ({
+        ...current,
+        [report.reported_post_id as string]: {
+          ...current[report.reported_post_id as string],
+          moderation_status: 'hidden',
+          moderated_at: new Date().toISOString(),
+          moderated_by: adminProfile.id,
+          moderation_reason: reason.trim() || 'Conteudo ocultado pela moderacao.',
+        },
+      }))
+      setMessage('Conteudo ocultado e denuncia marcada como resolvida.')
+    } else {
+      setPostContextById((current) => ({
+        ...current,
+        [report.reported_post_id as string]: {
+          ...current[report.reported_post_id as string],
+          moderation_status: 'active',
+          moderated_at: new Date().toISOString(),
+          moderated_by: adminProfile.id,
+          moderation_reason: reason.trim() || 'Conteudo restaurado pela moderacao.',
+        },
+      }))
+      setMessage('Conteudo restaurado.')
+    }
+
+    setUpdatingPostId(null)
   }
 
   async function copyPostLink(postId: string) {
@@ -272,6 +367,8 @@ export default function AdminReportsPage() {
               const hasImage = Boolean(postContext?.image_url)
               const hasVideo = Boolean(postContext?.video_url)
               const sensitive = isSensitivePost(postContext)
+              const postModerationStatus = normalizeModerationStatus(postContext?.moderation_status)
+              const postActionLoading = Boolean(report.reported_post_id && updatingPostId === report.reported_post_id)
 
               return (
               <article key={report.id} className="rounded-3xl border border-white/10 bg-zinc-950/80 p-4 ring-1 ring-white/5 transition hover:-translate-y-0.5 hover:border-blue-300/20">
@@ -288,6 +385,9 @@ export default function AdminReportsPage() {
                     {postContext && (
                       <div className="mt-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
                         <div className="flex flex-wrap items-center gap-2 text-xs font-black text-zinc-300">
+                          <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 ${getPostModerationClass(postContext)}`}>
+                            {getPostModerationLabel(postContext)}
+                          </span>
                           {hasImage && (
                             <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2.5 py-1 text-blue-100">
                               <ImageIcon className="h-3.5 w-3.5" />
@@ -318,6 +418,12 @@ export default function AdminReportsPage() {
                           </p>
                         )}
 
+                        {postContext.moderation_reason && postModerationStatus !== 'active' && (
+                          <p className="mt-2 text-xs font-semibold text-red-100/80">
+                            Motivo: {postContext.moderation_reason}
+                          </p>
+                        )}
+
                         {hasImage && postContext.image_url && (
                           <div className="mt-3 h-32 w-full overflow-hidden rounded-2xl border border-white/10 bg-black sm:max-w-xs">
                             {sensitive ? (
@@ -337,6 +443,11 @@ export default function AdminReportsPage() {
                         )}
                       </div>
                     )}
+                    {report.reported_post_id && !postContext && (
+                      <div className="mt-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3 text-sm font-semibold text-zinc-300">
+                        Conteudo indisponivel.
+                      </div>
+                    )}
                   </div>
                   {report.reported_post_id && (
                     <div className="flex shrink-0 flex-wrap gap-2 sm:max-w-44">
@@ -350,6 +461,27 @@ export default function AdminReportsPage() {
                       >
                         Copiar link
                       </button>
+                      {postModerationStatus === 'active' ? (
+                        <button
+                          type="button"
+                          onClick={() => moderatePost(report, 'hidden')}
+                          disabled={postActionLoading}
+                          className="inline-flex items-center gap-1 rounded-full border border-red-300/20 bg-red-500/10 px-4 py-2 text-xs font-black text-red-100 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {postActionLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldOff className="h-3.5 w-3.5" />}
+                          Ocultar conteudo
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => moderatePost(report, 'active')}
+                          disabled={postActionLoading}
+                          className="inline-flex items-center gap-1 rounded-full border border-emerald-300/20 bg-emerald-500/10 px-4 py-2 text-xs font-black text-emerald-100 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {postActionLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
+                          Restaurar conteudo
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>

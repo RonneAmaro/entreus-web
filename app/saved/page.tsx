@@ -10,6 +10,11 @@ import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import { supabase } from '@/lib/supabase'
 import { useLanguage } from '../components/LanguageProvider'
+import {
+  isMissingPostModerationColumnError,
+  isModeratedHidden,
+  type ModeratedPostFields,
+} from '@/lib/post-moderation'
 
 
 function getDateLocale(language: string) {
@@ -52,7 +57,7 @@ type PostMedia = {
   created_at?: string
 }
 
-type Post = {
+type Post = ModeratedPostFields & {
   id: string
   content: string | null
   category: string | null
@@ -356,9 +361,27 @@ export default function SavedPage() {
       return
     }
 
-    const { data, error } = await supabase
-      .from('posts')
-      .select(`
+    const selectWithModeration = `
+        id,
+        content,
+        category,
+        created_at,
+        user_id,
+        image_url,
+        video_url,
+        visibility,
+        is_sensitive,
+        moderation_status,
+        moderated_at,
+        moderated_by,
+        moderation_reason,
+        profiles (
+          username,
+          display_name,
+          avatar_url
+        )
+      `
+    const selectFallback = `
         id,
         content,
         category,
@@ -373,8 +396,22 @@ export default function SavedPage() {
           display_name,
           avatar_url
         )
-      `)
+      `
+
+    let { data, error } = await supabase
+      .from('posts')
+      .select(selectWithModeration)
       .in('id', postIds)
+
+    if (error && isMissingPostModerationColumnError(error)) {
+      const fallback = await supabase
+        .from('posts')
+        .select(selectFallback)
+        .in('id', postIds)
+
+      data = fallback.data as typeof data
+      error = fallback.error
+    }
 
     if (error) {
       setMessage(t('saved.messages.loadBookmarksError') + error.message)
@@ -425,6 +462,7 @@ export default function SavedPage() {
         media: mediaByPost[post.id] || [],
       }))
       .filter((post) => !currentBlockedIds.includes(post.user_id))
+      .filter((post) => !isModeratedHidden(post))
       .filter((post) => canSeePost(post, currentUserId, currentFollows))
       .sort((a, b) => {
         const orderA = bookmarkOrder.get(a.id) ?? 999999

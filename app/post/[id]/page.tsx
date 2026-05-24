@@ -6,6 +6,12 @@ import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import PostCard from '@/app/components/PostCard'
+import { isAdminRole } from '@/lib/admin'
+import {
+  isMissingPostModerationColumnError,
+  isModeratedHidden,
+  type ModeratedPostFields,
+} from '@/lib/post-moderation'
 
 type VisibilityType = 'public' | 'followers' | 'private'
 
@@ -19,6 +25,7 @@ type CurrentProfile = {
   username: string | null
   display_name: string | null
   avatar_url: string | null
+  role?: string | null
   show_sensitive_content: boolean
   wants_18_plus?: boolean | null
   age_verification_status?: string | null
@@ -34,7 +41,7 @@ type PostMedia = {
   created_at?: string
 }
 
-type Post = {
+type Post = ModeratedPostFields & {
   id: string
   content: string | null
   category: string | null
@@ -98,12 +105,14 @@ export default function PostPage() {
   const [copiedPostId, setCopiedPostId] = useState<string | null>(null)
   const [canInteract, setCanInteract] = useState(false)
   const [permissionDenied, setPermissionDenied] = useState(false)
+  const [moderationHiddenDenied, setModerationHiddenDenied] = useState(false)
 
   useEffect(() => {
     async function loadPostPage() {
       setLoading(true)
       setMessage('')
       setPermissionDenied(false)
+      setModerationHiddenDenied(false)
 
       if (!postId) {
         setMessage('Publicação inválida.')
@@ -119,18 +128,22 @@ export default function PostPage() {
       setLoggedUserId(currentUserId)
       setCanInteract(!!currentUserId)
 
+      let currentUserIsAdmin = false
+
       if (currentUserId) {
         const { data: profileData } = await supabase
           .from('profiles')
-          .select('username, display_name, avatar_url, show_sensitive_content, wants_18_plus, age_verification_status')
+          .select('username, display_name, avatar_url, role, show_sensitive_content, wants_18_plus, age_verification_status')
           .eq('id', currentUserId)
           .maybeSingle()
 
         if (profileData) {
+          currentUserIsAdmin = isAdminRole(profileData.role)
           setCurrentProfile({
             username: profileData.username,
             display_name: profileData.display_name,
             avatar_url: profileData.avatar_url,
+            role: profileData.role || 'user',
             wants_18_plus: profileData.wants_18_plus || false,
             age_verification_status: profileData.age_verification_status || 'not_started',
             show_sensitive_content:
@@ -139,9 +152,27 @@ export default function PostPage() {
         }
       }
 
-      const { data: postData, error: postError } = await supabase
-        .from('posts')
-        .select(`
+      const postSelectWithModeration = `
+          id,
+          content,
+          category,
+          created_at,
+          user_id,
+          image_url,
+          video_url,
+          visibility,
+          is_sensitive,
+          moderation_status,
+          moderated_at,
+          moderated_by,
+          moderation_reason,
+          profiles (
+            username,
+            display_name,
+            avatar_url
+          )
+        `
+      const postSelectFallback = `
           id,
           content,
           category,
@@ -156,9 +187,24 @@ export default function PostPage() {
             display_name,
             avatar_url
           )
-        `)
+        `
+
+      let { data: postData, error: postError } = await supabase
+        .from('posts')
+        .select(postSelectWithModeration)
         .eq('id', postId)
         .maybeSingle()
+
+      if (postError && isMissingPostModerationColumnError(postError)) {
+        const fallback = await supabase
+          .from('posts')
+          .select(postSelectFallback)
+          .eq('id', postId)
+          .maybeSingle()
+
+        postData = fallback.data as typeof postData
+        postError = fallback.error
+      }
 
       if (postError) {
         setMessage('Erro ao carregar publicação: ' + postError.message)
@@ -180,6 +226,17 @@ export default function PostPage() {
           ? postData.profiles[0] || null
           : postData.profiles,
       } as Post
+
+      const isHiddenByModeration = isModeratedHidden(normalizedPost)
+
+      if (isHiddenByModeration && !currentUserIsAdmin) {
+        setPost(normalizedPost)
+        setPermissionDenied(true)
+        setModerationHiddenDenied(true)
+        setMessage('Este conteudo foi ocultado pela moderacao.')
+        setLoading(false)
+        return
+      }
 
       const canSee = await checkCanSeePost(normalizedPost, currentUserId)
 
@@ -728,12 +785,17 @@ export default function PostPage() {
       <section className="mx-auto max-w-3xl px-4 py-6">
         {permissionDenied ? (
           <div className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900">
-            <h1 className="text-xl font-bold">Publicação restrita</h1>
+            <h1 className="text-xl font-bold">
+              {moderationHiddenDenied ? 'Conteudo ocultado' : 'Publicação restrita'}
+            </h1>
 
             <p className="mt-2 text-zinc-600 dark:text-zinc-400">
-              Essa publicação não está disponível para sua conta ou precisa de login.
+              {moderationHiddenDenied
+                ? 'Este conteudo foi ocultado pela moderacao.'
+                : 'Essa publicação não está disponível para sua conta ou precisa de login.'}
             </p>
 
+            {!moderationHiddenDenied && (
             <div className="mt-5 flex flex-col gap-3 sm:flex-row">
               <Link
                 href="/login"
@@ -749,6 +811,7 @@ export default function PostPage() {
                 Criar conta
               </Link>
             </div>
+            )}
           </div>
         ) : (
           <>

@@ -13,6 +13,7 @@ import PostMoreMenu from './PostMoreMenu'
 import UserBadges from './UserBadges'
 import TranslatePostButton from './TranslatePostButton'
 import { useLanguage } from './LanguageProvider'
+import { isModeratedHidden, type ModeratedPostFields } from '@/lib/post-moderation'
 
 export type VisibilityType = 'public' | 'followers' | 'private'
 
@@ -32,7 +33,7 @@ export type PostCardMedia = {
   created_at?: string
 }
 
-export type PostCardPost = {
+export type PostCardPost = ModeratedPostFields & {
   id: string
   content: string | null
   category: string | null
@@ -324,6 +325,7 @@ export default function PostCard({
   const postMedia = getPostMedia(post)
   const isSharedGiftPost = post.category === 'gift_received'
   const sensitive = isSensitivePost(post)
+  const moderatedHidden = isModeratedHidden(post)
   const shouldProtectSensitive = sensitive && !showSensitiveContent
 
   const reposterName =
@@ -472,9 +474,19 @@ export default function PostCard({
             Destaque
           </span>
         )}
+
+        {moderatedHidden && (
+          <span className="rounded-full border border-red-200 bg-red-50 px-2 py-1 text-xs text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200">
+            Ocultado pela moderacao
+          </span>
+        )}
       </div>
 
-      {shouldProtectSensitive ? (
+      {moderatedHidden ? (
+        <div className="mb-4 rounded-2xl border border-red-200/70 bg-red-50/80 p-4 text-sm font-semibold text-red-800 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-100">
+          Este conteudo foi ocultado pela moderacao.
+        </div>
+      ) : shouldProtectSensitive ? (
         <SensitiveContent>
           {isSharedGiftPost ? (
             <SharedGiftPostCard post={post} />

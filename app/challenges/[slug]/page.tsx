@@ -14,6 +14,11 @@ import {
   X,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import {
+  isMissingPostModerationColumnError,
+  isModeratedHidden,
+  type ModeratedPostFields,
+} from '@/lib/post-moderation'
 
 type ChallengeStatus = 'draft' | 'scheduled' | 'active' | 'voting' | 'finished' | 'archived'
 type EntryStatus = 'submitted' | 'approved' | 'featured' | 'winner' | 'rejected'
@@ -53,7 +58,7 @@ type VoteRow = {
   vote_value: 1
 }
 
-type PostSummary = {
+type PostSummary = ModeratedPostFields & {
   id: string
   user_id: string
   content: string | null
@@ -208,12 +213,28 @@ export default function ChallengeDetailPage() {
     let votes: VoteRow[] = []
 
     if (postIds.length > 0) {
-      const { data: postsData } = await supabase
+      let { data: postsData, error: postsError } = await supabase
         .from('posts')
-        .select('id, user_id, content, image_url, video_url, created_at, profiles(username, display_name, avatar_url)')
+        .select('id, user_id, content, image_url, video_url, created_at, moderation_status, moderated_at, moderated_by, moderation_reason, profiles(username, display_name, avatar_url)')
         .in('id', postIds)
 
-      posts = ((postsData || []) as PostSummaryResponse[]).map(normalizePostSummary)
+      if (postsError && isMissingPostModerationColumnError(postsError)) {
+        const fallback = await supabase
+          .from('posts')
+          .select('id, user_id, content, image_url, video_url, created_at, profiles(username, display_name, avatar_url)')
+          .in('id', postIds)
+
+        postsData = fallback.data as typeof postsData
+        postsError = fallback.error
+      }
+
+      if (postsError) {
+        console.error('Nao foi possivel carregar posts do desafio:', postsError.message)
+      }
+
+      posts = ((postsData || []) as PostSummaryResponse[])
+        .map(normalizePostSummary)
+        .filter((post) => !isModeratedHidden(post))
     }
 
     if (entryIds.length > 0) {
@@ -242,12 +263,24 @@ export default function ChallengeDetailPage() {
   }
 
   async function loadMyPosts(currentUserId: string) {
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('posts')
-      .select('id, user_id, content, image_url, video_url, created_at, profiles(username, display_name, avatar_url)')
+      .select('id, user_id, content, image_url, video_url, created_at, moderation_status, moderated_at, moderated_by, moderation_reason, profiles(username, display_name, avatar_url)')
       .eq('user_id', currentUserId)
       .order('created_at', { ascending: false })
       .limit(30)
+
+    if (error && isMissingPostModerationColumnError(error)) {
+      const fallback = await supabase
+        .from('posts')
+        .select('id, user_id, content, image_url, video_url, created_at, profiles(username, display_name, avatar_url)')
+        .eq('user_id', currentUserId)
+        .order('created_at', { ascending: false })
+        .limit(30)
+
+      data = fallback.data as typeof data
+      error = fallback.error
+    }
 
     if (error) {
       setMessage('Nao foi possivel carregar seus posts: ' + error.message)
@@ -255,7 +288,9 @@ export default function ChallengeDetailPage() {
       return
     }
 
-    const posts = ((data || []) as PostSummaryResponse[]).map(normalizePostSummary)
+    const posts = ((data || []) as PostSummaryResponse[])
+      .map(normalizePostSummary)
+      .filter((post) => !isModeratedHidden(post))
     setMyPosts(posts)
     setSelectedPostId((current) => current || posts[0]?.id || '')
   }
