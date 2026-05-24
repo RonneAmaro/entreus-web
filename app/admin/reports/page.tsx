@@ -341,6 +341,10 @@ export default function AdminReportsPage() {
           <ArrowLeft className="h-4 w-4" />
           Admin
         </Link>
+        <Link href="/admin/moderation" className="ml-2 inline-flex items-center gap-2 rounded-full border border-red-300/20 bg-red-500/10 px-4 py-2 text-sm font-black text-red-100 transition hover:bg-red-500/20">
+          <ShieldOff className="h-4 w-4" />
+          Ver central de moderacao
+        </Link>
 
         <header className="mt-6 rounded-[2rem] border border-red-300/25 bg-red-500/10 p-6 ring-1 ring-red-300/10">
           <Flag className="h-9 w-9 text-red-100" />

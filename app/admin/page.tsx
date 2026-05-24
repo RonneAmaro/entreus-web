@@ -13,6 +13,7 @@ import {
   Gift,
   Lightbulb,
   Loader2,
+  ShieldOff,
   ShieldAlert,
   ShieldCheck,
   Sparkles,
@@ -59,6 +60,12 @@ const adminCards = [
     description: 'Revisar denuncias de posts e usuarios feitas pela comunidade.',
     href: '/admin/reports',
     icon: Flag,
+  },
+  {
+    title: 'Moderacao',
+    description: 'Conteudos ocultos e revisao de moderacao.',
+    href: '/admin/moderation',
+    icon: ShieldOff,
   },
   {
     title: 'Sugestoes da Comunidade',
