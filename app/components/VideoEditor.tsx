@@ -537,11 +537,10 @@ export default function VideoEditor() {
   }
 
   function getDefaultLayerTiming() {
-    const safeDuration = Math.max(duration, DEFAULT_VIDEO_DURATION)
-    const startTime = clamp(currentTime, 0, Math.max(safeDuration - 0.5, 0))
-    const endTime = clamp(startTime + 3, Math.min(startTime + 0.5, safeDuration), safeDuration)
+    const projectDuration = editorMode === 'photos' ? getPhotoSlidesDuration() : duration
+    const safeDuration = Math.max(projectDuration, DEFAULT_VIDEO_DURATION)
 
-    return { startTime, endTime }
+    return { startTime: 0, endTime: safeDuration }
   }
 
   function getBaseClipOffset() {
@@ -1907,6 +1906,18 @@ export default function VideoEditor() {
   function nudgeActiveImageTiming(key: 'startTime' | 'endTime', delta: number) {
     if (!activeImageOverlay) return
     updateActiveImageTiming(key, activeImageOverlay[key] + delta)
+  }
+
+  function nudgeMusicStart(delta: number) {
+    setMusicStartTime((current) => clamp(current + delta, 0, Math.max(timelineDuration - 0.1, 0)))
+  }
+
+  function nudgeMusicTrim(delta: number) {
+    setMusicTrimStart((current) => clamp(current + delta, 0, Math.max(audioDuration - 0.1, 0)))
+  }
+
+  function nudgeVoiceStart(delta: number) {
+    setVoiceStartTime((current) => clamp(current + delta, 0, Math.max(timelineDuration - 0.1, 0)))
   }
 
   function applyTextBackgroundPreset(preset: typeof TEXT_BACKGROUND_PRESETS[number]) {
@@ -4033,35 +4044,42 @@ export default function VideoEditor() {
                     </div>
 
                     {activeOverlay && (
-                      <div className="mt-1 flex h-8 items-center gap-1 rounded-lg border border-sky-300/20 bg-sky-500/15 px-2 text-[10px] font-black text-sky-50">
+                      <div className="mt-1 flex h-8 items-center gap-1 overflow-x-auto rounded-lg border border-sky-300/20 bg-sky-500/15 px-2 text-[10px] font-black text-sky-50">
                         <span className="mr-1 shrink-0">Texto {activeOverlay.startTime.toFixed(1)}s-{activeOverlay.endTime.toFixed(1)}s</span>
                         <button
                           type="button"
                           onClick={() => nudgeActiveOverlayTiming('startTime', -0.25)}
-                          className="h-6 rounded-md border border-white/10 bg-black/20 px-2"
+                          className="h-6 shrink-0 rounded-md border border-white/10 bg-black/20 px-2"
                         >
                           Entrada -
                         </button>
                         <button
                           type="button"
                           onClick={() => nudgeActiveOverlayTiming('startTime', 0.25)}
-                          className="h-6 rounded-md border border-white/10 bg-black/20 px-2"
+                          className="h-6 shrink-0 rounded-md border border-white/10 bg-black/20 px-2"
                         >
                           Entrada +
                         </button>
                         <button
                           type="button"
                           onClick={() => nudgeActiveOverlayTiming('endTime', -0.25)}
-                          className="h-6 rounded-md border border-white/10 bg-black/20 px-2"
+                          className="h-6 shrink-0 rounded-md border border-white/10 bg-black/20 px-2"
                         >
                           Saida -
                         </button>
                         <button
                           type="button"
                           onClick={() => nudgeActiveOverlayTiming('endTime', 0.25)}
-                          className="h-6 rounded-md border border-white/10 bg-black/20 px-2"
+                          className="h-6 shrink-0 rounded-md border border-white/10 bg-black/20 px-2"
                         >
                           Saida +
+                        </button>
+                        <button
+                          type="button"
+                          onClick={removeActiveOverlay}
+                          className="h-6 shrink-0 rounded-md border border-red-300/25 bg-red-500/15 px-2 text-red-100"
+                        >
+                          Remover
                         </button>
                       </div>
                     )}
@@ -4129,6 +4147,13 @@ export default function VideoEditor() {
                           className="h-6 shrink-0 rounded-md border border-white/10 bg-black/20 px-2"
                         >
                           Saida +
+                        </button>
+                        <button
+                          type="button"
+                          onClick={removeActiveSticker}
+                          className="h-6 shrink-0 rounded-md border border-red-300/25 bg-red-500/15 px-2 text-red-100"
+                        >
+                          Remover
                         </button>
                       </div>
                     )}
@@ -4201,6 +4226,13 @@ export default function VideoEditor() {
                           className="h-6 shrink-0 rounded-md border border-white/10 bg-black/20 px-2"
                         >
                           Saida +
+                        </button>
+                        <button
+                          type="button"
+                          onClick={removeActiveImageOverlay}
+                          className="h-6 shrink-0 rounded-md border border-red-300/25 bg-red-500/15 px-2 text-red-100"
+                        >
+                          Remover
                         </button>
                       </div>
                     )}
@@ -4365,6 +4397,33 @@ export default function VideoEditor() {
                       )}
                     </div>
 
+                    {voiceUrl && (
+                      <div className="mt-1 flex h-8 items-center gap-1 overflow-x-auto rounded-lg border border-violet-300/20 bg-violet-500/15 px-2 text-[10px] font-black text-violet-50">
+                        <span className="mr-1 shrink-0">Voz {formatEditorTime(voiceStartTime)}</span>
+                        <button
+                          type="button"
+                          onClick={() => nudgeVoiceStart(-0.25)}
+                          className="h-6 shrink-0 rounded-md border border-white/10 bg-black/20 px-2"
+                        >
+                          Inicio -
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => nudgeVoiceStart(0.25)}
+                          className="h-6 shrink-0 rounded-md border border-white/10 bg-black/20 px-2"
+                        >
+                          Inicio +
+                        </button>
+                        <button
+                          type="button"
+                          onClick={removeVoiceRecording}
+                          className="h-6 shrink-0 rounded-md border border-red-300/25 bg-red-500/15 px-2 text-red-100"
+                        >
+                          Refazer
+                        </button>
+                      </div>
+                    )}
+
                     <div className={`${timelineExpanded ? 'block' : 'hidden sm:block'} relative mt-1 h-8 rounded-lg border border-emerald-300/15 bg-emerald-500/10`}>
                       {audioName ? (
                         <button
@@ -4406,6 +4465,47 @@ export default function VideoEditor() {
                         </button>
                       )}
                     </div>
+
+                    {audioName && (
+                      <div className="mt-1 flex h-8 items-center gap-1 overflow-x-auto rounded-lg border border-emerald-300/20 bg-emerald-500/15 px-2 text-[10px] font-black text-emerald-50">
+                        <span className="mr-1 max-w-24 shrink-0 truncate">{audioName}</span>
+                        <button
+                          type="button"
+                          onClick={() => nudgeMusicStart(-0.25)}
+                          className="h-6 shrink-0 rounded-md border border-white/10 bg-black/20 px-2"
+                        >
+                          Inicio -
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => nudgeMusicStart(0.25)}
+                          className="h-6 shrink-0 rounded-md border border-white/10 bg-black/20 px-2"
+                        >
+                          Inicio +
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => nudgeMusicTrim(-0.25)}
+                          className="h-6 shrink-0 rounded-md border border-white/10 bg-black/20 px-2"
+                        >
+                          Trecho -
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => nudgeMusicTrim(0.25)}
+                          className="h-6 shrink-0 rounded-md border border-white/10 bg-black/20 px-2"
+                        >
+                          Trecho +
+                        </button>
+                        <button
+                          type="button"
+                          onClick={removeAudioTrack}
+                          className="h-6 shrink-0 rounded-md border border-red-300/25 bg-red-500/15 px-2 text-red-100"
+                        >
+                          Remover
+                        </button>
+                      </div>
+                    )}
 
                   </div>
                 </div>

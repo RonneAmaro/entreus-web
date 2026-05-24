@@ -32,6 +32,8 @@ type ReportedPostContext = {
   is_sensitive: boolean | null
 }
 
+type ReportStatus = 'pending' | 'in_review' | 'resolved' | 'rejected'
+
 export default function AdminReportsPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
@@ -39,6 +41,7 @@ export default function AdminReportsPage() {
   const [adminProfile, setAdminProfile] = useState<AdminProfile | null>(null)
   const [reports, setReports] = useState<ReportRow[]>([])
   const [postContextById, setPostContextById] = useState<Record<string, ReportedPostContext>>({})
+  const [updatingReportId, setUpdatingReportId] = useState<string | null>(null)
 
   useEffect(() => {
     loadPage()
@@ -87,7 +90,7 @@ export default function AdminReportsPage() {
     const primaryResult = await supabase
       .from('reports')
       .select('id, reporter_id, reported_post_id, reported_user_id, reason, status, created_at')
-      .or('status.is.null,status.eq.pending')
+      .or('status.is.null,status.eq.pending,status.eq.in_review')
       .order('created_at', { ascending: false })
       .limit(50)
 
@@ -164,6 +167,54 @@ export default function AdminReportsPage() {
     )
   }
 
+  function getStatusLabel(status: string | null | undefined) {
+    if (status === 'in_review') return 'em analise'
+    if (status === 'resolved') return 'resolvida'
+    if (status === 'rejected') return 'arquivada'
+    return 'pendente'
+  }
+
+  async function updateReportStatus(reportId: string, status: ReportStatus) {
+    setUpdatingReportId(reportId)
+    setMessage('')
+
+    const { error } = await supabase
+      .from('reports')
+      .update({ status })
+      .eq('id', reportId)
+
+    if (error) {
+      setMessage('Nao foi possivel atualizar a denuncia: ' + error.message)
+      setUpdatingReportId(null)
+      return
+    }
+
+    setReports((current) =>
+      status === 'resolved' || status === 'rejected'
+        ? current.filter((report) => report.id !== reportId)
+        : current.map((report) => (report.id === reportId ? { ...report, status } : report)),
+    )
+    setMessage(
+      status === 'resolved'
+        ? 'Denuncia marcada como resolvida.'
+        : status === 'rejected'
+          ? 'Denuncia arquivada.'
+          : 'Denuncia marcada como em analise.',
+    )
+    setUpdatingReportId(null)
+  }
+
+  async function copyPostLink(postId: string) {
+    const path = `/post/${postId}`
+
+    try {
+      await navigator.clipboard.writeText(`${window.location.origin}${path}`)
+      setMessage('Link do conteudo copiado.')
+    } catch {
+      setMessage(`Link do conteudo: ${path}`)
+    }
+  }
+
   if (loading) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-black text-white">
@@ -228,7 +279,7 @@ export default function AdminReportsPage() {
                   <div className="min-w-0">
                     <p className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-red-200">
                       <AlertTriangle className="h-4 w-4" />
-                      {report.status || 'pendente'}
+                      {getStatusLabel(report.status)}
                     </p>
                     <p className="mt-2 text-sm leading-6 text-zinc-200">{report.reason || 'Sem motivo informado.'}</p>
                     <p className="mt-2 text-xs text-zinc-500">
@@ -288,9 +339,54 @@ export default function AdminReportsPage() {
                     )}
                   </div>
                   {report.reported_post_id && (
-                    <Link href={`/post/${report.reported_post_id}`} className="shrink-0 rounded-full bg-white px-4 py-2 text-xs font-black text-black">
-                      Ver post
-                    </Link>
+                    <div className="flex shrink-0 flex-wrap gap-2 sm:max-w-44">
+                      <Link href={`/post/${report.reported_post_id}`} className="rounded-full bg-white px-4 py-2 text-xs font-black text-black">
+                        Abrir post
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={() => copyPostLink(report.reported_post_id as string)}
+                        className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-black text-white transition hover:bg-white/10"
+                      >
+                        Copiar link
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2 border-t border-white/10 pt-3">
+                  <button
+                    type="button"
+                    onClick={() => updateReportStatus(report.id, 'in_review')}
+                    disabled={updatingReportId === report.id}
+                    className="rounded-full border border-blue-300/20 bg-blue-500/10 px-4 py-2 text-xs font-black text-blue-100 transition hover:bg-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Revisar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => updateReportStatus(report.id, 'resolved')}
+                    disabled={updatingReportId === report.id}
+                    className="rounded-full border border-emerald-300/20 bg-emerald-500/10 px-4 py-2 text-xs font-black text-emerald-100 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Resolver
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (window.confirm('Arquivar/rejeitar esta denuncia?')) {
+                        void updateReportStatus(report.id, 'rejected')
+                      }
+                    }}
+                    disabled={updatingReportId === report.id}
+                    className="rounded-full border border-zinc-300/20 bg-white/5 px-4 py-2 text-xs font-black text-zinc-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Arquivar
+                  </button>
+                  {updatingReportId === report.id && (
+                    <span className="inline-flex items-center gap-2 rounded-full bg-white/5 px-4 py-2 text-xs font-black text-zinc-300">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Salvando
+                    </span>
                   )}
                 </div>
               </article>
