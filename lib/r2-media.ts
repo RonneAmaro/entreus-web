@@ -1,6 +1,16 @@
-const R2_MEDIA_PREFIXES = ['posts/', 'comments/'] as const
+export const R2_MEDIA_PREFIXES = ['posts/', 'comments/'] as const
 
 export type R2MediaPrefix = (typeof R2_MEDIA_PREFIXES)[number]
+
+function cleanDirectKey(value: string) {
+  const key = value.trim().replace(/^\/+/, '')
+
+  if (!key || key.includes('..') || key.includes('\\') || key.includes('?') || key.includes('#')) {
+    return null
+  }
+
+  return isAuditedR2MediaKey(key) ? key : null
+}
 
 export function isAuditedR2MediaKey(value: string | null | undefined) {
   if (!value) return false
@@ -8,15 +18,18 @@ export function isAuditedR2MediaKey(value: string | null | undefined) {
   return R2_MEDIA_PREFIXES.some((prefix) => value.startsWith(prefix))
 }
 
-export function extractR2KeyFromPublicUrl(value: unknown, publicBaseUrl: string | undefined) {
+export function extractR2MediaKey(value: unknown, publicBaseUrl: string | undefined) {
   if (typeof value !== 'string') return null
 
   const cleanValue = value.trim()
   const cleanBaseUrl = publicBaseUrl?.trim().replace(/\/+$/, '')
 
-  if (!cleanValue || !cleanBaseUrl) return null
+  if (!cleanValue) return null
 
-  if (isAuditedR2MediaKey(cleanValue)) return cleanValue
+  const directKey = cleanDirectKey(cleanValue)
+  if (directKey) return directKey
+
+  if (!cleanBaseUrl) return null
 
   try {
     const mediaUrl = new URL(cleanValue)
@@ -29,11 +42,12 @@ export function extractR2KeyFromPublicUrl(value: unknown, publicBaseUrl: string 
     if (basePath && !mediaUrl.pathname.startsWith(`${basePath}/`)) return null
 
     const keyPath = mediaUrl.pathname.slice(basePath.length).replace(/^\/+/, '')
-    const key = decodeURIComponent(keyPath)
+    const key = cleanDirectKey(decodeURIComponent(keyPath))
 
-    return isAuditedR2MediaKey(key) ? key : null
+    return key
   } catch {
     return null
   }
 }
 
+export const extractR2KeyFromPublicUrl = extractR2MediaKey
