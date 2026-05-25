@@ -9,6 +9,7 @@ import {
   Bug,
   CheckCircle2,
   Coins,
+  DatabaseZap,
   Flag,
   Gift,
   Lightbulb,
@@ -66,6 +67,13 @@ const adminCards = [
     description: 'Conteudos ocultos e revisao de moderacao.',
     href: '/admin/moderation',
     icon: ShieldOff,
+  },
+  {
+    title: 'Auditoria R2',
+    description: 'Verifique possiveis midias orfas no armazenamento.',
+    href: '/admin/r2-orphans',
+    icon: DatabaseZap,
+    badge: 'dry-run',
   },
   {
     title: 'Sugestoes da Comunidade',
@@ -384,13 +392,18 @@ export default function AdminPage() {
                       {adminPendingCounts.itacashPurchases > 99 ? '99+' : adminPendingCounts.itacashPurchases}
                     </span>
                   )}
+                  {'badge' in card && card.badge && (
+                    <span className="ml-2 inline-flex rounded-full bg-amber-300 px-2 py-0.5 align-middle text-[10px] font-black uppercase tracking-[0.12em] text-amber-950">
+                      {card.badge}
+                    </span>
+                  )}
                 </h2>
                 <p className="mt-3 min-h-16 text-sm leading-6 text-zinc-400">
                   {card.description}
                 </p>
 
                 <span className="mt-5 inline-flex rounded-full bg-white px-4 py-2 text-xs font-black text-black shadow-sm shadow-blue-500/10 transition group-hover:bg-blue-50">
-                  Abrir
+                  {card.href === '/admin/r2-orphans' ? 'Abrir auditoria' : 'Abrir'}
                 </span>
               </Link>
             )
