@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, ArrowLeft, Flag, Image as ImageIcon, Loader2, RotateCcw, ShieldAlert, ShieldOff, Video } from 'lucide-react'
 import { isAdminRole } from '@/lib/admin'
 import { isMissingPostModerationColumnError, normalizeModerationStatus, type ModeratedPostFields } from '@/lib/post-moderation'
@@ -35,7 +35,24 @@ type ReportedPostContext = ModeratedPostFields & {
   is_sensitive: boolean | null
 }
 
-type ReportStatus = 'pending' | 'in_review' | 'resolved' | 'rejected'
+type ReportStatus = 'pending' | 'in_review' | 'resolved' | 'rejected' | 'archived'
+type ReportFilter = 'pending' | 'in_review' | 'resolved' | 'rejected' | 'all'
+
+const reportFilters: { value: ReportFilter; label: string }[] = [
+  { value: 'pending', label: 'Pendentes' },
+  { value: 'in_review', label: 'Em analise' },
+  { value: 'resolved', label: 'Resolvidas' },
+  { value: 'rejected', label: 'Recusadas' },
+  { value: 'all', label: 'Todas' },
+]
+
+function normalizeReportStatus(status: string | null | undefined): ReportStatus {
+  if (status === 'in_review' || status === 'resolved' || status === 'rejected' || status === 'archived') {
+    return status
+  }
+
+  return 'pending'
+}
 
 export default function AdminReportsPage() {
   const router = useRouter()
@@ -46,6 +63,26 @@ export default function AdminReportsPage() {
   const [postContextById, setPostContextById] = useState<Record<string, ReportedPostContext>>({})
   const [updatingReportId, setUpdatingReportId] = useState<string | null>(null)
   const [updatingPostId, setUpdatingPostId] = useState<string | null>(null)
+  const [reportFilter, setReportFilter] = useState<ReportFilter>('pending')
+
+  const filteredReports = useMemo(() => {
+    const statusPriority: Record<ReportStatus, number> = {
+      pending: 0,
+      in_review: 1,
+      resolved: 2,
+      rejected: 3,
+      archived: 4,
+    }
+
+    return reports
+      .filter((report) => {
+        const status = normalizeReportStatus(report.status)
+        if (reportFilter === 'all') return true
+        if (reportFilter === 'pending') return status === 'pending'
+        return status === reportFilter
+      })
+      .sort((a, b) => statusPriority[normalizeReportStatus(a.status)] - statusPriority[normalizeReportStatus(b.status)])
+  }, [reports, reportFilter])
 
   useEffect(() => {
     loadPage()
@@ -94,9 +131,8 @@ export default function AdminReportsPage() {
     const primaryResult = await supabase
       .from('reports')
       .select('id, reporter_id, reported_post_id, reported_user_id, reason, status, created_at')
-      .or('status.is.null,status.eq.pending,status.eq.in_review,status.eq.resolved')
       .order('created_at', { ascending: false })
-      .limit(50)
+      .limit(80)
 
     reportsData = (primaryResult.data || null) as ReportRow[] | null
     reportsError = primaryResult.error
@@ -186,10 +222,20 @@ export default function AdminReportsPage() {
   }
 
   function getStatusLabel(status: string | null | undefined) {
-    if (status === 'in_review') return 'em analise'
-    if (status === 'resolved') return 'resolvida'
-    if (status === 'rejected') return 'arquivada'
-    return 'pendente'
+    const normalized = normalizeReportStatus(status)
+    if (normalized === 'in_review') return 'Em analise'
+    if (normalized === 'resolved') return 'Procedente / resolvida'
+    if (normalized === 'rejected') return 'Denuncia recusada'
+    if (normalized === 'archived') return 'Arquivada'
+    return 'Pendente'
+  }
+
+  function getReportStatusClass(status: string | null | undefined) {
+    const normalized = normalizeReportStatus(status)
+    if (normalized === 'in_review') return 'border-blue-300/20 bg-blue-500/10 text-blue-100'
+    if (normalized === 'resolved') return 'border-emerald-300/20 bg-emerald-500/10 text-emerald-100'
+    if (normalized === 'rejected' || normalized === 'archived') return 'border-zinc-300/20 bg-white/10 text-zinc-100'
+    return 'border-amber-300/20 bg-amber-500/10 text-amber-100'
   }
 
   function getPostModerationLabel(post: ReportedPostContext | undefined) {
@@ -226,19 +272,27 @@ export default function AdminReportsPage() {
     }
 
     setReports((current) =>
-      status === 'rejected'
-        ? current.filter((report) => report.id !== reportId)
-        : current.map((report) => (report.id === reportId ? { ...report, status } : report)),
+      current.map((report) => (report.id === reportId ? { ...report, status } : report)),
     )
     setMessage(
       status === 'resolved'
         ? 'Denuncia marcada como resolvida.'
         : status === 'rejected'
-          ? 'Denuncia arquivada.'
+          ? 'Denuncia recusada. O conteudo continuara ativo.'
           : 'Denuncia marcada como em analise.',
     )
     notifyAdminPendingAlertsChanged()
     setUpdatingReportId(null)
+  }
+
+  async function rejectReport(report: ReportRow) {
+    const confirmed = window.confirm(
+      'Recusar denuncia? A denuncia sera encerrada e o conteudo continuara ativo.',
+    )
+
+    if (!confirmed) return
+
+    await updateReportStatus(report.id, 'rejected')
   }
 
   async function notifyPostOwnerAboutHiddenContent(postId: string, postOwnerId: string | null | undefined) {
@@ -261,8 +315,8 @@ export default function AdminReportsPage() {
 
     const hiding = nextStatus === 'hidden'
     const confirmText = hiding
-      ? 'Tem certeza que deseja ocultar este conteudo? Ele deixara de aparecer para usuarios comuns, mas continuara registrado para moderacao.'
-      : 'Tem certeza que deseja restaurar este conteudo? Ele voltara a aparecer para usuarios comuns conforme a visibilidade original.'
+      ? 'Ocultar conteudo? O conteudo sera ocultado para usuarios comuns e o criador sera notificado.'
+      : 'Restaurar conteudo? O conteudo voltara a aparecer para usuarios comuns.'
 
     if (!window.confirm(confirmText)) return
 
@@ -306,7 +360,7 @@ export default function AdminReportsPage() {
           moderation_reason: reason.trim() || 'Conteudo ocultado pela moderacao.',
         },
       }))
-      setMessage('Conteudo ocultado e denuncia marcada como resolvida.')
+      setMessage('Conteudo ocultado e denuncia resolvida.')
       notifyAdminPendingAlertsChanged()
     } else {
       setPostContextById((current) => ({
@@ -376,7 +430,7 @@ export default function AdminReportsPage() {
           <Flag className="h-9 w-9 text-red-100" />
           <h1 className="mt-4 text-3xl font-black">Denuncias pendentes</h1>
           <p className="mt-2 text-sm leading-6 text-red-100/80">
-            Revisao inicial de denuncias enviadas por usuarios. Abra o post denunciado quando houver ID de post.
+            Decida se a denuncia entra em analise, se sera recusada ou se o conteudo deve ser ocultado.
           </p>
         </header>
 
@@ -386,13 +440,38 @@ export default function AdminReportsPage() {
           </div>
         )}
 
+        <div className="mt-5 flex flex-col gap-3 rounded-[1.5rem] border border-white/10 bg-zinc-950/80 p-4 ring-1 ring-white/5 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-black text-white">Fila de denuncias</p>
+            <p className="mt-1 text-xs text-zinc-500">
+              {filteredReports.length} denuncias no filtro atual. Pendentes contam apenas status pending ou vazio.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {reportFilters.map((filter) => (
+              <button
+                key={filter.value}
+                type="button"
+                onClick={() => setReportFilter(filter.value)}
+                className={`rounded-full px-4 py-2 text-xs font-black transition ${
+                  reportFilter === filter.value
+                    ? 'bg-white text-black'
+                    : 'border border-white/10 bg-white/5 text-zinc-200 hover:bg-white/10'
+                }`}
+              >
+                {filter.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="mt-5 grid gap-3">
-          {reports.length === 0 ? (
+          {filteredReports.length === 0 ? (
             <div className="rounded-3xl border border-emerald-300/20 bg-emerald-500/10 p-5 text-emerald-100 ring-1 ring-emerald-300/10">
-              Nenhuma denuncia pendente no momento.
+              Nenhuma denuncia neste filtro.
             </div>
           ) : (
-            reports.map((report) => {
+            filteredReports.map((report) => {
               const postContext = report.reported_post_id ? postContextById[report.reported_post_id] : undefined
               const hasImage = Boolean(postContext?.image_url)
               const hasVideo = Boolean(postContext?.video_url)
@@ -404,7 +483,7 @@ export default function AdminReportsPage() {
               <article key={report.id} className="rounded-3xl border border-white/10 bg-zinc-950/80 p-4 ring-1 ring-white/5 transition hover:-translate-y-0.5 hover:border-blue-300/20">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0">
-                    <p className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em] text-red-200">
+                    <p className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-black ${getReportStatusClass(report.status)}`}>
                       <AlertTriangle className="h-4 w-4" />
                       {getStatusLabel(report.status)}
                     </p>
@@ -480,8 +559,8 @@ export default function AdminReportsPage() {
                     )}
                   </div>
                   {report.reported_post_id && (
-                    <div className="flex shrink-0 flex-wrap gap-2 sm:max-w-44">
-                      <Link href={`/post/${report.reported_post_id}`} className="rounded-full bg-white px-4 py-2 text-xs font-black text-black">
+                    <div className="grid w-full shrink-0 grid-cols-1 gap-2 sm:w-auto sm:max-w-56">
+                      <Link href={`/post/${report.reported_post_id}`} className="rounded-full bg-white px-4 py-2 text-center text-xs font-black text-black">
                         Abrir post
                       </Link>
                       <button
@@ -512,37 +591,33 @@ export default function AdminReportsPage() {
                           Restaurar conteudo
                         </button>
                       )}
+                      <p className="rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2 text-xs leading-5 text-zinc-400">
+                        {postModerationStatus === 'active'
+                          ? 'Ocultar conteudo remove o post da visualizacao comum e notifica o criador.'
+                          : 'Restaurar conteudo faz o post voltar a aparecer para usuarios comuns.'}
+                      </p>
                     </div>
                   )}
                 </div>
-                <div className="mt-4 flex flex-wrap gap-2 border-t border-white/10 pt-3">
+                <div className="mt-4 grid gap-2 border-t border-white/10 pt-3 sm:flex sm:flex-wrap">
+                  <p className="text-xs leading-5 text-zinc-500 sm:basis-full">
+                    Recusar denuncia encerra a denuncia e mantem o conteudo ativo.
+                  </p>
                   <button
                     type="button"
                     onClick={() => updateReportStatus(report.id, 'in_review')}
                     disabled={updatingReportId === report.id}
                     className="rounded-full border border-blue-300/20 bg-blue-500/10 px-4 py-2 text-xs font-black text-blue-100 transition hover:bg-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    Revisar
+                    Marcar em analise
                   </button>
                   <button
                     type="button"
-                    onClick={() => updateReportStatus(report.id, 'resolved')}
-                    disabled={updatingReportId === report.id}
-                    className="rounded-full border border-emerald-300/20 bg-emerald-500/10 px-4 py-2 text-xs font-black text-emerald-100 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    Resolver
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (window.confirm('Arquivar/rejeitar esta denuncia?')) {
-                        void updateReportStatus(report.id, 'rejected')
-                      }
-                    }}
+                    onClick={() => rejectReport(report)}
                     disabled={updatingReportId === report.id}
                     className="rounded-full border border-zinc-300/20 bg-white/5 px-4 py-2 text-xs font-black text-zinc-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    Arquivar
+                    Recusar denuncia
                   </button>
                   {updatingReportId === report.id && (
                     <span className="inline-flex items-center gap-2 rounded-full bg-white/5 px-4 py-2 text-xs font-black text-zinc-300">
