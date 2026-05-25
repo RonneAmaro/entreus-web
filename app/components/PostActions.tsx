@@ -1,5 +1,6 @@
 'use client'
 
+import { memo } from 'react'
 import { Bookmark, Gift, Heart, MessageCircle, Repeat2, Share2 } from 'lucide-react'
 import { useLanguage } from './LanguageProvider'
 
@@ -30,7 +31,7 @@ function ActionTooltip({ label }: { label: string }) {
   )
 }
 
-export default function PostActions({
+function PostActions({
   commentsCount,
   likesCount,
   repostsCount = 0,
@@ -168,3 +169,5 @@ export default function PostActions({
     </div>
   )
 }
+
+export default memo(PostActions)

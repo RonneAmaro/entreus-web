@@ -35,7 +35,7 @@ import {
   Trophy,
   Trash2,
 } from 'lucide-react'
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import { supabase } from '@/lib/supabase'
@@ -203,6 +203,9 @@ const FEED_INITIAL_REACTION_LIMIT = 500
 const FEED_INITIAL_REPOST_LIMIT = 120
 const POST_IMAGE_MAX_SIZE_BYTES = 5 * 1024 * 1024
 const POST_VIDEO_MAX_SIZE_BYTES = 30 * 1024 * 1024
+const FEED_ITEM_ACTIVE_ROOT_MARGIN = '1800px 0px 2200px 0px'
+const FEED_MEDIA_PLACEHOLDER_HEIGHT = 360
+const FEED_COMMENTS_PLACEHOLDER_HEIGHT = 180
 
 type FeedTexts = {
   tabs: {
@@ -647,6 +650,77 @@ type FeedItem =
     post: Post
     repost: Repost
   }
+
+function FeedWindowItem({
+  children,
+  forceActive = false,
+}: {
+  children: (isNearViewport: boolean) => ReactNode
+  forceActive?: boolean
+}) {
+  const itemRef = useRef<HTMLDivElement | null>(null)
+  const [isNearViewport, setIsNearViewport] = useState(true)
+
+  useEffect(() => {
+    if (forceActive) {
+      setIsNearViewport(true)
+      return
+    }
+
+    const item = itemRef.current
+    if (!item || typeof IntersectionObserver === 'undefined') return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0]
+        setIsNearViewport(Boolean(entry?.isIntersecting))
+      },
+      {
+        rootMargin: FEED_ITEM_ACTIVE_ROOT_MARGIN,
+        threshold: 0,
+      }
+    )
+
+    observer.observe(item)
+
+    return () => {
+      observer.disconnect()
+    }
+  }, [forceActive])
+
+  return <div ref={itemRef}>{children(forceActive || isNearViewport)}</div>
+}
+
+function DeferredFeedSection({
+  active,
+  children,
+  minHeight,
+}: {
+  active: boolean
+  children: ReactNode
+  minHeight: number
+}) {
+  const sectionRef = useRef<HTMLDivElement | null>(null)
+  const [measuredHeight, setMeasuredHeight] = useState(0)
+
+  useEffect(() => {
+    if (!active || !sectionRef.current) return
+
+    setMeasuredHeight((current) => Math.max(current, sectionRef.current?.offsetHeight || 0))
+  }, [active, children])
+
+  if (!active) {
+    return (
+      <div
+        aria-hidden="true"
+        style={{ minHeight: measuredHeight || minHeight }}
+        className="rounded-[1.5rem] border border-dashed border-zinc-200/70 bg-zinc-50/50 dark:border-zinc-800/70 dark:bg-zinc-900/20"
+      />
+    )
+  }
+
+  return <div ref={sectionRef}>{children}</div>
+}
 
 function mergeUniqueById<T extends { id: string }>(current: T[], incoming: T[]) {
   const map = new Map<string, T>()
@@ -2713,6 +2787,81 @@ function FeedContent() {
   const visibleFeedItems = filteredFeedItems
   const hasSearch = normalizedSearch.length > 0
 
+  const commentsByPostId = useMemo(() => {
+    const map = new Map<string, Comment[]>()
+
+    for (const comment of comments) {
+      const postComments = map.get(comment.post_id) || []
+      postComments.push(comment)
+      map.set(comment.post_id, postComments)
+    }
+
+    return map
+  }, [comments])
+
+  const likesByPostId = useMemo(() => {
+    const map = new Map<string, Like[]>()
+    const likedByCurrentUser = new Set<string>()
+
+    for (const like of likes) {
+      const postLikes = map.get(like.post_id) || []
+      postLikes.push(like)
+      map.set(like.post_id, postLikes)
+
+      if (like.user_id === userId) {
+        likedByCurrentUser.add(like.post_id)
+      }
+    }
+
+    return { map, likedByCurrentUser }
+  }, [likes, userId])
+
+  const repostsByPostId = useMemo(() => {
+    const map = new Map<string, Repost[]>()
+    const repostedByCurrentUser = new Set<string>()
+
+    for (const repost of reposts) {
+      const postReposts = map.get(repost.post_id) || []
+      postReposts.push(repost)
+      map.set(repost.post_id, postReposts)
+
+      if (repost.user_id === userId) {
+        repostedByCurrentUser.add(repost.post_id)
+      }
+    }
+
+    return { map, repostedByCurrentUser }
+  }, [reposts, userId])
+
+  const savedPostIds = useMemo(() => {
+    const ids = new Set<string>()
+
+    for (const bookmark of bookmarks) {
+      if (bookmark.user_id === userId) {
+        ids.add(bookmark.post_id)
+      }
+    }
+
+    return ids
+  }, [bookmarks, userId])
+
+  const commentLikesByCommentId = useMemo(() => {
+    const map = new Map<string, CommentLike[]>()
+    const likedByCurrentUser = new Set<string>()
+
+    for (const like of commentLikes) {
+      const likesForComment = map.get(like.comment_id) || []
+      likesForComment.push(like)
+      map.set(like.comment_id, likesForComment)
+
+      if (like.user_id === userId) {
+        likedByCurrentUser.add(like.comment_id)
+      }
+    }
+
+    return { map, likedByCurrentUser }
+  }, [commentLikes, userId])
+
   const replyModalPost = useMemo(() => {
     if (!replyModalPostId) return null
 
@@ -3160,21 +3309,12 @@ function FeedContent() {
               {visibleFeedItems.map((item) => {
                 const post = item.post
 
-                const postComments = comments.filter((comment) => comment.post_id === post.id)
-                const postLikes = likes.filter((like) => like.post_id === post.id)
-                const postReposts = reposts.filter((repost) => repost.post_id === post.id)
-
-                const userLiked = likes.some(
-                  (like) => like.post_id === post.id && like.user_id === userId
-                )
-
-                const postSaved = bookmarks.some(
-                  (bookmark) => bookmark.post_id === post.id && bookmark.user_id === userId
-                )
-
-                const postReposted = reposts.some(
-                  (repost) => repost.post_id === post.id && repost.user_id === userId
-                )
+                const postComments = commentsByPostId.get(post.id) || []
+                const postLikes = likesByPostId.map.get(post.id) || []
+                const postReposts = repostsByPostId.map.get(post.id) || []
+                const userLiked = likesByPostId.likedByCurrentUser.has(post.id)
+                const postSaved = savedPostIds.has(post.id)
+                const postReposted = repostsByPostId.repostedByCurrentUser.has(post.id)
 
                 const isEditing = editingPostId === post.id
 
@@ -3211,9 +3351,13 @@ function FeedContent() {
                   item.type === 'repost' ? item.repost.profiles?.avatar_url || '' : ''
 
                 return (
+                  <FeedWindowItem
+                    key={item.id}
+                    forceActive={isHighlighted || isEditing || replyModalPostId === post.id}
+                  >
+                    {(isNearViewport) => (
                   <article
                     id={item.type === 'post' ? `post-${post.id}` : `repost-${item.id}`}
-                    key={item.id}
                     className={`group relative overflow-hidden rounded-[1.65rem] border bg-white/95 p-3.5 shadow-sm shadow-black/5 ring-1 ring-black/5 backdrop-blur-xl transition-all duration-300 before:pointer-events-none before:absolute before:inset-0 before:bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.12),transparent_42%)] before:opacity-0 before:transition-opacity before:duration-300 hover:border-blue-400/50 hover:shadow-2xl hover:shadow-blue-500/10 hover:before:opacity-100 dark:bg-slate-950/85 dark:ring-white/10 sm:rounded-[2rem] sm:p-6 md:hover:-translate-y-1 ${isHighlighted
                         ? 'border-blue-500 ring-2 ring-blue-200 dark:border-blue-400 dark:ring-blue-900'
                         : 'border-zinc-200/70 dark:border-zinc-800/70'
@@ -3386,7 +3530,9 @@ function FeedContent() {
                         {shouldShowSensitiveWarning ? (
                           <SensitiveContent>
                             {isSharedGiftPost ? (
-                              <SharedGiftFeedCard post={post} />
+                              <DeferredFeedSection active={isNearViewport} minHeight={FEED_MEDIA_PLACEHOLDER_HEIGHT}>
+                                <SharedGiftFeedCard post={post} />
+                              </DeferredFeedSection>
                             ) : post.content && (
                               <LinkedPostText
                                 content={post.content}
@@ -3398,12 +3544,18 @@ function FeedContent() {
 
                             <LinkPreview content={post.content} />
 
-                            {!isSharedGiftPost && <PostMediaGallery media={postMedia} />}
+                            {!isSharedGiftPost && postMedia.length > 0 && (
+                              <DeferredFeedSection active={isNearViewport} minHeight={FEED_MEDIA_PLACEHOLDER_HEIGHT}>
+                                <PostMediaGallery media={postMedia} />
+                              </DeferredFeedSection>
+                            )}
                           </SensitiveContent>
                         ) : (
                           <>
                             {isSharedGiftPost ? (
-                              <SharedGiftFeedCard post={post} />
+                              <DeferredFeedSection active={isNearViewport} minHeight={FEED_MEDIA_PLACEHOLDER_HEIGHT}>
+                                <SharedGiftFeedCard post={post} />
+                              </DeferredFeedSection>
                             ) : post.content && (
                               <LinkedPostText
                                 content={post.content}
@@ -3415,7 +3567,11 @@ function FeedContent() {
 
                             <LinkPreview content={post.content} />
 
-                            {!isSharedGiftPost && <PostMediaGallery media={postMedia} />}
+                            {!isSharedGiftPost && postMedia.length > 0 && (
+                              <DeferredFeedSection active={isNearViewport} minHeight={FEED_MEDIA_PLACEHOLDER_HEIGHT}>
+                                <PostMediaGallery media={postMedia} />
+                              </DeferredFeedSection>
+                            )}
                           </>
                         )}
                       </>
@@ -3460,6 +3616,7 @@ function FeedContent() {
                         : new Date(post.created_at).toLocaleString(getDateLocale(language))}
                     </p>
 
+                    <DeferredFeedSection active={isNearViewport} minHeight={FEED_COMMENTS_PLACEHOLDER_HEIGHT}>
                     <div className="mt-4 border-t border-zinc-200/70 pt-4 dark:border-zinc-800/70">
                       <h3 className="mb-3 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
                         {t('feed.comments')}
@@ -3487,13 +3644,8 @@ function FeedContent() {
                           const commentIsMine = comment.user_id === userId
                           const isEditingThisComment = editingCommentId === comment.id
 
-                          const likesForComment = commentLikes.filter(
-                            (like) => like.comment_id === comment.id
-                          )
-
-                          const userLikedComment = likesForComment.some(
-                            (like) => like.user_id === userId
-                          )
+                          const likesForComment = commentLikesByCommentId.map.get(comment.id) || []
+                          const userLikedComment = commentLikesByCommentId.likedByCurrentUser.has(comment.id)
 
                           return (
                             <div
@@ -3684,7 +3836,10 @@ function FeedContent() {
                         </button>
                       </div>
                     </div>
+                    </DeferredFeedSection>
                   </article>
+                    )}
+                  </FeedWindowItem>
                 )
               })}
             </div>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useId, useRef, useState } from 'react'
+import { memo, useEffect, useId, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, Play, X } from 'lucide-react'
 
 type PostMedia = {
@@ -260,7 +260,7 @@ function MediaThumb({
   )
 }
 
-export default function PostMediaGallery({ media }: PostMediaGalleryProps) {
+function PostMediaGallery({ media }: PostMediaGalleryProps) {
   const [open, setOpen] = useState(false)
   const [activeIndex, setActiveIndex] = useState(0)
   const [viewerFailed, setViewerFailed] = useState(false)
@@ -497,3 +497,5 @@ export default function PostMediaGallery({ media }: PostMediaGalleryProps) {
     </>
   )
 }
+
+export default memo(PostMediaGallery)
