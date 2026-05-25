@@ -3317,6 +3317,9 @@ function FeedContent() {
                 const postReposted = repostsByPostId.repostedByCurrentUser.has(post.id)
 
                 const isEditing = editingPostId === post.id
+                const hasActiveCommentState = postComments.some(
+                  (comment) => comment.id === editingCommentId || comment.id === openCommentMenuId
+                )
 
                 const authorName =
                   post.profiles?.display_name || post.profiles?.username || t('common.user')
@@ -3353,7 +3356,7 @@ function FeedContent() {
                 return (
                   <FeedWindowItem
                     key={item.id}
-                    forceActive={isHighlighted || isEditing || replyModalPostId === post.id}
+                    forceActive={isHighlighted || isEditing || hasActiveCommentState || replyModalPostId === post.id}
                   >
                     {(isNearViewport) => (
                   <article
