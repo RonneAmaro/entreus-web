@@ -16,6 +16,7 @@ import { supabase } from '@/lib/supabase'
 import { isAdminRole } from '@/lib/admin'
 
 type FilterStatus = 'pending' | 'approved' | 'rejected' | 'all'
+type DocumentKind = 'front' | 'back' | 'selfie'
 
 type AdminProfile = {
   id: string
@@ -42,19 +43,19 @@ type AgeVerificationRequest = {
   rejection_reason: string | null
   created_at: string
   updated_at: string
-  document_front_path: string | null
-  document_back_path: string | null
-  selfie_path: string | null
   submitted_at: string | null
   privacy_accepted_at: string | null
   document_type: string | null
 }
 
-type SignedDocuments = {
-  front?: string
-  back?: string
-  selfie?: string
+type SignedDocument = {
+  url?: string
+  fileType?: 'image' | 'pdf'
+  loading?: boolean
+  error?: string
 }
+
+type SignedDocuments = Record<DocumentKind, SignedDocument>
 
 const FILTERS: { value: FilterStatus; label: string }[] = [
   { value: 'pending', label: 'Pendentes' },
@@ -62,6 +63,12 @@ const FILTERS: { value: FilterStatus; label: string }[] = [
   { value: 'rejected', label: 'Recusadas' },
   { value: 'all', label: 'Todas' },
 ]
+
+const EMPTY_SIGNED_DOCUMENTS: SignedDocuments = {
+  front: {},
+  back: {},
+  selfie: {},
+}
 
 function calculateAge(birthDateValue: string | null) {
   if (!birthDateValue) return null
@@ -105,10 +112,6 @@ function documentTypeLabel(value: string | null) {
   return 'Nao informado'
 }
 
-function isPdf(path: string | null) {
-  return Boolean(path?.toLowerCase().endsWith('.pdf'))
-}
-
 export default function AdminAgeVerificationsPage() {
   const router = useRouter()
 
@@ -120,7 +123,7 @@ export default function AdminAgeVerificationsPage() {
   const [profilesById, setProfilesById] = useState<Record<string, UserProfile>>({})
   const [filter, setFilter] = useState<FilterStatus>('pending')
   const [selectedRequest, setSelectedRequest] = useState<AgeVerificationRequest | null>(null)
-  const [signedDocuments, setSignedDocuments] = useState<SignedDocuments>({})
+  const [signedDocuments, setSignedDocuments] = useState<SignedDocuments>(EMPTY_SIGNED_DOCUMENTS)
   const [rejectionReason, setRejectionReason] = useState('')
   const [adminNotes, setAdminNotes] = useState('')
 
@@ -190,9 +193,6 @@ export default function AdminAgeVerificationsPage() {
         rejection_reason,
         created_at,
         updated_at,
-        document_front_path,
-        document_back_path,
-        selfie_path,
         submitted_at,
         privacy_accepted_at,
         document_type
@@ -235,35 +235,80 @@ export default function AdminAgeVerificationsPage() {
     setProfilesById(profileMap)
   }
 
-  async function createSignedUrl(path: string | null) {
-    if (!path) return undefined
-
-    const { data, error } = await supabase.storage
-      .from('age-verifications')
-      .createSignedUrl(path, 300)
-
-    if (error) {
-      setMessage('Nao foi possivel gerar URL temporaria: ' + error.message)
-      return undefined
-    }
-
-    return data.signedUrl
-  }
-
   async function openDetails(request: AgeVerificationRequest) {
     setSelectedRequest(request)
     setRejectionReason('')
     setAdminNotes(request.admin_notes || '')
-    setSignedDocuments({})
+    setSignedDocuments(EMPTY_SIGNED_DOCUMENTS)
+    setMessage('')
+  }
+
+  async function requestSignedDocument(documentKind: DocumentKind) {
+    if (!selectedRequest) return
+
+    setSignedDocuments((current) => ({
+      ...current,
+      [documentKind]: { loading: true },
+    }))
     setMessage('')
 
-    const [front, back, selfie] = await Promise.all([
-      createSignedUrl(request.document_front_path),
-      createSignedUrl(request.document_back_path),
-      createSignedUrl(request.selfie_path),
-    ])
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
 
-    setSignedDocuments({ front, back, selfie })
+    if (!session?.access_token) {
+      setSignedDocuments((current) => ({
+        ...current,
+        [documentKind]: { error: 'Sessao expirada. Entre novamente para visualizar.' },
+      }))
+      return
+    }
+
+    try {
+      const response = await fetch('/api/admin/age-verifications/signed-url', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          requestId: selectedRequest.id,
+          documentKind,
+        }),
+      })
+
+      const data = (await response.json().catch(() => null)) as {
+        ok?: boolean
+        signedUrl?: string
+        fileType?: 'image' | 'pdf'
+        error?: string
+      } | null
+
+      if (!response.ok || !data?.ok || !data.signedUrl) {
+        const unavailableMessage = data?.error === 'DOCUMENT_NOT_AVAILABLE'
+          ? 'Documento nao enviado ou indisponivel.'
+          : 'Nao foi possivel gerar acesso temporario.'
+
+        setSignedDocuments((current) => ({
+          ...current,
+          [documentKind]: { error: unavailableMessage },
+        }))
+        return
+      }
+
+      setSignedDocuments((current) => ({
+        ...current,
+        [documentKind]: {
+          url: data.signedUrl,
+          fileType: data.fileType || 'image',
+        },
+      }))
+    } catch {
+      setSignedDocuments((current) => ({
+        ...current,
+        [documentKind]: { error: 'Falha de conexao ao gerar acesso temporario.' },
+      }))
+    }
   }
 
   async function approveRequest(request: AgeVerificationRequest) {
@@ -369,7 +414,9 @@ export default function AdminAgeVerificationsPage() {
     await loadRequests()
   }
 
-  function renderSignedDocument(label: string, signedUrl: string | undefined, path: string | null) {
+  function renderSignedDocument(label: string, documentKind: DocumentKind) {
+    const document = signedDocuments[documentKind]
+
     return (
       <div className="rounded-3xl border border-white/10 bg-black/35 p-4">
         <div className="mb-3 flex items-center justify-between gap-3">
@@ -379,28 +426,38 @@ export default function AdminAgeVerificationsPage() {
           </span>
         </div>
 
-        {!path ? (
-          <div className="flex min-h-48 items-center justify-center rounded-2xl border border-dashed border-white/10 text-sm text-zinc-500">
-            Nao enviado
-          </div>
-        ) : !signedUrl ? (
+        {document.loading ? (
           <div className="flex min-h-48 items-center justify-center rounded-2xl border border-white/10 text-sm text-zinc-400">
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             Gerando acesso temporario...
           </div>
-        ) : isPdf(path) ? (
+        ) : document.error ? (
+          <div className="flex min-h-48 items-center justify-center rounded-2xl border border-dashed border-white/10 px-4 text-center text-sm text-zinc-500">
+            {document.error}
+          </div>
+        ) : !document.url ? (
+          <button
+            type="button"
+            onClick={() => requestSignedDocument(documentKind)}
+            className="flex min-h-48 w-full flex-col items-center justify-center rounded-2xl border border-blue-300/20 bg-blue-500/10 text-blue-100 transition hover:bg-blue-500/20"
+          >
+            <Eye className="h-9 w-9" />
+            <span className="mt-3 text-sm font-black">Ver documento</span>
+          </button>
+        ) : document.fileType === 'pdf' ? (
           <Link
-            href={signedUrl}
+            href={document.url}
             target="_blank"
+            rel="noreferrer"
             className="flex min-h-48 flex-col items-center justify-center rounded-2xl border border-blue-300/20 bg-blue-500/10 text-blue-100 transition hover:bg-blue-500/20"
           >
             <FileText className="h-10 w-10" />
             <span className="mt-3 text-sm font-black">Abrir PDF temporario</span>
           </Link>
         ) : (
-          <a href={signedUrl} target="_blank" rel="noreferrer">
+          <a href={document.url} target="_blank" rel="noreferrer">
             <img
-              src={signedUrl}
+              src={document.url}
               alt={label}
               className="max-h-80 w-full rounded-2xl object-contain ring-1 ring-white/10"
             />
@@ -582,13 +639,13 @@ export default function AdminAgeVerificationsPage() {
               </div>
 
               <div className="mt-5 rounded-2xl border border-amber-300/20 bg-amber-500/10 p-4 text-sm leading-6 text-amber-50">
-                Documentos de verificacao sao dados sensiveis. As URLs abaixo sao temporarias e expiram em 5 minutos.
+                Documento sensivel. Acesse apenas para revisao de idade. Cada visualizacao gera uma URL temporaria de 5 minutos.
               </div>
 
               <div className="mt-5 grid gap-4 lg:grid-cols-3">
-                {renderSignedDocument('Documento - frente', signedDocuments.front, selectedRequest.document_front_path)}
-                {renderSignedDocument('Documento - verso', signedDocuments.back, selectedRequest.document_back_path)}
-                {renderSignedDocument('Selfie', signedDocuments.selfie, selectedRequest.selfie_path)}
+                {renderSignedDocument('Documento - frente', 'front')}
+                {renderSignedDocument('Documento - verso', 'back')}
+                {renderSignedDocument('Selfie', 'selfie')}
               </div>
 
               <div className="mt-5 grid gap-4 lg:grid-cols-2">
