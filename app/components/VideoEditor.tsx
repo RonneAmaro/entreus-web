@@ -92,6 +92,13 @@ type TimelineDragState = {
   initialStartTime: number
   initialEndTime: number
 }
+type TimelineDragPreview = {
+  type: TimelineEditableLayer
+  id: string
+  mode: TimelineDragMode
+  startTime: number
+  endTime: number
+} | null
 type PhotoTransition = 'none' | 'fade'
 type CompressionPreset = 'auto' | 'light' | 'high'
 type TextFontKey = 'system' | 'strong' | 'elegant' | 'condensed' | 'casual' | 'mono' | 'classic' | 'rounded'
@@ -150,6 +157,7 @@ const DEFAULT_TEXT_BACKGROUND_COLOR = '#000000'
 const DEFAULT_TEXT_BACKGROUND_OPACITY = 0.55
 const DEFAULT_VIDEO_DURATION = 10
 const MIN_TIMELINE_ITEM_DURATION = 0.5
+const TIMELINE_DRAG_SNAP_SECONDS = 0.25
 const FFMPEG_CORE_VERSION = '0.12.10'
 const FFMPEG_CORE_BASE_URL = `https://unpkg.com/@ffmpeg/core@${FFMPEG_CORE_VERSION}/dist/umd`
 const HEAVY_VIDEO_SIZE_BYTES = 30 * 1024 * 1024
@@ -500,6 +508,7 @@ export default function VideoEditor({ mode = 'publish' }: VideoEditorProps) {
   const [isPublishStepOpen, setIsPublishStepOpen] = useState(false)
   const [timelineExpanded, setTimelineExpanded] = useState(true)
   const [timelineDragTarget, setTimelineDragTarget] = useState<string | null>(null)
+  const [timelineDragPreview, setTimelineDragPreview] = useState<TimelineDragPreview>(null)
   const [imageMessage, setImageMessage] = useState('')
   const [photoSlides, setPhotoSlides] = useState<PhotoSlide[]>([])
   const [activePhotoId, setActivePhotoId] = useState<string | null>(null)
@@ -1878,6 +1887,10 @@ export default function VideoEditor({ mode = 'publish' }: VideoEditorProps) {
     }
   }
 
+  function snapTimelineTime(value: number) {
+    return Math.round(value / TIMELINE_DRAG_SNAP_SECONDS) * TIMELINE_DRAG_SNAP_SECONDS
+  }
+
   function updateTimelineLayerTiming(type: TimelineEditableLayer, id: string, startTime: number, endTime: number) {
     const timing = normalizeTimelineTiming(startTime, endTime)
 
@@ -1953,26 +1966,34 @@ export default function VideoEditor({ mode = 'publish' }: VideoEditorProps) {
 
     if (dragState.mode === 'trim-start') {
       nextStart = clamp(
-        dragState.initialStartTime + deltaSeconds,
+        snapTimelineTime(dragState.initialStartTime + deltaSeconds),
         0,
         dragState.initialEndTime - MIN_TIMELINE_ITEM_DURATION,
       )
     } else if (dragState.mode === 'trim-end') {
       nextEnd = clamp(
-        dragState.initialEndTime + deltaSeconds,
+        snapTimelineTime(dragState.initialEndTime + deltaSeconds),
         dragState.initialStartTime + MIN_TIMELINE_ITEM_DURATION,
         timelineDuration,
       )
     } else {
       nextStart = clamp(
-        dragState.initialStartTime + deltaSeconds,
+        snapTimelineTime(dragState.initialStartTime + deltaSeconds),
         0,
         Math.max(timelineDuration - originalDuration, 0),
       )
       nextEnd = nextStart + originalDuration
     }
 
-    updateTimelineLayerTiming(dragState.type, dragState.id, nextStart, nextEnd)
+    const timing = normalizeTimelineTiming(nextStart, nextEnd)
+    updateTimelineLayerTiming(dragState.type, dragState.id, timing.startTime, timing.endTime)
+    setTimelineDragPreview({
+      type: dragState.type,
+      id: dragState.id,
+      mode: dragState.mode,
+      startTime: timing.startTime,
+      endTime: timing.endTime,
+    })
   }
 
   function handleTimelineLayerDragStart(
@@ -1996,6 +2017,7 @@ export default function VideoEditor({ mode = 'publish' }: VideoEditorProps) {
 
     selectTimelineLayer(type, id)
     setTimelineDragTarget(`${type}:${id}:${mode}`)
+    setTimelineDragPreview({ type, id, mode, startTime, endTime })
     timelineDragRef.current = {
       type,
       id,
@@ -2038,6 +2060,7 @@ export default function VideoEditor({ mode = 'publish' }: VideoEditorProps) {
     applyTimelineDrag(event.clientX)
     timelineDragRef.current = null
     setTimelineDragTarget(null)
+    setTimelineDragPreview(null)
   }
 
   function updateActiveOverlayText(value: string) {
@@ -3683,6 +3706,21 @@ export default function VideoEditor({ mode = 'publish' }: VideoEditorProps) {
     timelineDuration > 0
       ? clamp(((endTime - startTime) / timelineDuration) * 100, minWidth, 100 - getTimelineLeft(startTime))
       : minWidth
+  const getTimelineDragFeedback = (type: TimelineEditableLayer, id: string) => {
+    if (!timelineDragPreview || timelineDragPreview.type !== type || timelineDragPreview.id !== id) return null
+
+    const durationLabel = formatEditorTime(timelineDragPreview.endTime - timelineDragPreview.startTime)
+
+    if (timelineDragPreview.mode === 'trim-start') {
+      return `start: ${formatEditorTime(timelineDragPreview.startTime)}`
+    }
+
+    if (timelineDragPreview.mode === 'trim-end') {
+      return `end: ${formatEditorTime(timelineDragPreview.endTime)}`
+    }
+
+    return `duracao: ${durationLabel}`
+  }
   const musicTimelineEnd = audioDuration > 0
     ? Math.min(musicStartTime + Math.max(audioDuration - musicTrimStart, 0), timelineDuration)
     : timelineDuration
@@ -4246,7 +4284,7 @@ export default function VideoEditor({ mode = 'publish' }: VideoEditorProps) {
                       ))}
                     </div>
 
-                    <div data-timeline-track className="relative mt-1 h-8 rounded-lg border border-sky-300/15 bg-sky-500/10">
+                    <div data-timeline-track className="relative mt-1 h-10 rounded-lg border border-sky-300/15 bg-sky-500/10 sm:h-8">
                       {editorMode === 'video' && overlays.length > 0 ? (
                         overlays.map((overlay, index) => (
                           <div
@@ -4264,11 +4302,11 @@ export default function VideoEditor({ mode = 'publish' }: VideoEditorProps) {
                             onPointerMove={handleTimelineLayerDragMove}
                             onPointerUp={handleTimelineLayerDragEnd}
                             onPointerCancel={handleTimelineLayerDragEnd}
-                            className={`absolute top-1 h-6 min-w-8 cursor-grab touch-manipulation rounded-md px-2 text-left text-[10px] font-black transition active:cursor-grabbing ${
+                            className={`absolute top-1 h-8 min-w-10 cursor-grab touch-none rounded-md px-3 text-left text-[10px] font-black transition active:cursor-grabbing sm:h-6 sm:min-w-8 sm:px-2 ${
                               overlay.id === activeOverlayId
                                 ? 'bg-white text-black ring-2 ring-sky-300'
                                 : 'bg-sky-300/75 text-sky-950 hover:bg-sky-200'
-                            } ${timelineDragTarget?.startsWith(`text:${overlay.id}:`) ? 'scale-[1.02] shadow-lg shadow-sky-500/25' : ''}`}
+                            } ${timelineDragTarget?.startsWith(`text:${overlay.id}:`) ? 'z-30 scale-[1.03] shadow-lg shadow-sky-500/25 ring-2 ring-sky-200' : ''}`}
                             style={{
                               left: `${getTimelineLeft(overlay.startTime)}%`,
                               width: `${getTimelineWidth(overlay.startTime, overlay.endTime, 7)}%`,
@@ -4283,9 +4321,16 @@ export default function VideoEditor({ mode = 'publish' }: VideoEditorProps) {
                               onPointerMove={handleTimelineLayerDragMove}
                               onPointerUp={handleTimelineLayerDragEnd}
                               onPointerCancel={handleTimelineLayerDragEnd}
-                              className="absolute inset-y-0 left-0 z-10 w-4 -translate-x-1 rounded-l-md border-r border-white/40 bg-white/35 cursor-ew-resize touch-manipulation"
-                            />
-                            <span className="flex items-center gap-1 truncate">
+                              className="absolute inset-y-0 left-0 z-20 flex w-10 -translate-x-3 cursor-ew-resize touch-none items-center justify-start rounded-l-md sm:w-4 sm:-translate-x-1"
+                            >
+                              <span className="pointer-events-none h-full w-4 rounded-l-md border-r border-white/50 bg-white/45 shadow-sm sm:w-full" />
+                            </button>
+                            {getTimelineDragFeedback('text', overlay.id) && (
+                              <span className="pointer-events-none absolute -top-7 left-1/2 z-30 -translate-x-1/2 whitespace-nowrap rounded-full border border-sky-200/30 bg-black/85 px-2 py-1 text-[10px] font-black text-sky-50 shadow-lg">
+                                {getTimelineDragFeedback('text', overlay.id)}
+                              </span>
+                            )}
+                            <span className="flex h-full items-center gap-1 truncate">
                               <Type className="h-3 w-3 shrink-0" />
                               <span className="truncate">{getOverlayLabel(overlay, index)}</span>
                             </span>
@@ -4298,8 +4343,10 @@ export default function VideoEditor({ mode = 'publish' }: VideoEditorProps) {
                               onPointerMove={handleTimelineLayerDragMove}
                               onPointerUp={handleTimelineLayerDragEnd}
                               onPointerCancel={handleTimelineLayerDragEnd}
-                              className="absolute inset-y-0 right-0 z-10 w-4 translate-x-1 rounded-r-md border-l border-white/40 bg-white/35 cursor-ew-resize touch-manipulation"
-                            />
+                              className="absolute inset-y-0 right-0 z-20 flex w-10 translate-x-3 cursor-ew-resize touch-none items-center justify-end rounded-r-md sm:w-4 sm:translate-x-1"
+                            >
+                              <span className="pointer-events-none h-full w-4 rounded-r-md border-l border-white/50 bg-white/45 shadow-sm sm:w-full" />
+                            </button>
                           </div>
                         ))
                       ) : (
@@ -4355,7 +4402,7 @@ export default function VideoEditor({ mode = 'publish' }: VideoEditorProps) {
                       </div>
                     )}
 
-                    <div data-timeline-track className={`${timelineExpanded ? 'block' : 'hidden sm:block'} relative mt-1 h-8 rounded-lg border border-fuchsia-300/15 bg-fuchsia-500/10`}>
+                    <div data-timeline-track className={`${timelineExpanded ? 'block' : 'hidden sm:block'} relative mt-1 h-10 rounded-lg border border-fuchsia-300/15 bg-fuchsia-500/10 sm:h-8`}>
                       {editorMode === 'video' && stickers.length > 0 ? (
                         stickers.map((sticker) => (
                           <div
@@ -4373,11 +4420,11 @@ export default function VideoEditor({ mode = 'publish' }: VideoEditorProps) {
                             onPointerMove={handleTimelineLayerDragMove}
                             onPointerUp={handleTimelineLayerDragEnd}
                             onPointerCancel={handleTimelineLayerDragEnd}
-                            className={`absolute top-1 flex h-6 min-w-8 cursor-grab touch-manipulation items-center gap-1 rounded-md px-2 text-left text-[10px] font-black transition active:cursor-grabbing ${
+                            className={`absolute top-1 flex h-8 min-w-10 cursor-grab touch-none items-center gap-1 rounded-md px-3 text-left text-[10px] font-black transition active:cursor-grabbing sm:h-6 sm:min-w-8 sm:px-2 ${
                               sticker.id === activeStickerId
                                 ? 'bg-white text-black ring-2 ring-fuchsia-300'
                                 : 'bg-fuchsia-300/80 text-fuchsia-950 hover:bg-fuchsia-200'
-                            } ${timelineDragTarget?.startsWith(`sticker:${sticker.id}:`) ? 'scale-[1.02] shadow-lg shadow-fuchsia-500/25' : ''}`}
+                            } ${timelineDragTarget?.startsWith(`sticker:${sticker.id}:`) ? 'z-30 scale-[1.03] shadow-lg shadow-fuchsia-500/25 ring-2 ring-fuchsia-200' : ''}`}
                             style={{
                               left: `${getTimelineLeft(sticker.startTime)}%`,
                               width: `${getTimelineWidth(sticker.startTime, sticker.endTime, 7)}%`,
@@ -4391,8 +4438,15 @@ export default function VideoEditor({ mode = 'publish' }: VideoEditorProps) {
                               onPointerMove={handleTimelineLayerDragMove}
                               onPointerUp={handleTimelineLayerDragEnd}
                               onPointerCancel={handleTimelineLayerDragEnd}
-                              className="absolute inset-y-0 left-0 z-10 w-4 -translate-x-1 rounded-l-md border-r border-white/40 bg-white/35 cursor-ew-resize touch-manipulation"
-                            />
+                              className="absolute inset-y-0 left-0 z-20 flex w-10 -translate-x-3 cursor-ew-resize touch-none items-center justify-start rounded-l-md sm:w-4 sm:-translate-x-1"
+                            >
+                              <span className="pointer-events-none h-full w-4 rounded-l-md border-r border-white/50 bg-white/45 shadow-sm sm:w-full" />
+                            </button>
+                            {getTimelineDragFeedback('sticker', sticker.id) && (
+                              <span className="pointer-events-none absolute -top-7 left-1/2 z-30 -translate-x-1/2 whitespace-nowrap rounded-full border border-fuchsia-200/30 bg-black/85 px-2 py-1 text-[10px] font-black text-fuchsia-50 shadow-lg">
+                                {getTimelineDragFeedback('sticker', sticker.id)}
+                              </span>
+                            )}
                             <span className="text-sm leading-none">{sticker.value}</span>
                             <span className="truncate">Figurinha</span>
                             <span className="pointer-events-none absolute inset-x-4 bottom-0.5 h-0.5 rounded-full bg-fuchsia-950/20" />
@@ -4404,8 +4458,10 @@ export default function VideoEditor({ mode = 'publish' }: VideoEditorProps) {
                               onPointerMove={handleTimelineLayerDragMove}
                               onPointerUp={handleTimelineLayerDragEnd}
                               onPointerCancel={handleTimelineLayerDragEnd}
-                              className="absolute inset-y-0 right-0 z-10 w-4 translate-x-1 rounded-r-md border-l border-white/40 bg-white/35 cursor-ew-resize touch-manipulation"
-                            />
+                              className="absolute inset-y-0 right-0 z-20 flex w-10 translate-x-3 cursor-ew-resize touch-none items-center justify-end rounded-r-md sm:w-4 sm:translate-x-1"
+                            >
+                              <span className="pointer-events-none h-full w-4 rounded-r-md border-l border-white/50 bg-white/45 shadow-sm sm:w-full" />
+                            </button>
                           </div>
                         ))
                       ) : (
@@ -4461,7 +4517,7 @@ export default function VideoEditor({ mode = 'publish' }: VideoEditorProps) {
                       </div>
                     )}
 
-                    <div data-timeline-track className={`${timelineExpanded ? 'block' : 'hidden sm:block'} relative mt-1 h-8 rounded-lg border border-amber-300/15 bg-amber-500/10`}>
+                    <div data-timeline-track className={`${timelineExpanded ? 'block' : 'hidden sm:block'} relative mt-1 h-10 rounded-lg border border-amber-300/15 bg-amber-500/10 sm:h-8`}>
                       {editorMode === 'video' && imageOverlays.length > 0 ? (
                         imageOverlays.map((overlay) => (
                           <div
@@ -4479,11 +4535,11 @@ export default function VideoEditor({ mode = 'publish' }: VideoEditorProps) {
                             onPointerMove={handleTimelineLayerDragMove}
                             onPointerUp={handleTimelineLayerDragEnd}
                             onPointerCancel={handleTimelineLayerDragEnd}
-                            className={`absolute top-1 h-6 min-w-8 cursor-grab touch-manipulation rounded-md px-2 text-left text-[10px] font-black transition active:cursor-grabbing ${
+                            className={`absolute top-1 h-8 min-w-10 cursor-grab touch-none rounded-md px-3 text-left text-[10px] font-black transition active:cursor-grabbing sm:h-6 sm:min-w-8 sm:px-2 ${
                               overlay.id === activeImageId
                                 ? 'bg-white text-black ring-2 ring-amber-300'
                                 : 'bg-amber-300/80 text-amber-950 hover:bg-amber-200'
-                            } ${timelineDragTarget?.startsWith(`image:${overlay.id}:`) ? 'scale-[1.02] shadow-lg shadow-amber-500/25' : ''}`}
+                            } ${timelineDragTarget?.startsWith(`image:${overlay.id}:`) ? 'z-30 scale-[1.03] shadow-lg shadow-amber-500/25 ring-2 ring-amber-200' : ''}`}
                             style={{
                               left: `${getTimelineLeft(overlay.startTime)}%`,
                               width: `${getTimelineWidth(overlay.startTime, overlay.endTime, 8)}%`,
@@ -4497,9 +4553,16 @@ export default function VideoEditor({ mode = 'publish' }: VideoEditorProps) {
                               onPointerMove={handleTimelineLayerDragMove}
                               onPointerUp={handleTimelineLayerDragEnd}
                               onPointerCancel={handleTimelineLayerDragEnd}
-                              className="absolute inset-y-0 left-0 z-10 w-4 -translate-x-1 rounded-l-md border-r border-white/40 bg-white/35 cursor-ew-resize touch-manipulation"
-                            />
-                            <span className="flex items-center gap-1 truncate">
+                              className="absolute inset-y-0 left-0 z-20 flex w-10 -translate-x-3 cursor-ew-resize touch-none items-center justify-start rounded-l-md sm:w-4 sm:-translate-x-1"
+                            >
+                              <span className="pointer-events-none h-full w-4 rounded-l-md border-r border-white/50 bg-white/45 shadow-sm sm:w-full" />
+                            </button>
+                            {getTimelineDragFeedback('image', overlay.id) && (
+                              <span className="pointer-events-none absolute -top-7 left-1/2 z-30 -translate-x-1/2 whitespace-nowrap rounded-full border border-amber-200/30 bg-black/85 px-2 py-1 text-[10px] font-black text-amber-50 shadow-lg">
+                                {getTimelineDragFeedback('image', overlay.id)}
+                              </span>
+                            )}
+                            <span className="flex h-full items-center gap-1 truncate">
                               <ImageIcon className="h-3 w-3 shrink-0" />
                               <span className="truncate">{overlay.name}</span>
                             </span>
@@ -4512,8 +4575,10 @@ export default function VideoEditor({ mode = 'publish' }: VideoEditorProps) {
                               onPointerMove={handleTimelineLayerDragMove}
                               onPointerUp={handleTimelineLayerDragEnd}
                               onPointerCancel={handleTimelineLayerDragEnd}
-                              className="absolute inset-y-0 right-0 z-10 w-4 translate-x-1 rounded-r-md border-l border-white/40 bg-white/35 cursor-ew-resize touch-manipulation"
-                            />
+                              className="absolute inset-y-0 right-0 z-20 flex w-10 translate-x-3 cursor-ew-resize touch-none items-center justify-end rounded-r-md sm:w-4 sm:translate-x-1"
+                            >
+                              <span className="pointer-events-none h-full w-4 rounded-r-md border-l border-white/50 bg-white/45 shadow-sm sm:w-full" />
+                            </button>
                           </div>
                         ))
                       ) : (
