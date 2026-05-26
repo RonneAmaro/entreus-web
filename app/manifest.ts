@@ -2,31 +2,51 @@ import type { MetadataRoute } from 'next'
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'EntreUS — Só Entre Nós',
+    name: 'EntreUS',
     short_name: 'EntreUS',
-    description: 'Rede social EntreUS — Só Entre Nós',
+    description:
+      'Rede social EntreUS para feed, perfil, mensagens e conexoes em uma experiencia instalavel.',
     start_url: '/feed',
     scope: '/',
     display: 'standalone',
-    background_color: '#020617',
-    theme_color: '#0ea5e9',
+    background_color: '#000000',
+    theme_color: '#134a99',
     orientation: 'portrait',
     lang: 'pt-BR',
     categories: ['social', 'entertainment', 'lifestyle'],
     icons: [
-      // TODO: substituir por /icons/icon-192.png, /icons/icon-512.png e
-      // /icons/maskable-512.png quando os ícones oficiais forem criados.
       {
-        src: '/logo.png',
-        sizes: '512x512',
+        src: '/entreus-app-icon.svg',
+        sizes: 'any',
+        type: 'image/svg+xml',
+        purpose: 'any',
+      },
+      {
+        src: '/entreus-app-icon.svg',
+        sizes: 'any',
+        type: 'image/svg+xml',
+        purpose: 'maskable',
+      },
+      {
+        src: '/favicon-entreus.png',
+        sizes: '653x653',
         type: 'image/png',
         purpose: 'any',
       },
       {
         src: '/logo.png',
-        sizes: '512x512',
+        sizes: '2000x2000',
         type: 'image/png',
-        purpose: 'maskable',
+        purpose: 'any',
+      },
+    ],
+    screenshots: [
+      {
+        src: '/pwa/entreus-home-preview.png',
+        sizes: '1414x2000',
+        type: 'image/png',
+        form_factor: 'narrow',
+        label: 'Tela inicial da EntreUS',
       },
     ],
   }

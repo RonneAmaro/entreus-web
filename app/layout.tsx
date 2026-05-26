@@ -26,10 +26,22 @@ export const metadata: Metadata = {
       {
         url: '/favicon-entreus.png',
         type: 'image/png',
+        sizes: '653x653',
+      },
+      {
+        url: '/entreus-app-icon.svg',
+        type: 'image/svg+xml',
+        sizes: 'any',
       },
     ],
     shortcut: '/favicon-entreus.png',
-    apple: '/logo.png',
+    apple: [
+      {
+        url: '/favicon-entreus.png',
+        type: 'image/png',
+        sizes: '653x653',
+      },
+    ],
   },
 
   appleWebApp: {
@@ -66,7 +78,7 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
-  themeColor: '#0ea5e9',
+  themeColor: '#134a99',
   colorScheme: 'dark',
 }
 
