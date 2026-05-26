@@ -13,7 +13,7 @@ Do not paste secrets into this file. Apply SQL manually in Supabase after review
 
 Known PWA follow-up:
 
-- `app/manifest.ts` now uses `/entreus-app-icon.svg` and `/favicon-entreus.png`, with `/logo.png` kept only as a fallback image asset. Before a serious public launch, generate official PNG icons in 192x192, 512x512, and maskable 512x512 sizes.
+- `app/manifest.ts` uses official PNG PWA icons in `public/pwa/icons/` for 192x192, 512x512, and maskable 512x512, with SVG/favicon assets kept as fallbacks.
 
 ## 2. Supabase migrations that must be applied
 
@@ -288,7 +288,7 @@ Do not change financial rules during smoke tests.
 - `start_url` opens `/feed`.
 - Theme/background colors are correct.
 - `/instalar` explains Android/Chrome and iPhone/Safari installation without promising push notifications.
-- Replace fallback logo-based assets with final 192/512/maskable PNG icons before a serious public launch.
+- Confirm installed app icon renders correctly on Android Chrome and iPhone Safari home screens.
 
 ## 12. Production caution list
 
@@ -306,5 +306,5 @@ Do not change financial rules during smoke tests.
 - Production Supabase state must be checked manually against the migration list.
 - Bucket privacy cannot be proven from repository code alone.
 - R2 audit is sampled/limited and is not a deletion source of truth.
-- PWA has a branded SVG icon and square favicon asset, but final generated 192/512/maskable PNG icons are still pending.
+- Installed PWA icon rendering still needs real-device verification on target Android/iPhone launchers.
 - Browser-only editor behavior must be tested on target mobile devices.

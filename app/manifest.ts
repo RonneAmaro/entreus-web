@@ -16,26 +16,32 @@ export default function manifest(): MetadataRoute.Manifest {
     categories: ['social', 'entertainment', 'lifestyle'],
     icons: [
       {
-        src: '/entreus-app-icon.svg',
-        sizes: 'any',
-        type: 'image/svg+xml',
-        purpose: 'any',
-      },
-      {
-        src: '/entreus-app-icon.svg',
-        sizes: 'any',
-        type: 'image/svg+xml',
-        purpose: 'maskable',
-      },
-      {
-        src: '/favicon-entreus.png',
-        sizes: '653x653',
+        src: '/pwa/icons/entreus-icon-192.png',
+        sizes: '192x192',
         type: 'image/png',
         purpose: 'any',
       },
       {
-        src: '/logo.png',
-        sizes: '2000x2000',
+        src: '/pwa/icons/entreus-icon-512.png',
+        sizes: '512x512',
+        type: 'image/png',
+        purpose: 'any',
+      },
+      {
+        src: '/pwa/icons/entreus-maskable-512.png',
+        sizes: '512x512',
+        type: 'image/png',
+        purpose: 'maskable',
+      },
+      {
+        src: '/entreus-app-icon.svg',
+        sizes: 'any',
+        type: 'image/svg+xml',
+        purpose: 'any',
+      },
+      {
+        src: '/favicon-entreus.png',
+        sizes: '653x653',
         type: 'image/png',
         purpose: 'any',
       },
