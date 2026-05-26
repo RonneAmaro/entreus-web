@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { Eye, EyeOff } from 'lucide-react'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
+import { signInWithSocialProvider, supabase } from '@/lib/supabase'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -13,6 +13,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [socialLoading, setSocialLoading] = useState(false)
   const [message, setMessage] = useState('')
 
   async function handleLogin(e: React.FormEvent) {
@@ -35,6 +36,18 @@ export default function LoginPage() {
     setLoading(false)
   }
 
+  async function handleGoogleLogin() {
+    setSocialLoading(true)
+    setMessage('')
+
+    const { error } = await signInWithSocialProvider('google')
+
+    if (error) {
+      setMessage('Nao foi possivel iniciar o login com Google. Verifique a configuracao e tente novamente.')
+      setSocialLoading(false)
+    }
+  }
+
   return (
     <main className="flex min-h-screen items-center justify-center bg-white px-6 py-10 text-black dark:bg-black dark:text-white">
       <div className="w-full max-w-md rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 sm:p-8">
@@ -46,7 +59,36 @@ export default function LoginPage() {
           </p>
         </div>
 
-        <form onSubmit={handleLogin} className="space-y-4">
+        <div className="space-y-3">
+          <button
+            type="button"
+            onClick={handleGoogleLogin}
+            disabled={loading || socialLoading}
+            className="flex w-full items-center justify-center gap-3 rounded-xl border border-zinc-300 bg-white px-4 py-3 font-semibold text-zinc-900 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white dark:hover:bg-zinc-800"
+          >
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-sm font-black text-blue-600 ring-1 ring-zinc-200">
+              G
+            </span>
+            {socialLoading ? 'Conectando...' : 'Continuar com Google'}
+          </button>
+
+          <button
+            type="button"
+            disabled
+            className="flex w-full cursor-not-allowed items-center justify-center gap-3 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm font-semibold text-zinc-400 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-600"
+            title="Facebook precisa ser configurado antes de ativar"
+          >
+            Facebook em breve
+          </button>
+
+          <div className="flex items-center gap-3 py-1 text-xs font-semibold uppercase text-zinc-400">
+            <span className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
+            <span>E-mail</span>
+            <span className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
+          </div>
+        </div>
+
+        <form onSubmit={handleLogin} className="mt-3 space-y-4">
           <div>
             <label className="mb-2 block text-sm text-zinc-700 dark:text-zinc-300">
               E-mail

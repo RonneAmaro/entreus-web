@@ -4,7 +4,7 @@ import { Eye, EyeOff } from 'lucide-react'
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
+import { signInWithSocialProvider, supabase } from '@/lib/supabase'
 
 function validatePassword(password: string) {
   if (password.length < 8) {
@@ -48,6 +48,7 @@ export default function SignupPage() {
   const [acceptedTerms, setAcceptedTerms] = useState(false)
   const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(false)
+  const [socialLoading, setSocialLoading] = useState(false)
 
   async function handleSignup(e: React.FormEvent) {
     e.preventDefault()
@@ -128,6 +129,45 @@ export default function SignupPage() {
     setMessage('Conta criada com sucesso! Agora você já pode entrar.')
   }
 
+  async function handleGoogleSignup() {
+    setMessage('')
+
+    if (!acceptedTerms) {
+      setMessage('Voce precisa aceitar os Termos de Uso e a Politica de Privacidade para continuar com Google.')
+      return
+    }
+
+    if (!birthDate) {
+      setMessage('Informe sua data de nascimento para continuar com Google.')
+      return
+    }
+
+    const age = calculateAge(birthDate)
+    const isMinor = age < 18
+
+    if (typeof window !== 'undefined') {
+      window.sessionStorage.setItem(
+        'entreus_oauth_signup_profile',
+        JSON.stringify({
+          birth_date: birthDate,
+          is_minor: isMinor,
+          parental_consent_status: isMinor ? 'pending' : 'not_required',
+          wants_18_plus: false,
+          age_verification_status: 'not_started',
+        }),
+      )
+    }
+
+    setSocialLoading(true)
+
+    const { error } = await signInWithSocialProvider('google')
+
+    if (error) {
+      setMessage('Nao foi possivel iniciar o cadastro com Google. Verifique a configuracao e tente novamente.')
+      setSocialLoading(false)
+    }
+  }
+
   return (
     <main className="flex min-h-screen items-center justify-center bg-black px-6 py-10 text-white">
       <div className="w-full max-w-md rounded-3xl border border-zinc-800 bg-zinc-950 p-6 shadow-2xl sm:p-8">
@@ -136,6 +176,35 @@ export default function SignupPage() {
         <p className="mb-6 text-center text-zinc-400">
           Entre para o EntreUS
         </p>
+
+        <div className="mb-5 space-y-3">
+          <button
+            type="button"
+            onClick={handleGoogleSignup}
+            disabled={loading || socialLoading}
+            className="flex w-full items-center justify-center gap-3 rounded-xl border border-zinc-700 bg-white px-4 py-3 font-semibold text-zinc-950 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-sm font-black text-blue-600 ring-1 ring-zinc-200">
+              G
+            </span>
+            {socialLoading ? 'Conectando...' : 'Entrar ou cadastrar com Google'}
+          </button>
+
+          <button
+            type="button"
+            disabled
+            className="flex w-full cursor-not-allowed items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900/60 px-4 py-3 text-sm font-semibold text-zinc-600"
+            title="Facebook precisa ser configurado antes de ativar"
+          >
+            Facebook em breve
+          </button>
+
+          <div className="flex items-center gap-3 py-1 text-xs font-semibold uppercase text-zinc-500">
+            <span className="h-px flex-1 bg-zinc-800" />
+            <span>E-mail</span>
+            <span className="h-px flex-1 bg-zinc-800" />
+          </div>
+        </div>
 
         <form onSubmit={handleSignup} className="space-y-4">
           <div>

@@ -4,10 +4,12 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import {
+  Camera,
   Globe2,
   ImagePlus,
   Lock,
   Scissors,
+  Video,
   Play,
   Send,
   Smile,
@@ -129,6 +131,8 @@ export default function PostComposer({
 }: PostComposerProps) {
   const { t } = useLanguage()
   const mediaInputRef = useRef<HTMLInputElement | null>(null)
+  const cameraPhotoInputRef = useRef<HTMLInputElement | null>(null)
+  const cameraVideoInputRef = useRef<HTMLInputElement | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
 
   const [content, setContent] = useState('')
@@ -137,6 +141,7 @@ export default function PostComposer({
   const [media, setMedia] = useState<MediaPreview[]>([])
   const [error, setError] = useState('')
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const [showMediaMenu, setShowMediaMenu] = useState(false)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [portalElement, setPortalElement] = useState<HTMLElement | null>(null)
 
@@ -188,6 +193,7 @@ export default function PostComposer({
     if (!files || files.length === 0) return
 
     setError('')
+    setShowMediaMenu(false)
 
     const currentMedia = [...media]
     const availableSlots = MAX_MEDIA_FILES - currentMedia.length
@@ -235,6 +241,8 @@ export default function PostComposer({
     setMedia([...currentMedia, ...newMedia])
 
     if (mediaInputRef.current) mediaInputRef.current.value = ''
+    if (cameraPhotoInputRef.current) cameraPhotoInputRef.current.value = ''
+    if (cameraVideoInputRef.current) cameraVideoInputRef.current.value = ''
   }
 
   function removeMedia(id: string) {
@@ -299,6 +307,7 @@ export default function PostComposer({
 
     setContent('')
     setShowEmojiPicker(false)
+    setShowMediaMenu(false)
     setIsModalOpen(false)
     setMedia((current) => {
       current.forEach((item) => URL.revokeObjectURL(item.url))
@@ -468,9 +477,31 @@ export default function PostComposer({
                     onClick={() => removeMedia(item.id)}
                     className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/70 text-white transition hover:bg-black"
                     title={t('postComposer.removeMedia')}
+                    aria-label={t('postComposer.removeMedia')}
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
+
+                  <div className="absolute left-2 top-2 flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => mediaInputRef.current?.click()}
+                      className="flex h-8 w-8 items-center justify-center rounded-full bg-black/70 text-white transition hover:bg-black"
+                      title="Trocar midia"
+                      aria-label="Trocar midia"
+                    >
+                      <ImagePlus className="h-4 w-4" />
+                    </button>
+
+                    <Link
+                      href="/editor"
+                      className="flex h-8 w-8 items-center justify-center rounded-full bg-black/70 text-white transition hover:bg-black"
+                      title="Editar midia"
+                      aria-label="Editar midia"
+                    >
+                      <Scissors className="h-4 w-4" />
+                    </Link>
+                  </div>
 
                   <div className="absolute bottom-2 left-2 rounded-full bg-black/70 px-2 py-1 text-[11px] font-medium text-white">
                     {item.type === 'image' ? t('postComposer.image') : t('postComposer.video')}
@@ -499,23 +530,82 @@ export default function PostComposer({
                     onChange={(event) => addFiles(event.target.files)}
                   />
 
-                  <button
-                    type="button"
-                    onClick={() => mediaInputRef.current?.click()}
-                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-blue-500 transition hover:bg-blue-50 dark:hover:bg-blue-950/30"
-                    title={`${t('postComposer.addImages')} / ${t('postComposer.addVideos')}`}
-                  >
-                    <ImagePlus className="h-5 w-5" />
-                  </button>
+                  <input
+                    ref={cameraPhotoInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="hidden"
+                    onChange={(event) => addFiles(event.target.files)}
+                  />
 
-                  <Link
-                    href="/editor"
-                    className="inline-flex h-10 shrink-0 items-center gap-2 rounded-full border border-blue-400/25 bg-blue-500/10 px-3 text-xs font-black text-blue-600 transition hover:bg-blue-500/15 dark:text-blue-200"
-                    title="Editar video antes de publicar"
-                  >
-                    <Scissors className="h-4 w-4" />
-                    Editar video
-                  </Link>
+                  <input
+                    ref={cameraVideoInputRef}
+                    type="file"
+                    accept="video/*"
+                    capture="environment"
+                    className="hidden"
+                    onChange={(event) => addFiles(event.target.files)}
+                  />
+
+                  <div className="relative shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setShowMediaMenu((current) => !current)}
+                      className={`flex h-10 w-10 items-center justify-center rounded-full transition ${
+                        showMediaMenu
+                          ? 'bg-blue-50 text-blue-600 ring-1 ring-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:ring-blue-500/30'
+                          : 'text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/30'
+                      }`}
+                      title="Adicionar midia"
+                      aria-label="Adicionar midia"
+                      aria-expanded={showMediaMenu}
+                    >
+                      <ImagePlus className="h-5 w-5" />
+                    </button>
+
+                    {showMediaMenu && (
+                      <div className="absolute left-0 top-12 z-[10000] w-[min(17rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-blue-400/25 bg-white p-1.5 text-zinc-900 shadow-2xl shadow-blue-950/20 ring-1 ring-black/5 dark:bg-zinc-950 dark:text-white dark:ring-white/10">
+                        <button
+                          type="button"
+                          onClick={() => mediaInputRef.current?.click()}
+                          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-bold transition hover:bg-blue-50 dark:hover:bg-blue-950/30"
+                        >
+                          <ImagePlus className="h-4 w-4 text-blue-500" />
+                          Galeria
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => cameraPhotoInputRef.current?.click()}
+                          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-bold transition hover:bg-blue-50 dark:hover:bg-blue-950/30"
+                        >
+                          <Camera className="h-4 w-4 text-blue-500" />
+                          Camera
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => cameraVideoInputRef.current?.click()}
+                          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-bold transition hover:bg-blue-50 dark:hover:bg-blue-950/30"
+                        >
+                          <Video className="h-4 w-4 text-blue-500" />
+                          Gravar video
+                        </button>
+
+                        <Link
+                          href="/editor"
+                          onClick={() => setShowMediaMenu(false)}
+                          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-bold transition hover:bg-blue-50 dark:hover:bg-blue-950/30"
+                          title="Editar midia"
+                          aria-label="Editar midia"
+                        >
+                          <Scissors className="h-4 w-4 text-blue-500" />
+                          Editar midia
+                        </Link>
+                      </div>
+                    )}
+                  </div>
 
                   <div className="relative shrink-0">
                     <button
