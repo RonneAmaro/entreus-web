@@ -8,6 +8,9 @@ import { supabase } from '@/lib/supabase'
 import {
   blocksMinorAccess,
   calculateAge,
+  CURRENT_PRIVACY_VERSION,
+  CURRENT_TERMS_VERSION,
+  isMissingProfileAcceptanceColumnError,
   isProfileIncomplete,
   sanitizeUsername,
 } from '@/lib/profile-completion'
@@ -21,6 +24,10 @@ type Profile = {
   parental_consent_status: string | null
   wants_18_plus: boolean | null
   age_verification_status: string | null
+  terms_accepted_at?: string | null
+  privacy_accepted_at?: string | null
+  terms_version?: string | null
+  privacy_version?: string | null
 }
 
 export default function CompleteProfilePage() {
@@ -50,13 +57,28 @@ export default function CompleteProfilePage() {
         return
       }
 
-      const { data, error } = await supabase
+      const profileResult = await supabase
         .from('profiles')
         .select(
-          'id, username, display_name, birth_date, is_minor, parental_consent_status, wants_18_plus, age_verification_status',
+          'id, username, display_name, birth_date, is_minor, parental_consent_status, wants_18_plus, age_verification_status, terms_accepted_at, privacy_accepted_at, terms_version, privacy_version',
         )
         .eq('id', user.id)
         .maybeSingle()
+      let data = profileResult.data as Profile | null
+      let error = profileResult.error
+
+      if (isMissingProfileAcceptanceColumnError(error)) {
+        const fallback = await supabase
+          .from('profiles')
+          .select(
+            'id, username, display_name, birth_date, is_minor, parental_consent_status, wants_18_plus, age_verification_status',
+          )
+          .eq('id', user.id)
+          .maybeSingle()
+
+        data = fallback.data as Profile | null
+        error = fallback.error
+      }
 
       if (!active) return
 
@@ -87,6 +109,7 @@ export default function CompleteProfilePage() {
       setDisplayName(loadedProfile?.display_name || fallbackName)
       setUsername(loadedProfile?.username || sanitizeUsername(fallbackName))
       setBirthDate(loadedProfile?.birth_date || '')
+      setAcceptedTerms(Boolean(loadedProfile?.terms_accepted_at && loadedProfile.privacy_accepted_at))
       setLoading(false)
     }
 
@@ -153,6 +176,7 @@ export default function CompleteProfilePage() {
     const nextWants18Plus = isMinor ? false : profile?.wants_18_plus || false
     const nextAgeVerificationStatus = profile?.age_verification_status || 'not_started'
 
+    const acceptedAt = new Date().toISOString()
     const { error } = await supabase.from('profiles').upsert({
       id: userId,
       username: normalizedUsername,
@@ -163,11 +187,19 @@ export default function CompleteProfilePage() {
       wants_18_plus: nextWants18Plus,
       show_sensitive_content: !isMinor && nextWants18Plus && nextAgeVerificationStatus === 'approved',
       age_verification_status: nextAgeVerificationStatus,
-      updated_at: new Date().toISOString(),
+      terms_accepted_at: profile?.terms_accepted_at || acceptedAt,
+      privacy_accepted_at: profile?.privacy_accepted_at || acceptedAt,
+      terms_version: profile?.terms_version || CURRENT_TERMS_VERSION,
+      privacy_version: profile?.privacy_version || CURRENT_PRIVACY_VERSION,
+      updated_at: acceptedAt,
     })
 
     if (error) {
-      setMessage('Nao foi possivel salvar seu perfil: ' + error.message)
+      setMessage(
+        isMissingProfileAcceptanceColumnError(error)
+          ? 'A atualizacao de aceite legal ainda precisa ser aplicada no banco antes de continuar.'
+          : 'Nao foi possivel salvar seu perfil. Tente novamente.',
+      )
       setSaving(false)
       return
     }
@@ -287,7 +319,7 @@ export default function CompleteProfilePage() {
                 className="mt-1 h-4 w-4 shrink-0 rounded border-zinc-600 bg-zinc-950 text-blue-500 accent-blue-500"
               />
               <span>
-                Li e concordo com os{' '}
+                Li e aceito os{' '}
                 <Link href="/terms" className="font-semibold text-blue-300 underline-offset-4 hover:underline">
                   Termos de Uso
                 </Link>{' '}

@@ -5,6 +5,11 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { signInWithSocialProvider, supabase } from '@/lib/supabase'
+import {
+  CURRENT_PRIVACY_VERSION,
+  CURRENT_TERMS_VERSION,
+  isMissingProfileAcceptanceColumnError,
+} from '@/lib/profile-completion'
 
 function validatePassword(password: string) {
   if (password.length < 8) {
@@ -78,6 +83,7 @@ export default function SignupPage() {
 
     const age = calculateAge(birthDate)
     const isMinor = age < 18
+    const acceptedAt = new Date().toISOString()
 
     setLoading(true)
 
@@ -91,12 +97,17 @@ export default function SignupPage() {
           parental_consent_status: isMinor ? 'pending' : 'not_required',
           wants_18_plus: false,
           age_verification_status: 'not_started',
+          accepted_terms: true,
+          terms_accepted_at: acceptedAt,
+          privacy_accepted_at: acceptedAt,
+          terms_version: CURRENT_TERMS_VERSION,
+          privacy_version: CURRENT_PRIVACY_VERSION,
         },
       },
     })
 
     if (!error && data.user) {
-      await supabase.from('profiles').upsert({
+      const profilePayload = {
         id: data.user.id,
         birth_date: birthDate,
         is_minor: isMinor,
@@ -104,8 +115,26 @@ export default function SignupPage() {
         wants_18_plus: false,
         show_sensitive_content: false,
         age_verification_status: 'not_started',
-        updated_at: new Date().toISOString(),
-      })
+        terms_accepted_at: acceptedAt,
+        privacy_accepted_at: acceptedAt,
+        terms_version: CURRENT_TERMS_VERSION,
+        privacy_version: CURRENT_PRIVACY_VERSION,
+        updated_at: acceptedAt,
+      }
+      const { error: profileError } = await supabase.from('profiles').upsert(profilePayload)
+
+      if (isMissingProfileAcceptanceColumnError(profileError)) {
+        await supabase.from('profiles').upsert({
+          id: data.user.id,
+          birth_date: birthDate,
+          is_minor: isMinor,
+          parental_consent_status: isMinor ? 'pending' : 'not_required',
+          wants_18_plus: false,
+          show_sensitive_content: false,
+          age_verification_status: 'not_started',
+          updated_at: acceptedAt,
+        })
+      }
     }
 
     setLoading(false)
@@ -144,6 +173,7 @@ export default function SignupPage() {
 
     const age = calculateAge(birthDate)
     const isMinor = age < 18
+    const acceptedAt = new Date().toISOString()
 
     if (typeof window !== 'undefined') {
       window.sessionStorage.setItem(
@@ -151,6 +181,10 @@ export default function SignupPage() {
         JSON.stringify({
           birth_date: birthDate,
           accepted_terms: true,
+          terms_accepted_at: acceptedAt,
+          privacy_accepted_at: acceptedAt,
+          terms_version: CURRENT_TERMS_VERSION,
+          privacy_version: CURRENT_PRIVACY_VERSION,
           is_minor: isMinor,
           parental_consent_status: isMinor ? 'pending' : 'not_required',
           wants_18_plus: false,
@@ -319,7 +353,7 @@ export default function SignupPage() {
             />
 
             <span>
-              Li e concordo com os{' '}
+              Li e aceito os{' '}
               <Link href="/terms" className="font-semibold text-blue-300 underline-offset-4 hover:underline">
                 Termos de Uso
               </Link>{' '}

@@ -4,7 +4,11 @@ import { useEffect, useMemo, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { ShieldAlert } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import { blocksMinorAccess, isProfileIncomplete } from '@/lib/profile-completion'
+import {
+  blocksMinorAccess,
+  isMissingProfileAcceptanceColumnError,
+  isProfileIncomplete,
+} from '@/lib/profile-completion'
 
 const protectedRoutes = [
   '/feed',
@@ -21,6 +25,15 @@ const protectedRoutes = [
   '/post',
   '/u',
 ]
+
+type GuardProfile = {
+  username: string | null
+  birth_date: string | null
+  is_minor: boolean | null
+  parental_consent_status: string | null
+  terms_accepted_at?: string | null
+  privacy_accepted_at?: string | null
+}
 
 function isProtectedPath(pathname: string) {
   return protectedRoutes.some((route) => pathname === route || pathname.startsWith(`${route}/`))
@@ -55,13 +68,31 @@ export default function ParentalAccessGuard({ children }: { children: React.Reac
         return
       }
 
-      const { data: profile } = await supabase
+      const profileResult = await supabase
         .from('profiles')
-        .select('username, birth_date, is_minor, parental_consent_status')
+        .select('username, birth_date, is_minor, parental_consent_status, terms_accepted_at, privacy_accepted_at')
         .eq('id', user.id)
         .maybeSingle()
+      let profile = profileResult.data as GuardProfile | null
+      let profileError = profileResult.error
+
+      if (isMissingProfileAcceptanceColumnError(profileError)) {
+        const fallback = await supabase
+          .from('profiles')
+          .select('username, birth_date, is_minor, parental_consent_status')
+          .eq('id', user.id)
+          .maybeSingle()
+
+        profile = fallback.data as GuardProfile | null
+        profileError = fallback.error
+      }
 
       if (!active) return
+
+      if (profileError) {
+        setAllowed(true)
+        return
+      }
 
       if (isProfileIncomplete(profile)) {
         router.replace('/complete-profile')

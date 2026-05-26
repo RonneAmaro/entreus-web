@@ -3,11 +3,22 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { blocksMinorAccess, isProfileIncomplete, sanitizeUsername } from '@/lib/profile-completion'
+import {
+  blocksMinorAccess,
+  CURRENT_PRIVACY_VERSION,
+  CURRENT_TERMS_VERSION,
+  isMissingProfileAcceptanceColumnError,
+  isProfileIncomplete,
+  sanitizeUsername,
+} from '@/lib/profile-completion'
 
 type PendingOAuthProfile = {
   birth_date?: string
   accepted_terms?: boolean
+  terms_accepted_at?: string
+  privacy_accepted_at?: string
+  terms_version?: string
+  privacy_version?: string
   is_minor?: boolean
   parental_consent_status?: string
   wants_18_plus?: boolean
@@ -22,6 +33,10 @@ type ExistingProfile = {
   birth_date: string | null
   is_minor: boolean | null
   parental_consent_status: string | null
+  terms_accepted_at?: string | null
+  privacy_accepted_at?: string | null
+  terms_version?: string | null
+  privacy_version?: string | null
 }
 
 const PROFILE_FINALIZE_ERROR =
@@ -174,11 +189,24 @@ export default function AuthCallbackPage() {
         'Usuario EntreUS'
       const fallbackAvatar = getMetadataText(metadata, ['avatar_url', 'picture'])
 
-      const { data: existingProfile, error: loadProfileError } = await supabase
+      const profileResult = await supabase
         .from('profiles')
-        .select('id, username, display_name, avatar_url, birth_date, is_minor, parental_consent_status')
+        .select('id, username, display_name, avatar_url, birth_date, is_minor, parental_consent_status, terms_accepted_at, privacy_accepted_at, terms_version, privacy_version')
         .eq('id', user.id)
         .maybeSingle()
+      let existingProfile = profileResult.data as ExistingProfile | null
+      let loadProfileError = profileResult.error
+
+      if (isMissingProfileAcceptanceColumnError(loadProfileError)) {
+        const fallback = await supabase
+          .from('profiles')
+          .select('id, username, display_name, avatar_url, birth_date, is_minor, parental_consent_status')
+          .eq('id', user.id)
+          .maybeSingle()
+
+        existingProfile = fallback.data as ExistingProfile | null
+        loadProfileError = fallback.error
+      }
 
       if (loadProfileError && !cancelled) {
         logAuthCallbackError('profiles select failed', loadProfileError)
@@ -208,12 +236,35 @@ export default function AuthCallbackPage() {
               age_verification_status: pendingProfile.age_verification_status || 'not_started',
             }
           : {}
+      const pendingAcceptedAt =
+        pendingProfile?.terms_accepted_at ||
+        pendingProfile?.privacy_accepted_at ||
+        new Date().toISOString()
+      const pendingLegalPayload = pendingProfile?.accepted_terms
+        ? {
+            terms_accepted_at: typedExistingProfile?.terms_accepted_at || pendingAcceptedAt,
+            privacy_accepted_at: typedExistingProfile?.privacy_accepted_at || pendingAcceptedAt,
+            terms_version:
+              typedExistingProfile?.terms_version ||
+              pendingProfile.terms_version ||
+              CURRENT_TERMS_VERSION,
+            privacy_version:
+              typedExistingProfile?.privacy_version ||
+              pendingProfile.privacy_version ||
+              CURRENT_PRIVACY_VERSION,
+          }
+        : {}
       const profilePayload = {
+        ...baseProfilePayload,
+        ...pendingProfilePayload,
+        ...pendingLegalPayload,
+      }
+      const legacyProfilePayload = {
         ...baseProfilePayload,
         ...pendingProfilePayload,
       }
 
-      const profileError = typedExistingProfile
+      let profileError = typedExistingProfile
         ? (
             await supabase
             .from('profiles')
@@ -236,6 +287,32 @@ export default function AuthCallbackPage() {
                   }),
             },
           )
+
+      if (isMissingProfileAcceptanceColumnError(profileError)) {
+        profileError = typedExistingProfile
+          ? (
+              await supabase
+              .from('profiles')
+              .update(legacyProfilePayload)
+              .eq('id', user.id)
+            ).error
+          : await insertProfileWithUsernameRetry(
+              user.id,
+              Array.from(new Set([username, ...usernameCandidates])),
+              {
+                ...legacyProfilePayload,
+                ...(pendingProfile?.birth_date
+                  ? {}
+                  : {
+                      is_minor: false,
+                      parental_consent_status: 'not_required',
+                      wants_18_plus: false,
+                      show_sensitive_content: false,
+                      age_verification_status: 'not_started',
+                    }),
+              },
+            )
+      }
 
       if (profileError && !cancelled) {
         logAuthCallbackError(typedExistingProfile ? 'profiles update failed' : 'profiles insert failed', profileError)
@@ -260,6 +337,14 @@ export default function AuthCallbackPage() {
             pendingProfilePayload.parental_consent_status ||
             typedExistingProfile?.parental_consent_status ||
             'not_required',
+          terms_accepted_at:
+            pendingLegalPayload.terms_accepted_at ||
+            typedExistingProfile?.terms_accepted_at ||
+            null,
+          privacy_accepted_at:
+            pendingLegalPayload.privacy_accepted_at ||
+            typedExistingProfile?.privacy_accepted_at ||
+            null,
         }
 
         if (isProfileIncomplete(completedProfile)) {
