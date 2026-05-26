@@ -177,7 +177,7 @@ export default function CompleteProfilePage() {
     const nextAgeVerificationStatus = profile?.age_verification_status || 'not_started'
 
     const acceptedAt = new Date().toISOString()
-    const { error } = await supabase.from('profiles').upsert({
+    const baseProfilePayload = {
       id: userId,
       username: normalizedUsername,
       display_name: displayName.trim() || normalizedUsername,
@@ -187,19 +187,24 @@ export default function CompleteProfilePage() {
       wants_18_plus: nextWants18Plus,
       show_sensitive_content: !isMinor && nextWants18Plus && nextAgeVerificationStatus === 'approved',
       age_verification_status: nextAgeVerificationStatus,
+      updated_at: acceptedAt,
+    }
+    const legalProfilePayload = {
+      ...baseProfilePayload,
       terms_accepted_at: profile?.terms_accepted_at || acceptedAt,
       privacy_accepted_at: profile?.privacy_accepted_at || acceptedAt,
       terms_version: profile?.terms_version || CURRENT_TERMS_VERSION,
       privacy_version: profile?.privacy_version || CURRENT_PRIVACY_VERSION,
-      updated_at: acceptedAt,
-    })
+    }
+    let { error } = await supabase.from('profiles').upsert(legalProfilePayload)
+
+    if (isMissingProfileAcceptanceColumnError(error)) {
+      const fallback = await supabase.from('profiles').upsert(baseProfilePayload)
+      error = fallback.error
+    }
 
     if (error) {
-      setMessage(
-        isMissingProfileAcceptanceColumnError(error)
-          ? 'A atualizacao de aceite legal ainda precisa ser aplicada no banco antes de continuar.'
-          : 'Nao foi possivel salvar seu perfil. Tente novamente.',
-      )
+      setMessage('Nao foi possivel concluir agora. Tente novamente.')
       setSaving(false)
       return
     }

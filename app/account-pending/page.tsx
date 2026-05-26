@@ -5,10 +5,18 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowRight, ShieldAlert, ShieldCheck } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import {
+  isMissingProfileAcceptanceColumnError,
+  isProfileIncomplete,
+} from '@/lib/profile-completion'
 
 type ProfileStatus = {
+  username: string | null
+  birth_date: string | null
   is_minor: boolean | null
   parental_consent_status: string | null
+  terms_accepted_at?: string | null
+  privacy_accepted_at?: string | null
 }
 
 type ConsentRequest = {
@@ -43,11 +51,24 @@ export default function AccountPendingPage() {
         return
       }
 
-      const { data: profileData } = await supabase
+      const profileResult = await supabase
         .from('profiles')
-        .select('is_minor, parental_consent_status')
+        .select('username, birth_date, is_minor, parental_consent_status, terms_accepted_at, privacy_accepted_at')
         .eq('id', user.id)
         .maybeSingle()
+      let profileData = profileResult.data as ProfileStatus | null
+      let profileError = profileResult.error
+
+      if (isMissingProfileAcceptanceColumnError(profileError)) {
+        const fallback = await supabase
+          .from('profiles')
+          .select('username, birth_date, is_minor, parental_consent_status')
+          .eq('id', user.id)
+          .maybeSingle()
+
+        profileData = fallback.data as ProfileStatus | null
+        profileError = fallback.error
+      }
 
       const { data: requestData } = await supabase
         .from('parental_consent_requests')
@@ -58,6 +79,11 @@ export default function AccountPendingPage() {
         .maybeSingle()
 
       if (!active) return
+
+      if (!profileError && isProfileIncomplete(profileData)) {
+        router.replace('/complete-profile')
+        return
+      }
 
       setProfile(profileData)
       setRequest(requestData)
