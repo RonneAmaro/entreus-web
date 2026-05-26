@@ -150,6 +150,7 @@ export default function SignupPage() {
         'entreus_oauth_signup_profile',
         JSON.stringify({
           birth_date: birthDate,
+          accepted_terms: true,
           is_minor: isMinor,
           parental_consent_status: isMinor ? 'pending' : 'not_required',
           wants_18_plus: false,

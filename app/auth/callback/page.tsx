@@ -6,11 +6,23 @@ import { supabase } from '@/lib/supabase'
 
 type PendingOAuthProfile = {
   birth_date?: string
+  accepted_terms?: boolean
   is_minor?: boolean
   parental_consent_status?: string
   wants_18_plus?: boolean
   age_verification_status?: string
 }
+
+type ExistingProfile = {
+  id: string
+  username: string | null
+  display_name: string | null
+  avatar_url: string | null
+  birth_date: string | null
+}
+
+const PROFILE_FINALIZE_ERROR =
+  'Seu login Google foi confirmado, mas nao conseguimos finalizar seu perfil. Tente novamente ou entre com email e senha.'
 
 function readPendingOAuthProfile() {
   if (typeof window === 'undefined') return null
@@ -23,6 +35,109 @@ function readPendingOAuthProfile() {
   } catch {
     return null
   }
+}
+
+function logAuthCallbackError(stage: string, error: unknown) {
+  console.error(`[auth/callback] ${stage}`, error)
+}
+
+function getMetadataText(metadata: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = metadata[key]
+
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim()
+    }
+  }
+
+  return null
+}
+
+function sanitizeUsername(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, '_')
+    .replace(/[^a-z0-9_]/g, '')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 30)
+}
+
+function buildUsernameCandidates(userId: string, email: string | null | undefined, displayName: string | null) {
+  const emailPrefix = email?.split('@')[0] || ''
+  const baseUsername = sanitizeUsername(displayName || emailPrefix)
+  const shortId = userId.replace(/-/g, '').slice(0, 8)
+  const fallbackBase = `user_${shortId}`
+  const preferred = baseUsername || fallbackBase
+
+  return Array.from(
+    new Set([
+      preferred,
+      `${preferred}_${shortId}`.slice(0, 30),
+      fallbackBase,
+    ]),
+  )
+}
+
+async function getAvailableUsername(userId: string, email: string | null | undefined, displayName: string | null) {
+  const candidates = buildUsernameCandidates(userId, email, displayName)
+
+  for (const candidate of candidates) {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('username', candidate)
+      .neq('id', userId)
+      .maybeSingle()
+
+    if (error) {
+      logAuthCallbackError('profiles username availability check failed', error)
+      continue
+    }
+
+    if (!data) return candidate
+  }
+
+  return `user_${userId.replace(/-/g, '').slice(0, 12)}`.slice(0, 30)
+}
+
+function isUsernameConflict(error: { code?: string; message?: string } | null) {
+  if (!error) return false
+
+  const message = error.message || ''
+  return error.code === '23505' || message.toLowerCase().includes('username')
+}
+
+async function insertProfileWithUsernameRetry(
+  userId: string,
+  candidates: string[],
+  payload: Record<string, unknown>,
+) {
+  let lastError: { code?: string; message?: string } | null = null
+
+  for (const username of candidates) {
+    const { error } = await supabase
+      .from('profiles')
+      .insert({
+        id: userId,
+        ...payload,
+        username,
+      })
+
+    if (!error) return null
+
+    lastError = error
+    logAuthCallbackError('profiles insert failed for username candidate', {
+      username,
+      error,
+    })
+
+    if (!isUsernameConflict(error)) break
+  }
+
+  return lastError
 }
 
 export default function AuthCallbackPage() {
@@ -40,6 +155,7 @@ export default function AuthCallbackPage() {
         const { error } = await supabase.auth.exchangeCodeForSession(code)
 
         if (error) {
+          logAuthCallbackError('exchangeCodeForSession failed', error)
           if (!cancelled) setMessage('Nao foi possivel confirmar o login social. Tente novamente.')
           return
         }
@@ -47,7 +163,12 @@ export default function AuthCallbackPage() {
 
       const {
         data: { user },
+        error: userError,
       } = await supabase.auth.getUser()
+
+      if (userError) {
+        logAuthCallbackError('getUser failed', userError)
+      }
 
       if (!user) {
         if (!cancelled) setMessage('Sessao nao encontrada. Volte ao login e tente novamente.')
@@ -57,63 +178,77 @@ export default function AuthCallbackPage() {
       const pendingProfile = readPendingOAuthProfile()
       const metadata = user.user_metadata || {}
       const fallbackName =
-        typeof metadata.full_name === 'string'
-          ? metadata.full_name
-          : typeof metadata.name === 'string'
-            ? metadata.name
-            : null
-      const fallbackAvatar =
-        typeof metadata.avatar_url === 'string'
-          ? metadata.avatar_url
-          : typeof metadata.picture === 'string'
-            ? metadata.picture
-            : null
+        getMetadataText(metadata, ['full_name', 'name']) ||
+        user.email?.split('@')[0] ||
+        'Usuario EntreUS'
+      const fallbackAvatar = getMetadataText(metadata, ['avatar_url', 'picture'])
 
       const { data: existingProfile, error: loadProfileError } = await supabase
         .from('profiles')
-        .select('id, display_name, avatar_url, birth_date')
+        .select('id, username, display_name, avatar_url, birth_date')
         .eq('id', user.id)
         .maybeSingle()
 
       if (loadProfileError && !cancelled) {
-        setMessage('Login confirmado, mas nao foi possivel carregar seu perfil.')
+        logAuthCallbackError('profiles select failed', loadProfileError)
+        setMessage(PROFILE_FINALIZE_ERROR)
         return
       }
 
-      const profilePayload = existingProfile
-        ? {
-            id: user.id,
-            display_name: existingProfile.display_name || fallbackName,
-            avatar_url: existingProfile.avatar_url || fallbackAvatar,
-            ...(pendingProfile?.birth_date && !existingProfile.birth_date
-              ? {
-                  birth_date: pendingProfile.birth_date,
-                  is_minor: pendingProfile.is_minor || false,
-                  parental_consent_status: pendingProfile.parental_consent_status || 'not_required',
-                  wants_18_plus: pendingProfile.wants_18_plus || false,
-                  show_sensitive_content: false,
-                  age_verification_status: pendingProfile.age_verification_status || 'not_started',
-                }
-              : {}),
-            updated_at: new Date().toISOString(),
-          }
-        : {
-            id: user.id,
-            display_name: fallbackName,
-            avatar_url: fallbackAvatar,
-            birth_date: pendingProfile?.birth_date || null,
-            is_minor: pendingProfile?.is_minor || false,
-            parental_consent_status: pendingProfile?.parental_consent_status || 'not_required',
-            wants_18_plus: pendingProfile?.wants_18_plus || false,
-            show_sensitive_content: false,
-            age_verification_status: pendingProfile?.age_verification_status || 'not_started',
-            updated_at: new Date().toISOString(),
-          }
+      const typedExistingProfile = existingProfile as ExistingProfile | null
+      const usernameCandidates = buildUsernameCandidates(user.id, user.email, fallbackName)
+      const username =
+        typedExistingProfile?.username ||
+        (await getAvailableUsername(user.id, user.email, fallbackName))
+      const baseProfilePayload = {
+        username,
+        display_name: typedExistingProfile?.display_name || fallbackName,
+        avatar_url: typedExistingProfile?.avatar_url || fallbackAvatar,
+        updated_at: new Date().toISOString(),
+      }
+      const pendingProfilePayload =
+        pendingProfile?.birth_date && !typedExistingProfile?.birth_date
+          ? {
+              birth_date: pendingProfile.birth_date,
+              is_minor: pendingProfile.is_minor || false,
+              parental_consent_status: pendingProfile.parental_consent_status || 'not_required',
+              wants_18_plus: pendingProfile.wants_18_plus || false,
+              show_sensitive_content: false,
+              age_verification_status: pendingProfile.age_verification_status || 'not_started',
+            }
+          : {}
+      const profilePayload = {
+        ...baseProfilePayload,
+        ...pendingProfilePayload,
+      }
 
-      const { error: profileError } = await supabase.from('profiles').upsert(profilePayload)
+      const profileError = typedExistingProfile
+        ? (
+            await supabase
+            .from('profiles')
+            .update(profilePayload)
+            .eq('id', user.id)
+          ).error
+        : await insertProfileWithUsernameRetry(
+            user.id,
+            Array.from(new Set([username, ...usernameCandidates])),
+            {
+              ...profilePayload,
+              ...(pendingProfile?.birth_date
+                ? {}
+                : {
+                    is_minor: false,
+                    parental_consent_status: 'not_required',
+                    wants_18_plus: false,
+                    show_sensitive_content: false,
+                    age_verification_status: 'not_started',
+                  }),
+            },
+          )
 
       if (profileError && !cancelled) {
-        setMessage('Login confirmado, mas nao foi possivel preparar o perfil automaticamente.')
+        logAuthCallbackError(typedExistingProfile ? 'profiles update failed' : 'profiles insert failed', profileError)
+        setMessage(PROFILE_FINALIZE_ERROR)
         return
       }
 
