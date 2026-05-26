@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { blocksMinorAccess, isProfileIncomplete, sanitizeUsername } from '@/lib/profile-completion'
 
 type PendingOAuthProfile = {
   birth_date?: string
@@ -19,6 +20,8 @@ type ExistingProfile = {
   display_name: string | null
   avatar_url: string | null
   birth_date: string | null
+  is_minor: boolean | null
+  parental_consent_status: string | null
 }
 
 const PROFILE_FINALIZE_ERROR =
@@ -51,18 +54,6 @@ function getMetadataText(metadata: Record<string, unknown>, keys: string[]) {
   }
 
   return null
-}
-
-function sanitizeUsername(value: string) {
-  return value
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/\s+/g, '_')
-    .replace(/[^a-z0-9_]/g, '')
-    .replace(/_+/g, '_')
-    .replace(/^_+|_+$/g, '')
-    .slice(0, 30)
 }
 
 function buildUsernameCandidates(userId: string, email: string | null | undefined, displayName: string | null) {
@@ -185,7 +176,7 @@ export default function AuthCallbackPage() {
 
       const { data: existingProfile, error: loadProfileError } = await supabase
         .from('profiles')
-        .select('id, username, display_name, avatar_url, birth_date')
+        .select('id, username, display_name, avatar_url, birth_date, is_minor, parental_consent_status')
         .eq('id', user.id)
         .maybeSingle()
 
@@ -255,7 +246,28 @@ export default function AuthCallbackPage() {
       window.sessionStorage.removeItem('entreus_oauth_signup_profile')
 
       if (!cancelled) {
-        router.replace(pendingProfile?.is_minor ? '/account-pending' : '/feed')
+        const completedProfile = {
+          username,
+          birth_date:
+            pendingProfilePayload.birth_date ||
+            typedExistingProfile?.birth_date ||
+            null,
+          is_minor:
+            pendingProfilePayload.is_minor ??
+            typedExistingProfile?.is_minor ??
+            false,
+          parental_consent_status:
+            pendingProfilePayload.parental_consent_status ||
+            typedExistingProfile?.parental_consent_status ||
+            'not_required',
+        }
+
+        if (isProfileIncomplete(completedProfile)) {
+          router.replace('/complete-profile')
+          return
+        }
+
+        router.replace(blocksMinorAccess(completedProfile) ? '/account-pending' : '/feed')
       }
     }
 

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { ShieldAlert } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { blocksMinorAccess, isProfileIncomplete } from '@/lib/profile-completion'
 
 const protectedRoutes = [
   '/feed',
@@ -23,10 +24,6 @@ const protectedRoutes = [
 
 function isProtectedPath(pathname: string) {
   return protectedRoutes.some((route) => pathname === route || pathname.startsWith(`${route}/`))
-}
-
-function blocksMinorAccess(profile: { is_minor: boolean | null; parental_consent_status: string | null } | null) {
-  return Boolean(profile?.is_minor && profile.parental_consent_status !== 'approved')
 }
 
 export default function ParentalAccessGuard({ children }: { children: React.ReactNode }) {
@@ -60,11 +57,16 @@ export default function ParentalAccessGuard({ children }: { children: React.Reac
 
       const { data: profile } = await supabase
         .from('profiles')
-        .select('is_minor, parental_consent_status')
+        .select('username, birth_date, is_minor, parental_consent_status')
         .eq('id', user.id)
         .maybeSingle()
 
       if (!active) return
+
+      if (isProfileIncomplete(profile)) {
+        router.replace('/complete-profile')
+        return
+      }
 
       if (blocksMinorAccess(profile)) {
         router.replace('/account-pending')
