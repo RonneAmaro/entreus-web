@@ -41,6 +41,8 @@ Age, 18+, parental consent, and admin review:
 - `20260517_add_age_verification_documents.sql`
 - `20260517_add_admin_age_verification_review.sql`
 - `20260525_harden_age_verification_document_access_retention.sql`
+- `20260526_add_profile_terms_privacy_acceptance.sql`
+- `20260526_extend_parental_consent_responsible_terms.sql`
 
 ItaCash, gifts, purchase requests, and Mercado Pago:
 
@@ -73,6 +75,7 @@ Manual verification after applying migrations:
 - `prevent_age_verification_user_review_changes` trigger exists.
 - `moderate_reported_post` RPC exists if moderation actions are enabled.
 - Mercado Pago completion RPCs exist if automatic credit is enabled.
+- Before publicly enabling accounts for minors, complete professional legal review of the parental consent text and flow.
 
 ## 3. Storage and bucket checklist
 

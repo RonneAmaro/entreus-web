@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowRight, ShieldAlert, ShieldCheck } from 'lucide-react'
+import { ArrowRight, Loader2, Mail, RotateCw, ShieldAlert, ShieldCheck } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import {
   isMissingProfileAcceptanceColumnError,
@@ -21,6 +21,10 @@ type ProfileStatus = {
 
 type ConsentRequest = {
   status: string
+  guardian_email: string | null
+  guardian_name?: string | null
+  relationship?: string | null
+  expires_at?: string | null
 }
 
 function getStatusLabel(status: string, hasRequest: boolean) {
@@ -30,11 +34,35 @@ function getStatusLabel(status: string, hasRequest: boolean) {
   return 'Pendente'
 }
 
+function maskEmail(value: string | null | undefined) {
+  if (!value) return 'Nao informado'
+
+  const [name, domain] = value.split('@')
+
+  if (!name || !domain) return value
+
+  return `${name.slice(0, 1)}***@${domain}`
+}
+
+function isMissingParentalColumnError(error: { message?: string; code?: string } | null) {
+  if (!error) return false
+
+  const message = (error.message || '').toLowerCase()
+
+  return (
+    error.code === '42703' ||
+    message.includes('guardian_name') ||
+    message.includes('relationship')
+  )
+}
+
 export default function AccountPendingPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [profile, setProfile] = useState<ProfileStatus | null>(null)
   const [request, setRequest] = useState<ConsentRequest | null>(null)
+  const [resending, setResending] = useState(false)
+  const [message, setMessage] = useState('')
 
   useEffect(() => {
     let active = true
@@ -70,13 +98,26 @@ export default function AccountPendingPage() {
         profileError = fallback.error
       }
 
-      const { data: requestData } = await supabase
+      const requestResult = await supabase
         .from('parental_consent_requests')
-        .select('status')
+        .select('status, guardian_email, guardian_name, relationship, expires_at')
         .eq('child_user_id', user.id)
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle()
+      let requestData = requestResult.data as ConsentRequest | null
+
+      if (isMissingParentalColumnError(requestResult.error)) {
+        const fallbackRequest = await supabase
+          .from('parental_consent_requests')
+          .select('status, guardian_email, expires_at')
+          .eq('child_user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+
+        requestData = fallbackRequest.data as ConsentRequest | null
+      }
 
       if (!active) return
 
@@ -105,6 +146,50 @@ export default function AccountPendingPage() {
   const isApproved = profile?.is_minor && profile.parental_consent_status === 'approved'
   const isPending = displayStatus === 'Pendente'
   const isRejected = displayStatus === 'Recusado'
+
+  async function handleResend() {
+    if (!request?.guardian_email) {
+      setMessage('Informe o e-mail do responsavel em Complete seu perfil para enviar o pedido.')
+      return
+    }
+
+    setResending(true)
+    setMessage('')
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+
+    if (!session?.access_token) {
+      setMessage('Entre novamente para reenviar o pedido.')
+      setResending(false)
+      return
+    }
+
+    const response = await fetch('/api/parental-consent/send-email', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        guardian_email: request.guardian_email,
+        guardian_name: request.guardian_name || '',
+        relationship: request.relationship || '',
+      }),
+    })
+    const result = await response.json().catch(() => null)
+
+    setResending(false)
+
+    if (!response.ok || !result?.success) {
+      setMessage(result?.error || result?.message || 'Nao foi possivel reenviar o pedido agora.')
+      return
+    }
+
+    setRequest(result.request || request)
+    setMessage(result.email_sent ? 'Pedido reenviado para o responsavel.' : result.message || 'Pedido atualizado.')
+  }
 
   return (
     <main className="min-h-screen bg-black px-5 py-8 text-white sm:px-6 lg:px-8">
@@ -145,6 +230,16 @@ export default function AccountPendingPage() {
                 Enquanto a autorizacao nao for aprovada, recursos como feed, mensagens, notificacoes, carteira, presentes, busca, desafios, posts e perfis publicos ficam bloqueados.
               </p>
 
+              <div className="mt-4 rounded-2xl border border-white/10 bg-black/35 p-4">
+                <div className="flex items-center gap-2 text-sm font-bold text-zinc-200">
+                  <Mail className="h-4 w-4 text-blue-300" />
+                  Responsavel
+                </div>
+                <p className="mt-2 break-all text-sm text-zinc-300">
+                  {maskEmail(request?.guardian_email)}
+                </p>
+              </div>
+
               {isPending && (
                 <p className="mt-4 rounded-2xl border border-blue-400/20 bg-blue-500/10 px-4 py-3 text-sm leading-6 text-blue-100">
                   Aguarde seu responsavel aprovar pelo link enviado.
@@ -166,20 +261,48 @@ export default function AccountPendingPage() {
               <p className="mt-4 rounded-2xl border border-cyan-400/20 bg-cyan-500/10 px-4 py-3 text-sm font-semibold leading-6 text-cyan-100">
                 Conteudos 18+ permanecem bloqueados para menores.
               </p>
+
+              {message && (
+                <p className="mt-4 rounded-2xl border border-blue-400/20 bg-blue-500/10 px-4 py-3 text-sm leading-6 text-blue-100">
+                  {message}
+                </p>
+              )}
             </div>
 
             <div className="rounded-3xl border border-blue-500/20 bg-blue-950/20 p-5">
               <p className="text-sm leading-6 text-zinc-300">
-                No perfil voce pode informar o e-mail do responsavel, gerar o link de autorizacao e acompanhar o status.
+                Voce pode reenviar o pedido para o responsavel ou alterar o e-mail informado completando seu perfil novamente.
               </p>
 
-              <Link
-                href="/profile"
-                className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-full bg-blue-500 px-5 py-3 text-sm font-black text-white shadow-lg shadow-blue-950/40 transition hover:bg-blue-400"
-              >
-                Solicitar autorizacao
-                <ArrowRight className="h-4 w-4" />
-              </Link>
+              {isApproved ? (
+                <Link
+                  href="/feed"
+                  className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-full bg-blue-500 px-5 py-3 text-sm font-black text-white shadow-lg shadow-blue-950/40 transition hover:bg-blue-400"
+                >
+                  Entrar na EntreUS
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              ) : (
+                <div className="mt-5 space-y-3">
+                  <button
+                    type="button"
+                    onClick={handleResend}
+                    disabled={resending || !request?.guardian_email}
+                    className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-blue-500 px-5 py-3 text-sm font-black text-white shadow-lg shadow-blue-950/40 transition hover:bg-blue-400 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {resending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCw className="h-4 w-4" />}
+                    Reenviar pedido
+                  </button>
+
+                  <Link
+                    href="/complete-profile"
+                    className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-full border border-white/10 bg-white/5 px-5 py-3 text-sm font-black text-white transition hover:bg-white/10"
+                  >
+                    Alterar e-mail do responsavel
+                    <ArrowRight className="h-4 w-4" />
+                  </Link>
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -1,11 +1,18 @@
+import { createHash, randomUUID } from 'crypto'
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+
+export const runtime = 'nodejs'
+
+const CONSENT_VERSION = '2026-05'
 
 type ParentalConsentRequest = {
   id: string
   child_user_id: string
   guardian_email: string
-  token: string
+  guardian_name?: string | null
+  relationship?: string | null
+  token?: string | null
   status: string
   child_birth_date: string | null
   expires_at: string | null
@@ -32,6 +39,22 @@ function isValidEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
 }
 
+function isMissingParentalColumnError(error: { message?: string; code?: string } | null) {
+  if (!error) return false
+
+  const message = (error.message || '').toLowerCase()
+
+  return (
+    error.code === '42703' ||
+    message.includes('guardian_name') ||
+    message.includes('relationship') ||
+    message.includes('consent_version') ||
+    message.includes('signed_name') ||
+    message.includes('signed_at') ||
+    message.includes('token_hash')
+  )
+}
+
 function getSiteUrl(request: Request) {
   const configuredUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim()
 
@@ -42,16 +65,29 @@ function getSiteUrl(request: Request) {
   return new URL(request.url).origin
 }
 
-function buildEmailText(approvalUrl: string) {
-  return `Ola,
+function hashToken(token: string) {
+  return createHash('sha256').update(token).digest('hex')
+}
+
+function buildEmailText({
+  approvalUrl,
+  guardianName,
+}: {
+  approvalUrl: string
+  guardianName: string
+}) {
+  const greeting = guardianName ? `Ola, ${guardianName}.` : 'Ola.'
+
+  return `${greeting}
 
 Um usuario menor de idade informou este e-mail como responsavel para autorizar o uso geral da plataforma EntreUS.
 
-Ao autorizar, voce permite que ele utilize recursos gerais da rede social.
+Ao autorizar, voce permite que ele utilize recursos normais da rede social.
 
 Importante:
-A autorizacao do responsavel nao libera conteudo 18+.
-Conteudo 18+ permanece bloqueado para menores.
+- A autorizacao do responsavel nao libera conteudo 18+.
+- Conteudo 18+ permanece bloqueado para menores.
+- O link vale por 7 dias.
 
 Para analisar e responder a solicitacao, acesse:
 ${approvalUrl}
@@ -64,9 +100,11 @@ EntreUS - So Entre Nos`
 async function sendResendEmail({
   to,
   approvalUrl,
+  guardianName,
 }: {
   to: string
   approvalUrl: string
+  guardianName: string
 }) {
   const resendApiKey = process.env.RESEND_API_KEY
   const emailFrom = process.env.EMAIL_FROM
@@ -75,7 +113,7 @@ async function sendResendEmail({
     return {
       sent: false,
       configured: false,
-      message: 'O e-mail automatico ainda nao esta configurado.',
+      message: 'O envio automatico de e-mail ainda precisa ser configurado.',
     }
   }
 
@@ -91,8 +129,8 @@ async function sendResendEmail({
       body: JSON.stringify({
         from: emailFrom,
         to,
-        subject: 'Autorizacao de responsavel - EntreUS',
-        text: buildEmailText(approvalUrl),
+        subject: 'Autorizacao de acesso a EntreUS',
+        text: buildEmailText({ approvalUrl, guardianName }),
       }),
     })
   } catch (error) {
@@ -127,9 +165,15 @@ export async function POST(request: Request) {
   try {
     const body = await request.json().catch(() => null)
     const guardianEmail = String(body?.guardian_email || '').trim().toLowerCase()
+    const guardianName = String(body?.guardian_name || '').trim()
+    const relationship = String(body?.relationship || '').trim()
 
     if (!isValidEmail(guardianEmail)) {
       return NextResponse.json({ error: 'Informe um e-mail valido do responsavel.' }, { status: 400 })
+    }
+
+    if (guardianName && guardianName.length < 3) {
+      return NextResponse.json({ error: 'Informe o nome do responsavel.' }, { status: 400 })
     }
 
     const supabase = getSupabaseForRequest(request)
@@ -151,74 +195,83 @@ export async function POST(request: Request) {
     if (profileError) {
       return NextResponse.json(
         { error: 'Nao foi possivel verificar sua conta agora.' },
-        { status: 500 }
+        { status: 500 },
       )
     }
 
     if (!profile?.is_minor) {
       return NextResponse.json(
         { error: 'Este fluxo e exclusivo para usuarios menores de 18 anos.' },
-        { status: 403 }
+        { status: 403 },
       )
     }
 
     if (profile.parental_consent_status === 'approved') {
       return NextResponse.json(
         { error: 'A autorizacao do responsavel ja foi aprovada.' },
-        { status: 400 }
+        { status: 400 },
       )
     }
 
-    let consentRequest: ParentalConsentRequest | null = null
+    const token = randomUUID()
+    const tokenHash = hashToken(token)
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+    const consentText =
+      'O responsavel autoriza o uso geral da plataforma EntreUS por um menor. Conteudos 18+ permanecem bloqueados para menores.'
 
-    const { data: existingRequest, error: existingError } = await supabase
+    const insertWithResponsible = {
+      child_user_id: user.id,
+      guardian_email: guardianEmail,
+      guardian_name: guardianName || null,
+      relationship: relationship || null,
+      token,
+      token_hash: tokenHash,
+      child_birth_date: profile.birth_date || null,
+      consent_text: consentText,
+      consent_version: CONSENT_VERSION,
+      status: 'pending',
+      expires_at: expiresAt,
+    }
+    const insertLegacy = {
+      child_user_id: user.id,
+      guardian_email: guardianEmail,
+      token,
+      child_birth_date: profile.birth_date || null,
+      consent_text: consentText,
+      status: 'pending',
+      expires_at: expiresAt,
+    }
+
+    let created = await supabase
       .from('parental_consent_requests')
-      .select('id, child_user_id, guardian_email, token, status, child_birth_date, expires_at, created_at')
-      .eq('child_user_id', user.id)
-      .eq('status', 'pending')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
+      .insert(insertWithResponsible)
+      .select('id, child_user_id, guardian_email, guardian_name, relationship, token, status, child_birth_date, expires_at, created_at')
+      .single()
 
-    if (existingError) {
-      return NextResponse.json(
-        { error: 'Nao foi possivel verificar solicitacoes existentes.' },
-        { status: 500 }
-      )
-    }
-
-    if (existingRequest) {
-      consentRequest = existingRequest as ParentalConsentRequest
-    } else {
-      const consentText =
-        'Voce esta autorizando o uso geral da plataforma EntreUS por um menor. Conteudos 18+ permanecem bloqueados para menores.'
-
-      const { data: createdRequest, error: createError } = await supabase
+    if (isMissingParentalColumnError(created.error)) {
+      created = await supabase
         .from('parental_consent_requests')
-        .insert({
-          child_user_id: user.id,
-          guardian_email: guardianEmail,
-          child_birth_date: profile.birth_date || null,
-          consent_text: consentText,
-          status: 'pending',
-        })
+        .insert(insertLegacy)
         .select('id, child_user_id, guardian_email, token, status, child_birth_date, expires_at, created_at')
         .single()
-
-      if (createError) {
-        return NextResponse.json(
-          { error: 'Nao foi possivel criar a solicitacao de autorizacao.' },
-          { status: 500 }
-        )
-      }
-
-      consentRequest = createdRequest as ParentalConsentRequest
     }
+
+    if (created.error || !created.data) {
+      return NextResponse.json(
+        { error: 'Nao foi possivel criar a solicitacao de autorizacao.' },
+        { status: 500 },
+      )
+    }
+
+    const consentRequest = created.data as ParentalConsentRequest
 
     const { error: updateProfileError } = await supabase
       .from('profiles')
       .update({
         parental_consent_status: 'pending',
+        is_minor: true,
+        wants_18_plus: false,
+        show_sensitive_content: false,
         updated_at: new Date().toISOString(),
       })
       .eq('id', user.id)
@@ -226,30 +279,41 @@ export async function POST(request: Request) {
     if (updateProfileError) {
       return NextResponse.json(
         { error: 'A solicitacao foi criada, mas nao foi possivel atualizar o status da conta.' },
-        { status: 500 }
+        { status: 500 },
       )
     }
 
-    const approvalUrl = `${getSiteUrl(request)}/parental-consent/${consentRequest.token}`
+    const approvalUrl = `${getSiteUrl(request)}/parental-consent/${token}`
     const emailResult = await sendResendEmail({
-      to: consentRequest.guardian_email || guardianEmail,
+      to: guardianEmail,
       approvalUrl,
+      guardianName,
     })
+    const isProduction = process.env.NODE_ENV === 'production'
+    const canUseDevLink = !isProduction && !emailResult.sent
 
-    return NextResponse.json({
-      success: true,
-      email_sent: emailResult.sent,
-      email_configured: emailResult.configured,
-      message: emailResult.message,
-      approval_url: approvalUrl,
-      request: consentRequest,
-    })
+    return NextResponse.json(
+      {
+        success: emailResult.sent || canUseDevLink,
+        email_sent: emailResult.sent,
+        email_configured: emailResult.configured,
+        message: canUseDevLink
+          ? 'E-mail automatico nao configurado. Use o link de teste em desenvolvimento.'
+          : emailResult.message,
+        approval_url: canUseDevLink ? approvalUrl : null,
+        request: {
+          ...consentRequest,
+          token: canUseDevLink ? token : null,
+        },
+      },
+      { status: emailResult.sent || canUseDevLink ? 200 : 503 },
+    )
   } catch (error) {
     console.error('Erro ao solicitar autorizacao parental por e-mail:', error)
 
     return NextResponse.json(
-      { error: 'Erro interno ao solicitar autorizacao parental.' },
-      { status: 500 }
+      { error: 'Nao foi possivel solicitar autorizacao parental agora.' },
+      { status: 500 },
     )
   }
 }

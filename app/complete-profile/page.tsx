@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { AtSign, CalendarDays, CheckCircle2, ShieldCheck, UserRound } from 'lucide-react'
+import { AtSign, CalendarDays, CheckCircle2, Mail, ShieldCheck, UserRound, UsersRound } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import {
   blocksMinorAccess,
@@ -30,6 +30,12 @@ type Profile = {
   privacy_version?: string | null
 }
 
+type ParentalConsentRequest = {
+  guardian_email: string | null
+  guardian_name?: string | null
+  relationship?: string | null
+}
+
 export default function CompleteProfilePage() {
   const router = useRouter()
   const [userId, setUserId] = useState('')
@@ -38,6 +44,9 @@ export default function CompleteProfilePage() {
   const [username, setUsername] = useState('')
   const [birthDate, setBirthDate] = useState('')
   const [acceptedTerms, setAcceptedTerms] = useState(false)
+  const [guardianName, setGuardianName] = useState('')
+  const [guardianEmail, setGuardianEmail] = useState('')
+  const [relationship, setRelationship] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
@@ -90,8 +99,8 @@ export default function CompleteProfilePage() {
 
       const loadedProfile = data as Profile | null
 
-      if (loadedProfile && !isProfileIncomplete(loadedProfile)) {
-        router.replace(blocksMinorAccess(loadedProfile) ? '/account-pending' : '/feed')
+      if (loadedProfile && !isProfileIncomplete(loadedProfile) && !blocksMinorAccess(loadedProfile)) {
+        router.replace('/feed')
         return
       }
 
@@ -110,6 +119,34 @@ export default function CompleteProfilePage() {
       setUsername(loadedProfile?.username || sanitizeUsername(fallbackName))
       setBirthDate(loadedProfile?.birth_date || '')
       setAcceptedTerms(Boolean(loadedProfile?.terms_accepted_at && loadedProfile.privacy_accepted_at))
+
+      const consentResult = await supabase
+        .from('parental_consent_requests')
+        .select('guardian_email, guardian_name, relationship')
+        .eq('child_user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      let consentData = consentResult.data as ParentalConsentRequest | null
+
+      if (isMissingParentalColumnError(consentResult.error)) {
+        const fallbackConsent = await supabase
+          .from('parental_consent_requests')
+          .select('guardian_email')
+          .eq('child_user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+
+        consentData = fallbackConsent.data as ParentalConsentRequest | null
+      }
+
+      if (consentData) {
+        setGuardianName(consentData.guardian_name || '')
+        setGuardianEmail(consentData.guardian_email || '')
+        setRelationship(consentData.relationship || '')
+      }
+
       setLoading(false)
     }
 
@@ -124,6 +161,22 @@ export default function CompleteProfilePage() {
   const age = useMemo(() => calculateAge(birthDate), [birthDate])
   const isMinor = age !== null && age < 18
   const hasRegisteredBirthDate = Boolean(profile?.birth_date)
+
+  function isValidEmail(value: string) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
+  }
+
+  function isMissingParentalColumnError(error: { message?: string; code?: string } | null) {
+    if (!error) return false
+
+    const message = (error.message || '').toLowerCase()
+
+    return (
+      error.code === '42703' ||
+      message.includes('guardian_name') ||
+      message.includes('relationship')
+    )
+  }
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
@@ -145,6 +198,25 @@ export default function CompleteProfilePage() {
     if (!acceptedTerms) {
       setMessage('Voce precisa aceitar os Termos de Uso e a Politica de Privacidade para continuar.')
       return
+    }
+
+    const normalizedGuardianEmail = guardianEmail.trim().toLowerCase()
+
+    if (isMinor) {
+      if (guardianName.trim().length < 3) {
+        setMessage('Informe o nome do responsavel.')
+        return
+      }
+
+      if (!isValidEmail(normalizedGuardianEmail)) {
+        setMessage('Informe um e-mail valido do responsavel.')
+        return
+      }
+
+      if (!relationship) {
+        setMessage('Informe a relacao com o responsavel.')
+        return
+      }
     }
 
     setSaving(true)
@@ -207,6 +279,38 @@ export default function CompleteProfilePage() {
       setMessage('Nao foi possivel concluir agora. Tente novamente.')
       setSaving(false)
       return
+    }
+
+    if (isMinor && nextParentalConsentStatus !== 'approved') {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+
+      if (!session?.access_token) {
+        setMessage('Entre novamente para solicitar autorizacao do responsavel.')
+        setSaving(false)
+        return
+      }
+
+      const response = await fetch('/api/parental-consent/send-email', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          guardian_email: normalizedGuardianEmail,
+          guardian_name: guardianName.trim(),
+          relationship,
+        }),
+      })
+      const result = await response.json().catch(() => null)
+
+      if (!response.ok || !result?.success) {
+        setMessage(result?.error || result?.message || 'Nao foi possivel enviar o pedido ao responsavel. Tente novamente.')
+        setSaving(false)
+        return
+      }
     }
 
     router.replace(isMinor && nextParentalConsentStatus !== 'approved' ? '/account-pending' : '/feed')
@@ -315,6 +419,74 @@ export default function CompleteProfilePage() {
                 </p>
               )}
             </label>
+
+            {isMinor && (
+              <div className="rounded-3xl border border-blue-400/20 bg-blue-500/10 p-4">
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-blue-500/15 text-blue-200">
+                    <UsersRound className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-base font-black text-white">Autorizacao do responsavel</h2>
+                    <p className="mt-2 text-sm leading-6 text-blue-100/85">
+                      Como voce e menor de idade, precisamos enviar um pedido de autorizacao para seu responsavel. Com a autorizacao, voce podera acessar os recursos normais da EntreUS. Conteudos 18+ continuam bloqueados para menores.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  <label className="block sm:col-span-2">
+                    <span className="mb-2 flex items-center gap-2 text-sm font-semibold text-zinc-200">
+                      <UserRound className="h-4 w-4 text-blue-300" />
+                      Nome do responsavel
+                    </span>
+                    <input
+                      type="text"
+                      value={guardianName}
+                      onChange={(event) => setGuardianName(event.target.value)}
+                      maxLength={120}
+                      className="w-full rounded-2xl border border-zinc-700 bg-black px-4 py-3 text-white outline-none transition focus:border-blue-400"
+                      placeholder="Nome completo do responsavel"
+                      required={isMinor}
+                    />
+                  </label>
+
+                  <label className="block">
+                    <span className="mb-2 flex items-center gap-2 text-sm font-semibold text-zinc-200">
+                      <Mail className="h-4 w-4 text-blue-300" />
+                      E-mail do responsavel
+                    </span>
+                    <input
+                      type="email"
+                      value={guardianEmail}
+                      onChange={(event) => setGuardianEmail(event.target.value)}
+                      className="w-full rounded-2xl border border-zinc-700 bg-black px-4 py-3 text-white outline-none transition focus:border-blue-400"
+                      placeholder="responsavel@email.com"
+                      required={isMinor}
+                    />
+                  </label>
+
+                  <label className="block">
+                    <span className="mb-2 flex items-center gap-2 text-sm font-semibold text-zinc-200">
+                      <ShieldCheck className="h-4 w-4 text-blue-300" />
+                      Relacao com o menor
+                    </span>
+                    <select
+                      value={relationship}
+                      onChange={(event) => setRelationship(event.target.value)}
+                      className="w-full rounded-2xl border border-zinc-700 bg-black px-4 py-3 text-white outline-none transition focus:border-blue-400"
+                      required={isMinor}
+                    >
+                      <option value="">Selecione</option>
+                      <option value="mae">Mae</option>
+                      <option value="pai">Pai</option>
+                      <option value="responsavel_legal">Responsavel legal</option>
+                      <option value="outro">Outro</option>
+                    </select>
+                  </label>
+                </div>
+              </div>
+            )}
 
             <label className="flex gap-3 rounded-2xl border border-zinc-800 bg-black p-4 text-sm leading-6 text-zinc-300">
               <input

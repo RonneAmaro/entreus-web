@@ -396,7 +396,7 @@ export default function ProfilePage() {
     setLatestConsentRequest(request)
     setParentalConsentStatus('pending')
     setGuardianEmail(request.guardian_email || normalizedGuardianEmail)
-    setConsentRequestLink(result.approval_url || `/parental-consent/${request.token}`)
+    setConsentRequestLink(result.approval_url || (request.token ? `/parental-consent/${request.token}` : ''))
     setCreatingConsentRequest(false)
 
     if (result.email_sent) {
@@ -405,11 +405,11 @@ export default function ProfilePage() {
     }
 
     if (result.email_configured === false) {
-      setMessage('Ainda nao foi possivel enviar automaticamente. Use o link abaixo para teste.')
+      setMessage(result.approval_url ? 'Ainda nao foi possivel enviar automaticamente. Use o link abaixo para teste.' : 'O envio automatico de e-mail precisa ser configurado.')
       return
     }
 
-    setMessage(result.message || 'Nao foi possivel enviar automaticamente agora. Use o link abaixo para teste.')
+    setMessage(result.message || 'Nao foi possivel enviar automaticamente agora.')
   }
 
   function sanitizeUsername(value: string) {
