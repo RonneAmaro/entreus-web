@@ -489,7 +489,7 @@ export default function AdminReportsPage() {
                     </p>
                     <p className="mt-2 text-sm leading-6 text-zinc-200">{report.reason || 'Sem motivo informado.'}</p>
                     <p className="mt-2 text-xs text-zinc-500">
-                      Denunciado: {report.reported_user_id || '-'} · Autor: {report.reporter_id || '-'}
+                      Reportado: {report.reported_user_id || '-'} · Denunciante: {report.reporter_id || '-'}
                     </p>
                     {postContext && (
                       <div className="mt-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
@@ -559,7 +559,10 @@ export default function AdminReportsPage() {
                     )}
                   </div>
                   {report.reported_post_id && (
-                    <div className="grid w-full shrink-0 grid-cols-1 gap-2 sm:w-auto sm:max-w-56">
+                    <div className="grid w-full shrink-0 grid-cols-1 gap-2 sm:w-auto sm:max-w-60">
+                      <p className="text-xs font-black uppercase tracking-[0.16em] text-zinc-500">
+                        Post denunciado
+                      </p>
                       <Link href={`/post/${report.reported_post_id}`} className="rounded-full bg-white px-4 py-2 text-center text-xs font-black text-black">
                         Abrir post
                       </Link>
@@ -593,15 +596,18 @@ export default function AdminReportsPage() {
                       )}
                       <p className="rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2 text-xs leading-5 text-zinc-400">
                         {postModerationStatus === 'active'
-                          ? 'Ocultar conteudo remove o post da visualizacao comum e notifica o criador.'
-                          : 'Restaurar conteudo faz o post voltar a aparecer para usuarios comuns.'}
+                          ? 'Se ocultar: o post sai da visualizacao comum, a denuncia vira resolvida e o criador recebe aviso.'
+                          : 'Se restaurar: o post volta para usuarios comuns sem reabrir a denuncia.'}
                       </p>
                     </div>
                   )}
                 </div>
-                <div className="mt-4 grid gap-2 border-t border-white/10 pt-3 sm:flex sm:flex-wrap">
+                <div className="mt-4 grid gap-2 border-t border-white/10 pt-3 sm:flex sm:flex-wrap sm:items-center">
+                  <p className="text-xs font-black uppercase tracking-[0.16em] text-zinc-500 sm:basis-full">
+                    Decisao da denuncia
+                  </p>
                   <p className="text-xs leading-5 text-zinc-500 sm:basis-full">
-                    Recusar denuncia encerra a denuncia e mantem o conteudo ativo.
+                    Se recusar: a denuncia sera encerrada e o conteudo continuara ativo.
                   </p>
                   <button
                     type="button"
