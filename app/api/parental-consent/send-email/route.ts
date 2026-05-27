@@ -113,7 +113,7 @@ async function sendResendEmail({
     return {
       sent: false,
       configured: false,
-      message: 'O envio automatico de e-mail ainda precisa ser configurado.',
+      message: 'Nao foi possivel enviar o e-mail agora. A configuracao de envio precisa ser revisada.',
     }
   }
 
@@ -139,7 +139,7 @@ async function sendResendEmail({
     return {
       sent: false,
       configured: true,
-      message: 'Nao foi possivel enviar o e-mail automatico agora.',
+      message: 'Nao foi possivel enviar o e-mail agora. Verifique o endereco do responsavel ou tente novamente.',
     }
   }
 
@@ -150,7 +150,7 @@ async function sendResendEmail({
     return {
       sent: false,
       configured: true,
-      message: 'Nao foi possivel enviar o e-mail automatico agora.',
+      message: 'Nao foi possivel enviar o e-mail agora. Verifique o endereco do responsavel ou tente novamente.',
     }
   }
 

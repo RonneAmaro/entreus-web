@@ -31,7 +31,22 @@ function getStatusLabel(status: string, hasRequest: boolean) {
   if (!hasRequest && status !== 'approved' && status !== 'rejected') return 'Nao solicitado'
   if (status === 'approved') return 'Aprovado'
   if (status === 'rejected') return 'Recusado'
+  if (status === 'expired') return 'Expirado'
   return 'Pendente'
+}
+
+function normalizeRequestStatus(request: ConsentRequest | null) {
+  if (!request) return null
+
+  if (
+    request.status === 'pending' &&
+    request.expires_at &&
+    new Date(request.expires_at).getTime() < Date.now()
+  ) {
+    return 'expired'
+  }
+
+  return request.status
 }
 
 function maskEmail(value: string | null | undefined) {
@@ -139,13 +154,17 @@ export default function AccountPendingPage() {
   }, [router])
 
   const displayStatus = useMemo(() => {
-    const status = request?.status || profile?.parental_consent_status || 'pending'
+    const status =
+      profile?.parental_consent_status === 'approved'
+        ? 'approved'
+        : normalizeRequestStatus(request) || profile?.parental_consent_status || 'pending'
     return getStatusLabel(status, Boolean(request))
   }, [profile, request])
 
   const isApproved = profile?.is_minor && profile.parental_consent_status === 'approved'
   const isPending = displayStatus === 'Pendente'
   const isRejected = displayStatus === 'Recusado'
+  const isExpired = displayStatus === 'Expirado'
 
   async function handleResend() {
     if (!request?.guardian_email) {
@@ -249,6 +268,12 @@ export default function AccountPendingPage() {
               {isRejected && (
                 <p className="mt-4 rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm leading-6 text-red-100">
                   A autorizacao foi recusada. O acesso completo permanece bloqueado.
+                </p>
+              )}
+
+              {isExpired && (
+                <p className="mt-4 rounded-2xl border border-amber-400/20 bg-amber-500/10 px-4 py-3 text-sm leading-6 text-amber-100">
+                  O link de autorizacao expirou. Reenvie o pedido para gerar um novo link.
                 </p>
               )}
 

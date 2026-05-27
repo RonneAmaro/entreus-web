@@ -20,7 +20,12 @@ type ConsentRequest = {
   created_at: string
 }
 
-function getSupabaseAdmin() {
+type ServerSupabase = {
+  client: any
+  hasServiceRole: boolean
+}
+
+function getSupabaseServer(): ServerSupabase {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -30,12 +35,81 @@ function getSupabaseAdmin() {
     throw new Error('Supabase environment variables are missing.')
   }
 
-  return createClient(supabaseUrl, key, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-    },
+  return {
+    client: createClient(supabaseUrl, key, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+      },
+    }),
+    hasServiceRole: Boolean(serviceRoleKey),
+  }
+}
+
+function mapRpcRequest(row: {
+  id: string
+  guardian_email: string
+  status: string
+  child_birth_date: string | null
+  consent_text: string | null
+  expires_at: string | null
+  created_at: string
+}): ConsentRequest {
+  return {
+    id: row.id,
+    child_user_id: '',
+    guardian_email: row.guardian_email,
+    status: row.status,
+    child_birth_date: row.child_birth_date,
+    consent_text: row.consent_text,
+    expires_at: row.expires_at,
+    created_at: row.created_at,
+  }
+}
+
+async function findRequestByLegacyRpc(client: ReturnType<typeof createClient>, token: string) {
+  const rpcClient = client as any
+  const { data, error } = await rpcClient.rpc('get_parental_consent_request', {
+    p_token: token,
   })
+
+  if (error) return { data: null, error }
+
+  const rows = (data || []) as Array<{
+    id: string
+    guardian_email: string
+    status: string
+    child_birth_date: string | null
+    consent_text: string | null
+    expires_at: string | null
+    created_at: string
+  }>
+
+  return {
+    data: rows[0] ? mapRpcRequest(rows[0]) : null,
+    error: null,
+  }
+}
+
+async function submitByLegacyRpc(client: ReturnType<typeof createClient>, token: string, decision: string) {
+  const rpcClient = client as any
+  const { data, error } = await rpcClient.rpc('submit_parental_consent', {
+    p_token: token,
+    p_decision: decision,
+  })
+
+  if (error) return { data: null, error }
+
+  const result = data as { success?: boolean; status?: string; message?: string } | null
+
+  return {
+    data: {
+      success: Boolean(result?.success),
+      status: result?.status || decision,
+      message: result?.message || (decision === 'approved' ? 'Autorizacao aprovada.' : 'Autorizacao recusada.'),
+    },
+    error: null,
+  }
 }
 
 function hashToken(token: string) {
@@ -85,7 +159,20 @@ function sanitizeRequest(request: ConsentRequest) {
   }
 }
 
-async function findRequestByToken(supabase: ReturnType<typeof getSupabaseAdmin>, token: string) {
+async function findRequestByToken(server: ServerSupabase, token: string) {
+  const supabase = server.client
+
+  if (!server.hasServiceRole) {
+    if (!isUuid(token)) {
+      return {
+        data: null,
+        error: { message: 'A validacao segura do link precisa da chave de servidor configurada.' },
+      }
+    }
+
+    return findRequestByLegacyRpc(supabase, token)
+  }
+
   const tokenHash = hashToken(token)
 
   let result = await supabase
@@ -131,11 +218,18 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Link invalido.' }, { status: 400 })
     }
 
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseServer()
     const { data, error } = await findRequestByToken(supabase, token)
 
     if (error || !data) {
-      return NextResponse.json({ error: 'Link expirado ou invalido.' }, { status: 404 })
+      return NextResponse.json(
+        {
+          error: error?.message?.includes('chave de servidor')
+            ? 'Nao foi possivel validar este link agora. A configuracao de servidor precisa ser revisada.'
+            : 'Link expirado ou invalido.',
+        },
+        { status: error?.message?.includes('chave de servidor') ? 503 : 404 },
+      )
     }
 
     return NextResponse.json({ request: sanitizeRequest(data as ConsentRequest) })
@@ -164,33 +258,42 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Informe o nome completo do responsavel.' }, { status: 400 })
     }
 
-    const supabase = getSupabaseAdmin()
+    const supabase = getSupabaseServer()
     const { data, error } = await findRequestByToken(supabase, token)
 
     if (error || !data) {
-      return NextResponse.json({ error: 'Link expirado ou invalido.' }, { status: 404 })
+      return NextResponse.json(
+        {
+          error: error?.message?.includes('chave de servidor')
+            ? 'Nao foi possivel validar este link agora. A configuracao de servidor precisa ser revisada.'
+            : 'Link expirado ou invalido.',
+        },
+        { status: error?.message?.includes('chave de servidor') ? 503 : 404 },
+      )
     }
 
     const consentRequest = data as ConsentRequest
     const currentStatus = normalizeStatus(consentRequest)
 
     if (currentStatus === 'expired') {
-      await supabase
-        .from('parental_consent_requests')
-        .update({ status: 'expired' })
-        .eq('id', consentRequest.id)
+      if (supabase.hasServiceRole) {
+        await supabase.client
+          .from('parental_consent_requests')
+          .update({ status: 'expired' })
+          .eq('id', consentRequest.id)
 
-      await supabase
-        .from('profiles')
-        .update({
-          parental_consent_status: 'pending',
-          is_minor: true,
-          wants_18_plus: false,
-          show_sensitive_content: false,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', consentRequest.child_user_id)
-        .neq('parental_consent_status', 'approved')
+        await supabase.client
+          .from('profiles')
+          .update({
+            parental_consent_status: 'pending',
+            is_minor: true,
+            wants_18_plus: false,
+            show_sensitive_content: false,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', consentRequest.child_user_id)
+          .neq('parental_consent_status', 'approved')
+      }
 
       return NextResponse.json(
         { error: 'Este link expirou. Solicite um novo pedido de autorizacao.', status: 'expired' },
@@ -204,6 +307,19 @@ export async function POST(request: Request) {
         status: currentStatus,
         message: 'Esta solicitacao ja foi respondida.',
       })
+    }
+
+    if (!supabase.hasServiceRole) {
+      const legacyResult = await submitByLegacyRpc(supabase.client, token, decision)
+
+      if (legacyResult.error || !legacyResult.data) {
+        return NextResponse.json(
+          { error: 'Nao foi possivel registrar a decisao agora. A configuracao de servidor precisa ser revisada.' },
+          { status: 503 },
+        )
+      }
+
+      return NextResponse.json(legacyResult.data)
     }
 
     const decidedAt = new Date().toISOString()
@@ -221,15 +337,19 @@ export async function POST(request: Request) {
     }
 
     let updateRequest = await supabase
+      .client
       .from('parental_consent_requests')
       .update(updateWithSignature)
       .eq('id', consentRequest.id)
+      .eq('status', 'pending')
 
     if (isMissingParentalColumnError(updateRequest.error)) {
       updateRequest = await supabase
+        .client
         .from('parental_consent_requests')
         .update(updateLegacy)
         .eq('id', consentRequest.id)
+        .eq('status', 'pending')
     }
 
     if (updateRequest.error) {
@@ -239,7 +359,23 @@ export async function POST(request: Request) {
       )
     }
 
-    const { error: profileError } = await supabase
+    const { data: latestRequest } = await supabase.client
+      .from('parental_consent_requests')
+      .select('status')
+      .eq('id', consentRequest.id)
+      .maybeSingle()
+
+    const latestStatus = String(latestRequest?.status || decision)
+
+    if (latestStatus !== decision) {
+      return NextResponse.json({
+        success: true,
+        status: latestStatus,
+        message: 'Esta solicitacao ja foi respondida.',
+      })
+    }
+
+    const { error: profileError } = await supabase.client
       .from('profiles')
       .update({
         parental_consent_status: decision,

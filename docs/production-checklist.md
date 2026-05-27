@@ -75,6 +75,8 @@ Manual verification after applying migrations:
 - `prevent_age_verification_user_review_changes` trigger exists.
 - `moderate_reported_post` RPC exists if moderation actions are enabled.
 - Mercado Pago completion RPCs exist if automatic credit is enabled.
+- Parental consent flow creates a pending request, sends e-mail, accepts approve/reject once, and keeps minors blocked from 18+.
+- Parental consent expired or invalid links show a friendly public error.
 - Before publicly enabling accounts for minors, complete professional legal review of the parental consent text and flow.
 
 ## 3. Storage and bucket checklist
@@ -114,6 +116,10 @@ Public site URL and email:
 - `NEXT_PUBLIC_SITE_URL`
 - `RESEND_API_KEY`
 - `EMAIL_FROM`
+
+Parental consent server actions:
+
+- `SUPABASE_SERVICE_ROLE_KEY` should be configured for `/api/parental-consent/respond` to validate token hashes and update decisions server-side. Without it, only the legacy RPC fallback can work for UUID tokens.
 
 Cloudflare R2:
 
