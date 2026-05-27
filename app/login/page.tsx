@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { Eye, EyeOff } from 'lucide-react'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import GoogleLogo from '../components/GoogleLogo'
 import { signInWithSocialProvider, supabase } from '@/lib/supabase'
 
 export default function LoginPage() {
@@ -64,10 +65,11 @@ export default function LoginPage() {
             type="button"
             onClick={handleGoogleLogin}
             disabled={loading || socialLoading}
-            className="flex w-full items-center justify-center gap-3 rounded-xl border border-zinc-300 bg-white px-4 py-3 font-semibold text-zinc-900 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white dark:hover:bg-zinc-800"
+            aria-label="Continuar com Google"
+            className="flex min-h-12 w-full items-center justify-center gap-3 rounded-xl border border-zinc-300 bg-white px-4 py-3 font-semibold text-zinc-900 transition hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white dark:hover:bg-zinc-800 dark:focus-visible:ring-offset-zinc-950"
           >
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white text-sm font-black text-blue-600 ring-1 ring-zinc-200">
-              G
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white">
+              <GoogleLogo />
             </span>
             {socialLoading ? 'Conectando...' : 'Continuar com Google'}
           </button>
