@@ -43,6 +43,7 @@ Age, 18+, parental consent, and admin review:
 - `20260525_harden_age_verification_document_access_retention.sql`
 - `20260526_add_profile_terms_privacy_acceptance.sql`
 - `20260526_extend_parental_consent_responsible_terms.sql`
+- `20260527_add_parental_consent_guardian_selfie.sql`
 
 ItaCash, gifts, purchase requests, and Mercado Pago:
 
@@ -75,15 +76,17 @@ Manual verification after applying migrations:
 - `prevent_age_verification_user_review_changes` trigger exists.
 - `moderate_reported_post` RPC exists if moderation actions are enabled.
 - Mercado Pago completion RPCs exist if automatic credit is enabled.
-- Parental consent flow creates a pending request, sends e-mail, accepts approve/reject once, and keeps minors blocked from 18+.
+- Parental consent flow creates a pending request, sends e-mail, requires guardian selfie for approval, accepts approve/reject once, and keeps minors blocked from 18+.
 - Parental consent expired or invalid links show a friendly public error.
+- `/parental-consent/[token]` requires a JPG/PNG/WEBP guardian selfie up to 5 MB before approval.
+- Guardian selfie paths are saved privately and no public selfie URL is returned to the browser.
 - Before publicly enabling accounts for minors, complete professional legal review of the parental consent text and flow.
 
 ## 3. Storage and bucket checklist
 
 Supabase Storage:
 
-- `age-verifications`: private. Used for 18+ documents/selfies. Admin access should use `/api/admin/age-verifications/signed-url`, not public URLs.
+- `age-verifications`: private. Used for 18+ documents/selfies and guardian selfie proof for parental consent. Admin access should use signed URLs, not public URLs.
 - `payment-proofs`: private. Used for ItaCash purchase proof files. Admin review uses signed URLs.
 - `avatars`: public or intentionally readable by the app, because profile avatars use public URLs.
 - `profile-banners`: public or intentionally readable by the app, because profile banners use public URLs.

@@ -18,7 +18,7 @@ export default function PrivacyPage() {
         },
         {
           title: 'Dados de menores e responsaveis',
-          body: 'Quando o usuario for menor de 18 anos, podemos tratar informacoes relacionadas a idade e, quando necessario, e-mail do responsavel para fluxo de consentimento parental. Esse consentimento nao libera conteudo 18+.',
+          body: 'Quando o usuario for menor de 18 anos, podemos tratar informacoes relacionadas a idade e, quando necessario, nome, e-mail, assinatura digitada e selfie simples do responsavel para fluxo de consentimento parental. Esse consentimento nao libera conteudo 18+.',
         },
         {
           title: 'Documentos e selfie para 18+',
@@ -34,7 +34,7 @@ export default function PrivacyPage() {
         },
         {
           title: 'Armazenamento privado de documentos',
-          body: 'Documentos e selfies de verificacao devem ficar em storage privado. A plataforma nao deve usar URL publica permanente para esses arquivos. O acesso deve ser restrito a equipe/admin autorizados e, quando necessario, por links temporarios.',
+          body: 'Documentos e selfies de verificacao, incluindo selfie do responsavel quando solicitada como prova de autorizacao parental, devem ficar em storage privado. A plataforma nao deve usar URL publica permanente para esses arquivos. O acesso deve ser restrito a equipe/admin autorizados e, quando necessario, por links temporarios.',
         },
         {
           title: 'Midias e gravacoes',

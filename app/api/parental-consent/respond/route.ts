@@ -16,6 +16,9 @@ type ConsentRequest = {
   consent_version?: string | null
   approved_at?: string | null
   rejected_at?: string | null
+  guardian_selfie_path?: string | null
+  guardian_selfie_uploaded_at?: string | null
+  approval_user_agent?: string | null
   expires_at: string | null
   created_at: string
 }
@@ -23,6 +26,22 @@ type ConsentRequest = {
 type ServerSupabase = {
   client: any
   hasServiceRole: boolean
+}
+
+type ParsedDecisionBody = {
+  token: string
+  decision: string
+  signedName: string
+  selfieFile: File | null
+}
+
+const GUARDIAN_SELFIE_BUCKET = 'age-verifications'
+const GUARDIAN_SELFIE_MAX_SIZE_BYTES = 5 * 1024 * 1024
+const GUARDIAN_SELFIE_ACCEPTED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
+const GUARDIAN_SELFIE_EXTENSIONS: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
 }
 
 function getSupabaseServer(): ServerSupabase {
@@ -128,7 +147,10 @@ function isMissingParentalColumnError(error: { message?: string; code?: string }
     message.includes('consent_version') ||
     message.includes('signed_name') ||
     message.includes('signed_at') ||
-    message.includes('token_hash')
+    message.includes('token_hash') ||
+    message.includes('guardian_selfie_path') ||
+    message.includes('guardian_selfie_uploaded_at') ||
+    message.includes('approval_user_agent')
   )
 }
 
@@ -157,6 +179,61 @@ function sanitizeRequest(request: ConsentRequest) {
     expires_at: request.expires_at,
     created_at: request.created_at,
   }
+}
+
+async function parseDecisionBody(request: Request): Promise<ParsedDecisionBody> {
+  const contentType = request.headers.get('content-type') || ''
+
+  if (contentType.toLowerCase().includes('multipart/form-data')) {
+    const formData = await request.formData()
+    const selfieValue = formData.get('guardian_selfie')
+
+    return {
+      token: String(formData.get('token') || ''),
+      decision: String(formData.get('decision') || ''),
+      signedName: String(formData.get('signed_name') || '').trim(),
+      selfieFile: selfieValue instanceof File ? selfieValue : null,
+    }
+  }
+
+  const body = await request.json().catch(() => null)
+
+  return {
+    token: String(body?.token || ''),
+    decision: String(body?.decision || ''),
+    signedName: String(body?.signed_name || '').trim(),
+    selfieFile: null,
+  }
+}
+
+function validateGuardianSelfie(file: File | null) {
+  if (!file || file.size === 0) {
+    return 'Envie uma selfie simples do responsavel para aprovar a autorizacao.'
+  }
+
+  if (!GUARDIAN_SELFIE_ACCEPTED_TYPES.has(file.type)) {
+    return 'A selfie precisa ser uma imagem JPG, PNG ou WEBP.'
+  }
+
+  if (file.size > GUARDIAN_SELFIE_MAX_SIZE_BYTES) {
+    return 'A selfie deve ter no maximo 5 MB.'
+  }
+
+  return ''
+}
+
+async function ensureGuardianSelfieColumns(supabase: ReturnType<typeof createClient>) {
+  const { error } = await supabase
+    .from('parental_consent_requests')
+    .select('guardian_selfie_path, guardian_selfie_uploaded_at, approval_user_agent')
+    .limit(1)
+
+  return !isMissingParentalColumnError(error)
+}
+
+function buildGuardianSelfiePath(requestId: string, file: File) {
+  const extension = GUARDIAN_SELFIE_EXTENSIONS[file.type] || 'jpg'
+  return `parental-consent/${requestId}/guardian-selfie-${Date.now()}.${extension}`
 }
 
 async function findRequestByToken(server: ServerSupabase, token: string) {
@@ -245,10 +322,10 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json().catch(() => null)
-    const token = String(body?.token || '')
-    const decision = String(body?.decision || '')
-    const signedName = String(body?.signed_name || '').trim()
+    const parsedBody = await parseDecisionBody(request)
+    const token = parsedBody.token
+    const decision = parsedBody.decision
+    const signedName = parsedBody.signedName
 
     if (!token || !['approved', 'rejected'].includes(decision)) {
       return NextResponse.json({ error: 'Decisao invalida.' }, { status: 400 })
@@ -256,6 +333,14 @@ export async function POST(request: Request) {
 
     if (decision === 'approved' && signedName.length < 5) {
       return NextResponse.json({ error: 'Informe o nome completo do responsavel.' }, { status: 400 })
+    }
+
+    if (decision === 'approved') {
+      const selfieError = validateGuardianSelfie(parsedBody.selfieFile)
+
+      if (selfieError) {
+        return NextResponse.json({ error: selfieError }, { status: 400 })
+      }
     }
 
     const supabase = getSupabaseServer()
@@ -310,6 +395,13 @@ export async function POST(request: Request) {
     }
 
     if (!supabase.hasServiceRole) {
+      if (decision === 'approved') {
+        return NextResponse.json(
+          { error: 'A aprovacao com selfie precisa da chave de servidor configurada.' },
+          { status: 503 },
+        )
+      }
+
       const legacyResult = await submitByLegacyRpc(supabase.client, token, decision)
 
       if (legacyResult.error || !legacyResult.data) {
@@ -323,12 +415,45 @@ export async function POST(request: Request) {
     }
 
     const decidedAt = new Date().toISOString()
+    let guardianSelfiePath: string | null = null
+
+    if (decision === 'approved') {
+      const hasSelfieColumns = await ensureGuardianSelfieColumns(supabase.client)
+
+      if (!hasSelfieColumns) {
+        return NextResponse.json(
+          { error: 'A aprovacao com selfie ainda precisa da migration parental mais recente.' },
+          { status: 503 },
+        )
+      }
+
+      const selfieFile = parsedBody.selfieFile as File
+      guardianSelfiePath = buildGuardianSelfiePath(consentRequest.id, selfieFile)
+
+      const { error: uploadError } = await supabase.client.storage
+        .from(GUARDIAN_SELFIE_BUCKET)
+        .upload(guardianSelfiePath, selfieFile, {
+          contentType: selfieFile.type,
+          upsert: false,
+        })
+
+      if (uploadError) {
+        return NextResponse.json(
+          { error: 'Nao foi possivel enviar a selfie do responsavel. Tente novamente.' },
+          { status: 500 },
+        )
+      }
+    }
+
     const updateWithSignature = {
       status: decision,
       approved_at: decision === 'approved' ? decidedAt : consentRequest.approved_at || null,
       rejected_at: decision === 'rejected' ? decidedAt : consentRequest.rejected_at || null,
       signed_name: signedName || null,
       signed_at: decidedAt,
+      guardian_selfie_path: guardianSelfiePath,
+      guardian_selfie_uploaded_at: guardianSelfiePath ? decidedAt : null,
+      approval_user_agent: request.headers.get('user-agent')?.slice(0, 500) || null,
     }
     const updateLegacy = {
       status: decision,

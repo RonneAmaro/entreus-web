@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { CheckCircle2, Loader2, ShieldAlert, XCircle } from 'lucide-react'
+import { Camera, CheckCircle2, Loader2, ShieldAlert, XCircle } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 
 type ConsentRequest = {
@@ -17,6 +17,9 @@ type ConsentRequest = {
   expires_at: string | null
   created_at: string
 }
+
+const SELFIE_MAX_SIZE_BYTES = 5 * 1024 * 1024
+const SELFIE_ACCEPTED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
 
 function formatDate(value: string | null) {
   if (!value) return 'Nao informado'
@@ -48,14 +51,24 @@ export default function ParentalConsentPage() {
   const [authorizesNormalUse, setAuthorizesNormalUse] = useState(false)
   const [acceptsTerms, setAcceptsTerms] = useState(false)
   const [signedName, setSignedName] = useState('')
+  const [selfieFile, setSelfieFile] = useState<File | null>(null)
+  const [selfiePreviewUrl, setSelfiePreviewUrl] = useState('')
 
   useEffect(() => {
     loadRequest()
   }, [token])
 
+  useEffect(() => {
+    return () => {
+      if (selfiePreviewUrl) {
+        URL.revokeObjectURL(selfiePreviewUrl)
+      }
+    }
+  }, [selfiePreviewUrl])
+
   const canApprove = useMemo(
-    () => isResponsible && authorizesNormalUse && acceptsTerms && signedName.trim().length >= 5,
-    [acceptsTerms, authorizesNormalUse, isResponsible, signedName],
+    () => isResponsible && authorizesNormalUse && acceptsTerms && signedName.trim().length >= 5 && Boolean(selfieFile),
+    [acceptsTerms, authorizesNormalUse, isResponsible, selfieFile, signedName],
   )
 
   async function loadRequest() {
@@ -88,23 +101,25 @@ export default function ParentalConsentPage() {
     if (!token) return
 
     if (decision === 'approved' && !canApprove) {
-      setMessage('Confirme os termos e informe o nome completo do responsavel para autorizar.')
+      setMessage('Confirme os termos, informe o nome completo do responsavel e envie uma selfie para autorizar.')
       return
     }
 
     setSubmittingDecision(decision)
     setMessage('')
 
+    const formData = new FormData()
+    formData.append('token', token)
+    formData.append('decision', decision)
+    formData.append('signed_name', signedName.trim())
+
+    if (decision === 'approved' && selfieFile) {
+      formData.append('guardian_selfie', selfieFile)
+    }
+
     const response = await fetch('/api/parental-consent/respond', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        token,
-        decision,
-        signed_name: signedName.trim(),
-      }),
+      body: formData,
     })
     const result = await response.json().catch(() => null)
 
@@ -124,6 +139,32 @@ export default function ParentalConsentPage() {
     setResultStatus(nextStatus)
     setRequest((current) => current ? { ...current, status: nextStatus } : current)
     setMessage(result.message || (decision === 'approved' ? 'Autorizacao aprovada.' : 'Autorizacao recusada.'))
+  }
+
+  function handleSelfieChange(file: File | null) {
+    setMessage('')
+
+    if (selfiePreviewUrl) {
+      URL.revokeObjectURL(selfiePreviewUrl)
+      setSelfiePreviewUrl('')
+    }
+
+    setSelfieFile(null)
+
+    if (!file) return
+
+    if (!SELFIE_ACCEPTED_TYPES.has(file.type)) {
+      setMessage('A selfie precisa ser uma imagem JPG, PNG ou WEBP.')
+      return
+    }
+
+    if (file.size > SELFIE_MAX_SIZE_BYTES) {
+      setMessage('A selfie deve ter no maximo 5 MB.')
+      return
+    }
+
+    setSelfieFile(file)
+    setSelfiePreviewUrl(URL.createObjectURL(file))
   }
 
   return (
@@ -248,6 +289,43 @@ export default function ParentalConsentPage() {
                         placeholder="Nome completo"
                       />
                     </label>
+
+                    <div className="rounded-3xl border border-blue-300/20 bg-blue-500/10 p-4">
+                      <div className="flex items-start gap-3">
+                        <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-blue-500/20 text-blue-100">
+                          <Camera className="h-5 w-5" />
+                        </span>
+                        <div>
+                          <p className="font-black text-blue-50">Selfie do responsavel</p>
+                          <p className="mt-1 text-sm leading-6 text-blue-100/80">
+                            Para proteger menores e evitar autorizacoes indevidas, solicitamos uma selfie simples do responsavel. A imagem sera usada apenas como prova de autorizacao e nao sera exibida publicamente.
+                          </p>
+                        </div>
+                      </div>
+
+                      <label className="mt-4 block">
+                        <span className="mb-2 block text-sm font-semibold text-zinc-200">
+                          Enviar ou tirar selfie
+                        </span>
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp,image/*"
+                          capture="user"
+                          onChange={(event) => handleSelfieChange(event.target.files?.[0] || null)}
+                          className="block w-full rounded-2xl border border-zinc-700 bg-black px-4 py-3 text-sm text-zinc-200 file:mr-4 file:rounded-full file:border-0 file:bg-white file:px-4 file:py-2 file:text-sm file:font-black file:text-black"
+                        />
+                      </label>
+
+                      {selfiePreviewUrl && (
+                        <div className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-black">
+                          <img
+                            src={selfiePreviewUrl}
+                            alt="Preview da selfie do responsavel"
+                            className="max-h-72 w-full object-contain"
+                          />
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}

@@ -21,6 +21,10 @@ export default function TermsPage() {
           body: 'Usuários menores de 18 anos podem precisar de autorização do responsável para usar recursos gerais da plataforma. A autorização do responsável organiza o uso geral da conta, mas não libera o acesso a conteúdo 18+.',
         },
         {
+          title: 'Prova de autorizacao parental',
+          body: 'Para proteger menores e evitar autorizacoes indevidas, a EntreUS pode solicitar assinatura digitada e selfie simples do responsavel como prova de autorizacao. Essa selfie nao e publica, fica em acesso restrito e pode ser revisada pela administracao apenas quando necessario para seguranca e comprovacao.',
+        },
+        {
           title: 'Conduta dos usuários',
           body: 'Esperamos respeito, boa-fé e responsabilidade. Não são permitidos assédio, ameaças, discurso de ódio, golpes, spam, exposição indevida de terceiros ou qualquer uso que prejudique a comunidade.',
         },
