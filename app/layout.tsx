@@ -24,14 +24,14 @@ export const metadata: Metadata = {
   icons: {
     icon: [
       {
-        url: '/pwa/icons/entreus-icon-512.png',
-        type: 'image/png',
-        sizes: '512x512',
-      },
-      {
         url: '/favicon-entreus.png',
         type: 'image/png',
         sizes: '653x653',
+      },
+      {
+        url: '/pwa/icons/entreus-icon-512.png',
+        type: 'image/png',
+        sizes: '512x512',
       },
       {
         url: '/entreus-app-icon.svg',
@@ -42,9 +42,9 @@ export const metadata: Metadata = {
     shortcut: '/favicon-entreus.png',
     apple: [
       {
-        url: '/pwa/icons/entreus-icon-512.png',
+        url: '/favicon-entreus.png',
         type: 'image/png',
-        sizes: '512x512',
+        sizes: '653x653',
       },
     ],
   },

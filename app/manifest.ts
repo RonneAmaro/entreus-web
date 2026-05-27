@@ -16,6 +16,12 @@ export default function manifest(): MetadataRoute.Manifest {
     categories: ['social', 'entertainment', 'lifestyle'],
     icons: [
       {
+        src: '/favicon-entreus.png',
+        sizes: '653x653',
+        type: 'image/png',
+        purpose: 'any',
+      },
+      {
         src: '/pwa/icons/entreus-icon-192.png',
         sizes: '192x192',
         type: 'image/png',
@@ -37,12 +43,6 @@ export default function manifest(): MetadataRoute.Manifest {
         src: '/entreus-app-icon.svg',
         sizes: 'any',
         type: 'image/svg+xml',
-        purpose: 'any',
-      },
-      {
-        src: '/favicon-entreus.png',
-        sizes: '653x653',
-        type: 'image/png',
         purpose: 'any',
       },
     ],
