@@ -230,12 +230,12 @@ export default function AdminR2OrphansPage() {
           <DatabaseZap className="h-10 w-10 text-blue-100" />
           <h1 className="mt-4 text-3xl font-black tracking-tight sm:text-5xl">Auditoria R2</h1>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-blue-100/80 sm:text-base">
-            Possiveis midias orfas no armazenamento. Esta pagina apenas audita. Nenhum arquivo sera deletado.
+            Possiveis midias orfas no armazenamento. Esta pagina apenas audita. Nenhum arquivo sera deletado automaticamente neste pacote.
           </p>
         </header>
 
         <div className="mt-5 rounded-3xl border border-amber-300/20 bg-amber-500/10 p-4 text-sm leading-6 text-amber-50">
-          Esta auditoria e preventiva. Antes de qualquer limpeza futura, os arquivos devem ser rechecados.
+          Esta auditoria e preventiva. Nenhum arquivo sera deletado automaticamente neste pacote. Antes de qualquer limpeza futura, os arquivos devem ser rechecados.
         </div>
 
         {message && (
@@ -291,7 +291,7 @@ export default function AdminR2OrphansPage() {
               </div>
               <div className="rounded-3xl border border-white/10 bg-zinc-950/80 p-4 ring-1 ring-white/5">
                 <p className="text-xs font-black uppercase tracking-[0.2em] text-zinc-500">Exclusao</p>
-                <p className="mt-2 text-lg font-black">{audit.deleted ? 'Arquivo deletado' : 'Nenhum arquivo deletado'}</p>
+                <p className="mt-2 text-lg font-black">{audit.deleted ? 'Arquivo deletado' : 'Nenhum arquivo deletado automaticamente'}</p>
               </div>
               <div className="rounded-3xl border border-white/10 bg-zinc-950/80 p-4 ring-1 ring-white/5">
                 <p className="text-xs font-black uppercase tracking-[0.2em] text-zinc-500">Limite</p>

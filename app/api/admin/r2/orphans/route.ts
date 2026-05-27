@@ -287,10 +287,27 @@ export async function GET(request: Request) {
   }
 
   const limitPerPrefix = getLimitPerPrefix(request)
-  const [r2Listing, usedMedia] = await Promise.all([
-    listR2Objects(limitPerPrefix),
-    loadUsedR2Keys(supabaseService),
-  ])
+  const auditResults = await (async () => {
+    try {
+      return await Promise.all([
+        listR2Objects(limitPerPrefix),
+        loadUsedR2Keys(supabaseService),
+      ])
+    } catch (error) {
+      console.warn('[R2OrphansAudit] Audit failed:', error instanceof Error ? error.message : 'unknown error')
+
+      return null
+    }
+  })()
+
+  if (!auditResults) {
+    return NextResponse.json(
+      { ok: false, error: 'R2_AUDIT_FAILED' },
+      { status: 502 },
+    )
+  }
+
+  const [r2Listing, usedMedia] = auditResults
 
   const objects = r2Listing.objects
   const usedObjects = objects.filter((item) => usedMedia.usedKeys.has(item.key))
