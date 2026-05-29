@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { getMailtoHref, siteConfig } from '@/lib/site-config'
 import InstitutionalPageLayout from '../components/InstitutionalPageLayout'
 
 export const metadata: Metadata = {
@@ -51,6 +52,29 @@ export default function SafetyPage() {
         {
           title: 'Boas práticas',
           body: 'Proteja sua senha, desconfie de ofertas irreais, evite enviar documentos ou códigos para desconhecidos e denuncie comportamentos suspeitos rapidamente.',
+        },
+        {
+          title: 'Canal de seguranca',
+          body: (
+            <>
+              Para denuncias sensiveis, abuso, golpe, exposicao indevida ou
+              risco a usuarios, escreva para{' '}
+              <a
+                href={getMailtoHref(siteConfig.emails.security, 'Seguranca EntreUS')}
+                className="font-semibold text-blue-300 underline-offset-4 hover:underline"
+              >
+                {siteConfig.emails.security}
+              </a>
+              . Para problemas de conta, use{' '}
+              <a
+                href={getMailtoHref(siteConfig.emails.support, 'Suporte EntreUS')}
+                className="font-semibold text-blue-300 underline-offset-4 hover:underline"
+              >
+                {siteConfig.emails.support}
+              </a>
+              .
+            </>
+          ),
         },
       ]}
     />

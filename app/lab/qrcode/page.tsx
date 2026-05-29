@@ -21,6 +21,7 @@ import {
   Wifi,
 } from 'lucide-react'
 import QRCode from 'qrcode'
+import { siteConfig } from '@/lib/site-config'
 
 type QrMode = 'text' | 'url' | 'wifi' | 'whatsapp' | 'email' | 'phone'
 type WifiSecurity = 'WPA' | 'WEP' | 'nopass'
@@ -110,7 +111,7 @@ export default function QrCodeLabPage() {
   const [mode, setMode] = useState<QrMode>('url')
   const [title, setTitle] = useState('Meu QR Code')
   const [textValue, setTextValue] = useState('')
-  const [urlValue, setUrlValue] = useState('https://entreus.vercel.app')
+  const [urlValue, setUrlValue] = useState(siteConfig.siteUrl)
   const [wifiSsid, setWifiSsid] = useState('')
   const [wifiPassword, setWifiPassword] = useState('')
   const [wifiSecurity, setWifiSecurity] = useState<WifiSecurity>('WPA')

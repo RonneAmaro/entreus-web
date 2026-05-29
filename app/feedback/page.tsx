@@ -14,6 +14,7 @@ import {
   Send,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { getMailtoHref, siteConfig } from '@/lib/site-config'
 
 type FeedbackType = 'bug' | 'feedback' | 'idea' | 'content' | 'safety' | 'other'
 type FeedbackUrgency = 'low' | 'normal' | 'high' | 'urgent'
@@ -122,6 +123,23 @@ export default function FeedbackPage() {
             </h1>
             <p className="mt-5 text-base leading-7 text-zinc-300">
               Conte o que aconteceu, onde aconteceu e qual impacto teve. Esse canal registra relatos em uma tabela interna para triagem.
+            </p>
+            <p className="mt-4 text-sm leading-6 text-zinc-400">
+              Para denuncias sensiveis, use{' '}
+              <a
+                href={getMailtoHref(siteConfig.emails.security, 'Seguranca EntreUS')}
+                className="font-semibold text-blue-200 underline-offset-4 hover:underline"
+              >
+                {siteConfig.emails.security}
+              </a>
+              . Para suporte de conta, use{' '}
+              <a
+                href={getMailtoHref(siteConfig.emails.support, 'Suporte EntreUS')}
+                className="font-semibold text-blue-200 underline-offset-4 hover:underline"
+              >
+                {siteConfig.emails.support}
+              </a>
+              .
             </p>
           </div>
 

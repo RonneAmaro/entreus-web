@@ -8,6 +8,7 @@ import {
   Coins,
   Crown,
   Download,
+  FileText,
   FlaskConical,
   Gift,
   HelpCircle,
@@ -205,6 +206,21 @@ export default function MoreMenu({
         <Link href="/privacy" onClick={onClose} className={itemClass('/privacy')}>
           <Shield className={iconClass('/privacy')} />
           <span>{t('settings.privacy')}</span>
+        </Link>
+
+        <Link href="/terms" onClick={onClose} className={itemClass('/terms')}>
+          <FileText className={iconClass('/terms')} />
+          <span>Termos</span>
+        </Link>
+
+        <Link href="/safety" onClick={onClose} className={itemClass('/safety')}>
+          <ShieldCheck className={iconClass('/safety')} />
+          <span>Seguranca</span>
+        </Link>
+
+        <Link href="/contact" onClick={onClose} className={itemClass('/contact')}>
+          <HelpCircle className={iconClass('/contact')} />
+          <span>Contato</span>
         </Link>
 
         <Link href="/blocked" onClick={onClose} className={itemClass('/blocked')}>

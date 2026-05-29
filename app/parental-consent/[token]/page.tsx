@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { Camera, CheckCircle2, Loader2, ShieldAlert, XCircle } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
+import { getMailtoHref, siteConfig } from '@/lib/site-config'
 
 type ConsentRequest = {
   id: string
@@ -195,6 +196,16 @@ export default function ParentalConsentPage() {
                 Link expirado ou invalido
               </div>
               <p className="mt-2 text-sm">{message || 'Nao encontramos uma solicitacao valida para este link.'}</p>
+              <p className="mt-3 text-sm">
+                Se precisar de ajuda, fale com{' '}
+                <a
+                  href={getMailtoHref(siteConfig.emails.support, 'Autorizacao parental EntreUS')}
+                  className="font-semibold text-red-50 underline-offset-4 hover:underline"
+                >
+                  {siteConfig.emails.support}
+                </a>
+                .
+              </p>
             </div>
           ) : (
             <>
@@ -211,6 +222,16 @@ export default function ParentalConsentPage() {
 
                 <p className="text-sm leading-7 text-zinc-200">
                   Voce esta recebendo esta solicitacao porque um menor informou seu e-mail como responsavel para usar a plataforma EntreUS. Autorizar libera apenas os recursos normais da rede social. Conteudos 18+ continuam bloqueados para menores, mesmo com autorizacao.
+                </p>
+                <p className="mt-3 text-sm leading-7 text-blue-100">
+                  Duvidas sobre este pedido podem ser enviadas para{' '}
+                  <a
+                    href={getMailtoHref(siteConfig.emails.support, 'Autorizacao parental EntreUS')}
+                    className="font-semibold underline-offset-4 hover:underline"
+                  >
+                    {siteConfig.emails.support}
+                  </a>
+                  .
                 </p>
 
                 <div className="mt-5 grid gap-3 sm:grid-cols-2">

@@ -119,6 +119,30 @@ Public site URL and email:
 - `NEXT_PUBLIC_SITE_URL`
 - `RESEND_API_KEY`
 - `EMAIL_FROM`
+- `CONTACT_EMAIL`
+- `SUPPORT_EMAIL`
+- `PRIVACY_EMAIL`
+- `SECURITY_EMAIL`
+
+## 4.1 Official domain, Vercel, Resend, and institutional email
+
+Manual checklist for the official `.com.br` domain:
+
+- Add the official domain in Vercel for the production project.
+- Configure DNS in the domain registrar according to Vercel instructions.
+- Set `NEXT_PUBLIC_SITE_URL` in Vercel to the canonical HTTPS production URL.
+- Confirm `app/layout.tsx` metadata and Open Graph URLs use `NEXT_PUBLIC_SITE_URL`.
+- Add the sending domain in Resend.
+- Configure all DNS records required by Resend, including SPF/DKIM/verification records.
+- Set `RESEND_API_KEY` only in Vercel environment variables.
+- Set `EMAIL_FROM` to the official no-reply sender for automated emails.
+- Set `CONTACT_EMAIL`, `SUPPORT_EMAIL`, `PRIVACY_EMAIL`, and `SECURITY_EMAIL` in Vercel.
+- Create or activate real mailboxes or aliases for `contato`, `suporte`, `privacidade`, `seguranca`, and `no-reply`.
+- Confirm `no-reply` is used only for automated sending.
+- Confirm contact/support/privacy/security aliases route to a real monitored inbox.
+- Test the parental consent email flow end to end with a safe test account.
+- Confirm the approval link in the email points to the official domain.
+- Confirm Resend delivery logs show the official sender and verified domain.
 
 Parental consent server actions:
 

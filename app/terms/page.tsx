@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { getMailtoHref, siteConfig } from '@/lib/site-config'
 import InstitutionalPageLayout from '../components/InstitutionalPageLayout'
 
 export const metadata: Metadata = {
@@ -79,6 +80,28 @@ export default function TermsPage() {
         {
           title: 'Alterações e contato',
           body: 'Estes termos podem ser atualizados para refletir novos recursos, regras legais ou mudanças da plataforma, incluindo regras de idade, segurança e verificação. Dúvidas e solicitações devem ser enviadas pelos canais oficiais do EntreUS quando disponibilizados.',
+        },
+        {
+          title: 'Canais oficiais',
+          body: (
+            <>
+              Para duvidas sobre estes termos, fale com{' '}
+              <a
+                href={getMailtoHref(siteConfig.emails.support, 'Termos de Uso EntreUS')}
+                className="font-semibold text-blue-300 underline-offset-4 hover:underline"
+              >
+                {siteConfig.emails.support}
+              </a>
+              . Para privacidade e dados pessoais, use{' '}
+              <a
+                href={getMailtoHref(siteConfig.emails.privacy, 'Privacidade EntreUS')}
+                className="font-semibold text-blue-300 underline-offset-4 hover:underline"
+              >
+                {siteConfig.emails.privacy}
+              </a>
+              .
+            </>
+          ),
         },
       ]}
     />

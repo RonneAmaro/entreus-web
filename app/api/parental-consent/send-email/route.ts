@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'crypto'
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getRequestSiteUrl, siteConfig } from '@/lib/site-config'
 
 export const runtime = 'nodejs'
 
@@ -55,16 +56,6 @@ function isMissingParentalColumnError(error: { message?: string; code?: string }
   )
 }
 
-function getSiteUrl(request: Request) {
-  const configuredUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim()
-
-  if (configuredUrl) {
-    return configuredUrl.replace(/\/+$/, '')
-  }
-
-  return new URL(request.url).origin
-}
-
 function hashToken(token: string) {
   return createHash('sha256').update(token).digest('hex')
 }
@@ -80,11 +71,12 @@ function buildEmailText({
 
   return `${greeting}
 
-Um usuario menor de idade informou este e-mail como responsavel para autorizar o uso geral da plataforma EntreUS.
+Voce recebeu esta mensagem porque um usuario menor de idade informou este e-mail como responsavel para uma solicitacao de autorizacao na plataforma EntreUS.
 
-Ao autorizar, voce permite que ele utilize recursos normais da rede social.
+Antes de responder, leia o termo exibido no link abaixo. Voce podera autorizar ou recusar a solicitacao.
 
 Importante:
+- A autorizacao permite apenas o uso geral da rede social.
 - A autorizacao do responsavel nao libera conteudo 18+.
 - Conteudo 18+ permanece bloqueado para menores.
 - O link vale por 7 dias.
@@ -92,7 +84,7 @@ Importante:
 Para analisar e responder a solicitacao, acesse:
 ${approvalUrl}
 
-Se voce nao reconhece esta solicitacao, ignore este e-mail.
+Se voce nao reconhece esta solicitacao, ignore este e-mail ou fale com o suporte: ${siteConfig.emails.support}
 
 EntreUS - So Entre Nos`
 }
@@ -144,8 +136,7 @@ async function sendResendEmail({
   }
 
   if (!response.ok) {
-    const responseBody = await response.text().catch(() => '')
-    console.error('Erro ao enviar e-mail parental pela Resend:', response.status, responseBody)
+    console.error('Erro ao enviar e-mail parental pela Resend:', response.status)
 
     return {
       sent: false,
@@ -283,7 +274,7 @@ export async function POST(request: Request) {
       )
     }
 
-    const approvalUrl = `${getSiteUrl(request)}/parental-consent/${token}`
+    const approvalUrl = `${getRequestSiteUrl(request)}/parental-consent/${token}`
     const emailResult = await sendResendEmail({
       to: guardianEmail,
       approvalUrl,

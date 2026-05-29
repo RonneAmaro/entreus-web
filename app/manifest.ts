@@ -1,9 +1,10 @@
 import type { MetadataRoute } from 'next'
+import { siteConfig } from '@/lib/site-config'
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'EntreUS',
-    short_name: 'EntreUS',
+    name: siteConfig.name,
+    short_name: siteConfig.name,
     description:
       'Rede social EntreUS para feed, perfil, mensagens e conexoes em uma experiencia instalavel.',
     start_url: '/feed',

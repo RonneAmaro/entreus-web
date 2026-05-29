@@ -1,21 +1,22 @@
 import type { Metadata, Viewport } from 'next'
+import { siteConfig } from '@/lib/site-config'
 import { Providers } from './providers'
 import { LanguageProvider } from './components/LanguageProvider'
 import PWARegister from './components/PWARegister'
 import './globals.css'
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://entreus.vercel.app'),
+  metadataBase: new URL(siteConfig.siteUrl),
   manifest: '/manifest.webmanifest',
-  applicationName: 'EntreUS',
+  applicationName: siteConfig.name,
 
   title: {
-    default: 'EntreUS — Só Entre Nós',
-    template: '%s | EntreUS',
+    default: `${siteConfig.name} - ${siteConfig.slogan}`,
+    template: `%s | ${siteConfig.name}`,
   },
 
   description:
-    'EntreUS é uma rede social com privacidade, liberdade, lifestyle e conexão real.',
+    'EntreUS e uma rede social com privacidade, liberdade, lifestyle e conexao real.',
 
   alternates: {
     canonical: '/',
@@ -41,22 +42,22 @@ export const metadata: Metadata = {
 
   appleWebApp: {
     capable: true,
-    title: 'EntreUS',
+    title: siteConfig.name,
     statusBarStyle: 'black-translucent',
   },
 
   openGraph: {
-    title: 'EntreUS — Só Entre Nós',
+    title: `${siteConfig.name} - ${siteConfig.slogan}`,
     description:
-      'Rede social com privacidade, liberdade, lifestyle e conexão real.',
-    url: 'https://entreus.vercel.app',
-    siteName: 'EntreUS',
+      'Rede social com privacidade, liberdade, lifestyle e conexao real.',
+    url: siteConfig.siteUrl,
+    siteName: siteConfig.name,
     images: [
       {
         url: '/og/entreus-preview.png',
         width: 1200,
         height: 630,
-        alt: 'EntreUS — Só Entre Nós',
+        alt: `${siteConfig.name} - ${siteConfig.slogan}`,
       },
     ],
     type: 'website',
@@ -65,9 +66,9 @@ export const metadata: Metadata = {
 
   twitter: {
     card: 'summary_large_image',
-    title: 'EntreUS — Só Entre Nós',
+    title: `${siteConfig.name} - ${siteConfig.slogan}`,
     description:
-      'Rede social com privacidade, liberdade, lifestyle e conexão real.',
+      'Rede social com privacidade, liberdade, lifestyle e conexao real.',
     images: ['/og/entreus-preview.png'],
   },
 }

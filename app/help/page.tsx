@@ -17,6 +17,7 @@ import {
   Sparkles,
   UserCircle,
 } from 'lucide-react'
+import { getMailtoHref, siteConfig } from '@/lib/site-config'
 
 type HelpCategory = {
   title: string
@@ -142,6 +143,16 @@ export default function HelpPage() {
             </h1>
             <p className="mt-5 max-w-2xl text-base leading-7 text-zinc-300 sm:text-lg">
               Conteudo inicial fixo na interface, com a estrutura de categorias e artigos pronta para migrar para Supabase.
+            </p>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-zinc-400">
+              Para suporte direto, escreva para{' '}
+              <a
+                href={getMailtoHref(siteConfig.emails.support, 'Suporte EntreUS')}
+                className="font-semibold text-blue-200 underline-offset-4 hover:underline"
+              >
+                {siteConfig.emails.support}
+              </a>
+              .
             </p>
 
             <label className="mt-8 flex max-w-2xl items-center gap-3 rounded-2xl border border-blue-300/25 bg-white/10 px-4 py-4 shadow-2xl shadow-blue-950/30 ring-1 ring-white/10 transition focus-within:border-blue-200 focus-within:bg-white/15">

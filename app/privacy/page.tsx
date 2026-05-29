@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { getMailtoHref, siteConfig } from '@/lib/site-config'
 import InstitutionalPageLayout from '../components/InstitutionalPageLayout'
 
 export const metadata: Metadata = {
@@ -54,7 +55,25 @@ export default function PrivacyPage() {
         },
         {
           title: 'Contato',
-          body: 'Duvidas sobre privacidade, dados pessoais ou seguranca poderao ser encaminhadas pelos canais oficiais do EntreUS assim que estiverem disponiveis publicamente.',
+          body: (
+            <>
+              Para assuntos de privacidade e dados pessoais, fale com{' '}
+              <a
+                href={getMailtoHref(siteConfig.emails.privacy, 'Privacidade EntreUS')}
+                className="font-semibold text-blue-300 underline-offset-4 hover:underline"
+              >
+                {siteConfig.emails.privacy}
+              </a>
+              . Para denuncias de seguranca, use{' '}
+              <a
+                href={getMailtoHref(siteConfig.emails.security, 'Seguranca EntreUS')}
+                className="font-semibold text-blue-300 underline-offset-4 hover:underline"
+              >
+                {siteConfig.emails.security}
+              </a>
+              .
+            </>
+          ),
         },
       ]}
     />

@@ -1,37 +1,96 @@
 import type { Metadata } from 'next'
+import { getMailtoHref, siteConfig } from '@/lib/site-config'
 import InstitutionalPageLayout from '../components/InstitutionalPageLayout'
 
 export const metadata: Metadata = {
   title: 'Fale Conosco / Ajuda',
-  description: 'Informações de contato e ajuda do EntreUS.',
+  description: 'Informacoes de contato e ajuda do EntreUS.',
+}
+
+function EmailLink({
+  email,
+  subject,
+}: {
+  email: string
+  subject: string
+}) {
+  return (
+    <a
+      href={getMailtoHref(email, subject)}
+      className="font-semibold text-blue-300 underline-offset-4 hover:underline"
+    >
+      {email}
+    </a>
+  )
 }
 
 export default function ContactPage() {
   return (
     <InstitutionalPageLayout
       title="Fale Conosco / Ajuda"
-      description="Esta página organiza os tipos de atendimento previstos para o EntreUS. Por enquanto, ela funciona como uma orientação informativa, sem formulário real."
-      notice="Em breve disponibilizaremos um canal oficial de atendimento."
+      description="Use os canais institucionais da EntreUS para direcionar duvidas gerais, suporte de conta, privacidade, seguranca e autorizacao parental."
+      notice={
+        <>
+          Para agilizar o atendimento, informe seu username, e-mail da conta e
+          um resumo claro do problema. Nunca envie senhas, codigos de acesso ou
+          documentos por e-mail sem orientacao da equipe.
+        </>
+      }
       sections={[
         {
-          title: 'Suporte técnico',
-          body: 'Para problemas de acesso, falhas no feed, mensagens, uploads, Meet ou comportamento inesperado da plataforma.',
+          title: 'Contato geral',
+          body: (
+            <>
+              Duvidas gerais, parcerias e assuntos institucionais:{' '}
+              <EmailLink
+                email={siteConfig.emails.contact}
+                subject="Contato geral EntreUS"
+              />
+            </>
+          ),
         },
         {
-          title: 'Denúncias',
-          body: 'Para relatar abuso, assédio, golpes, spam, perfis falsos, conteúdos indevidos ou situações que coloquem usuários em risco.',
+          title: 'Suporte',
+          body: (
+            <>
+              Problemas de conta, login, cadastro, autorizacao parental,
+              acesso, perfil e falhas de uso:{' '}
+              <EmailLink
+                email={siteConfig.emails.support}
+                subject="Suporte EntreUS"
+              />
+            </>
+          ),
         },
         {
-          title: 'Dúvidas sobre conta',
-          body: 'Para orientações sobre cadastro, login, perfil, username, privacidade, bloqueios, recuperação de acesso e configurações.',
+          title: 'Privacidade e dados',
+          body: (
+            <>
+              Solicitacoes sobre dados pessoais, privacidade, exclusao,
+              correcao ou duvidas sobre tratamento de informacoes:{' '}
+              <EmailLink
+                email={siteConfig.emails.privacy}
+                subject="Privacidade EntreUS"
+              />
+            </>
+          ),
         },
         {
-          title: 'VIP e ItaCash',
-          body: 'Para dúvidas futuras sobre plano VIP, benefícios premium, créditos ItaCash, presentes digitais, pagamentos e regras de uso.',
+          title: 'Seguranca e denuncias',
+          body: (
+            <>
+              Denuncias sensiveis, abuso, golpes, spam, exposicao indevida,
+              risco a usuarios ou conteudo proibido:{' '}
+              <EmailLink
+                email={siteConfig.emails.security}
+                subject="Seguranca e denuncia EntreUS"
+              />
+            </>
+          ),
         },
         {
-          title: 'Parcerias',
-          body: 'Para propostas institucionais, criadores, marcas, projetos culturais, tecnologia, comunidade e iniciativas alinhadas ao EntreUS.',
+          title: 'Central de Ajuda',
+          body: 'A pagina /help continua disponivel para guias rapidos, categorias de ajuda e caminhos de suporte dentro da plataforma.',
         },
       ]}
     />

@@ -9,6 +9,7 @@ import {
   isMissingProfileAcceptanceColumnError,
   isProfileIncomplete,
 } from '@/lib/profile-completion'
+import { getMailtoHref, siteConfig } from '@/lib/site-config'
 
 type ProfileStatus = {
   username: string | null
@@ -296,7 +297,16 @@ export default function AccountPendingPage() {
 
             <div className="rounded-3xl border border-blue-500/20 bg-blue-950/20 p-5">
               <p className="text-sm leading-6 text-zinc-300">
-                Voce pode reenviar o pedido para o responsavel ou alterar o e-mail informado completando seu perfil novamente.
+                Voce pode reenviar o pedido para o responsavel ou alterar o e-mail informado completando seu perfil novamente. Oriente o responsavel a verificar a caixa de entrada e o spam.
+              </p>
+              <p className="mt-4 rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm leading-6 text-zinc-300">
+                Se o e-mail nao chegar, fale com o suporte:{' '}
+                <a
+                  href={getMailtoHref(siteConfig.emails.support, 'Autorizacao parental EntreUS')}
+                  className="font-semibold text-blue-200 underline-offset-4 hover:underline"
+                >
+                  {siteConfig.emails.support}
+                </a>
               </p>
 
               {isApproved ? (
