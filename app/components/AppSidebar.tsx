@@ -52,6 +52,37 @@ type LastMessage = {
   deleted_at: string | null
 }
 
+const ADMIN_ROLE_CACHE_KEY = 'entreus:admin-role'
+
+function getCachedAdminRole(userId: string) {
+  if (typeof window === 'undefined') return null
+
+  try {
+    const cached = window.sessionStorage.getItem(ADMIN_ROLE_CACHE_KEY)
+    if (!cached) return null
+
+    const parsed = JSON.parse(cached) as { userId?: string; isAdmin?: boolean }
+    return parsed.userId === userId && typeof parsed.isAdmin === 'boolean'
+      ? parsed.isAdmin
+      : null
+  } catch {
+    return null
+  }
+}
+
+function setCachedAdminRole(userId: string, isAdmin: boolean) {
+  if (typeof window === 'undefined') return
+
+  try {
+    window.sessionStorage.setItem(
+      ADMIN_ROLE_CACHE_KEY,
+      JSON.stringify({ userId, isAdmin })
+    )
+  } catch {
+    // Cache is only a navigation optimization.
+  }
+}
+
 export default function AppSidebar({
   unreadNotificationsCount = 0,
   unreadMessagesCount,
@@ -124,6 +155,12 @@ export default function AppSidebar({
       return
     }
 
+    const cachedIsAdmin = getCachedAdminRole(user.id)
+    if (cachedIsAdmin !== null) {
+      setIsAdmin(cachedIsAdmin)
+      return
+    }
+
     const { data, error } = await supabase
       .from('profiles')
       .select('role')
@@ -135,7 +172,9 @@ export default function AppSidebar({
       return
     }
 
-    setIsAdmin(isAdminRole(data?.role))
+    const nextIsAdmin = isAdminRole(data?.role)
+    setCachedAdminRole(user.id, nextIsAdmin)
+    setIsAdmin(nextIsAdmin)
   }
 
   async function loadUnreadMessagesCount() {

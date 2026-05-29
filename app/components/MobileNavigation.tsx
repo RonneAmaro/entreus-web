@@ -13,6 +13,7 @@ import {
   Compass,
   Crown,
   Download,
+  FileText,
   Gift,
   Home,
   FlaskConical,
@@ -68,6 +69,37 @@ type LastMessage = {
   created_at: string
   read_at?: string | null
   deleted_at: string | null
+}
+
+const ADMIN_ROLE_CACHE_KEY = 'entreus:admin-role'
+
+function getCachedAdminRole(userId: string) {
+  if (typeof window === 'undefined') return null
+
+  try {
+    const cached = window.sessionStorage.getItem(ADMIN_ROLE_CACHE_KEY)
+    if (!cached) return null
+
+    const parsed = JSON.parse(cached) as { userId?: string; isAdmin?: boolean }
+    return parsed.userId === userId && typeof parsed.isAdmin === 'boolean'
+      ? parsed.isAdmin
+      : null
+  } catch {
+    return null
+  }
+}
+
+function setCachedAdminRole(userId: string, isAdmin: boolean) {
+  if (typeof window === 'undefined') return
+
+  try {
+    window.sessionStorage.setItem(
+      ADMIN_ROLE_CACHE_KEY,
+      JSON.stringify({ userId, isAdmin })
+    )
+  } catch {
+    // Cache is only a navigation optimization.
+  }
 }
 
 function getInitial(text: string) {
@@ -148,6 +180,12 @@ export default function MobileNavigation({
       return
     }
 
+    const cachedIsAdmin = getCachedAdminRole(user.id)
+    if (cachedIsAdmin !== null) {
+      setIsAdmin(cachedIsAdmin)
+      return
+    }
+
     const { data, error } = await supabase
       .from('profiles')
       .select('role')
@@ -159,7 +197,9 @@ export default function MobileNavigation({
       return
     }
 
-    setIsAdmin(isAdminRole(data?.role))
+    const nextIsAdmin = isAdminRole(data?.role)
+    setCachedAdminRole(user.id, nextIsAdmin)
+    setIsAdmin(nextIsAdmin)
   }
 
   async function loadUnreadMessagesCount() {
@@ -509,6 +549,33 @@ export default function MobileNavigation({
               </Link>
 
               <Link
+                href="/terms"
+                onClick={closeMoreOptions}
+                className={drawerLinkClass('/terms')}
+              >
+                <FileText className={drawerIconClass('/terms')} />
+                Termos
+              </Link>
+
+              <Link
+                href="/safety"
+                onClick={closeMoreOptions}
+                className={drawerLinkClass('/safety')}
+              >
+                <ShieldCheck className={drawerIconClass('/safety')} />
+                Seguranca
+              </Link>
+
+              <Link
+                href="/contact"
+                onClick={closeMoreOptions}
+                className={drawerLinkClass('/contact')}
+              >
+                <HelpCircle className={drawerIconClass('/contact')} />
+                Contato
+              </Link>
+
+              <Link
                 href="/blocked"
                 onClick={closeMoreOptions}
                 className={drawerLinkClass('/blocked')}
@@ -832,6 +899,33 @@ export default function MobileNavigation({
               >
                 <Shield className={drawerIconClass('/privacy')} />
                 {t('settings.privacy')}
+              </Link>
+
+              <Link
+                href="/terms"
+                onClick={closeMenu}
+                className={drawerLinkClass('/terms')}
+              >
+                <FileText className={drawerIconClass('/terms')} />
+                Termos
+              </Link>
+
+              <Link
+                href="/safety"
+                onClick={closeMenu}
+                className={drawerLinkClass('/safety')}
+              >
+                <ShieldCheck className={drawerIconClass('/safety')} />
+                Seguranca
+              </Link>
+
+              <Link
+                href="/contact"
+                onClick={closeMenu}
+                className={drawerLinkClass('/contact')}
+              >
+                <HelpCircle className={drawerIconClass('/contact')} />
+                Contato
               </Link>
 
               <Link
