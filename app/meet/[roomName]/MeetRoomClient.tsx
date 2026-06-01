@@ -39,6 +39,7 @@ import {
   X,
 } from 'lucide-react'
 import { Track } from 'livekit-client'
+import Image from 'next/image'
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
@@ -543,25 +544,51 @@ function PortugueseConference({
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[radial-gradient(circle_at_top,#0b1d3b_0%,#020617_42%,#000_100%)] text-white">
       <header className="z-20 flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-blue-400/10 bg-black/45 px-3 py-2 backdrop-blur-xl sm:px-5">
         <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-blue-400/30 bg-blue-500/10 text-sm font-black shadow-lg shadow-blue-950/30">
-            US
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-blue-300/25 bg-white/5 shadow-lg shadow-blue-950/30 ring-1 ring-white/10">
+            <Image
+              src="/logo-icon.png"
+              alt=""
+              width={40}
+              height={40}
+              className="h-full w-full object-contain"
+            />
           </div>
           <div className="min-w-0">
             <p className="truncate text-sm font-black tracking-normal">
               Entre<span className="text-blue-400">US</span> Meet
             </p>
-            <p className="truncate text-xs text-zinc-400">Sala {roomName}</p>
+            <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zinc-400">
+              <span className="truncate">Sala {roomName}</span>
+              <span className="hidden h-1 w-1 rounded-full bg-blue-300/50 sm:inline-flex" />
+              <span className="shrink-0 text-blue-100/80">
+                Tempo restante: {secondsLeft === null ? '--:--' : formatSeconds(secondsLeft)}
+              </span>
+            </div>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          <button type="button" onClick={copyRoomLink} className="inline-flex h-9 items-center justify-center gap-2 rounded-full border border-blue-400/20 bg-zinc-950/70 px-3 text-xs font-semibold text-blue-50 transition hover:border-blue-300/50 hover:bg-blue-600/20">
-            <Copy className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">{inviteFeedback === 'copied' ? 'Copiado' : 'Copiar link'}</span>
+          <button
+            type="button"
+            onClick={copyRoomLink}
+            aria-label="Copiar link da sala"
+            className="group relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-blue-400/20 bg-zinc-950/70 text-blue-50 shadow-lg shadow-black/20 transition hover:border-blue-300/50 hover:bg-blue-600/20 focus:outline-none focus:ring-2 focus:ring-blue-400/35"
+          >
+            <Copy className="h-4 w-4" />
+            <span className="pointer-events-none absolute right-0 top-12 z-50 whitespace-nowrap rounded-full border border-blue-300/20 bg-black/90 px-3 py-1.5 text-xs font-semibold text-blue-50 opacity-0 shadow-xl shadow-black/40 backdrop-blur-xl transition group-hover:opacity-100 group-focus-visible:opacity-100">
+              {inviteFeedback === 'copied' ? 'Link copiado' : 'Copiar link da sala'}
+            </span>
           </button>
-          <button type="button" onClick={shareRoom} className="inline-flex h-9 items-center justify-center gap-2 rounded-full border border-blue-400/20 bg-zinc-950/70 px-3 text-xs font-semibold text-blue-50 transition hover:border-blue-300/50 hover:bg-blue-600/20">
-            <Share2 className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Compartilhar</span>
+          <button
+            type="button"
+            onClick={shareRoom}
+            aria-label="Compartilhar sala"
+            className="group relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-blue-400/20 bg-zinc-950/70 text-blue-50 shadow-lg shadow-black/20 transition hover:border-blue-300/50 hover:bg-blue-600/20 focus:outline-none focus:ring-2 focus:ring-blue-400/35"
+          >
+            <Share2 className="h-4 w-4" />
+            <span className="pointer-events-none absolute right-0 top-12 z-50 whitespace-nowrap rounded-full border border-blue-300/20 bg-black/90 px-3 py-1.5 text-xs font-semibold text-blue-50 opacity-0 shadow-xl shadow-black/40 backdrop-blur-xl transition group-hover:opacity-100 group-focus-visible:opacity-100">
+              Compartilhar sala
+            </span>
           </button>
         </div>
       </header>
@@ -596,7 +623,7 @@ function PortugueseConference({
                   Sua sala gratuita termina em {secondsLeft} segundos
                 </h2>
                 <p className="mt-2 text-sm leading-6 text-zinc-300">
-                  O aviso acompanha a contagem, mas os controles continuam livres.
+                  A sala esta acabando e sera encerrada quando o tempo chegar a zero. Os controles continuam livres.
                 </p>
                 <button
                   type="button"
@@ -1179,63 +1206,90 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
 
   if (roomData && membership?.status === 'pending' && !expired) {
     return (
-      <div className="flex flex-1 items-center justify-center">
-        <section className="relative w-full max-w-3xl overflow-hidden rounded-[2rem] border border-blue-400/20 bg-[radial-gradient(circle_at_top,rgba(37,99,235,0.30),transparent_34%),linear-gradient(145deg,rgba(2,6,23,0.98),rgba(15,23,42,0.94),rgba(0,0,0,0.98))] p-6 text-center shadow-2xl shadow-blue-950/35 ring-1 ring-blue-300/10 sm:p-9">
-          <div className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-blue-200/50 to-transparent" />
-
-          <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full border border-blue-300/25 bg-blue-500/10 shadow-2xl shadow-blue-950/30">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full border border-blue-200/25 bg-black/50 text-blue-100">
-              <UserCheck className="h-8 w-8" />
+      <div className="fixed inset-0 z-50 flex min-h-screen flex-col overflow-hidden bg-[radial-gradient(circle_at_50%_0%,rgba(37,99,235,0.26),transparent_34%),linear-gradient(145deg,#020617_0%,#050b16_48%,#000_100%)] text-white">
+        <header className="z-10 flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-blue-400/10 bg-black/35 px-4 py-3 backdrop-blur-xl sm:px-6">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-blue-300/25 bg-white/5 shadow-lg shadow-blue-950/30 ring-1 ring-white/10">
+              <Image
+                src="/logo-icon.png"
+                alt=""
+                width={40}
+                height={40}
+                className="h-full w-full object-contain"
+              />
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-black tracking-normal">
+                Entre<span className="text-blue-400">US</span> Meet
+              </p>
+              <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zinc-400">
+                <span className="truncate">Sala {roomName}</span>
+                <span className="hidden h-1 w-1 rounded-full bg-blue-300/50 sm:inline-flex" />
+                <span className="shrink-0 text-blue-100/80">
+                  Tempo restante: {secondsLeft === null ? '--:--' : formatSeconds(secondsLeft)}
+                </span>
+              </div>
             </div>
           </div>
 
-          <div className="mt-6 flex items-center justify-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-blue-100/65">
-            <span className="h-2 w-2 animate-pulse rounded-full bg-blue-300 shadow-lg shadow-blue-300/40" />
-            Esperando organizador
-          </div>
+          <InviteActions compact />
+        </header>
 
-          <h2 className="mx-auto mt-4 max-w-xl text-3xl font-black tracking-normal text-white sm:text-4xl">
-            Aguarde ate que um organizador aprove sua entrada
-          </h2>
-          <p className="mx-auto mt-4 max-w-lg text-sm leading-6 text-zinc-300 sm:text-base">
-            Seu pedido foi enviado. Assim que a entrada for aprovada, o botao para entrar na chamada aparece aqui.
-          </p>
+        <main className="relative flex min-h-0 flex-1 items-center justify-center px-4 py-8 sm:px-6">
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-blue-200/50 to-transparent" />
+          <section className="relative w-full max-w-4xl overflow-hidden rounded-[2.2rem] border border-blue-400/20 bg-[linear-gradient(145deg,rgba(2,6,23,0.78),rgba(15,23,42,0.62),rgba(0,0,0,0.76))] p-6 text-center shadow-2xl shadow-blue-950/35 ring-1 ring-blue-300/10 backdrop-blur-2xl sm:p-10">
+            <div className="pointer-events-none absolute inset-x-12 top-0 h-px bg-gradient-to-r from-transparent via-blue-200/50 to-transparent" />
 
-          <div className="mx-auto mt-7 grid max-w-lg gap-3 text-left sm:grid-cols-2">
-            <div className="rounded-2xl border border-blue-400/15 bg-black/35 p-4">
-              <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-100/55">Seu nome</p>
-              <p className="mt-2 truncate text-sm font-bold text-white">{normalizedParticipantName || 'Participante'}</p>
+            <div className="mx-auto flex h-28 w-28 items-center justify-center rounded-full border border-blue-300/25 bg-blue-500/10 shadow-2xl shadow-blue-950/30">
+              <div className="flex h-20 w-20 items-center justify-center rounded-full border border-blue-200/25 bg-black/50 text-blue-100">
+                <UserCheck className="h-9 w-9" />
+              </div>
             </div>
-            <div className="rounded-2xl border border-blue-400/15 bg-blue-500/10 p-4">
-              <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-100/55">Tempo da sala</p>
-              <p className="mt-2 text-sm font-bold text-white">{secondsLeft === null ? '--:--' : formatSeconds(secondsLeft)}</p>
-            </div>
-          </div>
 
-          <div className="mx-auto mt-7 flex w-full max-w-md items-center gap-3 rounded-full border border-blue-400/15 bg-black/35 p-2">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-blue-500/15 text-blue-200">
-              <Loader2 className="h-5 w-5 animate-spin" />
+            <div className="mt-7 flex items-center justify-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-blue-100/65">
+              <span className="h-2 w-2 animate-pulse rounded-full bg-blue-300 shadow-lg shadow-blue-300/40" />
+              Sala de espera
             </div>
-            <div className="min-w-0 text-left">
-              <p className="text-sm font-bold text-white">Pedido em analise</p>
-              <p className="truncate text-xs text-zinc-400">Voce pode manter esta tela aberta.</p>
+
+            <h2 className="mx-auto mt-4 max-w-2xl text-3xl font-black tracking-normal text-white sm:text-5xl">
+              Aguarde ate que um organizador aprove sua entrada
+            </h2>
+            <p className="mx-auto mt-5 max-w-xl text-sm leading-6 text-zinc-300 sm:text-base">
+              Seu pedido ja esta com o organizador. Assim que for aprovado, esta tela libera a entrada na chamada automaticamente.
+            </p>
+
+            <div className="mx-auto mt-8 flex w-full max-w-md items-center gap-3 rounded-full border border-blue-400/15 bg-black/35 p-2 text-left shadow-xl shadow-black/20">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-blue-500/15 text-blue-200">
+                <Loader2 className="h-5 w-5 animate-spin" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-white">Pedido em analise</p>
+                <p className="truncate text-xs text-zinc-400">Mantenha esta sala aberta enquanto aguarda.</p>
+              </div>
             </div>
-          </div>
 
-          {error ? (
-            <div className="mx-auto mt-5 max-w-lg rounded-2xl border border-red-900/60 bg-red-950/30 px-4 py-3 text-sm text-red-200">
-              {error}
+            <div className="mx-auto mt-8 grid max-w-2xl gap-3 text-left sm:grid-cols-2">
+              <div className="rounded-2xl border border-blue-400/15 bg-black/35 p-4">
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-100/55">Seu nome</p>
+                <p className="mt-2 truncate text-sm font-bold text-white">{normalizedParticipantName || 'Participante'}</p>
+              </div>
+              <div className="rounded-2xl border border-blue-400/15 bg-blue-500/10 p-4">
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-100/55">Tempo da sala</p>
+                <p className="mt-2 text-sm font-bold text-white">{secondsLeft === null ? '--:--' : formatSeconds(secondsLeft)}</p>
+              </div>
             </div>
-          ) : null}
 
-          <div className="mt-7 flex justify-center">
-            <InviteActions compact />
-          </div>
+            {error ? (
+              <div className="mx-auto mt-5 max-w-lg rounded-2xl border border-red-900/60 bg-red-950/30 px-4 py-3 text-sm text-red-200">
+                {error}
+              </div>
+            ) : null}
 
-          <p className="mx-auto mt-5 max-w-lg text-xs leading-5 text-blue-100/60">
-            Preview de camera antes da aprovacao fica para uma proxima etapa, para evitar pedir permissao do dispositivo antes da entrada na sala.
-          </p>
-        </section>
+            <p className="mx-auto mt-6 max-w-lg text-xs leading-5 text-blue-100/60">
+              Preview de camera antes da aprovacao fica para uma proxima etapa, para evitar pedir permissao do dispositivo antes da entrada na sala.
+            </p>
+          </section>
+        </main>
       </div>
     )
   }
