@@ -133,7 +133,7 @@ type MeetDataMessage =
 
 type ChatMessage = Extract<MeetDataMessage, { type: 'chat' }>
 type ReactionMessage = Extract<MeetDataMessage, { type: 'reaction' }>
-type MeetAlertSound = 'request' | 'hand' | 'join' | 'leave'
+type MeetAlertSound = 'request' | 'hand' | 'join' | 'leave' | 'ending'
 
 const MAX_DISPLAY_NAME_LENGTH = 60
 const MAX_CHAT_MESSAGE_LENGTH = 500
@@ -145,6 +145,7 @@ const MEET_SOUND_PATTERNS: Record<MeetAlertSound, { frequency: number; endFreque
   hand: { frequency: 620, endFrequency: 760, duration: 0.13, volume: 0.04 },
   join: { frequency: 520, endFrequency: 660, duration: 0.12, volume: 0.035 },
   leave: { frequency: 430, endFrequency: 360, duration: 0.14, volume: 0.032 },
+  ending: { frequency: 880, endFrequency: 660, duration: 0.18, volume: 0.045 },
 }
 
 function normalizeDisplayName(value: string) {
@@ -209,6 +210,10 @@ function playMeetJoinSound() {
 
 function playMeetLeaveSound() {
   void playMeetAlertSound('leave')
+}
+
+function playMeetEndingSound() {
+  void playMeetAlertSound('ending')
 }
 
 function formatSeconds(totalSeconds: number) {
@@ -333,6 +338,7 @@ function PortugueseConference({
   isModerator,
   participantName,
   roomName,
+  secondsLeft,
   onToggleHand,
 }: {
   handRaised: boolean
@@ -340,6 +346,7 @@ function PortugueseConference({
   isModerator: boolean
   participantName: string
   roomName: string
+  secondsLeft: number | null
   onToggleHand: () => void
 }) {
   const tracks = useTracks([
@@ -360,11 +367,14 @@ function PortugueseConference({
   const [compactLayout, setCompactLayout] = useState(false)
   const [inviteFeedback, setInviteFeedback] = useState<InviteFeedback>('idle')
   const [handNotice, setHandNotice] = useState<string | null>(null)
+  const [timeWarningMinimized, setTimeWarningMinimized] = useState(false)
   const seenHandsRef = useRef<Set<string>>(new Set())
   const handsInitializedRef = useRef(false)
   const seenParticipantsRef = useRef<Set<string>>(new Set())
   const participantsInitializedRef = useRef(false)
+  const timeWarningPlayedRef = useRef(false)
   const localDisplayName = normalizeDisplayName(participantName) || 'Participante'
+  const showTimeWarning = typeof secondsLeft === 'number' && secondsLeft > 0 && secondsLeft <= 60
 
   const { send } = useDataChannel(MEET_DATA_TOPIC, (message) => {
     const data = parseMeetDataMessage(message.payload)
@@ -382,6 +392,19 @@ function PortugueseConference({
   useEffect(() => {
     if (sidePanel === 'chat') setChatUnread(false)
   }, [sidePanel])
+
+  useEffect(() => {
+    if (!showTimeWarning) {
+      timeWarningPlayedRef.current = false
+      setTimeWarningMinimized(false)
+      return
+    }
+
+    if (timeWarningPlayedRef.current) return
+
+    timeWarningPlayedRef.current = true
+    playMeetEndingSound()
+  }, [showTimeWarning])
 
   useEffect(() => {
     if (floatingReactions.length === 0) return
@@ -553,6 +576,38 @@ function PortugueseConference({
           </GridLayout>
 
           <RoomAudioRenderer />
+
+          {showTimeWarning && secondsLeft !== null ? (
+            timeWarningMinimized ? (
+              <button
+                type="button"
+                onClick={() => setTimeWarningMinimized(false)}
+                className="absolute right-3 top-4 z-30 rounded-full border border-amber-300/35 bg-black/75 px-4 py-2 text-xs font-bold text-amber-50 shadow-2xl shadow-black/35 backdrop-blur-xl transition hover:border-amber-200/60 hover:bg-amber-400/10 sm:right-5 sm:top-5"
+              >
+                Sala termina em {secondsLeft}s
+              </button>
+            ) : (
+              <div className="absolute left-1/2 top-16 z-30 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 rounded-3xl border border-blue-300/25 bg-[linear-gradient(145deg,rgba(2,6,23,0.94),rgba(30,64,175,0.34),rgba(0,0,0,0.94))] p-5 text-center shadow-2xl shadow-blue-950/45 ring-1 ring-blue-300/10 backdrop-blur-2xl sm:top-20">
+                <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full border border-amber-300/35 bg-amber-300/10 text-amber-100 shadow-lg shadow-amber-950/20">
+                  <Clock3 className="h-6 w-6" />
+                </div>
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-100/70">Tempo final</p>
+                <h2 className="mt-2 text-xl font-black text-white">
+                  Sua sala gratuita termina em {secondsLeft} segundos
+                </h2>
+                <p className="mt-2 text-sm leading-6 text-zinc-300">
+                  O aviso acompanha a contagem, mas os controles continuam livres.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setTimeWarningMinimized(true)}
+                  className="mt-4 inline-flex min-h-10 items-center justify-center rounded-full border border-blue-300/30 bg-blue-500/15 px-4 py-2 text-sm font-bold text-blue-50 transition hover:border-blue-200/60 hover:bg-blue-500/25"
+                >
+                  Minimizar aviso
+                </button>
+              </div>
+            )
+          ) : null}
 
           {handNotice ? (
             <div className="pointer-events-none absolute left-1/2 top-5 z-20 -translate-x-1/2 rounded-full border border-amber-300/40 bg-black/75 px-4 py-2 text-sm font-semibold text-amber-50 shadow-2xl shadow-black/40 backdrop-blur-xl">
@@ -1102,6 +1157,7 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
             isModerator={Boolean(isModerator)}
             participantName={normalizedParticipantName}
             roomName={roomName}
+            secondsLeft={secondsLeft}
             onToggleHand={toggleHand}
           />
         </LiveKitRoom>
@@ -1120,6 +1176,69 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
     return { title: isModerator ? 'Painel do administrador' : 'Pronto para entrar', description: 'Você foi aprovado para participar da chamada.', icon: ShieldCheck }
   })()
   const StatusIcon = statusContent.icon
+
+  if (roomData && membership?.status === 'pending' && !expired) {
+    return (
+      <div className="flex flex-1 items-center justify-center">
+        <section className="relative w-full max-w-3xl overflow-hidden rounded-[2rem] border border-blue-400/20 bg-[radial-gradient(circle_at_top,rgba(37,99,235,0.30),transparent_34%),linear-gradient(145deg,rgba(2,6,23,0.98),rgba(15,23,42,0.94),rgba(0,0,0,0.98))] p-6 text-center shadow-2xl shadow-blue-950/35 ring-1 ring-blue-300/10 sm:p-9">
+          <div className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-blue-200/50 to-transparent" />
+
+          <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full border border-blue-300/25 bg-blue-500/10 shadow-2xl shadow-blue-950/30">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full border border-blue-200/25 bg-black/50 text-blue-100">
+              <UserCheck className="h-8 w-8" />
+            </div>
+          </div>
+
+          <div className="mt-6 flex items-center justify-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-blue-100/65">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-blue-300 shadow-lg shadow-blue-300/40" />
+            Esperando organizador
+          </div>
+
+          <h2 className="mx-auto mt-4 max-w-xl text-3xl font-black tracking-normal text-white sm:text-4xl">
+            Aguarde ate que um organizador aprove sua entrada
+          </h2>
+          <p className="mx-auto mt-4 max-w-lg text-sm leading-6 text-zinc-300 sm:text-base">
+            Seu pedido foi enviado. Assim que a entrada for aprovada, o botao para entrar na chamada aparece aqui.
+          </p>
+
+          <div className="mx-auto mt-7 grid max-w-lg gap-3 text-left sm:grid-cols-2">
+            <div className="rounded-2xl border border-blue-400/15 bg-black/35 p-4">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-100/55">Seu nome</p>
+              <p className="mt-2 truncate text-sm font-bold text-white">{normalizedParticipantName || 'Participante'}</p>
+            </div>
+            <div className="rounded-2xl border border-blue-400/15 bg-blue-500/10 p-4">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-100/55">Tempo da sala</p>
+              <p className="mt-2 text-sm font-bold text-white">{secondsLeft === null ? '--:--' : formatSeconds(secondsLeft)}</p>
+            </div>
+          </div>
+
+          <div className="mx-auto mt-7 flex w-full max-w-md items-center gap-3 rounded-full border border-blue-400/15 bg-black/35 p-2">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-blue-500/15 text-blue-200">
+              <Loader2 className="h-5 w-5 animate-spin" />
+            </div>
+            <div className="min-w-0 text-left">
+              <p className="text-sm font-bold text-white">Pedido em analise</p>
+              <p className="truncate text-xs text-zinc-400">Voce pode manter esta tela aberta.</p>
+            </div>
+          </div>
+
+          {error ? (
+            <div className="mx-auto mt-5 max-w-lg rounded-2xl border border-red-900/60 bg-red-950/30 px-4 py-3 text-sm text-red-200">
+              {error}
+            </div>
+          ) : null}
+
+          <div className="mt-7 flex justify-center">
+            <InviteActions compact />
+          </div>
+
+          <p className="mx-auto mt-5 max-w-lg text-xs leading-5 text-blue-100/60">
+            Preview de camera antes da aprovacao fica para uma proxima etapa, para evitar pedir permissao do dispositivo antes da entrada na sala.
+          </p>
+        </section>
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-1 items-center">
