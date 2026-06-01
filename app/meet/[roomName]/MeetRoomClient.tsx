@@ -133,12 +133,19 @@ type MeetDataMessage =
 
 type ChatMessage = Extract<MeetDataMessage, { type: 'chat' }>
 type ReactionMessage = Extract<MeetDataMessage, { type: 'reaction' }>
+type MeetAlertSound = 'request' | 'hand' | 'join' | 'leave'
 
 const MAX_DISPLAY_NAME_LENGTH = 60
 const MAX_CHAT_MESSAGE_LENGTH = 500
 const NAME_REQUIRED_MESSAGE = 'Informe seu nome para entrar na chamada.'
 const MEET_DATA_TOPIC = 'entreus.meet'
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '👏', '😮', '🎉']
+const MEET_SOUND_PATTERNS: Record<MeetAlertSound, { frequency: number; endFrequency?: number; duration: number; volume: number }> = {
+  request: { frequency: 740, endFrequency: 880, duration: 0.16, volume: 0.045 },
+  hand: { frequency: 620, endFrequency: 760, duration: 0.13, volume: 0.04 },
+  join: { frequency: 520, endFrequency: 660, duration: 0.12, volume: 0.035 },
+  leave: { frequency: 430, endFrequency: 360, duration: 0.14, volume: 0.032 },
+}
 
 function normalizeDisplayName(value: string) {
   return value.trim().slice(0, MAX_DISPLAY_NAME_LENGTH)
@@ -146,6 +153,62 @@ function normalizeDisplayName(value: string) {
 
 function isValidDisplayName(value: string) {
   return normalizeDisplayName(value).length >= 2
+}
+
+async function playMeetAlertSound(type: MeetAlertSound) {
+  if (typeof window === 'undefined') return
+
+  try {
+    const AudioContextClass =
+      window.AudioContext ||
+      (window as Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+
+    if (!AudioContextClass) return
+
+    const pattern = MEET_SOUND_PATTERNS[type]
+    const audioContext = new AudioContextClass()
+    const oscillator = audioContext.createOscillator()
+    const gain = audioContext.createGain()
+    const now = audioContext.currentTime
+
+    oscillator.type = 'sine'
+    oscillator.frequency.setValueAtTime(pattern.frequency, now)
+    oscillator.frequency.exponentialRampToValueAtTime(pattern.endFrequency || pattern.frequency, now + pattern.duration)
+    gain.gain.setValueAtTime(0.0001, now)
+    gain.gain.exponentialRampToValueAtTime(pattern.volume, now + 0.015)
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + pattern.duration)
+
+    oscillator.connect(gain)
+    gain.connect(audioContext.destination)
+
+    if (audioContext.state === 'suspended') {
+      await audioContext.resume()
+    }
+
+    oscillator.start(now)
+    oscillator.stop(now + pattern.duration + 0.02)
+    oscillator.onended = () => {
+      void audioContext.close()
+    }
+  } catch {
+    // Browsers may block audio before user interaction. Visual alerts keep working.
+  }
+}
+
+function playMeetRequestSound() {
+  void playMeetAlertSound('request')
+}
+
+function playMeetHandSound() {
+  void playMeetAlertSound('hand')
+}
+
+function playMeetJoinSound() {
+  void playMeetAlertSound('join')
+}
+
+function playMeetLeaveSound() {
+  void playMeetAlertSound('leave')
 }
 
 function formatSeconds(totalSeconds: number) {
@@ -298,6 +361,9 @@ function PortugueseConference({
   const [inviteFeedback, setInviteFeedback] = useState<InviteFeedback>('idle')
   const [handNotice, setHandNotice] = useState<string | null>(null)
   const seenHandsRef = useRef<Set<string>>(new Set())
+  const handsInitializedRef = useRef(false)
+  const seenParticipantsRef = useRef<Set<string>>(new Set())
+  const participantsInitializedRef = useRef(false)
   const localDisplayName = normalizeDisplayName(participantName) || 'Participante'
 
   const { send } = useDataChannel(MEET_DATA_TOPIC, (message) => {
@@ -330,6 +396,7 @@ function PortugueseConference({
   useEffect(() => {
     if (hands.length === 0) {
       seenHandsRef.current = new Set()
+      handsInitializedRef.current = true
       setHandNotice(null)
       return
     }
@@ -337,15 +404,41 @@ function PortugueseConference({
     const previous = seenHandsRef.current
     const next = new Set(hands.map((item) => item.userId))
     const newHand = hands.find((item) => !previous.has(item.userId))
+    const shouldNotify = handsInitializedRef.current && Boolean(newHand)
 
     seenHandsRef.current = next
+    handsInitializedRef.current = true
 
-    if (!newHand || previous.size === 0) return
+    if (!newHand || !shouldNotify) return
 
     setHandNotice(`✋ ${newHand.displayName || 'Participante'} levantou a mão`)
+    if (isModerator) playMeetHandSound()
     const timer = window.setTimeout(() => setHandNotice(null), 4200)
     return () => window.clearTimeout(timer)
-  }, [hands])
+  }, [hands, isModerator])
+
+  useEffect(() => {
+    const previous = seenParticipantsRef.current
+    const next = new Set(participants.map((participant) => participant.identity).filter(Boolean))
+
+    if (!participantsInitializedRef.current) {
+      seenParticipantsRef.current = next
+      participantsInitializedRef.current = true
+      return
+    }
+
+    const joined = [...next].some((participantId) => !previous.has(participantId))
+    const left = [...previous].some((participantId) => !next.has(participantId))
+
+    seenParticipantsRef.current = next
+
+    if (joined) {
+      playMeetJoinSound()
+      return
+    }
+
+    if (left) playMeetLeaveSound()
+  }, [participants])
 
   async function copyRoomLink() {
     if (typeof window === 'undefined') return
@@ -678,6 +771,9 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
   const [serverUrl, setServerUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null)
+  const seenRequestIdsRef = useRef<Set<string>>(new Set())
+  const requestsInitializedRef = useRef(false)
+  const requestsLoadedRef = useRef(false)
 
   const isModerator = membership?.status === 'approved' && (membership.role === 'owner' || membership.role === 'admin')
   const isApproved = membership?.status === 'approved'
@@ -731,7 +827,10 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
 
     const response = await fetch(`/api/meet/rooms/${encodeURIComponent(roomName)}/requests`, { headers })
     const data = (await response.json()) as RequestsResponse
-    if (response.ok && data.ok) setPendingRequests(data.requests)
+    if (response.ok && data.ok) {
+      requestsLoadedRef.current = true
+      setPendingRequests(data.requests)
+    }
   }, [authHeaders, isModerator, roomName])
 
   const loadHands = useCallback(async () => {
@@ -823,6 +922,30 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
     const timer = window.setInterval(() => void loadRequests(), 5000)
     return () => window.clearInterval(timer)
   }, [isModerator, loadRequests])
+
+  useEffect(() => {
+    if (!isModerator) {
+      seenRequestIdsRef.current = new Set()
+      requestsInitializedRef.current = false
+      requestsLoadedRef.current = false
+      return
+    }
+
+    if (!requestsLoadedRef.current) return
+
+    const previous = seenRequestIdsRef.current
+    const next = new Set(pendingRequests.map((request) => request.id))
+    const hasNewRequest = pendingRequests.some((request) => !previous.has(request.id))
+
+    seenRequestIdsRef.current = next
+
+    if (!requestsInitializedRef.current) {
+      requestsInitializedRef.current = true
+      return
+    }
+
+    if (hasNewRequest) playMeetRequestSound()
+  }, [isModerator, pendingRequests])
 
   useEffect(() => {
     if (!inCall) {
@@ -1101,6 +1224,9 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
                   <UserCheck className="h-4 w-4 text-blue-300" />
                   Solicitações pendentes
                 </h3>
+                <p className="mb-3 rounded-2xl border border-blue-500/15 bg-black/25 px-4 py-3 text-xs leading-5 text-blue-100/70">
+                  Alertas sonoros discretos podem tocar apos sua primeira interacao com a sala.
+                </p>
                 <div className="space-y-2">
                   {pendingRequests.length === 0 ? (
                     <p className="rounded-2xl border border-blue-500/15 bg-black/30 px-4 py-3 text-sm text-zinc-400">Nenhum pedido pendente.</p>
