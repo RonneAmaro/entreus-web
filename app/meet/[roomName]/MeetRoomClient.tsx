@@ -28,7 +28,6 @@ import {
   MonitorUp,
   PhoneOff,
   Send,
-  Settings,
   Share2,
   ShieldCheck,
   Smile,
@@ -36,6 +35,8 @@ import {
   Users,
   UserX,
   Video,
+  Volume2,
+  VolumeX,
   X,
 } from 'lucide-react'
 import { Track } from 'livekit-client'
@@ -140,7 +141,7 @@ const MAX_DISPLAY_NAME_LENGTH = 60
 const MAX_CHAT_MESSAGE_LENGTH = 500
 const NAME_REQUIRED_MESSAGE = 'Informe seu nome para entrar na chamada.'
 const MEET_DATA_TOPIC = 'entreus.meet'
-const QUICK_REACTIONS = ['👍', '❤️', '😂', '👏', '😮', '🎉']
+const QUICK_REACTIONS = ['👍', '👏', '😂', '❤️', '🔥', '🎉']
 const MEET_SOUND_PATTERNS: Record<MeetAlertSound, { frequency: number; endFrequency?: number; duration: number; volume: number }> = {
   request: { frequency: 740, endFrequency: 880, duration: 0.16, volume: 0.045 },
   hand: { frequency: 620, endFrequency: 760, duration: 0.13, volume: 0.04 },
@@ -338,16 +339,24 @@ function PortugueseConference({
   hands,
   isModerator,
   participantName,
+  pendingRequests,
   roomName,
   secondsLeft,
+  soundAlertsEnabled,
+  onModerateRequest,
+  onToggleSoundAlerts,
   onToggleHand,
 }: {
   handRaised: boolean
   hands: Extract<HandsResponse, { ok: true }>['hands']
   isModerator: boolean
   participantName: string
+  pendingRequests: Extract<RequestsResponse, { ok: true }>['requests']
   roomName: string
   secondsLeft: number | null
+  soundAlertsEnabled: boolean
+  onModerateRequest: (memberId: string, action: 'approve' | 'reject') => Promise<void>
+  onToggleSoundAlerts: () => void
   onToggleHand: () => void
 }) {
   const tracks = useTracks([
@@ -369,6 +378,8 @@ function PortugueseConference({
   const [inviteFeedback, setInviteFeedback] = useState<InviteFeedback>('idle')
   const [handNotice, setHandNotice] = useState<string | null>(null)
   const [timeWarningMinimized, setTimeWarningMinimized] = useState(false)
+  const reactionMenuRef = useRef<HTMLDivElement | null>(null)
+  const moreMenuRef = useRef<HTMLDivElement | null>(null)
   const seenHandsRef = useRef<Set<string>>(new Set())
   const handsInitializedRef = useRef(false)
   const seenParticipantsRef = useRef<Set<string>>(new Set())
@@ -376,6 +387,7 @@ function PortugueseConference({
   const timeWarningPlayedRef = useRef(false)
   const localDisplayName = normalizeDisplayName(participantName) || 'Participante'
   const showTimeWarning = typeof secondsLeft === 'number' && secondsLeft > 0 && secondsLeft <= 60
+  const pendingRequestCount = isModerator ? pendingRequests.length : 0
 
   const { send } = useDataChannel(MEET_DATA_TOPIC, (message) => {
     const data = parseMeetDataMessage(message.payload)
@@ -404,8 +416,25 @@ function PortugueseConference({
     if (timeWarningPlayedRef.current) return
 
     timeWarningPlayedRef.current = true
-    playMeetEndingSound()
-  }, [showTimeWarning])
+    if (soundAlertsEnabled) playMeetEndingSound()
+  }, [showTimeWarning, soundAlertsEnabled])
+
+  useEffect(() => {
+    function handleDocumentPointerDown(event: MouseEvent) {
+      const target = event.target as Node
+
+      if (showReactions && reactionMenuRef.current && !reactionMenuRef.current.contains(target)) {
+        setShowReactions(false)
+      }
+
+      if (showMoreMenu && moreMenuRef.current && !moreMenuRef.current.contains(target)) {
+        setShowMoreMenu(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleDocumentPointerDown)
+    return () => document.removeEventListener('mousedown', handleDocumentPointerDown)
+  }, [showMoreMenu, showReactions])
 
   useEffect(() => {
     if (floatingReactions.length === 0) return
@@ -436,10 +465,10 @@ function PortugueseConference({
     if (!newHand || !shouldNotify) return
 
     setHandNotice(`✋ ${newHand.displayName || 'Participante'} levantou a mão`)
-    if (isModerator) playMeetHandSound()
+    if (isModerator && soundAlertsEnabled) playMeetHandSound()
     const timer = window.setTimeout(() => setHandNotice(null), 4200)
     return () => window.clearTimeout(timer)
-  }, [hands, isModerator])
+  }, [hands, isModerator, soundAlertsEnabled])
 
   useEffect(() => {
     const previous = seenParticipantsRef.current
@@ -457,12 +486,12 @@ function PortugueseConference({
     seenParticipantsRef.current = next
 
     if (joined) {
-      playMeetJoinSound()
+      if (soundAlertsEnabled) playMeetJoinSound()
       return
     }
 
-    if (left) playMeetLeaveSound()
-  }, [participants])
+    if (left && soundAlertsEnabled) playMeetLeaveSound()
+  }, [participants, soundAlertsEnabled])
 
   async function copyRoomLink() {
     if (typeof window === 'undefined') return
@@ -524,15 +553,16 @@ function PortugueseConference({
 
   const openPanel = (panel: Exclude<SidePanel, null>) => {
     setSidePanel((current) => (current === panel ? null : panel))
+    setShowReactions(false)
     setShowMoreMenu(false)
   }
 
   const iconButtonClass =
-    'relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-blue-400/20 bg-zinc-950/90 text-blue-50 shadow-lg shadow-black/25 transition hover:border-blue-300/50 hover:bg-blue-600/20 focus:outline-none focus:ring-2 focus:ring-blue-400/35 data-[lk-enabled=false]:border-zinc-700 data-[lk-enabled=false]:bg-zinc-950 data-[lk-enabled=false]:text-zinc-500 sm:h-12 sm:w-12'
+    'relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-blue-400/15 bg-zinc-950/80 text-blue-50 shadow-md shadow-black/20 transition hover:border-blue-300/45 hover:bg-blue-600/20 focus:outline-none focus:ring-2 focus:ring-blue-400/35 data-[lk-enabled=false]:border-zinc-700 data-[lk-enabled=false]:bg-zinc-950/70 data-[lk-enabled=false]:text-zinc-500 sm:h-11 sm:w-11'
   const activeIconButtonClass =
-    'relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-blue-300/50 bg-blue-600/25 text-blue-50 shadow-lg shadow-blue-950/30 transition hover:bg-blue-600/35 focus:outline-none focus:ring-2 focus:ring-blue-400/35 sm:h-12 sm:w-12'
+    'relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-blue-300/45 bg-blue-600/25 text-blue-50 shadow-md shadow-blue-950/25 transition hover:bg-blue-600/35 focus:outline-none focus:ring-2 focus:ring-blue-400/35 sm:h-11 sm:w-11'
   const handButtonClass = handRaised
-    ? 'relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-amber-300/55 bg-amber-300/20 text-amber-50 shadow-lg shadow-amber-950/20 transition hover:bg-amber-300/30 focus:outline-none focus:ring-2 focus:ring-amber-300/30 sm:h-12 sm:w-12'
+    ? 'relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-amber-300/55 bg-amber-300/20 text-amber-50 shadow-md shadow-amber-950/20 transition hover:bg-amber-300/30 focus:outline-none focus:ring-2 focus:ring-amber-300/30 sm:h-11 sm:w-11'
     : iconButtonClass
   const visibleParticipants = participants.map((participant) => ({
     id: participant.identity,
@@ -642,6 +672,18 @@ function PortugueseConference({
             </div>
           ) : null}
 
+          {pendingRequestCount > 0 ? (
+            <button
+              type="button"
+              onClick={() => openPanel('participants')}
+              className="absolute left-1/2 top-5 z-30 flex max-w-[calc(100%-1.5rem)] -translate-x-1/2 items-center gap-2 rounded-full border border-amber-300/40 bg-black/82 px-4 py-2 text-sm font-bold text-amber-50 shadow-2xl shadow-black/40 backdrop-blur-xl transition hover:border-amber-200/70 hover:bg-amber-400/10"
+            >
+              <UserCheck className="h-4 w-4" />
+              Nova solicitação para entrar na sala
+              <span className="rounded-full bg-amber-300 px-2 py-0.5 text-xs font-black text-black">{pendingRequestCount}</span>
+            </button>
+          ) : null}
+
           {hands.length > 0 ? (
             <div className="absolute left-3 top-4 z-10 flex max-w-[calc(100%-1.5rem)] flex-wrap gap-2 sm:left-5 sm:top-5">
               {hands.map((item) => (
@@ -667,35 +709,37 @@ function PortugueseConference({
             </div>
           </div>
 
-          <div className="absolute inset-x-0 bottom-4 z-30 flex justify-center px-3">
-            <div className="relative flex max-w-full items-center gap-1.5 overflow-x-auto rounded-full border border-blue-400/20 bg-black/80 p-2 shadow-2xl shadow-black/45 backdrop-blur-2xl sm:gap-2">
-              <TrackToggle source={Track.Source.Microphone} showIcon={false} className={iconButtonClass} onChange={setMicrophoneEnabled} title={microphoneEnabled ? 'Desativar microfone' : 'Ativar microfone'}>
+          <div className={`absolute inset-x-0 bottom-3 z-30 flex justify-center px-3 ${sidePanel === 'chat' ? 'max-lg:hidden' : ''}`}>
+            <div className="relative flex max-w-full items-center gap-1 overflow-x-auto rounded-full border border-blue-400/15 bg-black/72 p-1.5 shadow-xl shadow-black/35 backdrop-blur-2xl sm:gap-1.5">
+              <TrackToggle source={Track.Source.Microphone} showIcon={false} className={iconButtonClass} onChange={setMicrophoneEnabled} aria-label={microphoneEnabled ? 'Desativar microfone' : 'Ativar microfone'} title={microphoneEnabled ? 'Desativar microfone' : 'Ativar microfone'}>
                 <Mic className="h-5 w-5" />
               </TrackToggle>
-              <TrackToggle source={Track.Source.Camera} showIcon={false} className={iconButtonClass} onChange={setCameraEnabled} title={cameraEnabled ? 'Desativar câmera' : 'Ativar câmera'}>
+              <TrackToggle source={Track.Source.Camera} showIcon={false} className={iconButtonClass} onChange={setCameraEnabled} aria-label={cameraEnabled ? 'Desativar câmera' : 'Ativar câmera'} title={cameraEnabled ? 'Desativar câmera' : 'Ativar câmera'}>
                 <Video className="h-5 w-5" />
               </TrackToggle>
-              <TrackToggle source={Track.Source.ScreenShare} showIcon={false} className={iconButtonClass} onChange={setScreenShareEnabled} title={screenShareEnabled ? 'Parar compartilhamento' : 'Compartilhar tela'}>
+              <TrackToggle source={Track.Source.ScreenShare} showIcon={false} className={iconButtonClass} onChange={setScreenShareEnabled} aria-label={screenShareEnabled ? 'Parar compartilhamento' : 'Compartilhar tela'} title={screenShareEnabled ? 'Parar compartilhamento' : 'Compartilhar tela'}>
                 <MonitorUp className="h-5 w-5" />
               </TrackToggle>
 
-              <button type="button" onClick={() => openPanel('chat')} className={sidePanel === 'chat' ? activeIconButtonClass : iconButtonClass} title="Bate-papo">
+              <button type="button" onClick={() => openPanel('chat')} className={sidePanel === 'chat' ? activeIconButtonClass : iconButtonClass} aria-label="Bate-papo" title="Bate-papo">
                 <MessageSquare className="h-5 w-5" />
                 {chatUnread ? <span className="absolute right-1 top-1 h-2.5 w-2.5 rounded-full bg-blue-300 ring-2 ring-black" /> : null}
               </button>
-              <button type="button" onClick={() => openPanel('participants')} className={sidePanel === 'participants' ? activeIconButtonClass : iconButtonClass} title="Participantes">
+              <button type="button" onClick={() => openPanel('participants')} className={sidePanel === 'participants' ? activeIconButtonClass : iconButtonClass} aria-label={pendingRequestCount > 0 ? `${pendingRequestCount} solicitações pendentes` : 'Participantes'} title="Participantes">
                 <Users className="h-5 w-5" />
-                <span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-blue-500 px-1 text-[10px] font-bold text-white">{visibleParticipants.length}</span>
+                <span className={`absolute -right-1 -top-1 min-w-5 rounded-full px-1 text-[10px] font-bold text-white ${pendingRequestCount > 0 ? 'bg-amber-400 text-black' : 'bg-blue-500'}`}>
+                  {pendingRequestCount > 0 ? pendingRequestCount : visibleParticipants.length}
+                </span>
               </button>
 
-              <div className="relative">
-                <button type="button" onClick={() => setShowReactions((current) => !current)} className={showReactions ? activeIconButtonClass : iconButtonClass} title="Reações">
+              <div ref={reactionMenuRef} className="relative">
+                <button type="button" onClick={() => setShowReactions((current) => !current)} className={showReactions ? activeIconButtonClass : iconButtonClass} aria-label="Reações" title="Reações">
                   <Smile className="h-5 w-5" />
                 </button>
                 {showReactions ? (
                   <div className="absolute bottom-14 left-1/2 flex -translate-x-1/2 gap-1 rounded-full border border-blue-400/20 bg-black/85 p-2 shadow-2xl shadow-black/40 backdrop-blur-xl">
                     {QUICK_REACTIONS.map((reaction) => (
-                      <button key={reaction} type="button" onClick={() => void sendReaction(reaction)} className="flex h-10 w-10 items-center justify-center rounded-full text-xl transition hover:bg-blue-500/20">
+                      <button key={reaction} type="button" onClick={() => void sendReaction(reaction)} className="flex h-10 w-10 items-center justify-center rounded-full text-xl transition hover:bg-blue-500/20" aria-label={`Enviar reação ${reaction}`} title={`Enviar reação ${reaction}`}>
                         {reaction}
                       </button>
                     ))}
@@ -703,21 +747,21 @@ function PortugueseConference({
                 ) : null}
               </div>
 
-              <button type="button" onClick={onToggleHand} className={handButtonClass} title={handRaised ? 'Baixar mão' : 'Levantar mão'}>
+              <button type="button" onClick={onToggleHand} className={handButtonClass} aria-label={handRaised ? 'Baixar mão' : 'Levantar mão'} title={handRaised ? 'Baixar mão' : 'Levantar mão'}>
                 <Hand className="h-5 w-5" />
               </button>
 
-              <div className="relative">
-                <button type="button" onClick={() => setShowMoreMenu((current) => !current)} className={showMoreMenu ? activeIconButtonClass : iconButtonClass} title="Mais opções">
+              <div ref={moreMenuRef} className="relative">
+                <button type="button" onClick={() => setShowMoreMenu((current) => !current)} className={showMoreMenu ? activeIconButtonClass : iconButtonClass} aria-label="Mais opções" title="Mais opções">
                   <MoreHorizontal className="h-5 w-5" />
                 </button>
                 {showMoreMenu ? (
                   <div className="absolute bottom-14 right-0 w-64 overflow-hidden rounded-2xl border border-blue-400/20 bg-black/90 p-2 text-sm shadow-2xl shadow-black/45 backdrop-blur-xl">
-                    <button type="button" onClick={copyRoomLink} className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-zinc-100 transition hover:bg-blue-500/15">
+                    <button type="button" onClick={() => void copyRoomLink().then(() => setShowMoreMenu(false))} className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-zinc-100 transition hover:bg-blue-500/15">
                       <Copy className="h-4 w-4 text-blue-300" />
-                      Copiar link da sala
+                      {inviteFeedback === 'copied' ? 'Link copiado' : 'Copiar link da sala'}
                     </button>
-                    <button type="button" onClick={shareRoom} className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-zinc-100 transition hover:bg-blue-500/15">
+                    <button type="button" onClick={() => void shareRoom().then(() => setShowMoreMenu(false))} className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-zinc-100 transition hover:bg-blue-500/15">
                       <Share2 className="h-4 w-4 text-blue-300" />
                       Compartilhar sala
                     </button>
@@ -729,6 +773,18 @@ function PortugueseConference({
                       <MessageSquare className="h-4 w-4 text-blue-300" />
                       Abrir chat
                     </button>
+                    <div className="my-1 h-px bg-blue-400/10" />
+                    <div className="rounded-xl px-3 py-2 text-left">
+                      <p className="text-xs font-bold uppercase tracking-[0.14em] text-blue-100/55">Informações da sala</p>
+                      <p className="mt-1 truncate text-xs text-zinc-400">Sala {roomName}</p>
+                      <p className="mt-0.5 text-xs text-zinc-400">
+                        Tempo restante: {secondsLeft === null ? '--:--' : formatSeconds(secondsLeft)}
+                      </p>
+                    </div>
+                    <button type="button" onClick={() => { onToggleSoundAlerts(); setShowMoreMenu(false) }} className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-zinc-100 transition hover:bg-blue-500/15">
+                      {soundAlertsEnabled ? <Volume2 className="h-4 w-4 text-blue-300" /> : <VolumeX className="h-4 w-4 text-blue-300" />}
+                      {soundAlertsEnabled ? 'Desativar alertas sonoros' : 'Ativar alertas sonoros'}
+                    </button>
                     <button type="button" onClick={() => setCompactLayout((current) => !current)} className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-zinc-100 transition hover:bg-blue-500/15">
                       <LayoutGrid className="h-4 w-4 text-blue-300" />
                       Alternar layout
@@ -737,15 +793,19 @@ function PortugueseConference({
                       <Maximize className="h-4 w-4 text-blue-300" />
                       Tela cheia
                     </button>
-                    <button type="button" disabled className="flex w-full cursor-not-allowed items-center gap-2 rounded-xl px-3 py-2 text-left text-zinc-500">
-                      <Settings className="h-4 w-4" />
-                      Configurações em breve
+                    <DisconnectButton className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-red-100 transition hover:bg-red-500/15" title="Sair da sala">
+                      <PhoneOff className="h-4 w-4 text-red-300" />
+                      Sair da sala
+                    </DisconnectButton>
+                    <button type="button" onClick={() => setShowMoreMenu(false)} className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-zinc-300 transition hover:bg-blue-500/15">
+                      <X className="h-4 w-4 text-blue-300" />
+                      Fechar menu
                     </button>
                   </div>
                 ) : null}
               </div>
 
-              <DisconnectButton className="inline-flex h-11 w-12 shrink-0 items-center justify-center rounded-full border border-red-400/35 bg-red-600/90 text-white shadow-lg shadow-red-950/25 transition hover:border-red-300/60 hover:bg-red-500 focus:outline-none focus:ring-2 focus:ring-red-300/30 sm:h-12 sm:w-14" title="Sair">
+              <DisconnectButton className="inline-flex h-10 w-11 shrink-0 items-center justify-center rounded-full border border-red-400/35 bg-red-600/90 text-white shadow-md shadow-red-950/25 transition hover:border-red-300/60 hover:bg-red-500 focus:outline-none focus:ring-2 focus:ring-red-300/30 sm:h-11 sm:w-12" title="Sair">
                 <PhoneOff className="h-5 w-5" />
               </DisconnectButton>
             </div>
@@ -753,7 +813,7 @@ function PortugueseConference({
         </main>
 
         {sidePanel ? (
-          <aside className="z-20 flex w-full max-w-sm shrink-0 flex-col border-l border-blue-400/15 bg-black/82 shadow-2xl shadow-black/40 backdrop-blur-2xl max-lg:absolute max-lg:bottom-0 max-lg:right-0 max-lg:top-0 max-lg:max-w-full sm:max-w-md lg:relative">
+          <aside className="z-40 flex w-full max-w-sm shrink-0 flex-col border-l border-blue-400/15 bg-black/82 shadow-2xl shadow-black/40 backdrop-blur-2xl max-lg:absolute max-lg:bottom-0 max-lg:right-0 max-lg:top-0 max-lg:max-w-full sm:max-w-md lg:relative">
             <div className="flex items-start justify-between gap-3 border-b border-blue-400/10 p-4">
               <div>
                 <h2 className="text-base font-black text-white">
@@ -790,7 +850,7 @@ function PortugueseConference({
                   )}
                 </div>
                 <form
-                  className="border-t border-blue-400/10 p-4"
+                  className="border-t border-blue-400/10 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]"
                   onSubmit={(event) => {
                     event.preventDefault()
                     void sendChatMessage()
@@ -812,7 +872,49 @@ function PortugueseConference({
                 </form>
               </>
             ) : (
-              <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-4">
+              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
+                {isModerator ? (
+                  <section className="rounded-2xl border border-amber-300/20 bg-amber-300/10 p-3">
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <div>
+                        <h3 className="text-sm font-black text-amber-50">Solicitações pendentes</h3>
+                        <p className="mt-1 text-xs text-amber-100/65">
+                          {pendingRequestCount === 0
+                            ? 'Nenhum pedido aguardando.'
+                            : `${pendingRequestCount} pedido${pendingRequestCount === 1 ? '' : 's'} aguardando aprovação.`}
+                        </p>
+                      </div>
+                      {pendingRequestCount > 0 ? (
+                        <span className="rounded-full bg-amber-300 px-2 py-1 text-xs font-black text-black">{pendingRequestCount}</span>
+                      ) : null}
+                    </div>
+
+                    <div className="space-y-2">
+                      {pendingRequests.length === 0 ? (
+                        <p className="rounded-xl border border-amber-200/10 bg-black/25 px-3 py-2 text-sm text-zinc-400">
+                          Nenhuma solicitação pendente.
+                        </p>
+                      ) : (
+                        pendingRequests.map((request) => (
+                          <div key={request.id} className="rounded-xl border border-amber-200/15 bg-black/35 p-3">
+                            <p className="truncate text-sm font-bold text-white">{request.displayName || 'Usuário EntreUS'}</p>
+                            <div className="mt-3 flex gap-2">
+                              <button type="button" onClick={() => void onModerateRequest(request.id, 'approve')} className="inline-flex h-9 flex-1 items-center justify-center gap-1 rounded-full bg-blue-600 px-3 text-xs font-bold text-white transition hover:bg-blue-500">
+                                <Check className="h-3.5 w-3.5" />
+                                Aceitar
+                              </button>
+                              <button type="button" onClick={() => void onModerateRequest(request.id, 'reject')} className="inline-flex h-9 flex-1 items-center justify-center gap-1 rounded-full border border-red-400/30 bg-red-600/80 px-3 text-xs font-bold text-white transition hover:bg-red-500">
+                                <X className="h-3.5 w-3.5" />
+                                Recusar
+                              </button>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </section>
+                ) : null}
+
                 {visibleParticipants.map((participant) => (
                   <div key={participant.id} className="flex items-center justify-between gap-3 rounded-2xl border border-blue-400/10 bg-zinc-950/75 p-3">
                     <div className="flex min-w-0 items-center gap-3">
@@ -853,6 +955,7 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
   const [serverUrl, setServerUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null)
+  const [soundAlertsEnabled, setSoundAlertsEnabled] = useState(true)
   const seenRequestIdsRef = useRef<Set<string>>(new Set())
   const requestsInitializedRef = useRef(false)
   const requestsLoadedRef = useRef(false)
@@ -1026,8 +1129,8 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
       return
     }
 
-    if (hasNewRequest) playMeetRequestSound()
-  }, [isModerator, pendingRequests])
+    if (hasNewRequest && soundAlertsEnabled) playMeetRequestSound()
+  }, [isModerator, pendingRequests, soundAlertsEnabled])
 
   useEffect(() => {
     if (!inCall) {
@@ -1183,8 +1286,12 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
             hands={hands}
             isModerator={Boolean(isModerator)}
             participantName={normalizedParticipantName}
+            pendingRequests={pendingRequests}
             roomName={roomName}
             secondsLeft={secondsLeft}
+            soundAlertsEnabled={soundAlertsEnabled}
+            onModerateRequest={moderate}
+            onToggleSoundAlerts={() => setSoundAlertsEnabled((current) => !current)}
             onToggleHand={toggleHand}
           />
         </LiveKitRoom>
