@@ -9,6 +9,7 @@ import {
   RoomAudioRenderer,
   TrackToggle,
   useDataChannel,
+  useConnectionState,
   useParticipants,
   useTracks,
 } from '@livekit/components-react'
@@ -37,12 +38,14 @@ import {
   Video,
   Volume2,
   VolumeX,
+  Wifi,
+  WifiOff,
   X,
 } from 'lucide-react'
-import { Track } from 'livekit-client'
+import { ConnectionState as LiveKitConnectionState, Track } from 'livekit-client'
 import Image from 'next/image'
 import Link from 'next/link'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
 type TokenResponse =
   | {
@@ -116,6 +119,7 @@ type MeetRoomClientProps = {
 type JoinState = 'idle' | 'loading' | 'connected' | 'error'
 type InviteFeedback = 'idle' | 'copied'
 type SidePanel = 'chat' | 'participants' | null
+type JoinIssue = 'auth' | 'not-found' | 'not-approved' | 'expired' | 'network' | 'unknown' | null
 
 type MeetDataMessage =
   | {
@@ -148,6 +152,72 @@ const MEET_SOUND_PATTERNS: Record<MeetAlertSound, { frequency: number; endFreque
   join: { frequency: 520, endFrequency: 660, duration: 0.12, volume: 0.035 },
   leave: { frequency: 430, endFrequency: 360, duration: 0.14, volume: 0.032 },
   ending: { frequency: 880, endFrequency: 660, duration: 0.18, volume: 0.045 },
+}
+
+function getFriendlyJoinIssue(message?: string | null): JoinIssue {
+  const normalized = (message || '').toLowerCase()
+
+  if (normalized.includes('sala não encontrada') || normalized.includes('sala nÃ£o encontrada')) return 'not-found'
+  if (normalized.includes('expirou') || normalized.includes('tempo gratuito') || normalized.includes('encerrada')) return 'expired'
+  if (normalized.includes('autoriz') || normalized.includes('aprova')) return 'not-approved'
+  if (normalized.includes('conta') || normalized.includes('login') || normalized.includes('sess')) return 'auth'
+  if (normalized.includes('network') || normalized.includes('fetch') || normalized.includes('conex')) return 'network'
+
+  return message ? 'unknown' : null
+}
+
+function getFriendlyJoinText(issue: JoinIssue) {
+  if (issue === 'not-found') {
+    return {
+      title: 'Não foi possível entrar nesta sala.',
+      description: 'O link pode estar inválido ou a sala não existe mais.',
+    }
+  }
+
+  if (issue === 'not-approved') {
+    return {
+      title: 'Você ainda não pode entrar nesta sala.',
+      description: 'Aguarde a aprovação do organizador ou peça entrada novamente.',
+    }
+  }
+
+  if (issue === 'expired') {
+    return {
+      title: 'A sala foi encerrada.',
+      description: 'O tempo gratuito desta chamada terminou.',
+    }
+  }
+
+  if (issue === 'auth') {
+    return {
+      title: 'Entre na sua conta para continuar.',
+      description: 'O acesso ao EntreUS Meet exige login.',
+    }
+  }
+
+  if (issue === 'network') {
+    return {
+      title: 'Não foi possível entrar nesta sala.',
+      description: 'Confira sua internet e tente novamente.',
+    }
+  }
+
+  return {
+    title: 'Não foi possível entrar nesta sala.',
+    description: 'Pode ser um link expirado, permissão ainda não aprovada ou instabilidade de conexão.',
+  }
+}
+
+function getMediaPermissionMessage(kind?: MediaDeviceKind) {
+  if (kind === 'videoinput') {
+    return 'Não foi possível acessar sua câmera. Verifique as permissões do navegador e tente novamente.'
+  }
+
+  if (kind === 'audioinput') {
+    return 'Não foi possível acessar seu microfone. Verifique as permissões do navegador e tente novamente.'
+  }
+
+  return 'Não foi possível acessar sua câmera ou microfone. Verifique as permissões do navegador e tente novamente.'
 }
 
 function normalizeDisplayName(value: string) {
@@ -338,24 +408,28 @@ function PortugueseConference({
   handRaised,
   hands,
   isModerator,
+  mediaPermissionMessage,
   participantName,
   pendingRequests,
   roomName,
   secondsLeft,
   soundAlertsEnabled,
   onModerateRequest,
+  onRetryMediaPermissions,
   onToggleSoundAlerts,
   onToggleHand,
 }: {
   handRaised: boolean
   hands: Extract<HandsResponse, { ok: true }>['hands']
   isModerator: boolean
+  mediaPermissionMessage: string | null
   participantName: string
   pendingRequests: Extract<RequestsResponse, { ok: true }>['requests']
   roomName: string
   secondsLeft: number | null
   soundAlertsEnabled: boolean
   onModerateRequest: (memberId: string, action: 'approve' | 'reject') => Promise<void>
+  onRetryMediaPermissions: () => Promise<void>
   onToggleSoundAlerts: () => void
   onToggleHand: () => void
 }) {
@@ -363,6 +437,7 @@ function PortugueseConference({
     { source: Track.Source.Camera, withPlaceholder: true },
     { source: Track.Source.ScreenShare, withPlaceholder: false },
   ])
+  const connectionState = useConnectionState()
   const participants = useParticipants()
   const [microphoneEnabled, setMicrophoneEnabled] = useState(true)
   const [cameraEnabled, setCameraEnabled] = useState(true)
@@ -377,6 +452,7 @@ function PortugueseConference({
   const [compactLayout, setCompactLayout] = useState(false)
   const [inviteFeedback, setInviteFeedback] = useState<InviteFeedback>('idle')
   const [handNotice, setHandNotice] = useState<string | null>(null)
+  const [connectionNotice, setConnectionNotice] = useState<string | null>(null)
   const [timeWarningMinimized, setTimeWarningMinimized] = useState(false)
   const reactionMenuRef = useRef<HTMLDivElement | null>(null)
   const moreMenuRef = useRef<HTMLDivElement | null>(null)
@@ -418,6 +494,21 @@ function PortugueseConference({
     timeWarningPlayedRef.current = true
     if (soundAlertsEnabled) playMeetEndingSound()
   }, [showTimeWarning, soundAlertsEnabled])
+
+  useEffect(() => {
+    if (connectionState === LiveKitConnectionState.Reconnecting || connectionState === LiveKitConnectionState.SignalReconnecting) {
+      setConnectionNotice('Tentando reconectar...')
+      return
+    }
+
+    if (connectionNotice !== 'Tentando reconectar...') return
+
+    if (connectionState === LiveKitConnectionState.Connected) {
+      setConnectionNotice('Conexão restabelecida')
+      const timer = window.setTimeout(() => setConnectionNotice(null), 2600)
+      return () => window.clearTimeout(timer)
+    }
+  }, [connectionNotice, connectionState])
 
   useEffect(() => {
     function handleDocumentPointerDown(event: MouseEvent) {
@@ -677,6 +768,20 @@ function PortugueseConference({
 
           <RoomAudioRenderer />
 
+          {connectionState === LiveKitConnectionState.Connecting ? (
+            <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/55 px-4 backdrop-blur-sm">
+              <div className="w-full max-w-sm rounded-3xl border border-blue-300/20 bg-black/82 p-5 text-center shadow-2xl shadow-black/45 ring-1 ring-blue-200/10">
+                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-blue-500/15 text-blue-100 ring-1 ring-blue-200/15">
+                  <Loader2 className="h-7 w-7 animate-spin" />
+                </div>
+                <p className="mt-4 text-lg font-black text-white">Conectando ao EntreUS Meet...</p>
+                <p className="mt-2 text-sm leading-5 text-zinc-300">
+                  Se demorar, confira sua internet ou recarregue a página.
+                </p>
+              </div>
+            </div>
+          ) : null}
+
           {onlyLocalParticipant ? (
             <div className="pointer-events-none absolute inset-x-3 bottom-[calc(6.5rem+env(safe-area-inset-bottom))] z-20 flex justify-center sm:bottom-24">
               <div className="pointer-events-auto w-full max-w-md rounded-3xl border border-blue-300/15 bg-black/60 p-4 text-center shadow-2xl shadow-black/35 ring-1 ring-blue-100/10 backdrop-blur-2xl">
@@ -744,6 +849,30 @@ function PortugueseConference({
           {handNotice ? (
             <div className="pointer-events-none absolute left-1/2 top-5 z-20 -translate-x-1/2 rounded-full border border-amber-300/40 bg-black/75 px-4 py-2 text-sm font-semibold text-amber-50 shadow-2xl shadow-black/40 backdrop-blur-xl">
               {handNotice}
+            </div>
+          ) : null}
+
+          {connectionNotice ? (
+            <div className="pointer-events-none absolute left-1/2 top-5 z-30 flex -translate-x-1/2 items-center gap-2 rounded-full border border-blue-300/30 bg-black/78 px-4 py-2 text-sm font-semibold text-blue-50 shadow-2xl shadow-black/40 backdrop-blur-xl">
+              {connectionNotice === 'Tentando reconectar...' ? <WifiOff className="h-4 w-4 text-amber-200" /> : <Wifi className="h-4 w-4 text-blue-200" />}
+              {connectionNotice}
+            </div>
+          ) : null}
+
+          {mediaPermissionMessage ? (
+            <div className="absolute left-1/2 top-16 z-30 w-[calc(100%-1.5rem)] max-w-md -translate-x-1/2 rounded-3xl border border-amber-300/30 bg-black/82 p-4 text-center shadow-2xl shadow-black/45 ring-1 ring-amber-100/10 backdrop-blur-2xl sm:top-20">
+              <div className="mx-auto mb-2 flex h-11 w-11 items-center justify-center rounded-full bg-amber-300/12 text-amber-100 ring-1 ring-amber-200/20">
+                <Video className="h-5 w-5" />
+              </div>
+              <p className="text-sm font-black text-white">Permissão necessária</p>
+              <p className="mt-1 text-sm leading-5 text-zinc-300">{mediaPermissionMessage}</p>
+              <button
+                type="button"
+                onClick={() => void onRetryMediaPermissions()}
+                className="mt-3 inline-flex min-h-10 items-center justify-center rounded-full bg-blue-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-blue-500"
+              >
+                Tentar novamente
+              </button>
             </div>
           ) : null}
 
@@ -1093,6 +1222,69 @@ function PortugueseConference({
   )
 }
 
+function MeetStatusCard({
+  title,
+  description,
+  icon: Icon,
+  primaryAction,
+  secondaryAction,
+  children,
+}: {
+  title: string
+  description: string
+  icon: typeof Loader2
+  primaryAction?: {
+    label: string
+    onClick?: () => void
+    href?: string
+  }
+  secondaryAction?: {
+    label: string
+    href: string
+  }
+  children?: ReactNode
+}) {
+  const iconClass = Icon === Loader2 ? 'h-8 w-8 animate-spin' : 'h-8 w-8'
+
+  return (
+    <div className="fixed inset-0 z-[60] flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_50%_0%,rgba(37,99,235,0.26),transparent_34%),linear-gradient(145deg,#020617_0%,#050b16_48%,#000_100%)] px-4 py-8 text-white">
+      <section className="relative w-full max-w-lg overflow-hidden rounded-[2rem] border border-blue-300/20 bg-[linear-gradient(145deg,rgba(2,6,23,0.88),rgba(15,23,42,0.74),rgba(0,0,0,0.84))] p-6 text-center shadow-2xl shadow-blue-950/35 ring-1 ring-blue-200/10 backdrop-blur-2xl sm:p-8">
+        <div className="pointer-events-none absolute inset-x-12 top-0 h-px bg-gradient-to-r from-transparent via-blue-200/50 to-transparent" />
+        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full border border-blue-300/20 bg-blue-500/10 text-blue-100 shadow-xl shadow-blue-950/30">
+          <Icon className={iconClass} />
+        </div>
+        <h2 className="mx-auto mt-5 max-w-md text-2xl font-black tracking-normal text-white sm:text-3xl">
+          {title}
+        </h2>
+        <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-zinc-300">
+          {description}
+        </p>
+        {children}
+        {(primaryAction || secondaryAction) ? (
+          <div className="mt-6 flex flex-col justify-center gap-2 sm:flex-row">
+            {primaryAction ? (
+              primaryAction.href ? (
+                <Link href={primaryAction.href} className="inline-flex min-h-12 items-center justify-center rounded-full bg-blue-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-blue-600/25 transition hover:bg-blue-500">
+                  {primaryAction.label}
+                </Link>
+              ) : (
+                <button type="button" onClick={primaryAction.onClick} className="inline-flex min-h-12 items-center justify-center rounded-full bg-blue-600 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-blue-600/25 transition hover:bg-blue-500">
+                  {primaryAction.label}
+                </button>
+              )
+            ) : null}
+            {secondaryAction ? (
+              <Link href={secondaryAction.href} className="inline-flex min-h-12 items-center justify-center rounded-full border border-blue-300/25 bg-white/[0.06] px-5 py-3 text-sm font-bold text-blue-50 transition hover:bg-blue-500/15">
+                {secondaryAction.label}
+              </Link>
+            ) : null}
+          </div>
+        ) : null}
+      </section>
+    </div>
+  )
+}
+
 export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
   const [accessToken, setAccessToken] = useState<string | null>(null)
   const [participantName, setParticipantName] = useState('')
@@ -1105,6 +1297,8 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
   const [joinState, setJoinState] = useState<JoinState>('idle')
   const [serverUrl, setServerUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [joinIssue, setJoinIssue] = useState<JoinIssue>(null)
+  const [mediaPermissionMessage, setMediaPermissionMessage] = useState<string | null>(null)
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null)
   const [soundAlertsEnabled, setSoundAlertsEnabled] = useState(true)
   const seenRequestIdsRef = useRef<Set<string>>(new Set())
@@ -1134,6 +1328,7 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
       setLoading(false)
       setRoomData(null)
       setMembership(null)
+      setJoinIssue('auth')
       return
     }
 
@@ -1143,12 +1338,15 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
     setLoading(false)
 
     if (!response.ok || !data.ok) {
-      setError(data.ok ? 'Não foi possível carregar a sala.' : data.error)
+      const nextIssue = data.ok ? 'unknown' : getFriendlyJoinIssue(data.error)
+      setJoinIssue(nextIssue)
+      setError(getFriendlyJoinText(nextIssue).description)
       setRoomData(null)
       return
     }
 
     setError(null)
+    setJoinIssue(null)
     setRoomData(data.room)
     setMembership(data.membership)
     if (data.membership?.displayName && isValidDisplayName(data.membership.displayName)) {
@@ -1322,10 +1520,17 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
     setRequesting(false)
 
     if (!response.ok || !data.ok) {
-      setError(data.error || 'Não foi possível pedir entrada.')
+      const nextIssue = getFriendlyJoinIssue(data.error || 'network')
+      setJoinIssue(nextIssue)
+      setError(
+        nextIssue === 'network'
+          ? 'Não foi possível enviar seu pedido agora. Confira sua conexão e tente novamente.'
+          : getFriendlyJoinText(nextIssue).description,
+      )
       return
     }
 
+    setJoinIssue(null)
     if (data.displayName) setParticipantName(data.displayName)
     await loadRoom()
   }
@@ -1362,26 +1567,47 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
     }
   }
 
+  async function retryMediaPermissions() {
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+      setMediaPermissionMessage('Seu navegador não liberou câmera ou microfone. Verifique as permissões e tente novamente.')
+      return
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true })
+      stream.getTracks().forEach((track) => track.stop())
+      setMediaPermissionMessage(null)
+    } catch {
+      setMediaPermissionMessage(getMediaPermissionMessage())
+    }
+  }
+
   async function handleJoin() {
     if (!participantNameIsValid) {
       setError(NAME_REQUIRED_MESSAGE)
+      setJoinIssue(null)
       return
     }
 
     if (!canJoin) {
-      setError(expired ? 'O tempo gratuito desta sala acabou.' : 'Você ainda não tem autorização para entrar nesta sala.')
+      const nextIssue: JoinIssue = expired ? 'expired' : 'not-approved'
+      setJoinIssue(nextIssue)
+      setError(getFriendlyJoinText(nextIssue).description)
       return
     }
 
     setJoinState('loading')
     setError(null)
+    setJoinIssue(null)
+    setMediaPermissionMessage(null)
     setAccessToken(null)
     setServerUrl(null)
 
     const headers = await authHeaders()
     if (!headers) {
       setJoinState('error')
-      setError('Entre na sua conta para continuar.')
+      setJoinIssue('auth')
+      setError(getFriendlyJoinText('auth').description)
       return
     }
 
@@ -1397,16 +1623,91 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
       const data = (await response.json()) as TokenResponse
 
       if (!response.ok || !data.ok) {
-        throw new Error(data.ok ? 'Erro ao entrar na sala.' : data.error)
+        const nextIssue = data.ok ? 'unknown' : getFriendlyJoinIssue(data.error)
+        setJoinIssue(nextIssue)
+        setError(getFriendlyJoinText(nextIssue).description)
+        setJoinState('error')
+        return
       }
 
       setAccessToken(data.token)
       setServerUrl(data.url)
       setJoinState('connected')
     } catch (joinError) {
+      console.error('Meet join failed', joinError)
       setJoinState('error')
-      setError(joinError instanceof Error ? joinError.message : 'Erro ao entrar na sala.')
+      setJoinIssue('network')
+      setError(getFriendlyJoinText('network').description)
     }
+  }
+
+  if (joinState === 'loading') {
+    return (
+      <MeetStatusCard
+        title="Conectando ao EntreUS Meet..."
+        description="Estamos preparando sua entrada na sala. Se demorar, confira sua internet ou recarregue a página."
+        icon={Loader2}
+      />
+    )
+  }
+
+  if (joinState === 'error') {
+    const friendly = getFriendlyJoinText(joinIssue || getFriendlyJoinIssue(error) || 'unknown')
+
+    return (
+      <MeetStatusCard
+        title={friendly.title}
+        description={friendly.description}
+        icon={WifiOff}
+        primaryAction={{ label: 'Tentar novamente', onClick: handleJoin }}
+        secondaryAction={{ label: 'Voltar para o Meet', href: '/meet' }}
+      />
+    )
+  }
+
+  if (!loading && !roomData && joinIssue) {
+    const friendly = getFriendlyJoinText(joinIssue)
+
+    return (
+      <MeetStatusCard
+        title={friendly.title}
+        description={friendly.description}
+        icon={joinIssue === 'auth' ? ShieldCheck : WifiOff}
+        primaryAction={{ label: joinIssue === 'auth' ? 'Entrar na conta' : 'Tentar novamente', onClick: joinIssue === 'auth' ? undefined : () => void loadRoom(), href: joinIssue === 'auth' ? '/login' : undefined }}
+        secondaryAction={{ label: 'Voltar para o Meet', href: '/meet' }}
+      />
+    )
+  }
+
+  if (roomData && expired) {
+    return (
+      <MeetStatusCard
+        title="A sala foi encerrada."
+        description="O tempo gratuito desta chamada terminou."
+        icon={Clock3}
+        primaryAction={{ label: 'Criar nova sala', href: '/meet' }}
+        secondaryAction={{ label: 'Voltar ao Meet', href: '/meet' }}
+      />
+    )
+  }
+
+  if (roomData && membership?.status === 'rejected') {
+    return (
+      <MeetStatusCard
+        title="Sua entrada não foi aprovada pelo organizador."
+        description="Você pode voltar ao Meet ou pedir entrada novamente se ainda precisar participar."
+        icon={UserX}
+        primaryAction={{ label: 'Pedir novamente', onClick: requestAccess }}
+        secondaryAction={{ label: 'Voltar para o Meet', href: '/meet' }}
+      >
+        {requesting ? (
+          <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-blue-300/20 bg-blue-500/10 px-4 py-2 text-sm font-semibold text-blue-50">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Enviando pedido...
+          </div>
+        ) : null}
+      </MeetStatusCard>
+    )
   }
 
   if (inCall && accessToken && serverUrl) {
@@ -1420,28 +1721,39 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
           video
           data-lk-theme="default"
           className="h-full w-full bg-black"
+          onConnected={() => {
+            setJoinIssue(null)
+            setError(null)
+          }}
           onDisconnected={() => {
             setJoinState('idle')
             setAccessToken(null)
             setServerUrl(null)
           }}
           onError={(roomError) => {
+            console.error('Meet room error', roomError)
             setJoinState('error')
-            setError(roomError.message || 'A chamada foi interrompida.')
+            setJoinIssue('network')
+            setError(getFriendlyJoinText('network').description)
             setAccessToken(null)
             setServerUrl(null)
+          }}
+          onMediaDeviceFailure={(_failure, kind) => {
+            setMediaPermissionMessage(getMediaPermissionMessage(kind))
           }}
         >
           <PortugueseConference
             handRaised={Boolean(membership?.handRaised)}
             hands={hands}
             isModerator={Boolean(isModerator)}
+            mediaPermissionMessage={mediaPermissionMessage}
             participantName={normalizedParticipantName}
             pendingRequests={pendingRequests}
             roomName={roomName}
             secondsLeft={secondsLeft}
             soundAlertsEnabled={soundAlertsEnabled}
             onModerateRequest={moderate}
+            onRetryMediaPermissions={retryMediaPermissions}
             onToggleSoundAlerts={() => setSoundAlertsEnabled((current) => !current)}
             onToggleHand={toggleHand}
           />
@@ -1622,11 +1934,11 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
                 <button
                   type="button"
                   onClick={handleJoin}
-                  disabled={!canJoin || joinState === 'loading'}
+                  disabled={!canJoin}
                   className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-blue-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-blue-600/25 transition hover:bg-blue-500 hover:shadow-blue-500/30 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {joinState === 'loading' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Video className="h-4 w-4" />}
-                  {joinState === 'loading' ? 'Entrando...' : 'Entrar na sala'}
+                  <Video className="h-4 w-4" />
+                  Entrar na sala
                 </button>
               </div>
             </>
