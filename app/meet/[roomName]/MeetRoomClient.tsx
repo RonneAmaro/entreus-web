@@ -640,7 +640,11 @@ function PortugueseConference({
     setFloatingReactions((current) => [...current, reaction].slice(-8))
     setShowReactions(false)
     setShowMoreMenu(false)
-    await send(encodeMeetDataMessage(reaction), { reliable: false, topic: MEET_DATA_TOPIC })
+    try {
+      await send(encodeMeetDataMessage(reaction), { reliable: false, topic: MEET_DATA_TOPIC })
+    } catch (reactionError) {
+      console.error('Meet reaction send failed', reactionError)
+    }
   }
 
   const openPanel = (panel: Exclude<SidePanel, null>) => {
@@ -650,15 +654,15 @@ function PortugueseConference({
   }
 
   const iconButtonClass =
-    'relative inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-white/5 bg-white/[0.07] text-blue-50 shadow-sm shadow-black/20 ring-1 ring-blue-200/5 transition hover:bg-blue-500/20 hover:ring-blue-200/20 focus:outline-none focus:ring-2 focus:ring-blue-300/35 data-[lk-enabled=false]:bg-black/25 data-[lk-enabled=false]:text-zinc-500 sm:h-11 sm:w-11'
+    'relative !m-0 inline-flex !h-11 !min-h-0 !w-11 shrink-0 items-center justify-center !rounded-full !border !border-white/5 !bg-white/[0.07] !p-0 text-blue-50 shadow-sm shadow-black/20 ring-1 ring-blue-200/5 transition hover:!bg-blue-500/20 hover:ring-blue-200/20 focus:outline-none focus:ring-2 focus:ring-blue-300/35 data-[lk-enabled=false]:!bg-black/25 data-[lk-enabled=false]:!text-zinc-500 sm:!h-11 sm:!w-11'
   const activeIconButtonClass =
-    'relative inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-blue-300/20 bg-blue-500/25 text-blue-50 shadow-sm shadow-blue-950/25 ring-1 ring-blue-200/20 transition hover:bg-blue-500/35 focus:outline-none focus:ring-2 focus:ring-blue-300/35 sm:h-11 sm:w-11'
+    'relative !m-0 inline-flex !h-11 !min-h-0 !w-11 shrink-0 items-center justify-center !rounded-full !border !border-blue-300/20 !bg-blue-500/25 !p-0 text-blue-50 shadow-sm shadow-blue-950/25 ring-1 ring-blue-200/20 transition hover:!bg-blue-500/35 focus:outline-none focus:ring-2 focus:ring-blue-300/35 sm:!h-11 sm:!w-11'
   const handButtonClass = handRaised
-    ? 'relative inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-amber-300/30 bg-amber-300/20 text-amber-50 shadow-sm shadow-amber-950/20 ring-1 ring-amber-200/20 transition hover:bg-amber-300/30 focus:outline-none focus:ring-2 focus:ring-amber-300/35 sm:h-11 sm:w-11'
+    ? 'relative !m-0 inline-flex !h-11 !min-h-0 !w-11 shrink-0 items-center justify-center !rounded-full !border !border-amber-300/30 !bg-amber-300/20 !p-0 text-amber-50 shadow-sm shadow-amber-950/20 ring-1 ring-amber-200/20 transition hover:!bg-amber-300/30 focus:outline-none focus:ring-2 focus:ring-amber-300/35 sm:!h-11 sm:!w-11'
     : iconButtonClass
   const secondaryDesktopControlClass = 'max-sm:hidden'
   const sheetActionClass =
-    'flex min-h-16 w-full items-center gap-3 rounded-2xl border border-blue-300/10 bg-white/[0.055] px-3 py-3 text-left text-sm font-semibold text-zinc-100 shadow-sm shadow-black/15 transition hover:border-blue-200/25 hover:bg-blue-500/15 focus:outline-none focus:ring-2 focus:ring-blue-300/30'
+    '!m-0 flex !min-h-16 w-full items-center gap-3 !rounded-2xl !border !border-blue-300/10 !bg-white/[0.055] !px-3 !py-3 text-left text-sm font-semibold text-zinc-100 shadow-sm shadow-black/15 transition hover:!border-blue-200/25 hover:!bg-blue-500/15 focus:outline-none focus:ring-2 focus:ring-blue-300/30'
   const sheetDangerActionClass =
     'flex min-h-16 w-full items-center gap-3 rounded-2xl border border-red-300/15 bg-red-500/15 px-3 py-3 text-left text-sm font-semibold text-red-50 shadow-sm shadow-black/15 transition hover:border-red-200/35 hover:bg-red-500/20 focus:outline-none focus:ring-2 focus:ring-red-300/30'
   const sheetIconClass = 'flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-500/15 text-blue-100 ring-1 ring-blue-200/10'
@@ -770,7 +774,7 @@ function PortugueseConference({
 
           {connectionState === LiveKitConnectionState.Connecting ? (
             <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/55 px-4 backdrop-blur-sm">
-              <div className="w-full max-w-sm rounded-3xl border border-blue-300/20 bg-black/82 p-5 text-center shadow-2xl shadow-black/45 ring-1 ring-blue-200/10">
+              <div className="w-full max-w-sm rounded-3xl border border-blue-300/20 bg-black/80 p-5 text-center shadow-2xl shadow-black/45 ring-1 ring-blue-200/10">
                 <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-blue-500/15 text-blue-100 ring-1 ring-blue-200/15">
                   <Loader2 className="h-7 w-7 animate-spin" />
                 </div>
@@ -860,7 +864,7 @@ function PortugueseConference({
           ) : null}
 
           {mediaPermissionMessage ? (
-            <div className="absolute left-1/2 top-16 z-30 w-[calc(100%-1.5rem)] max-w-md -translate-x-1/2 rounded-3xl border border-amber-300/30 bg-black/82 p-4 text-center shadow-2xl shadow-black/45 ring-1 ring-amber-100/10 backdrop-blur-2xl sm:top-20">
+            <div className="absolute left-1/2 top-16 z-30 w-[calc(100%-1.5rem)] max-w-md -translate-x-1/2 rounded-3xl border border-amber-300/30 bg-black/80 p-4 text-center shadow-2xl shadow-black/45 ring-1 ring-amber-100/10 backdrop-blur-2xl sm:top-20">
               <div className="mx-auto mb-2 flex h-11 w-11 items-center justify-center rounded-full bg-amber-300/12 text-amber-100 ring-1 ring-amber-200/20">
                 <Video className="h-5 w-5" />
               </div>
@@ -880,7 +884,7 @@ function PortugueseConference({
             <button
               type="button"
               onClick={() => openPanel('participants')}
-              className="absolute left-1/2 top-5 z-30 flex max-w-[calc(100%-1.5rem)] -translate-x-1/2 items-center gap-2 rounded-full border border-amber-300/40 bg-black/82 px-4 py-2 text-sm font-bold text-amber-50 shadow-2xl shadow-black/40 backdrop-blur-xl transition hover:border-amber-200/70 hover:bg-amber-400/10"
+              className="absolute left-1/2 top-5 z-30 flex max-w-[calc(100%-1.5rem)] -translate-x-1/2 items-center gap-2 rounded-full border border-amber-300/40 bg-black/80 px-4 py-2 text-sm font-bold text-amber-50 shadow-2xl shadow-black/40 backdrop-blur-xl transition hover:border-amber-200/70 hover:bg-amber-400/10"
             >
               <UserCheck className="h-4 w-4" />
               Nova solicitação para entrar na sala
@@ -914,7 +918,7 @@ function PortugueseConference({
           </div>
 
           <div className={`absolute inset-x-0 bottom-3 z-30 flex justify-center px-3 pb-[env(safe-area-inset-bottom)] ${sidePanel === 'chat' ? 'max-lg:hidden' : ''}`}>
-            <div className="relative flex max-w-full items-center gap-1.5 overflow-x-auto rounded-full border border-white/10 bg-black/60 p-1.5 shadow-xl shadow-black/35 ring-1 ring-blue-200/10 backdrop-blur-2xl sm:gap-1">
+            <div className="relative flex max-w-[calc(100vw-1rem)] items-center gap-1 overflow-visible rounded-full border border-blue-200/10 bg-black/60 p-1.5 shadow-xl shadow-black/30 ring-1 ring-blue-200/10 backdrop-blur-2xl sm:max-w-full sm:gap-1">
               <TrackToggle source={Track.Source.Microphone} showIcon={false} className={iconButtonClass} onChange={setMicrophoneEnabled} aria-label={microphoneEnabled ? 'Desativar microfone' : 'Ativar microfone'} title={microphoneEnabled ? 'Desativar microfone' : 'Ativar microfone'}>
                 <Mic className="h-5 w-5" />
               </TrackToggle>
@@ -941,7 +945,7 @@ function PortugueseConference({
                   <Smile className="h-5 w-5" />
                 </button>
                 {showReactions ? (
-                  <div className="absolute bottom-14 left-1/2 flex -translate-x-1/2 gap-1 rounded-full border border-blue-400/20 bg-black/85 p-2 shadow-2xl shadow-black/40 backdrop-blur-xl">
+                  <div className="absolute bottom-14 left-1/2 z-50 flex -translate-x-1/2 gap-1 rounded-full border border-blue-300/20 bg-black/90 p-2 shadow-2xl shadow-black/45 ring-1 ring-blue-100/10 backdrop-blur-2xl">
                     {QUICK_REACTIONS.map((reaction) => (
                       <button key={reaction} type="button" onClick={() => void sendReaction(reaction)} className="flex h-10 w-10 items-center justify-center rounded-full text-xl transition hover:bg-blue-500/20" aria-label={`Enviar reação ${reaction}`} title={`Enviar reação ${reaction}`}>
                         {reaction}
@@ -1085,7 +1089,7 @@ function PortugueseConference({
                 ) : null}
               </div>
 
-              <DisconnectButton className="inline-flex h-10 w-11 shrink-0 items-center justify-center rounded-full border border-red-400/35 bg-red-600/90 text-white shadow-md shadow-red-950/25 transition hover:border-red-300/60 hover:bg-red-500 focus:outline-none focus:ring-2 focus:ring-red-300/30 sm:h-11 sm:w-12" title="Sair">
+              <DisconnectButton className="!m-0 inline-flex !h-11 !min-h-0 !w-11 shrink-0 items-center justify-center !rounded-full !border !border-red-400/35 !bg-red-600/90 !p-0 text-white shadow-md shadow-red-950/25 transition hover:!border-red-300/60 hover:!bg-red-500 focus:outline-none focus:ring-2 focus:ring-red-300/30 sm:!h-11 sm:!w-12" title="Sair">
                 <PhoneOff className="h-5 w-5" />
               </DisconnectButton>
             </div>
@@ -1093,7 +1097,7 @@ function PortugueseConference({
         </main>
 
         {sidePanel ? (
-          <aside className="z-40 flex w-full max-w-sm shrink-0 flex-col border-l border-blue-400/15 bg-black/82 shadow-2xl shadow-black/40 backdrop-blur-2xl max-lg:absolute max-lg:bottom-0 max-lg:right-0 max-lg:top-0 max-lg:max-w-full sm:max-w-md lg:relative">
+          <aside className="z-40 flex w-full max-w-sm shrink-0 flex-col border-l border-blue-400/15 bg-black/80 shadow-2xl shadow-black/40 backdrop-blur-2xl max-lg:absolute max-lg:bottom-0 max-lg:right-0 max-lg:top-0 max-lg:max-w-full sm:max-w-md lg:relative">
             <div className="flex items-start justify-between gap-3 border-b border-blue-400/10 p-4">
               <div>
                 <h2 className="text-base font-black text-white">
