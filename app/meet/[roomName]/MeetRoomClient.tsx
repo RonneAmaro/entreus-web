@@ -558,12 +558,18 @@ function PortugueseConference({
   }
 
   const iconButtonClass =
-    'relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-blue-400/15 bg-zinc-950/80 text-blue-50 shadow-md shadow-black/20 transition hover:border-blue-300/45 hover:bg-blue-600/20 focus:outline-none focus:ring-2 focus:ring-blue-400/35 data-[lk-enabled=false]:border-zinc-700 data-[lk-enabled=false]:bg-zinc-950/70 data-[lk-enabled=false]:text-zinc-500 sm:h-11 sm:w-11'
+    'relative inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-white/5 bg-white/[0.07] text-blue-50 shadow-sm shadow-black/20 ring-1 ring-blue-200/5 transition hover:bg-blue-500/20 hover:ring-blue-200/20 focus:outline-none focus:ring-2 focus:ring-blue-300/35 data-[lk-enabled=false]:bg-black/25 data-[lk-enabled=false]:text-zinc-500 sm:h-11 sm:w-11'
   const activeIconButtonClass =
-    'relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-blue-300/45 bg-blue-600/25 text-blue-50 shadow-md shadow-blue-950/25 transition hover:bg-blue-600/35 focus:outline-none focus:ring-2 focus:ring-blue-400/35 sm:h-11 sm:w-11'
+    'relative inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-blue-300/20 bg-blue-500/25 text-blue-50 shadow-sm shadow-blue-950/25 ring-1 ring-blue-200/20 transition hover:bg-blue-500/35 focus:outline-none focus:ring-2 focus:ring-blue-300/35 sm:h-11 sm:w-11'
   const handButtonClass = handRaised
-    ? 'relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-amber-300/55 bg-amber-300/20 text-amber-50 shadow-md shadow-amber-950/20 transition hover:bg-amber-300/30 focus:outline-none focus:ring-2 focus:ring-amber-300/30 sm:h-11 sm:w-11'
+    ? 'relative inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-amber-300/30 bg-amber-300/20 text-amber-50 shadow-sm shadow-amber-950/20 ring-1 ring-amber-200/20 transition hover:bg-amber-300/30 focus:outline-none focus:ring-2 focus:ring-amber-300/35 sm:h-11 sm:w-11'
     : iconButtonClass
+  const secondaryDesktopControlClass = 'max-sm:hidden'
+  const sheetActionClass =
+    'flex min-h-16 w-full items-center gap-3 rounded-2xl border border-blue-300/10 bg-white/[0.055] px-3 py-3 text-left text-sm font-semibold text-zinc-100 shadow-sm shadow-black/15 transition hover:border-blue-200/25 hover:bg-blue-500/15 focus:outline-none focus:ring-2 focus:ring-blue-300/30'
+  const sheetDangerActionClass =
+    'flex min-h-16 w-full items-center gap-3 rounded-2xl border border-red-300/15 bg-red-500/15 px-3 py-3 text-left text-sm font-semibold text-red-50 shadow-sm shadow-black/15 transition hover:border-red-200/35 hover:bg-red-500/20 focus:outline-none focus:ring-2 focus:ring-red-300/30'
+  const sheetIconClass = 'flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-500/15 text-blue-100 ring-1 ring-blue-200/10'
   const visibleParticipants = participants.map((participant) => ({
     id: participant.identity,
     name: participant.name || (participant.isLocal ? localDisplayName : 'Participante'),
@@ -709,15 +715,15 @@ function PortugueseConference({
             </div>
           </div>
 
-          <div className={`absolute inset-x-0 bottom-3 z-30 flex justify-center px-3 ${sidePanel === 'chat' ? 'max-lg:hidden' : ''}`}>
-            <div className="relative flex max-w-full items-center gap-1 overflow-x-auto rounded-full border border-blue-400/15 bg-black/72 p-1.5 shadow-xl shadow-black/35 backdrop-blur-2xl sm:gap-1.5">
+          <div className={`absolute inset-x-0 bottom-3 z-30 flex justify-center px-3 pb-[env(safe-area-inset-bottom)] ${sidePanel === 'chat' ? 'max-lg:hidden' : ''}`}>
+            <div className="relative flex max-w-full items-center gap-1.5 overflow-x-auto rounded-full border border-white/10 bg-black/60 p-1.5 shadow-xl shadow-black/35 ring-1 ring-blue-200/10 backdrop-blur-2xl sm:gap-1">
               <TrackToggle source={Track.Source.Microphone} showIcon={false} className={iconButtonClass} onChange={setMicrophoneEnabled} aria-label={microphoneEnabled ? 'Desativar microfone' : 'Ativar microfone'} title={microphoneEnabled ? 'Desativar microfone' : 'Ativar microfone'}>
                 <Mic className="h-5 w-5" />
               </TrackToggle>
               <TrackToggle source={Track.Source.Camera} showIcon={false} className={iconButtonClass} onChange={setCameraEnabled} aria-label={cameraEnabled ? 'Desativar câmera' : 'Ativar câmera'} title={cameraEnabled ? 'Desativar câmera' : 'Ativar câmera'}>
                 <Video className="h-5 w-5" />
               </TrackToggle>
-              <TrackToggle source={Track.Source.ScreenShare} showIcon={false} className={iconButtonClass} onChange={setScreenShareEnabled} aria-label={screenShareEnabled ? 'Parar compartilhamento' : 'Compartilhar tela'} title={screenShareEnabled ? 'Parar compartilhamento' : 'Compartilhar tela'}>
+              <TrackToggle source={Track.Source.ScreenShare} showIcon={false} className={`${secondaryDesktopControlClass} ${iconButtonClass}`} onChange={setScreenShareEnabled} aria-label={screenShareEnabled ? 'Parar compartilhamento' : 'Compartilhar tela'} title={screenShareEnabled ? 'Parar compartilhamento' : 'Compartilhar tela'}>
                 <MonitorUp className="h-5 w-5" />
               </TrackToggle>
 
@@ -732,7 +738,7 @@ function PortugueseConference({
                 </span>
               </button>
 
-              <div ref={reactionMenuRef} className="relative">
+              <div ref={reactionMenuRef} className={`relative ${secondaryDesktopControlClass}`}>
                 <button type="button" onClick={() => setShowReactions((current) => !current)} className={showReactions ? activeIconButtonClass : iconButtonClass} aria-label="Reações" title="Reações">
                   <Smile className="h-5 w-5" />
                 </button>
@@ -747,7 +753,7 @@ function PortugueseConference({
                 ) : null}
               </div>
 
-              <button type="button" onClick={onToggleHand} className={handButtonClass} aria-label={handRaised ? 'Baixar mão' : 'Levantar mão'} title={handRaised ? 'Baixar mão' : 'Levantar mão'}>
+              <button type="button" onClick={onToggleHand} className={`${secondaryDesktopControlClass} ${handButtonClass}`} aria-label={handRaised ? 'Baixar mão' : 'Levantar mão'} title={handRaised ? 'Baixar mão' : 'Levantar mão'}>
                 <Hand className="h-5 w-5" />
               </button>
 
@@ -756,52 +762,128 @@ function PortugueseConference({
                   <MoreHorizontal className="h-5 w-5" />
                 </button>
                 {showMoreMenu ? (
-                  <div className="absolute bottom-14 right-0 w-64 overflow-hidden rounded-2xl border border-blue-400/20 bg-black/90 p-2 text-sm shadow-2xl shadow-black/45 backdrop-blur-xl">
-                    <button type="button" onClick={() => void copyRoomLink().then(() => setShowMoreMenu(false))} className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-zinc-100 transition hover:bg-blue-500/15">
-                      <Copy className="h-4 w-4 text-blue-300" />
-                      {inviteFeedback === 'copied' ? 'Link copiado' : 'Copiar link da sala'}
-                    </button>
-                    <button type="button" onClick={() => void shareRoom().then(() => setShowMoreMenu(false))} className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-zinc-100 transition hover:bg-blue-500/15">
-                      <Share2 className="h-4 w-4 text-blue-300" />
-                      Compartilhar sala
-                    </button>
-                    <button type="button" onClick={() => openPanel('participants')} className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-zinc-100 transition hover:bg-blue-500/15">
-                      <Users className="h-4 w-4 text-blue-300" />
-                      Ver participantes
-                    </button>
-                    <button type="button" onClick={() => openPanel('chat')} className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-zinc-100 transition hover:bg-blue-500/15">
-                      <MessageSquare className="h-4 w-4 text-blue-300" />
-                      Abrir chat
-                    </button>
-                    <div className="my-1 h-px bg-blue-400/10" />
-                    <div className="rounded-xl px-3 py-2 text-left">
-                      <p className="text-xs font-bold uppercase tracking-[0.14em] text-blue-100/55">Informações da sala</p>
-                      <p className="mt-1 truncate text-xs text-zinc-400">Sala {roomName}</p>
-                      <p className="mt-0.5 text-xs text-zinc-400">
-                        Tempo restante: {secondsLeft === null ? '--:--' : formatSeconds(secondsLeft)}
-                      </p>
+                  <>
+                    <button
+                      type="button"
+                      aria-label="Fechar menu"
+                      onClick={() => setShowMoreMenu(false)}
+                      className="fixed inset-0 z-40 bg-black/45 backdrop-blur-sm sm:hidden"
+                    />
+                    <div className="fixed inset-x-0 bottom-0 z-50 max-h-[86vh] overflow-y-auto rounded-t-[2rem] border border-blue-200/10 bg-[linear-gradient(180deg,rgba(10,18,34,0.98),rgba(2,6,23,0.98))] p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] text-sm shadow-2xl shadow-black/60 ring-1 ring-blue-200/10 backdrop-blur-2xl sm:absolute sm:bottom-14 sm:right-0 sm:inset-x-auto sm:max-h-[min(76vh,620px)] sm:w-[22rem] sm:rounded-3xl sm:p-3">
+                      <div className="mx-auto mb-4 h-1.5 w-11 rounded-full bg-blue-100/25 sm:hidden" />
+
+                      <div className="mb-4 flex items-start justify-between gap-3 px-1 sm:mb-3">
+                        <div>
+                          <p className="text-base font-black text-white">Mais opções</p>
+                          <p className="mt-1 text-xs text-zinc-400">Sala {roomName} · {secondsLeft === null ? '--:--' : formatSeconds(secondsLeft)}</p>
+                        </div>
+                        <button type="button" onClick={() => setShowMoreMenu(false)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/[0.07] text-zinc-200 transition hover:bg-blue-500/15" aria-label="Fechar menu" title="Fechar menu">
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+
+                      <div className="mb-3 rounded-3xl border border-blue-300/10 bg-black/25 p-3">
+                        <p className="mb-3 px-1 text-xs font-bold uppercase tracking-[0.14em] text-blue-100/55">Reações</p>
+                        <div className="grid grid-cols-6 gap-1.5">
+                          {QUICK_REACTIONS.map((reaction) => (
+                            <button key={reaction} type="button" onClick={() => void sendReaction(reaction)} className="flex aspect-square items-center justify-center rounded-2xl bg-white/[0.06] text-2xl transition hover:bg-blue-500/15 focus:outline-none focus:ring-2 focus:ring-blue-300/30" aria-label={`Enviar reação ${reaction}`} title={`Enviar reação ${reaction}`}>
+                              {reaction}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <button type="button" onClick={onToggleHand} className={handRaised ? `${sheetActionClass} border-amber-300/25 bg-amber-300/15 text-amber-50` : sheetActionClass} aria-label={handRaised ? 'Baixar mão' : 'Levantar mão'} title={handRaised ? 'Baixar mão' : 'Levantar mão'}>
+                          <span className={handRaised ? 'flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-300/20 text-amber-50 ring-1 ring-amber-200/20' : sheetIconClass}>
+                            <Hand className="h-5 w-5" />
+                          </span>
+                          <span>{handRaised ? 'Baixar mão' : 'Levantar mão'}</span>
+                        </button>
+
+                        <TrackToggle source={Track.Source.ScreenShare} showIcon={false} className={sheetActionClass} onChange={setScreenShareEnabled} aria-label={screenShareEnabled ? 'Parar apresentação' : 'Apresentar'} title={screenShareEnabled ? 'Parar apresentação' : 'Apresentar'}>
+                          <span className={sheetIconClass}>
+                            <MonitorUp className="h-5 w-5" />
+                          </span>
+                          <span>{screenShareEnabled ? 'Parar apresentação' : 'Apresentar'}</span>
+                        </TrackToggle>
+
+                        <button type="button" onClick={() => openPanel('chat')} className={sheetActionClass}>
+                          <span className={sheetIconClass}>
+                            <MessageSquare className="h-5 w-5" />
+                          </span>
+                          <span>Chat</span>
+                        </button>
+
+                        <button type="button" onClick={() => openPanel('participants')} className={sheetActionClass}>
+                          <span className={sheetIconClass}>
+                            <Users className="h-5 w-5" />
+                          </span>
+                          <span>Participantes</span>
+                        </button>
+
+                        <button type="button" onClick={() => void copyRoomLink().then(() => setShowMoreMenu(false))} className={sheetActionClass}>
+                          <span className={sheetIconClass}>
+                            <Copy className="h-5 w-5" />
+                          </span>
+                          <span>{inviteFeedback === 'copied' ? 'Link copiado' : 'Copiar link'}</span>
+                        </button>
+
+                        <button type="button" onClick={() => void shareRoom().then(() => setShowMoreMenu(false))} className={sheetActionClass}>
+                          <span className={sheetIconClass}>
+                            <Share2 className="h-5 w-5" />
+                          </span>
+                          <span>Compartilhar</span>
+                        </button>
+
+                        <button type="button" onClick={() => { onToggleSoundAlerts(); setShowMoreMenu(false) }} className={sheetActionClass}>
+                          <span className={sheetIconClass}>
+                            {soundAlertsEnabled ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5" />}
+                          </span>
+                          <span>{soundAlertsEnabled ? 'Sons ligados' : 'Sons desligados'}</span>
+                        </button>
+
+                        <button type="button" onClick={() => setCompactLayout((current) => !current)} className={sheetActionClass}>
+                          <span className={sheetIconClass}>
+                            <LayoutGrid className="h-5 w-5" />
+                          </span>
+                          <span>Layout</span>
+                        </button>
+
+                        <button type="button" onClick={() => document.documentElement.requestFullscreen?.()} className={sheetActionClass}>
+                          <span className={sheetIconClass}>
+                            <Maximize className="h-5 w-5" />
+                          </span>
+                          <span>Tela cheia</span>
+                        </button>
+
+                        <div className="flex min-h-16 items-center gap-3 rounded-2xl border border-blue-300/10 bg-white/[0.04] px-3 py-3 text-left text-sm text-zinc-300">
+                          <span className={sheetIconClass}>
+                            <Clock3 className="h-5 w-5" />
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block font-semibold text-zinc-100">Informações</span>
+                            <span className="block truncate text-xs text-zinc-500">Sala {roomName}</span>
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 grid grid-cols-2 gap-2">
+                        <DisconnectButton className={sheetDangerActionClass} title="Sair da sala">
+                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-500/20 text-red-100 ring-1 ring-red-200/15">
+                            <PhoneOff className="h-5 w-5" />
+                          </span>
+                          <span>Sair da sala</span>
+                        </DisconnectButton>
+                        <button type="button" onClick={() => setShowMoreMenu(false)} className={sheetActionClass}>
+                          <span className={sheetIconClass}>
+                            <X className="h-5 w-5" />
+                          </span>
+                          <span>Fechar</span>
+                        </button>
+                      </div>
                     </div>
-                    <button type="button" onClick={() => { onToggleSoundAlerts(); setShowMoreMenu(false) }} className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-zinc-100 transition hover:bg-blue-500/15">
-                      {soundAlertsEnabled ? <Volume2 className="h-4 w-4 text-blue-300" /> : <VolumeX className="h-4 w-4 text-blue-300" />}
-                      {soundAlertsEnabled ? 'Desativar alertas sonoros' : 'Ativar alertas sonoros'}
-                    </button>
-                    <button type="button" onClick={() => setCompactLayout((current) => !current)} className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-zinc-100 transition hover:bg-blue-500/15">
-                      <LayoutGrid className="h-4 w-4 text-blue-300" />
-                      Alternar layout
-                    </button>
-                    <button type="button" onClick={() => document.documentElement.requestFullscreen?.()} className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-zinc-100 transition hover:bg-blue-500/15">
-                      <Maximize className="h-4 w-4 text-blue-300" />
-                      Tela cheia
-                    </button>
-                    <DisconnectButton className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-red-100 transition hover:bg-red-500/15" title="Sair da sala">
-                      <PhoneOff className="h-4 w-4 text-red-300" />
-                      Sair da sala
-                    </DisconnectButton>
-                    <button type="button" onClick={() => setShowMoreMenu(false)} className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-zinc-300 transition hover:bg-blue-500/15">
-                      <X className="h-4 w-4 text-blue-300" />
-                      Fechar menu
-                    </button>
-                  </div>
+                  </>
                 ) : null}
               </div>
 
