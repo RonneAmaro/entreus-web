@@ -548,6 +548,7 @@ function PortugueseConference({
 
     setFloatingReactions((current) => [...current, reaction].slice(-8))
     setShowReactions(false)
+    setShowMoreMenu(false)
     await send(encodeMeetDataMessage(reaction), { reliable: false, topic: MEET_DATA_TOPIC })
   }
 
@@ -575,6 +576,7 @@ function PortugueseConference({
     name: participant.name || (participant.isLocal ? localDisplayName : 'Participante'),
     isLocal: participant.isLocal,
   }))
+  const onlyLocalParticipant = visibleParticipants.length === 1
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[radial-gradient(circle_at_top,#0b1d3b_0%,#020617_42%,#000_100%)] text-white">
@@ -633,12 +635,79 @@ function PortugueseConference({
         <main className={`relative min-w-0 flex-1 transition-[padding] duration-300 ${sidePanel ? 'lg:pr-0' : ''}`}>
           <GridLayout
             tracks={tracks}
-            className={`h-full p-2 pb-28 sm:p-4 sm:pb-28 [&_.lk-participant-metadata]:hidden [&_.lk-participant-tile]:overflow-hidden [&_.lk-participant-tile]:rounded-2xl [&_.lk-participant-tile]:border [&_.lk-participant-tile]:border-blue-400/15 [&_.lk-participant-tile]:bg-zinc-950 [&_.lk-participant-tile]:shadow-2xl ${compactLayout ? '[&_.lk-grid-layout]:gap-2' : ''}`}
+            className={`entreus-meet-grid h-full p-2 pb-[calc(7.25rem+env(safe-area-inset-bottom))] sm:p-4 sm:pb-28 [&_.lk-participant-metadata]:hidden [&_.lk-participant-name]:rounded-full [&_.lk-participant-name]:bg-black/55 [&_.lk-participant-name]:px-3 [&_.lk-participant-name]:py-1 [&_.lk-participant-tile]:overflow-hidden [&_.lk-participant-tile]:rounded-2xl [&_.lk-participant-tile]:border [&_.lk-participant-tile]:border-blue-400/15 [&_.lk-participant-tile]:bg-zinc-950 [&_.lk-participant-tile]:shadow-2xl ${compactLayout ? '[&_.lk-grid-layout]:gap-2' : ''}`}
           >
             <ParticipantTile />
           </GridLayout>
 
+          <style jsx global>{`
+            .entreus-meet-grid .lk-grid-layout {
+              align-content: center;
+              gap: 0.75rem;
+            }
+
+            .entreus-meet-grid .lk-participant-tile {
+              min-height: 14rem;
+            }
+
+            @media (max-width: 640px) {
+              .entreus-meet-grid .lk-grid-layout {
+                align-content: center;
+                gap: 0.625rem;
+              }
+
+              .entreus-meet-grid .lk-participant-tile {
+                min-height: min(42vh, 20rem);
+              }
+
+              .entreus-meet-grid .lk-grid-layout:has(.lk-participant-tile:only-child) .lk-participant-tile {
+                min-height: min(58vh, 28rem);
+              }
+
+              .entreus-meet-grid .lk-grid-layout:has(.lk-participant-tile:nth-child(2):last-child) .lk-participant-tile {
+                min-height: min(36vh, 17rem);
+              }
+
+              .entreus-meet-grid .lk-grid-layout:has(.lk-participant-tile:nth-child(3):last-child) .lk-participant-tile,
+              .entreus-meet-grid .lk-grid-layout:has(.lk-participant-tile:nth-child(n + 4)) .lk-participant-tile {
+                min-height: 11.5rem;
+              }
+            }
+          `}</style>
+
           <RoomAudioRenderer />
+
+          {onlyLocalParticipant ? (
+            <div className="pointer-events-none absolute inset-x-3 bottom-[calc(6.5rem+env(safe-area-inset-bottom))] z-20 flex justify-center sm:bottom-24">
+              <div className="pointer-events-auto w-full max-w-md rounded-3xl border border-blue-300/15 bg-black/60 p-4 text-center shadow-2xl shadow-black/35 ring-1 ring-blue-100/10 backdrop-blur-2xl">
+                <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center overflow-hidden rounded-full border border-blue-200/20 bg-white/[0.08]">
+                  <Image src="/logo-icon.png" alt="" width={48} height={48} className="h-full w-full object-contain" />
+                </div>
+                <p className="text-base font-black text-white">Só você está aqui</p>
+                <p className="mx-auto mt-1 max-w-xs text-sm leading-5 text-zinc-300">
+                  Compartilhe o link da sala para convidar alguém.
+                </p>
+                <div className="mt-4 flex justify-center gap-2">
+                  <button
+                    type="button"
+                    onClick={copyRoomLink}
+                    className="inline-flex min-h-10 items-center justify-center gap-2 rounded-full border border-blue-300/20 bg-blue-500/15 px-4 py-2 text-sm font-bold text-blue-50 transition hover:bg-blue-500/25"
+                  >
+                    <Copy className="h-4 w-4" />
+                    {inviteFeedback === 'copied' ? 'Copiado' : 'Copiar link'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={shareRoom}
+                    className="inline-flex min-h-10 items-center justify-center gap-2 rounded-full border border-blue-300/20 bg-white/[0.07] px-4 py-2 text-sm font-bold text-blue-50 transition hover:bg-blue-500/15"
+                  >
+                    <Share2 className="h-4 w-4" />
+                    Compartilhar
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
 
           {showTimeWarning && secondsLeft !== null ? (
             timeWarningMinimized ? (
@@ -794,14 +863,14 @@ function PortugueseConference({
                       </div>
 
                       <div className="grid grid-cols-2 gap-2">
-                        <button type="button" onClick={onToggleHand} className={handRaised ? `${sheetActionClass} border-amber-300/25 bg-amber-300/15 text-amber-50` : sheetActionClass} aria-label={handRaised ? 'Baixar mão' : 'Levantar mão'} title={handRaised ? 'Baixar mão' : 'Levantar mão'}>
+                        <button type="button" onClick={() => { onToggleHand(); setShowMoreMenu(false) }} className={handRaised ? `${sheetActionClass} border-amber-300/25 bg-amber-300/15 text-amber-50` : sheetActionClass} aria-label={handRaised ? 'Baixar mão' : 'Levantar mão'} title={handRaised ? 'Baixar mão' : 'Levantar mão'}>
                           <span className={handRaised ? 'flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-300/20 text-amber-50 ring-1 ring-amber-200/20' : sheetIconClass}>
                             <Hand className="h-5 w-5" />
                           </span>
                           <span>{handRaised ? 'Baixar mão' : 'Levantar mão'}</span>
                         </button>
 
-                        <TrackToggle source={Track.Source.ScreenShare} showIcon={false} className={sheetActionClass} onChange={setScreenShareEnabled} aria-label={screenShareEnabled ? 'Parar apresentação' : 'Apresentar'} title={screenShareEnabled ? 'Parar apresentação' : 'Apresentar'}>
+                        <TrackToggle source={Track.Source.ScreenShare} showIcon={false} className={sheetActionClass} onChange={(enabled) => { setScreenShareEnabled(enabled); setShowMoreMenu(false) }} aria-label={screenShareEnabled ? 'Parar apresentação' : 'Apresentar'} title={screenShareEnabled ? 'Parar apresentação' : 'Apresentar'}>
                           <span className={sheetIconClass}>
                             <MonitorUp className="h-5 w-5" />
                           </span>
@@ -914,7 +983,7 @@ function PortugueseConference({
 
             {sidePanel === 'chat' ? (
               <>
-                <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+                <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4 pb-5">
                   {chatMessages.length === 0 ? (
                     <div className="rounded-2xl border border-blue-400/15 bg-blue-500/10 p-4 text-sm leading-6 text-zinc-300">
                       Nenhuma mensagem ainda. O chat usa o canal de dados da chamada e não fica salvo no banco.
@@ -932,7 +1001,7 @@ function PortugueseConference({
                   )}
                 </div>
                 <form
-                  className="border-t border-blue-400/10 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]"
+                  className="border-t border-blue-400/10 p-4 pb-[calc(1.25rem+env(safe-area-inset-bottom))]"
                   onSubmit={(event) => {
                     event.preventDefault()
                     void sendChatMessage()
@@ -954,7 +1023,7 @@ function PortugueseConference({
                 </form>
               </>
             ) : (
-              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
+              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 pb-[calc(1.25rem+env(safe-area-inset-bottom))]">
                 {isModerator ? (
                   <section className="rounded-2xl border border-amber-300/20 bg-amber-300/10 p-3">
                     <div className="mb-3 flex items-center justify-between gap-3">
@@ -981,11 +1050,11 @@ function PortugueseConference({
                           <div key={request.id} className="rounded-xl border border-amber-200/15 bg-black/35 p-3">
                             <p className="truncate text-sm font-bold text-white">{request.displayName || 'Usuário EntreUS'}</p>
                             <div className="mt-3 flex gap-2">
-                              <button type="button" onClick={() => void onModerateRequest(request.id, 'approve')} className="inline-flex h-9 flex-1 items-center justify-center gap-1 rounded-full bg-blue-600 px-3 text-xs font-bold text-white transition hover:bg-blue-500">
+                              <button type="button" onClick={() => void onModerateRequest(request.id, 'approve')} className="inline-flex min-h-11 flex-1 items-center justify-center gap-1 rounded-full bg-blue-600 px-3 text-sm font-bold text-white transition hover:bg-blue-500 sm:min-h-9 sm:text-xs">
                                 <Check className="h-3.5 w-3.5" />
                                 Aceitar
                               </button>
-                              <button type="button" onClick={() => void onModerateRequest(request.id, 'reject')} className="inline-flex h-9 flex-1 items-center justify-center gap-1 rounded-full border border-red-400/30 bg-red-600/80 px-3 text-xs font-bold text-white transition hover:bg-red-500">
+                              <button type="button" onClick={() => void onModerateRequest(request.id, 'reject')} className="inline-flex min-h-11 flex-1 items-center justify-center gap-1 rounded-full border border-red-400/30 bg-red-600/80 px-3 text-sm font-bold text-white transition hover:bg-red-500 sm:min-h-9 sm:text-xs">
                                 <X className="h-3.5 w-3.5" />
                                 Recusar
                               </button>
