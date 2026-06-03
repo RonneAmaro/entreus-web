@@ -498,6 +498,8 @@ function PortugueseConference({
   const seenParticipantsRef = useRef<Set<string>>(new Set())
   const participantsInitializedRef = useRef(false)
   const timeWarningPlayedRef = useRef(false)
+  const moreButtonRef = useRef<HTMLButtonElement | null>(null)
+  const ignoreNextMoreOutsidePointerRef = useRef(false)
   const localDisplayName = normalizeDisplayName(participantName) || 'Participante'
   const showTimeWarning = typeof secondsLeft === 'number' && secondsLeft > 0 && secondsLeft <= 60
   const pendingRequestCount = isModerator ? pendingRequests.length : 0
@@ -573,15 +575,21 @@ function PortugueseConference({
   }, [connectionNotice, connectionState])
 
   useEffect(() => {
-    function handleDocumentPointerDown(event: MouseEvent) {
+    function handleDocumentPointerDown(event: PointerEvent) {
       const target = event.target as Node
 
       if (showReactions && reactionMenuRef.current && !reactionMenuRef.current.contains(target)) {
         setShowReactions(false)
       }
 
-      if (showMoreMenu && moreMenuRef.current && !moreMenuRef.current.contains(target)) {
-        setShowMoreMenu(false)
+      if (showMoreMenu) {
+        if (ignoreNextMoreOutsidePointerRef.current) {
+          ignoreNextMoreOutsidePointerRef.current = false
+        } else {
+          const clickedButton = Boolean(moreButtonRef.current?.contains(target))
+          const clickedMenu = Boolean(moreMenuRef.current?.contains(target))
+          if (!clickedButton && !clickedMenu) setShowMoreMenu(false)
+        }
       }
 
       if (showChatEmojiPanel && chatEmojiPanelRef.current && !chatEmojiPanelRef.current.contains(target)) {
@@ -762,6 +770,18 @@ function PortugueseConference({
     setShowMoreMenu(false)
   }
 
+  function toggleMoreMenu() {
+    setShowMoreMenu((current) => !current)
+    setShowReactions(false)
+  }
+
+  function ignoreOpeningMorePointer() {
+    ignoreNextMoreOutsidePointerRef.current = true
+    window.setTimeout(() => {
+      ignoreNextMoreOutsidePointerRef.current = false
+    }, 80)
+  }
+
   const iconButtonClass =
     'relative !m-0 inline-flex !h-11 !min-h-0 !w-11 shrink-0 items-center justify-center !rounded-full !border !border-white/5 !bg-white/[0.07] !p-0 text-blue-50 shadow-sm shadow-black/20 ring-1 ring-blue-200/5 transition hover:!bg-blue-500/20 hover:ring-blue-200/20 focus:outline-none focus:ring-2 focus:ring-blue-300/35 data-[lk-enabled=false]:!bg-black/25 data-[lk-enabled=false]:!text-zinc-500 sm:!h-11 sm:!w-11'
   const activeIconButtonClass =
@@ -781,6 +801,14 @@ function PortugueseConference({
     isLocal: participant.isLocal,
   }))
   const onlyLocalParticipant = visibleParticipants.length === 1
+  const screenShareTracks = tracks.filter((track) => track.source === Track.Source.ScreenShare)
+  const activePresentationTrack = screenShareTracks[0] ?? null
+  const cameraTracks = tracks.filter((track) => track.source === Track.Source.Camera)
+  const hasPresentationLayout = Boolean(activePresentationTrack)
+
+  function getTrackKey(track: (typeof tracks)[number]) {
+    return `${track.participant.identity}-${track.source}-${track.publication?.trackSid || 'placeholder'}`
+  }
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[radial-gradient(circle_at_top,#0b1d3b_0%,#020617_42%,#000_100%)] text-white">
@@ -837,14 +865,47 @@ function PortugueseConference({
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <main className={`relative min-w-0 flex-1 transition-[padding] duration-300 ${sidePanel ? 'lg:pr-0' : ''}`}>
-          <GridLayout
-            tracks={tracks}
-            className={`entreus-meet-grid h-full p-2 pb-[calc(7.25rem+env(safe-area-inset-bottom))] sm:p-4 sm:pb-28 [&_.lk-participant-metadata]:hidden [&_.lk-participant-name]:rounded-full [&_.lk-participant-name]:bg-black/55 [&_.lk-participant-name]:px-3 [&_.lk-participant-name]:py-1 [&_.lk-participant-tile]:overflow-hidden [&_.lk-participant-tile]:rounded-2xl [&_.lk-participant-tile]:border [&_.lk-participant-tile]:border-blue-400/15 [&_.lk-participant-tile]:bg-zinc-950 [&_.lk-participant-tile]:shadow-2xl ${compactLayout ? '[&_.lk-grid-layout]:gap-2' : ''}`}
-          >
-            <ParticipantTile />
-          </GridLayout>
+          {hasPresentationLayout && activePresentationTrack ? (
+            <div className="entreus-meet-presentation flex h-full min-h-0 flex-col gap-2 p-2 pb-[calc(7.75rem+env(safe-area-inset-bottom))] sm:gap-3 sm:p-4 sm:pb-28 lg:flex-row">
+              <section className="min-h-0 flex-1 overflow-hidden rounded-2xl border border-blue-300/15 bg-zinc-950 shadow-2xl shadow-black/40 ring-1 ring-blue-200/10">
+                <ParticipantTile trackRef={activePresentationTrack} className="h-full min-h-[48vh] overflow-hidden rounded-2xl bg-black lg:min-h-0 [&_.lk-participant-name]:rounded-full [&_.lk-participant-name]:bg-black/65 [&_.lk-participant-name]:px-3 [&_.lk-participant-name]:py-1" />
+              </section>
+
+              <aside className="min-h-0 shrink-0 overflow-x-auto overflow-y-hidden rounded-2xl border border-blue-300/10 bg-black/45 p-2 shadow-xl shadow-black/25 ring-1 ring-blue-200/5 backdrop-blur-xl lg:h-full lg:w-52 lg:overflow-x-hidden lg:overflow-y-auto xl:w-60">
+                <div className="flex min-w-max gap-2 lg:min-w-0 lg:flex-col">
+                  {cameraTracks.map((track) => (
+                    <ParticipantTile
+                      key={getTrackKey(track)}
+                      trackRef={track}
+                      className="h-24 w-36 shrink-0 overflow-hidden rounded-xl border border-blue-300/10 bg-zinc-950 shadow-lg shadow-black/25 lg:h-32 lg:w-full [&_.lk-participant-name]:max-w-[calc(100%-0.75rem)] [&_.lk-participant-name]:rounded-full [&_.lk-participant-name]:bg-black/65 [&_.lk-participant-name]:px-2 [&_.lk-participant-name]:py-0.5 [&_.lk-participant-name]:text-xs"
+                    />
+                  ))}
+                </div>
+              </aside>
+            </div>
+          ) : (
+            <GridLayout
+              tracks={tracks}
+              className={`entreus-meet-grid h-full p-2 pb-[calc(7.25rem+env(safe-area-inset-bottom))] sm:p-4 sm:pb-28 [&_.lk-participant-metadata]:hidden [&_.lk-participant-name]:rounded-full [&_.lk-participant-name]:bg-black/55 [&_.lk-participant-name]:px-3 [&_.lk-participant-name]:py-1 [&_.lk-participant-tile]:overflow-hidden [&_.lk-participant-tile]:rounded-2xl [&_.lk-participant-tile]:border [&_.lk-participant-tile]:border-blue-400/15 [&_.lk-participant-tile]:bg-zinc-950 [&_.lk-participant-tile]:shadow-2xl ${compactLayout ? '[&_.lk-grid-layout]:gap-2' : ''}`}
+            >
+              <ParticipantTile />
+            </GridLayout>
+          )}
 
           <style jsx global>{`
+            .entreus-meet-presentation .lk-participant-tile {
+              height: 100%;
+            }
+
+            .entreus-meet-presentation .lk-participant-metadata {
+              display: none;
+            }
+
+            .entreus-meet-presentation video {
+              object-fit: contain;
+              background: #000;
+            }
+
             .entreus-meet-grid .lk-grid-layout {
               align-content: center;
               gap: 0.75rem;
@@ -1068,8 +1129,8 @@ function PortugueseConference({
                 <Hand className="h-5 w-5" />
               </button>
 
-              <div ref={moreMenuRef} className="relative">
-                <button type="button" onClick={(event) => { event.stopPropagation(); setShowMoreMenu((current) => !current) }} className={showMoreMenu ? activeIconButtonClass : iconButtonClass} aria-label="Mais opções" title="Mais opções">
+              <div className="relative">
+                <button ref={moreButtonRef} type="button" onPointerDown={(event) => { event.stopPropagation(); ignoreOpeningMorePointer() }} onMouseDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); toggleMoreMenu() }} className={showMoreMenu ? activeIconButtonClass : iconButtonClass} aria-label="Mais opções" title="Mais opções">
                   <MoreHorizontal className="h-5 w-5" />
                 </button>
                 {showMoreMenu ? (
@@ -1080,7 +1141,7 @@ function PortugueseConference({
                       onClick={() => setShowMoreMenu(false)}
                       className="fixed inset-0 z-40 bg-black/45 backdrop-blur-sm sm:hidden"
                     />
-                    <div onClick={(event) => event.stopPropagation()} className="fixed inset-x-0 bottom-0 z-50 max-h-[86vh] overflow-y-auto rounded-t-[2rem] border border-blue-200/10 bg-[linear-gradient(180deg,rgba(10,18,34,0.98),rgba(2,6,23,0.98))] p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] text-sm shadow-2xl shadow-black/60 ring-1 ring-blue-200/10 backdrop-blur-2xl sm:absolute sm:bottom-14 sm:right-0 sm:inset-x-auto sm:max-h-[min(76vh,620px)] sm:w-[22rem] sm:rounded-3xl sm:p-3">
+                    <div ref={moreMenuRef} onPointerDown={(event) => event.stopPropagation()} onMouseDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()} className="fixed inset-x-0 bottom-0 z-50 max-h-[86vh] overflow-y-auto rounded-t-[2rem] border border-blue-200/10 bg-[linear-gradient(180deg,rgba(10,18,34,0.98),rgba(2,6,23,0.98))] p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] text-sm shadow-2xl shadow-black/60 ring-1 ring-blue-200/10 backdrop-blur-2xl sm:absolute sm:bottom-14 sm:right-0 sm:inset-x-auto sm:max-h-[min(76vh,620px)] sm:w-[22rem] sm:rounded-3xl sm:p-3">
                       <div className="mx-auto mb-4 h-1.5 w-11 rounded-full bg-blue-100/25 sm:hidden" />
 
                       <div className="mb-4 flex items-start justify-between gap-3 px-1 sm:mb-3">
@@ -1181,8 +1242,8 @@ function PortugueseConference({
 
                       <div className="mt-3 grid grid-cols-2 gap-2">
                         <DisconnectButton className={sheetDangerActionClass} title="Sair da sala">
-                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-500/20 text-red-100 ring-1 ring-red-200/15">
-                            <PhoneOff className="h-5 w-5" />
+                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-500/25 text-white ring-1 ring-red-100/25">
+                            <PhoneOff className="h-5 w-5 stroke-[2.8]" />
                           </span>
                           <span>Sair da sala</span>
                         </DisconnectButton>
@@ -1198,8 +1259,8 @@ function PortugueseConference({
                 ) : null}
               </div>
 
-              <DisconnectButton className="!m-0 inline-flex !h-11 !min-h-0 !w-11 shrink-0 items-center justify-center !rounded-full !border !border-red-400/35 !bg-red-600/90 !p-0 text-white shadow-md shadow-red-950/25 transition hover:!border-red-300/60 hover:!bg-red-500 focus:outline-none focus:ring-2 focus:ring-red-300/30 sm:!h-11 sm:!w-12" title="Sair">
-                <PhoneOff className="h-5 w-5" />
+              <DisconnectButton className="!m-0 inline-flex !h-11 !min-h-0 !w-11 shrink-0 items-center justify-center !rounded-full !border !border-red-300/50 !bg-red-600/95 !p-0 !text-white text-white shadow-md shadow-red-950/25 transition hover:!border-red-100/70 hover:!bg-red-500 focus:outline-none focus:ring-2 focus:ring-red-100/45 sm:!h-11 sm:!w-12" title="Sair">
+                <PhoneOff className="h-5 w-5 text-white stroke-[2.9]" />
               </DisconnectButton>
             </div>
           </div>
