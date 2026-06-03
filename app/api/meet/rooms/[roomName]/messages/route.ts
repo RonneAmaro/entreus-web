@@ -24,7 +24,11 @@ type ChatMessageRow = {
   sender_identity: string | null
   content: string
   created_at: string
-  type: 'text'
+  type: 'text' | 'attachment'
+  attachment_name: string | null
+  attachment_path: string | null
+  attachment_mime_type: string | null
+  attachment_size: number | null
 }
 
 type CreateMessageBody = {
@@ -39,10 +43,18 @@ function publicChatMessage(row: ChatMessageRow) {
   return {
     type: 'chat' as const,
     id: row.id,
+    messageKind: row.type,
     text: row.content,
     senderName: row.sender_name,
     senderIdentity: row.sender_identity,
     sentAt: Date.parse(row.created_at),
+    attachment: row.type === 'attachment'
+      ? {
+          name: row.attachment_name || row.content,
+          mimeType: row.attachment_mime_type || 'application/octet-stream',
+          size: row.attachment_size || 0,
+        }
+      : null,
   }
 }
 
@@ -105,10 +117,9 @@ export async function GET(request: Request, context: MessagesRouteContext) {
 
   const { data, error } = await access.supabase
     .from('meet_room_chat_messages')
-    .select('id, room_name, sender_name, sender_identity, content, created_at, type')
+    .select('id, room_name, sender_name, sender_identity, content, created_at, type, attachment_name, attachment_path, attachment_mime_type, attachment_size')
     .eq('room_id', access.room.id)
     .eq('room_name', access.room.room_name)
-    .eq('type', 'text')
     .order('created_at', { ascending: false })
     .limit(MAX_CHAT_HISTORY_MESSAGES)
 
@@ -157,7 +168,7 @@ export async function POST(request: Request, context: MessagesRouteContext) {
       content,
       type: 'text',
     })
-    .select('id, room_name, sender_name, sender_identity, content, created_at, type')
+    .select('id, room_name, sender_name, sender_identity, content, created_at, type, attachment_name, attachment_path, attachment_mime_type, attachment_size')
     .single()
 
   if (error) {

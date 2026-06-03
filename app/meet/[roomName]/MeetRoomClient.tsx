@@ -19,6 +19,8 @@ import {
   Check,
   Clock3,
   Copy,
+  Download,
+  FileText,
   Hand,
   LayoutGrid,
   Link2,
@@ -28,6 +30,7 @@ import {
   Mic,
   MoreHorizontal,
   MonitorUp,
+  Paperclip,
   PhoneOff,
   Send,
   Share2,
@@ -133,10 +136,16 @@ type MeetDataMessage =
   | {
       type: 'chat'
       id: string
+      messageKind?: 'text' | 'attachment'
       text: string
       senderName: string
       senderIdentity?: string | null
       sentAt: number
+      attachment?: {
+        name: string
+        mimeType: string
+        size: number
+      } | null
     }
   | {
       type: 'reaction'
@@ -152,8 +161,21 @@ type MeetAlertSound = 'request' | 'hand' | 'join' | 'leave' | 'ending'
 
 const MAX_DISPLAY_NAME_LENGTH = 60
 const MAX_CHAT_MESSAGE_LENGTH = 500
+const MAX_CHAT_ATTACHMENT_SIZE = 5 * 1024 * 1024
 const NAME_REQUIRED_MESSAGE = 'Informe seu nome para entrar na chamada.'
 const MEET_DATA_TOPIC = 'entreus.meet'
+const ALLOWED_CHAT_ATTACHMENT_MIME_BY_EXTENSION: Record<string, string> = {
+  pdf: 'application/pdf',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  webp: 'image/webp',
+  txt: 'text/plain',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+}
+const BLOCKED_CHAT_ATTACHMENT_EXTENSIONS = new Set(['exe', 'bat', 'cmd', 'msi', 'apk', 'js', 'html', 'htm', 'php', 'sh', 'zip', 'rar', '7z'])
 const CHAT_EMOJIS = ['😀', '😂', '😍', '👍', '👏', '❤️', '🔥', '🎉', '🙌', '👀']
 const QUICK_REACTIONS = ['👍', '👏', '😂', '❤️', '🔥', '🎉']
 const MEET_SOUND_PATTERNS: Record<MeetAlertSound, { frequency: number; endFrequency?: number; duration: number; volume: number }> = {
@@ -318,13 +340,23 @@ function parseMeetDataMessage(payload: Uint8Array): MeetDataMessage | null {
     const data = JSON.parse(decoded) as Partial<MeetDataMessage>
 
     if (data.type === 'chat' && typeof data.text === 'string') {
+      const attachment = data.attachment && typeof data.attachment === 'object'
+        ? {
+            name: typeof data.attachment.name === 'string' ? data.attachment.name : data.text,
+            mimeType: typeof data.attachment.mimeType === 'string' ? data.attachment.mimeType : 'application/octet-stream',
+            size: typeof data.attachment.size === 'number' ? data.attachment.size : 0,
+          }
+        : null
+
       return {
         type: 'chat',
         id: typeof data.id === 'string' ? data.id : crypto.randomUUID(),
+        messageKind: data.messageKind === 'attachment' ? 'attachment' : 'text',
         text: data.text.slice(0, MAX_CHAT_MESSAGE_LENGTH),
         senderName: typeof data.senderName === 'string' && data.senderName.trim() ? data.senderName : 'Participante',
         senderIdentity: typeof data.senderIdentity === 'string' && data.senderIdentity.trim() ? data.senderIdentity : null,
         sentAt: typeof data.sentAt === 'number' ? data.sentAt : Date.now(),
+        attachment,
       }
     }
 
@@ -385,6 +417,37 @@ function renderMessageText(text: string) {
 
     return <span key={`${part}-${index}`}>{part}</span>
   })
+}
+
+function getFileExtension(fileName: string) {
+  const normalized = fileName.trim().toLowerCase()
+  const dotIndex = normalized.lastIndexOf('.')
+  if (dotIndex < 0 || dotIndex === normalized.length - 1) return null
+  return normalized.slice(dotIndex + 1)
+}
+
+function validateChatAttachment(file: File) {
+  if (file.size > MAX_CHAT_ATTACHMENT_SIZE) {
+    return 'Arquivo muito grande. Envie um arquivo de ate 5 MB.'
+  }
+
+  const extension = getFileExtension(file.name)
+  if (!extension || BLOCKED_CHAT_ATTACHMENT_EXTENSIONS.has(extension)) {
+    return 'Tipo de arquivo nao permitido.'
+  }
+
+  const expectedMime = ALLOWED_CHAT_ATTACHMENT_MIME_BY_EXTENSION[extension]
+  if (!expectedMime || file.type !== expectedMime) {
+    return 'Tipo de arquivo nao permitido.'
+  }
+
+  return null
+}
+
+function formatFileSize(size: number) {
+  if (size < 1024) return `${size} B`
+  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`
 }
 
 export function InviteActions({ compact = false }: { compact?: boolean }) {
@@ -482,6 +545,8 @@ function PortugueseConference({
   const [chatDraft, setChatDraft] = useState('')
   const [chatUnread, setChatUnread] = useState(false)
   const [showChatEmojiPanel, setShowChatEmojiPanel] = useState(false)
+  const [chatAttachmentUploading, setChatAttachmentUploading] = useState(false)
+  const [chatAttachmentError, setChatAttachmentError] = useState<string | null>(null)
   const [showReactions, setShowReactions] = useState(false)
   const [floatingReactions, setFloatingReactions] = useState<ReactionMessage[]>([])
   const [showMoreMenu, setShowMoreMenu] = useState(false)
@@ -493,6 +558,7 @@ function PortugueseConference({
   const reactionMenuRef = useRef<HTMLDivElement | null>(null)
   const moreMenuRef = useRef<HTMLDivElement | null>(null)
   const chatEmojiPanelRef = useRef<HTMLDivElement | null>(null)
+  const chatAttachmentInputRef = useRef<HTMLInputElement | null>(null)
   const seenHandsRef = useRef<Set<string>>(new Set())
   const handsInitializedRef = useRef(false)
   const seenParticipantsRef = useRef<Set<string>>(new Set())
@@ -703,10 +769,12 @@ function PortugueseConference({
     const draftMessage: ChatMessage = {
       type: 'chat',
       id: crypto.randomUUID(),
+      messageKind: 'text',
       text,
       senderName: localDisplayName,
       senderIdentity: localParticipant?.identity || null,
       sentAt: Date.now(),
+      attachment: null,
     }
 
     setChatDraft('')
@@ -743,6 +811,80 @@ function PortugueseConference({
 
   function insertChatEmoji(emoji: string) {
     setChatDraft((current) => `${current}${emoji}`.slice(0, MAX_CHAT_MESSAGE_LENGTH))
+  }
+
+  async function sendChatAttachment(file: File) {
+    const validationError = validateChatAttachment(file)
+    if (validationError) {
+      setChatAttachmentError(validationError)
+      return
+    }
+
+    const messageId = crypto.randomUUID()
+    const formData = new FormData()
+    formData.append('id', messageId)
+    formData.append('file', file)
+    formData.append('senderName', localDisplayName)
+    if (localParticipant?.identity) formData.append('senderIdentity', localParticipant.identity)
+
+    setChatAttachmentUploading(true)
+    setChatAttachmentError(null)
+
+    try {
+      const headers = await authHeaders()
+      if (!headers) {
+        setChatAttachmentError('Nao foi possivel enviar o arquivo. Tente novamente.')
+        return
+      }
+
+      const response = await fetch(`/api/meet/rooms/${encodeURIComponent(roomName)}/messages/attachments`, {
+        method: 'POST',
+        headers,
+        body: formData,
+      })
+      const data = (await response.json()) as { ok: boolean; message?: ChatMessage; error?: string }
+
+      if (!response.ok || !data.ok || !data.message) {
+        setChatAttachmentError(data.error || 'Nao foi possivel enviar o arquivo. Tente novamente.')
+        return
+      }
+
+      setChatMessages((current) => mergeChatMessages(current, [data.message!]))
+      await send(encodeMeetDataMessage(data.message), { reliable: true, topic: MEET_DATA_TOPIC })
+    } catch (attachmentError) {
+      console.error('Meet attachment upload failed', attachmentError)
+      setChatAttachmentError('Nao foi possivel enviar o arquivo. Tente novamente.')
+    } finally {
+      setChatAttachmentUploading(false)
+      if (chatAttachmentInputRef.current) chatAttachmentInputRef.current.value = ''
+    }
+  }
+
+  async function downloadChatAttachment(message: ChatMessage) {
+    if (message.messageKind !== 'attachment') return
+
+    setChatAttachmentError(null)
+
+    try {
+      const headers = await authHeaders()
+      if (!headers) {
+        setChatAttachmentError('Nao foi possivel gerar o download.')
+        return
+      }
+
+      const response = await fetch(`/api/meet/rooms/${encodeURIComponent(roomName)}/messages/attachments/download?messageId=${encodeURIComponent(message.id)}`, { headers })
+      const data = (await response.json()) as { ok: boolean; url?: string; error?: string }
+
+      if (!response.ok || !data.ok || !data.url) {
+        setChatAttachmentError(data.error || 'Nao foi possivel gerar o download.')
+        return
+      }
+
+      window.open(data.url, '_blank', 'noopener,noreferrer')
+    } catch (downloadError) {
+      console.error('Meet attachment download failed', downloadError)
+      setChatAttachmentError('Nao foi possivel gerar o download.')
+    }
   }
 
   async function sendReaction(emoji: string) {
@@ -1298,7 +1440,23 @@ function PortugueseConference({
                           <span className="truncate text-sm font-bold text-blue-100">{message.senderName}</span>
                           <span className="shrink-0 text-xs text-zinc-500">{formatTime(message.sentAt)}</span>
                         </div>
-                        <p className="break-words text-sm leading-6 text-zinc-200">{renderMessageText(message.text)}</p>
+                        {message.messageKind === 'attachment' && message.attachment ? (
+                          <div className="mt-2 flex items-center gap-3 rounded-2xl border border-blue-300/15 bg-blue-500/10 p-3">
+                            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-500/15 text-blue-100 ring-1 ring-blue-200/10">
+                              <FileText className="h-5 w-5" />
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-sm font-bold text-zinc-100">{message.attachment.name}</span>
+                              <span className="block text-xs text-zinc-500">{formatFileSize(message.attachment.size)}</span>
+                            </span>
+                            <button type="button" onClick={() => void downloadChatAttachment(message)} className="inline-flex min-h-9 shrink-0 items-center justify-center gap-1 rounded-full border border-blue-300/20 bg-blue-500/15 px-3 text-xs font-bold text-blue-50 transition hover:bg-blue-500/25" aria-label={`Baixar ${message.attachment.name}`} title="Baixar">
+                              <Download className="h-3.5 w-3.5" />
+                              Baixar
+                            </button>
+                          </div>
+                        ) : (
+                          <p className="break-words text-sm leading-6 text-zinc-200">{renderMessageText(message.text)}</p>
+                        )}
                       </div>
                     ))
                   )}
@@ -1311,6 +1469,19 @@ function PortugueseConference({
                   }}
                 >
                   <div className="flex items-end gap-2 rounded-2xl border border-blue-400/20 bg-zinc-950/80 p-2 focus-within:border-blue-300/50">
+                    <input
+                      ref={chatAttachmentInputRef}
+                      type="file"
+                      className="hidden"
+                      accept=".pdf,.jpg,.jpeg,.png,.webp,.txt,.docx,.xlsx,.pptx,application/pdf,image/jpeg,image/png,image/webp,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0]
+                        if (file) void sendChatAttachment(file)
+                      }}
+                    />
+                    <button type="button" onClick={() => chatAttachmentInputRef.current?.click()} disabled={chatAttachmentUploading} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-blue-300/15 bg-white/[0.06] text-zinc-100 transition hover:bg-blue-500/15 disabled:cursor-not-allowed disabled:opacity-50" aria-label="Enviar anexo" title="Enviar anexo">
+                      {chatAttachmentUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
+                    </button>
                     <textarea
                       value={chatDraft}
                       onChange={(event) => setChatDraft(event.target.value.slice(0, MAX_CHAT_MESSAGE_LENGTH))}
@@ -1336,7 +1507,12 @@ function PortugueseConference({
                       <Send className="h-4 w-4" />
                     </button>
                   </div>
-                  <p className="mt-2 text-right text-xs text-zinc-500">{chatDraft.length}/{MAX_CHAT_MESSAGE_LENGTH}</p>
+                  <div className="mt-2 flex items-center justify-between gap-3 text-xs">
+                    <span className={chatAttachmentError ? 'text-red-200' : 'text-zinc-500'}>
+                      {chatAttachmentError || (chatAttachmentUploading ? 'Enviando arquivo...' : '')}
+                    </span>
+                    <span className="shrink-0 text-zinc-500">{chatDraft.length}/{MAX_CHAT_MESSAGE_LENGTH}</span>
+                  </div>
                 </form>
               </>
             ) : (
