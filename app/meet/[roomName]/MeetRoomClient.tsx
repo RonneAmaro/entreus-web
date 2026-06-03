@@ -10,6 +10,7 @@ import {
   TrackToggle,
   useDataChannel,
   useConnectionState,
+  useLocalParticipant,
   useParticipants,
   useTracks,
 } from '@livekit/components-react'
@@ -112,6 +113,13 @@ type HandsResponse =
     }
   | { ok: false; error: string }
 
+type ChatMessagesResponse =
+  | {
+      ok: true
+      messages: ChatMessage[]
+    }
+  | { ok: false; error: string }
+
 type MeetRoomClientProps = {
   roomName: string
 }
@@ -127,6 +135,7 @@ type MeetDataMessage =
       id: string
       text: string
       senderName: string
+      senderIdentity?: string | null
       sentAt: number
     }
   | {
@@ -145,6 +154,7 @@ const MAX_DISPLAY_NAME_LENGTH = 60
 const MAX_CHAT_MESSAGE_LENGTH = 500
 const NAME_REQUIRED_MESSAGE = 'Informe seu nome para entrar na chamada.'
 const MEET_DATA_TOPIC = 'entreus.meet'
+const CHAT_EMOJIS = ['😀', '😂', '😍', '👍', '👏', '❤️', '🔥', '🎉', '🙌', '👀']
 const QUICK_REACTIONS = ['👍', '👏', '😂', '❤️', '🔥', '🎉']
 const MEET_SOUND_PATTERNS: Record<MeetAlertSound, { frequency: number; endFrequency?: number; duration: number; volume: number }> = {
   request: { frequency: 740, endFrequency: 880, duration: 0.16, volume: 0.045 },
@@ -313,6 +323,7 @@ function parseMeetDataMessage(payload: Uint8Array): MeetDataMessage | null {
         id: typeof data.id === 'string' ? data.id : crypto.randomUUID(),
         text: data.text.slice(0, MAX_CHAT_MESSAGE_LENGTH),
         senderName: typeof data.senderName === 'string' && data.senderName.trim() ? data.senderName : 'Participante',
+        senderIdentity: typeof data.senderIdentity === 'string' && data.senderIdentity.trim() ? data.senderIdentity : null,
         sentAt: typeof data.sentAt === 'number' ? data.sentAt : Date.now(),
       }
     }
@@ -337,6 +348,25 @@ function encodeMeetDataMessage(message: MeetDataMessage) {
   return new TextEncoder().encode(JSON.stringify(message))
 }
 
+function mergeChatMessages(current: ChatMessage[], incoming: ChatMessage[]) {
+  const byId = new Map<string, ChatMessage>()
+
+  for (const message of [...current, ...incoming]) {
+    byId.set(message.id, message)
+  }
+
+  return [...byId.values()].sort((a, b) => a.sentAt - b.sentAt).slice(-100)
+}
+
+function isSafeHttpUrl(value: string) {
+  try {
+    const url = new URL(value)
+    return url.protocol === 'http:' || url.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
 function renderMessageText(text: string) {
   const parts = text.split(/(https?:\/\/[^\s]+)/g)
 
@@ -344,8 +374,10 @@ function renderMessageText(text: string) {
     if (!part) return null
 
     if (/^https?:\/\//.test(part)) {
+      if (!isSafeHttpUrl(part)) return <span key={`${part}-${index}`}>{part}</span>
+
       return (
-        <a key={`${part}-${index}`} href={part} target="_blank" rel="noreferrer" className="text-blue-300 underline decoration-blue-300/50 underline-offset-2 hover:text-blue-200">
+        <a key={`${part}-${index}`} href={part} target="_blank" rel="noopener noreferrer" className="text-blue-300 underline decoration-blue-300/50 underline-offset-2 hover:text-blue-200">
           {part}
         </a>
       )
@@ -414,6 +446,7 @@ function PortugueseConference({
   roomName,
   secondsLeft,
   soundAlertsEnabled,
+  authHeaders,
   onModerateRequest,
   onRetryMediaPermissions,
   onToggleSoundAlerts,
@@ -428,6 +461,7 @@ function PortugueseConference({
   roomName: string
   secondsLeft: number | null
   soundAlertsEnabled: boolean
+  authHeaders: () => Promise<{ Authorization: string } | null>
   onModerateRequest: (memberId: string, action: 'approve' | 'reject') => Promise<void>
   onRetryMediaPermissions: () => Promise<void>
   onToggleSoundAlerts: () => void
@@ -438,6 +472,7 @@ function PortugueseConference({
     { source: Track.Source.ScreenShare, withPlaceholder: false },
   ])
   const connectionState = useConnectionState()
+  const { localParticipant } = useLocalParticipant()
   const participants = useParticipants()
   const [microphoneEnabled, setMicrophoneEnabled] = useState(true)
   const [cameraEnabled, setCameraEnabled] = useState(true)
@@ -446,6 +481,7 @@ function PortugueseConference({
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [chatDraft, setChatDraft] = useState('')
   const [chatUnread, setChatUnread] = useState(false)
+  const [showChatEmojiPanel, setShowChatEmojiPanel] = useState(false)
   const [showReactions, setShowReactions] = useState(false)
   const [floatingReactions, setFloatingReactions] = useState<ReactionMessage[]>([])
   const [showMoreMenu, setShowMoreMenu] = useState(false)
@@ -456,6 +492,7 @@ function PortugueseConference({
   const [timeWarningMinimized, setTimeWarningMinimized] = useState(false)
   const reactionMenuRef = useRef<HTMLDivElement | null>(null)
   const moreMenuRef = useRef<HTMLDivElement | null>(null)
+  const chatEmojiPanelRef = useRef<HTMLDivElement | null>(null)
   const seenHandsRef = useRef<Set<string>>(new Set())
   const handsInitializedRef = useRef(false)
   const seenParticipantsRef = useRef<Set<string>>(new Set())
@@ -470,7 +507,7 @@ function PortugueseConference({
     if (!data) return
 
     if (data.type === 'chat') {
-      setChatMessages((current) => [...current, data].slice(-80))
+      setChatMessages((current) => mergeChatMessages(current, [data]))
       if (sidePanel !== 'chat') setChatUnread(true)
       return
     }
@@ -481,6 +518,31 @@ function PortugueseConference({
   useEffect(() => {
     if (sidePanel === 'chat') setChatUnread(false)
   }, [sidePanel])
+
+  useEffect(() => {
+    let active = true
+
+    async function loadChatMessages() {
+      const headers = await authHeaders()
+      if (!headers) return
+
+      try {
+        const response = await fetch(`/api/meet/rooms/${encodeURIComponent(roomName)}/messages`, { headers })
+        const data = (await response.json()) as ChatMessagesResponse
+
+        if (!active || !response.ok || !data.ok) return
+        setChatMessages((current) => mergeChatMessages(current, data.messages))
+      } catch (chatHistoryError) {
+        console.error('Meet chat history load failed', chatHistoryError)
+      }
+    }
+
+    void loadChatMessages()
+
+    return () => {
+      active = false
+    }
+  }, [authHeaders, roomName])
 
   useEffect(() => {
     if (!showTimeWarning) {
@@ -521,11 +583,26 @@ function PortugueseConference({
       if (showMoreMenu && moreMenuRef.current && !moreMenuRef.current.contains(target)) {
         setShowMoreMenu(false)
       }
+
+      if (showChatEmojiPanel && chatEmojiPanelRef.current && !chatEmojiPanelRef.current.contains(target)) {
+        setShowChatEmojiPanel(false)
+      }
     }
 
-    document.addEventListener('mousedown', handleDocumentPointerDown)
-    return () => document.removeEventListener('mousedown', handleDocumentPointerDown)
-  }, [showMoreMenu, showReactions])
+    function handleDocumentKeyDown(event: KeyboardEvent) {
+      if (event.key !== 'Escape') return
+      setShowMoreMenu(false)
+      setShowReactions(false)
+      setShowChatEmojiPanel(false)
+    }
+
+    document.addEventListener('pointerdown', handleDocumentPointerDown)
+    document.addEventListener('keydown', handleDocumentKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', handleDocumentPointerDown)
+      document.removeEventListener('keydown', handleDocumentKeyDown)
+    }
+  }, [showChatEmojiPanel, showMoreMenu, showReactions])
 
   useEffect(() => {
     if (floatingReactions.length === 0) return
@@ -615,17 +692,49 @@ function PortugueseConference({
     const text = chatDraft.trim().slice(0, MAX_CHAT_MESSAGE_LENGTH)
     if (!text) return
 
-    const message: ChatMessage = {
+    const draftMessage: ChatMessage = {
       type: 'chat',
       id: crypto.randomUUID(),
       text,
       senderName: localDisplayName,
+      senderIdentity: localParticipant?.identity || null,
       sentAt: Date.now(),
     }
 
-    setChatMessages((current) => [...current, message].slice(-80))
     setChatDraft('')
+    setShowChatEmojiPanel(false)
+
+    let message = draftMessage
+
+    try {
+      const headers = await authHeaders()
+      if (headers) {
+        const response = await fetch(`/api/meet/rooms/${encodeURIComponent(roomName)}/messages`, {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: draftMessage.id,
+            content: draftMessage.text,
+            senderName: draftMessage.senderName,
+            senderIdentity: draftMessage.senderIdentity,
+            type: 'text',
+          }),
+        })
+        const data = (await response.json()) as { ok: boolean; message?: ChatMessage }
+        if (response.ok && data.ok && data.message) {
+          message = data.message
+        }
+      }
+    } catch (chatSaveError) {
+      console.error('Meet chat save failed', chatSaveError)
+    }
+
+    setChatMessages((current) => mergeChatMessages(current, [message]))
     await send(encodeMeetDataMessage(message), { reliable: true, topic: MEET_DATA_TOPIC })
+  }
+
+  function insertChatEmoji(emoji: string) {
+    setChatDraft((current) => `${current}${emoji}`.slice(0, MAX_CHAT_MESSAGE_LENGTH))
   }
 
   async function sendReaction(emoji: string) {
@@ -960,7 +1069,7 @@ function PortugueseConference({
               </button>
 
               <div ref={moreMenuRef} className="relative">
-                <button type="button" onClick={() => setShowMoreMenu((current) => !current)} className={showMoreMenu ? activeIconButtonClass : iconButtonClass} aria-label="Mais opções" title="Mais opções">
+                <button type="button" onClick={(event) => { event.stopPropagation(); setShowMoreMenu((current) => !current) }} className={showMoreMenu ? activeIconButtonClass : iconButtonClass} aria-label="Mais opções" title="Mais opções">
                   <MoreHorizontal className="h-5 w-5" />
                 </button>
                 {showMoreMenu ? (
@@ -971,7 +1080,7 @@ function PortugueseConference({
                       onClick={() => setShowMoreMenu(false)}
                       className="fixed inset-0 z-40 bg-black/45 backdrop-blur-sm sm:hidden"
                     />
-                    <div className="fixed inset-x-0 bottom-0 z-50 max-h-[86vh] overflow-y-auto rounded-t-[2rem] border border-blue-200/10 bg-[linear-gradient(180deg,rgba(10,18,34,0.98),rgba(2,6,23,0.98))] p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] text-sm shadow-2xl shadow-black/60 ring-1 ring-blue-200/10 backdrop-blur-2xl sm:absolute sm:bottom-14 sm:right-0 sm:inset-x-auto sm:max-h-[min(76vh,620px)] sm:w-[22rem] sm:rounded-3xl sm:p-3">
+                    <div onClick={(event) => event.stopPropagation()} className="fixed inset-x-0 bottom-0 z-50 max-h-[86vh] overflow-y-auto rounded-t-[2rem] border border-blue-200/10 bg-[linear-gradient(180deg,rgba(10,18,34,0.98),rgba(2,6,23,0.98))] p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] text-sm shadow-2xl shadow-black/60 ring-1 ring-blue-200/10 backdrop-blur-2xl sm:absolute sm:bottom-14 sm:right-0 sm:inset-x-auto sm:max-h-[min(76vh,620px)] sm:w-[22rem] sm:rounded-3xl sm:p-3">
                       <div className="mx-auto mb-4 h-1.5 w-11 rounded-full bg-blue-100/25 sm:hidden" />
 
                       <div className="mb-4 flex items-start justify-between gap-3 px-1 sm:mb-3">
@@ -1119,7 +1228,7 @@ function PortugueseConference({
                 <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4 pb-5">
                   {chatMessages.length === 0 ? (
                     <div className="rounded-2xl border border-blue-400/15 bg-blue-500/10 p-4 text-sm leading-6 text-zinc-300">
-                      Nenhuma mensagem ainda. O chat usa o canal de dados da chamada e não fica salvo no banco.
+                      Nenhuma mensagem ainda. As mensagens desta sala aparecem aqui enquanto a reunião estiver ativa.
                     </div>
                   ) : (
                     chatMessages.map((message) => (
@@ -1148,6 +1257,20 @@ function PortugueseConference({
                       className="min-h-10 flex-1 resize-none bg-transparent px-2 py-2 text-sm text-white outline-none placeholder:text-zinc-600"
                       placeholder="Escreva uma mensagem"
                     />
+                    <div ref={chatEmojiPanelRef} className="relative">
+                      <button type="button" onClick={() => setShowChatEmojiPanel((current) => !current)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-blue-300/15 bg-white/[0.06] text-zinc-100 transition hover:bg-blue-500/15" aria-label="Adicionar emoji" title="Adicionar emoji">
+                        <Smile className="h-4 w-4" />
+                      </button>
+                      {showChatEmojiPanel ? (
+                        <div className="absolute bottom-12 right-0 z-50 grid w-48 grid-cols-5 gap-1 rounded-2xl border border-blue-300/20 bg-black/95 p-2 shadow-2xl shadow-black/45 ring-1 ring-blue-100/10 backdrop-blur-2xl">
+                          {CHAT_EMOJIS.map((emoji) => (
+                            <button key={emoji} type="button" onClick={() => insertChatEmoji(emoji)} className="flex h-9 w-9 items-center justify-center rounded-xl text-lg transition hover:bg-blue-500/20" aria-label={`Inserir emoji ${emoji}`} title={`Inserir emoji ${emoji}`}>
+                              {emoji}
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
                     <button type="submit" disabled={!chatDraft.trim()} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50">
                       <Send className="h-4 w-4" />
                     </button>
@@ -1756,6 +1879,7 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
             roomName={roomName}
             secondsLeft={secondsLeft}
             soundAlertsEnabled={soundAlertsEnabled}
+            authHeaders={authHeaders}
             onModerateRequest={moderate}
             onRetryMediaPermissions={retryMediaPermissions}
             onToggleSoundAlerts={() => setSoundAlertsEnabled((current) => !current)}
