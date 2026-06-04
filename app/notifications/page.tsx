@@ -85,6 +85,9 @@ type NotificationView = Notification & {
   itacashPurchaseRequest: ItaCashPurchaseRequestSummary | null
 }
 
+const POST_HIDDEN_NOTIFICATION_TEXT =
+  'Seu conteudo foi ocultado pela moderacao apos analise de uma denuncia. Identificamos que ele nao esta de acordo com as diretrizes da plataforma. Revise nossas regras. Novas violacoes podem gerar restricoes na conta.'
+
 function getInitial(text: string) {
   if (!text) return 'U'
   return text.slice(0, 1).toUpperCase()
@@ -174,7 +177,7 @@ function getNotificationActionTextView(notification: NotificationView) {
     return `enviou apoio em ItaCash para voce.`
   }
   if (notification.type === 'post_hidden') {
-    return 'Seu conteudo foi ocultado pela moderacao apos analise de uma denuncia.'
+    return POST_HIDDEN_NOTIFICATION_TEXT
   }
   if (notification.type === 'moderation_warning') {
     return 'Voce recebeu um aviso da moderacao.'
@@ -764,7 +767,7 @@ export default function NotificationsPage() {
                       </p>
                     )}
 
-                    {isModeration && (
+                    {isModeration && notification.type !== 'post_hidden' && (
                       <p className="mt-3 rounded-xl bg-amber-100 px-3 py-2 text-sm font-semibold text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
                         Identificamos que ele nao esta de acordo com as diretrizes da plataforma. Revise nossas regras. Novas violacoes podem gerar restricoes na conta.
                       </p>

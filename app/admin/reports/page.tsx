@@ -3,7 +3,21 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, ArrowLeft, Flag, Image as ImageIcon, Loader2, RotateCcw, ShieldAlert, ShieldOff, Video } from 'lucide-react'
+import {
+  AlertTriangle,
+  ArrowLeft,
+  Clipboard,
+  Eye,
+  Flag,
+  Image as ImageIcon,
+  Loader2,
+  RotateCcw,
+  SearchCheck,
+  ShieldAlert,
+  ShieldOff,
+  Video,
+  XCircle,
+} from 'lucide-react'
 import { isAdminRole } from '@/lib/admin'
 import { isMissingPostModerationColumnError, normalizeModerationStatus, type ModeratedPostFields } from '@/lib/post-moderation'
 import { supabase } from '@/lib/supabase'
@@ -224,8 +238,8 @@ export default function AdminReportsPage() {
   function getStatusLabel(status: string | null | undefined) {
     const normalized = normalizeReportStatus(status)
     if (normalized === 'in_review') return 'Em analise'
-    if (normalized === 'resolved') return 'Procedente / resolvida'
-    if (normalized === 'rejected') return 'Denuncia recusada'
+    if (normalized === 'resolved') return 'Resolvida'
+    if (normalized === 'rejected') return 'Recusada'
     if (normalized === 'archived') return 'Arquivada'
     return 'Pendente'
   }
@@ -374,6 +388,7 @@ export default function AdminReportsPage() {
         },
       }))
       setMessage('Conteudo restaurado.')
+      notifyAdminPendingAlertsChanged()
     }
 
     setUpdatingPostId(null)
@@ -428,7 +443,7 @@ export default function AdminReportsPage() {
 
         <header className="mt-6 rounded-[2rem] border border-red-300/25 bg-red-500/10 p-6 ring-1 ring-red-300/10">
           <Flag className="h-9 w-9 text-red-100" />
-          <h1 className="mt-4 text-3xl font-black">Denuncias pendentes</h1>
+          <h1 className="mt-4 text-3xl font-black">Fluxo de denuncias</h1>
           <p className="mt-2 text-sm leading-6 text-red-100/80">
             Decida se a denuncia entra em analise, se sera recusada ou se o conteudo deve ser ocultado.
           </p>
@@ -563,14 +578,16 @@ export default function AdminReportsPage() {
                       <p className="text-xs font-black uppercase tracking-[0.16em] text-zinc-500">
                         Post denunciado
                       </p>
-                      <Link href={`/post/${report.reported_post_id}`} className="rounded-full bg-white px-4 py-2 text-center text-xs font-black text-black">
+                      <Link href={`/post/${report.reported_post_id}`} className="inline-flex items-center justify-center gap-1 rounded-full bg-white px-4 py-2 text-center text-xs font-black text-black">
+                        <Eye className="h-3.5 w-3.5" />
                         Abrir post
                       </Link>
                       <button
                         type="button"
                         onClick={() => copyPostLink(report.reported_post_id as string)}
-                        className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-black text-white transition hover:bg-white/10"
+                        className="inline-flex items-center justify-center gap-1 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-black text-white transition hover:bg-white/10"
                       >
+                        <Clipboard className="h-3.5 w-3.5" />
                         Copiar link
                       </button>
                       {postModerationStatus === 'active' ? (
@@ -613,16 +630,18 @@ export default function AdminReportsPage() {
                     type="button"
                     onClick={() => updateReportStatus(report.id, 'in_review')}
                     disabled={updatingReportId === report.id}
-                    className="rounded-full border border-blue-300/20 bg-blue-500/10 px-4 py-2 text-xs font-black text-blue-100 transition hover:bg-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="inline-flex items-center justify-center gap-1 rounded-full border border-blue-300/20 bg-blue-500/10 px-4 py-2 text-xs font-black text-blue-100 transition hover:bg-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60"
                   >
+                    <SearchCheck className="h-3.5 w-3.5" />
                     Marcar em analise
                   </button>
                   <button
                     type="button"
                     onClick={() => rejectReport(report)}
                     disabled={updatingReportId === report.id}
-                    className="rounded-full border border-zinc-300/20 bg-white/5 px-4 py-2 text-xs font-black text-zinc-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="inline-flex items-center justify-center gap-1 rounded-full border border-zinc-300/20 bg-white/5 px-4 py-2 text-xs font-black text-zinc-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
                   >
+                    <XCircle className="h-3.5 w-3.5" />
                     Recusar denuncia
                   </button>
                   {updatingReportId === report.id && (
