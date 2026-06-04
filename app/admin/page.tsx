@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from 'react'
 import {
   AlertTriangle,
   ArrowLeft,
+  Award,
   Bug,
   CheckCircle2,
   Coins,
@@ -69,6 +70,12 @@ const adminCards = [
     description: 'Conteudos ocultos e revisao de moderacao.',
     href: '/admin/moderation',
     icon: ShieldOff,
+  },
+  {
+    title: 'Selos de usuarios',
+    description: 'Conceda ou remova selos manualmente sem acessar o Supabase.',
+    href: '/admin/badges',
+    icon: Award,
   },
   {
     title: 'Auditoria R2',
