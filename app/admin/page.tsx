@@ -13,6 +13,7 @@ import {
   Flag,
   Gift,
   Lightbulb,
+  LockKeyhole,
   Loader2,
   ShieldOff,
   ShieldAlert,
@@ -74,6 +75,13 @@ const adminCards = [
     href: '/admin/r2-orphans',
     icon: DatabaseZap,
     badge: 'dry-run',
+  },
+  {
+    title: 'Checklist de seguranca',
+    description: 'Confira buckets, migrations e pontos criticos antes de liberar usuarios reais.',
+    href: '/admin/security-check',
+    icon: LockKeyhole,
+    badge: 'manual',
   },
   {
     title: 'Sugestoes da Comunidade',

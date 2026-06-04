@@ -337,6 +337,16 @@ Do not change financial rules during smoke tests.
 - Do not enable WhatsApp webhooks without verifying app secret and callback URL.
 - Do not run LiveKit tests with production rooms if moderation/access policies are still being tuned.
 
+## 12.1 Checklist de seguranca antes de convidar usuarios reais
+
+- Verify private buckets in Supabase Storage: `meet-chat-attachments` and `age-verifications`.
+- Confirm critical migrations were applied manually in Supabase SQL Editor before testing real flows.
+- Test Meet chat history, attachment upload, blocked file types, approved-user download, and denied download for non-approved users.
+- Test admin reports: mark in review, reject, hide content, restore content, and confirm pending counts only include `null`/`pending`.
+- Test 18+ content with a minor or non-verified user and confirm sensitive media is not mounted before reveal.
+- Test ItaCash webhook idempotency in a controlled environment so repeated Mercado Pago events cannot duplicate balance.
+- Test upload/R2 presigned URLs, type/size validation, and orphan-media audit before planning any cleanup.
+
 ## 13. Known remaining risks
 
 - Production Supabase state must be checked manually against the migration list.
