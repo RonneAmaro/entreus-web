@@ -61,7 +61,41 @@ type BadgesApiResponse = {
   error?: string
 }
 
+type BadgeSuggestion = {
+  userId: string
+  username: string | null
+  displayName: string | null
+  avatarUrl: string | null
+  score: number
+  hasCommunityBadge: boolean
+  reason: string
+  metrics: {
+    postsPublished: number
+    commentsMade: number
+    likesReceived: number
+    commentsReceived: number
+    repostsReceived: number
+    hiddenPosts: number
+    activeDays: number
+  }
+}
+
+type BadgeSuggestionsResponse = {
+  ok: boolean
+  threshold?: {
+    score: number
+    alternative: string
+  }
+  scoring?: Record<string, number | string>
+  metricsUsed?: string[]
+  warnings?: string[]
+  candidates?: BadgeSuggestion[]
+  alreadyAwarded?: BadgeSuggestion[]
+  error?: string
+}
+
 const featuredBadgeSlugs = ['community', 'elder', 'vip', 'vip_premium']
+const communitySuggestionReason = 'Sugerido automaticamente por engajamento na comunidade.'
 
 function getInitial(text: string) {
   return (text || 'U').slice(0, 1).toUpperCase()
@@ -69,6 +103,10 @@ function getInitial(text: string) {
 
 function getProfileName(profile: UserProfile) {
   return profile.display_name || profile.username || 'Usuario'
+}
+
+function getSuggestionName(suggestion: BadgeSuggestion) {
+  return suggestion.displayName || suggestion.username || 'Usuario'
 }
 
 function formatDate(value: string | null | undefined) {
@@ -97,6 +135,11 @@ export default function AdminBadgesPage() {
   const [reason, setReason] = useState('')
   const [badges, setBadges] = useState<Badge[]>([])
   const [users, setUsers] = useState<UserProfile[]>([])
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false)
+  const [suggestionCandidates, setSuggestionCandidates] = useState<BadgeSuggestion[]>([])
+  const [alreadyAwardedCommunity, setAlreadyAwardedCommunity] = useState<BadgeSuggestion[]>([])
+  const [suggestionWarnings, setSuggestionWarnings] = useState<string[]>([])
+  const [metricsUsed, setMetricsUsed] = useState<string[]>([])
 
   const grantableBadges = useMemo(() => {
     const bySlug = new Map(badges.map((badge) => [badge.slug, badge]))
@@ -145,6 +188,45 @@ export default function AdminBadgesPage() {
     }
   }, [query])
 
+  const loadSuggestions = useCallback(async () => {
+    setSuggestionsLoading(true)
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+
+    if (!session?.access_token) {
+      setSuggestionsLoading(false)
+      return
+    }
+
+    try {
+      const response = await fetch('/api/admin/badges/suggestions', {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      })
+      const data = (await response.json()) as BadgeSuggestionsResponse
+
+      if (!response.ok || !data.ok) {
+        setSuggestionCandidates([])
+        setAlreadyAwardedCommunity([])
+        setSuggestionWarnings([getFriendlyError(data.error)])
+      } else {
+        setSuggestionCandidates(data.candidates || [])
+        setAlreadyAwardedCommunity(data.alreadyAwarded || [])
+        setSuggestionWarnings(data.warnings || [])
+        setMetricsUsed(data.metricsUsed || [])
+      }
+    } catch {
+      setSuggestionCandidates([])
+      setAlreadyAwardedCommunity([])
+      setSuggestionWarnings(['Nao foi possivel carregar recomendacoes agora.'])
+    } finally {
+      setSuggestionsLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
     async function loadPage() {
       setLoading(true)
@@ -182,11 +264,12 @@ export default function AdminBadgesPage() {
 
       if (isAdminRole(profile.role)) {
         void loadBadges('')
+        void loadSuggestions()
       }
     }
 
     loadPage()
-  }, [loadBadges, router])
+  }, [loadBadges, loadSuggestions, router])
 
   async function searchUsers(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -205,6 +288,7 @@ export default function AdminBadgesPage() {
     badgeSlug?: string
     userBadgeId?: string
     label: string
+    reasonOverride?: string
   }) {
     if (payload.action === 'revoke') {
       const confirmed = window.confirm(`Remover ${payload.label} deste usuario?`)
@@ -236,7 +320,7 @@ export default function AdminBadgesPage() {
           userId: payload.userId,
           badgeSlug: payload.badgeSlug,
           userBadgeId: payload.userBadgeId,
-          reason: reason.trim() || null,
+          reason: payload.reasonOverride || reason.trim() || null,
         }),
       })
       const data = (await response.json()) as BadgesApiResponse
@@ -246,6 +330,7 @@ export default function AdminBadgesPage() {
       } else {
         setMessage(data.message || (payload.action === 'grant' ? 'Selo concedido com sucesso.' : 'Selo removido com sucesso.'))
         await loadBadges(query)
+        await loadSuggestions()
       }
     } catch {
       setMessage('Nao foi possivel atualizar selo agora.')
@@ -301,6 +386,142 @@ export default function AdminBadgesPage() {
             {message}
           </div>
         )}
+
+        <section className="mt-5 rounded-[2rem] border border-blue-300/20 bg-blue-500/10 p-5 ring-1 ring-blue-300/10">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Sparkles className="h-5 w-5 text-blue-100" />
+                <h2 className="text-xl font-black text-white">Recomendacoes de Selo Comunidade</h2>
+                <span className="rounded-full border border-blue-200/20 bg-black/20 px-3 py-1 text-xs font-black text-blue-100">
+                  {suggestionCandidates.length} candidatos
+                </span>
+              </div>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-blue-50/80">
+                Usuarios com participacao real na plataforma que podem merecer o Selo Comunidade. A concessao continua manual.
+              </p>
+              {metricsUsed.length > 0 && (
+                <p className="mt-2 text-xs leading-5 text-blue-100/60">
+                  Metricas usadas: {metricsUsed.join(', ')}.
+                </p>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => loadSuggestions()}
+              disabled={suggestionsLoading}
+              className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-black text-black transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {suggestionsLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+              Atualizar sugestoes
+            </button>
+          </div>
+
+          {suggestionWarnings.length > 0 && (
+            <div className="mt-4 rounded-2xl border border-amber-300/20 bg-amber-500/10 px-4 py-3 text-sm font-semibold text-amber-100">
+              {suggestionWarnings.join(' | ')}
+            </div>
+          )}
+
+          <div className="mt-4 grid gap-3">
+            {suggestionsLoading && suggestionCandidates.length === 0 ? (
+              <div className="flex items-center justify-center gap-2 rounded-3xl border border-white/10 bg-black/25 p-6 text-blue-100">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                Calculando recomendacoes...
+              </div>
+            ) : suggestionCandidates.length === 0 ? (
+              <div className="rounded-3xl border border-white/10 bg-black/25 p-6 text-center text-sm font-semibold text-blue-100/75">
+                Nenhum candidato encontrado ainda.
+              </div>
+            ) : (
+              suggestionCandidates.map((suggestion, index) => {
+                const name = getSuggestionName(suggestion)
+                const key = `grant-${suggestion.userId}-community`
+
+                return (
+                  <article key={suggestion.userId} className="rounded-3xl border border-white/10 bg-zinc-950/80 p-4 ring-1 ring-white/5">
+                    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+                      <div className="min-w-0">
+                        <div className="flex items-start gap-3">
+                          {suggestion.avatarUrl ? (
+                            <img
+                              src={suggestion.avatarUrl}
+                              alt={name}
+                              className="h-12 w-12 rounded-full border border-blue-300/20 object-cover"
+                            />
+                          ) : (
+                            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-blue-300/20 bg-blue-950/40 text-sm font-black text-blue-100">
+                              {getInitial(name)}
+                            </span>
+                          )}
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="rounded-full bg-white px-2.5 py-1 text-xs font-black text-black">#{index + 1}</span>
+                              <h3 className="truncate text-lg font-black text-white">{name}</h3>
+                              <span className="rounded-full border border-emerald-300/20 bg-emerald-500/10 px-3 py-1 text-xs font-black text-emerald-100">
+                                Score {suggestion.score}
+                              </span>
+                            </div>
+                            <p className="mt-1 truncate text-sm text-blue-100/70">@{suggestion.username || 'sem-username'}</p>
+                            <p className="mt-2 text-sm leading-6 text-zinc-300">{suggestion.reason}</p>
+                          </div>
+                        </div>
+
+                        <div className="mt-3 grid gap-2 text-xs font-black text-zinc-300 sm:grid-cols-3 xl:grid-cols-6">
+                          <span className="rounded-2xl border border-white/10 bg-black/25 px-3 py-2">Posts: {suggestion.metrics.postsPublished}</span>
+                          <span className="rounded-2xl border border-white/10 bg-black/25 px-3 py-2">Comentarios: {suggestion.metrics.commentsMade}</span>
+                          <span className="rounded-2xl border border-white/10 bg-black/25 px-3 py-2">Curtidas recebidas: {suggestion.metrics.likesReceived}</span>
+                          <span className="rounded-2xl border border-white/10 bg-black/25 px-3 py-2">Comentarios recebidos: {suggestion.metrics.commentsReceived}</span>
+                          <span className="rounded-2xl border border-white/10 bg-black/25 px-3 py-2">Reposts recebidos: {suggestion.metrics.repostsReceived}</span>
+                          <span className="rounded-2xl border border-white/10 bg-black/25 px-3 py-2">Dias ativos: {suggestion.metrics.activeDays}</span>
+                        </div>
+                      </div>
+
+                      <div className="grid gap-2 sm:flex lg:grid lg:min-w-56">
+                        <Link href={suggestion.username ? `/u/${suggestion.username}` : '/search'} className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-4 py-2 text-xs font-black text-black">
+                          <UserRound className="h-3.5 w-3.5" />
+                          Ver perfil
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            submitBadgeAction({
+                              action: 'grant',
+                              userId: suggestion.userId,
+                              badgeSlug: 'community',
+                              label: 'Comunidade',
+                              reasonOverride: communitySuggestionReason,
+                            })
+                          }
+                          disabled={updatingKey === key}
+                          className="inline-flex items-center justify-center gap-2 rounded-full border border-emerald-300/20 bg-emerald-500/10 px-4 py-2 text-xs font-black text-emerald-100 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {updatingKey === key ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                          Conceder Selo Comunidade
+                        </button>
+                      </div>
+                    </div>
+                  </article>
+                )
+              })
+            )}
+          </div>
+
+          {alreadyAwardedCommunity.length > 0 && (
+            <details className="mt-4 rounded-3xl border border-white/10 bg-black/25 p-4">
+              <summary className="cursor-pointer text-sm font-black text-blue-100">
+                Ja possuem Selo Comunidade ({alreadyAwardedCommunity.length})
+              </summary>
+              <div className="mt-3 grid gap-2 md:grid-cols-2">
+                {alreadyAwardedCommunity.map((suggestion) => (
+                  <div key={suggestion.userId} className="rounded-2xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-blue-50/80">
+                    {getSuggestionName(suggestion)} - score {suggestion.score}
+                  </div>
+                ))}
+              </div>
+            </details>
+          )}
+        </section>
 
         <section className="mt-5 rounded-[2rem] border border-white/10 bg-zinc-950/80 p-5 ring-1 ring-white/5">
           <form onSubmit={searchUsers} className="grid gap-3 lg:grid-cols-[1fr_auto] lg:items-end">
