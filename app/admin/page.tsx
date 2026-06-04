@@ -11,6 +11,7 @@ import {
   Coins,
   DatabaseZap,
   Flag,
+  FileArchive,
   Gift,
   Lightbulb,
   LockKeyhole,
@@ -74,6 +75,13 @@ const adminCards = [
     description: 'Verifique possiveis midias orfas no armazenamento.',
     href: '/admin/r2-orphans',
     icon: DatabaseZap,
+    badge: 'dry-run',
+  },
+  {
+    title: 'Anexos do Meet',
+    description: 'Audite anexos temporarios do chat das reunioes e acompanhe possiveis arquivos expirados.',
+    href: '/admin/meet-attachments',
+    icon: FileArchive,
     badge: 'dry-run',
   },
   {

@@ -347,6 +347,15 @@ Do not change financial rules during smoke tests.
 - Test ItaCash webhook idempotency in a controlled environment so repeated Mercado Pago events cannot duplicate balance.
 - Test upload/R2 presigned URLs, type/size validation, and orphan-media audit before planning any cleanup.
 
+## 12.2 Anexos do Meet
+
+- Confirm `meet-chat-attachments` exists and stays private in Supabase Storage.
+- Treat Meet chat attachments as temporary files.
+- Initial expiration policy: attachments older than 24 hours are considered expired.
+- Run `/admin/meet-attachments` in dry-run mode before inviting real users.
+- Confirm the audit shows totals, active attachments, expired attachments, and approximate storage size without signed URLs.
+- Future package may implement real cleanup or scheduled deletion after manual review.
+
 ## 13. Known remaining risks
 
 - Production Supabase state must be checked manually against the migration list.
