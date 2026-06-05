@@ -1,6 +1,9 @@
 import { createClient, type SupabaseClient, type User } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 
+export const FREE_MEET_DURATION_MINUTES = 20
+export const VIP_MEET_DURATION_MINUTES = 60
+
 export type MeetRoom = {
   id: string
   room_name: string
@@ -98,6 +101,31 @@ export async function getProfileDisplayName(supabase: SupabaseClient, user: User
   return profile?.display_name || profile?.username || user.email || 'Usuário EntreUS'
 }
 
+export async function isActiveVipUser(supabase: SupabaseClient, userId: string) {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('vip_status, vip_expires_at')
+    .eq('id', userId)
+    .maybeSingle()
+
+  if (error) {
+    console.warn('[Meet] VIP status lookup failed:', error.message)
+    return false
+  }
+
+  const profile = data as { vip_status?: string | null; vip_expires_at?: string | null } | null
+  if (profile?.vip_status !== 'active' || !profile.vip_expires_at) return false
+
+  return Date.parse(profile.vip_expires_at) > Date.now()
+}
+
+export function getMeetPlanForCreator(isVipActive: boolean) {
+  return {
+    plan: isVipActive ? 'vip' as const : 'free' as const,
+    durationMinutes: isVipActive ? VIP_MEET_DURATION_MINUTES : FREE_MEET_DURATION_MINUTES,
+  }
+}
+
 export async function getRoomByName(supabase: SupabaseClient, roomName: string) {
   const { data, error } = await supabase
     .from('meet_rooms')
@@ -132,11 +160,11 @@ export async function getMembership(
 }
 
 export function hasRoomExpired(room: MeetRoom) {
-  return room.status === 'expired' || (room.plan === 'free' && Date.now() > Date.parse(room.expires_at))
+  return room.status === 'expired' || Date.now() > Date.parse(room.expires_at)
 }
 
 export async function expireRoomIfNeeded(supabase: SupabaseClient, room: MeetRoom) {
-  if (room.status !== 'active' || room.plan !== 'free' || Date.now() <= Date.parse(room.expires_at)) {
+  if (room.status !== 'active' || Date.now() <= Date.parse(room.expires_at)) {
     return room
   }
 

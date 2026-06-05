@@ -93,7 +93,7 @@ export async function POST(request: Request) {
       updatedRoom.status === 'ended' ||
       hasRoomExpired(updatedRoom)
     ) {
-      return jsonError('Esta sala gratuita expirou.', 403)
+      return jsonError('Esta sala expirou.', 403)
     }
 
     const membership = await getMembership(supabase, updatedRoom.id, auth.user.id)
@@ -125,12 +125,11 @@ export async function POST(request: Request) {
       60,
       Math.floor((Date.parse(updatedRoom.expires_at) - Date.now()) / 1000),
     )
-    const tokenTtl = updatedRoom.plan === 'free' ? secondsLeft : '2h'
     const identity = `${auth.user.id}-${crypto.randomUUID().slice(0, 8)}`
     const accessToken = new AccessToken(livekitApiKey, livekitApiSecret, {
       identity,
       name: participantName,
-      ttl: tokenTtl,
+      ttl: secondsLeft,
     })
 
     accessToken.addGrant({

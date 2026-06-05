@@ -1,13 +1,14 @@
 import {
+  getMeetPlanForCreator,
   getMembership,
   getProfileDisplayName,
   getSupabaseAdmin,
+  isActiveVipUser,
   jsonError,
   requireUser,
 } from '@/lib/meet-server'
 import { NextResponse } from 'next/server'
 
-const FREE_DURATION_MINUTES = 20
 const ROOM_PREFIXES = ['sala', 'meet', 'entreus']
 
 type CreateRoomBody = {
@@ -45,7 +46,9 @@ export async function POST(request: Request) {
       : null
 
   const startsAt = new Date()
-  const expiresAt = addMinutes(startsAt, FREE_DURATION_MINUTES)
+  const creatorIsVip = await isActiveVipUser(supabase, auth.user.id)
+  const meetPlan = getMeetPlanForCreator(creatorIsVip)
+  const expiresAt = addMinutes(startsAt, meetPlan.durationMinutes)
   const displayName = await getProfileDisplayName(supabase, auth.user)
 
   for (let attempt = 0; attempt < 6; attempt += 1) {
@@ -57,9 +60,9 @@ export async function POST(request: Request) {
         room_name: roomName,
         title,
         owner_id: auth.user.id,
-        plan: 'free',
+        plan: meetPlan.plan,
         status: 'active',
-        max_duration_minutes: FREE_DURATION_MINUTES,
+        max_duration_minutes: meetPlan.durationMinutes,
         starts_at: startsAt.toISOString(),
         expires_at: expiresAt.toISOString(),
       })
@@ -91,7 +94,8 @@ export async function POST(request: Request) {
       roomName,
       roomUrl: `${origin}/meet/${roomName}`,
       expiresAt: expiresAt.toISOString(),
-      maxDurationMinutes: FREE_DURATION_MINUTES,
+      maxDurationMinutes: meetPlan.durationMinutes,
+      plan: meetPlan.plan,
     })
   }
 

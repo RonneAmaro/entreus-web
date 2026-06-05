@@ -216,7 +216,7 @@ function getFriendlyJoinText(issue: JoinIssue) {
   if (issue === 'expired') {
     return {
       title: 'A sala foi encerrada.',
-      description: 'O tempo gratuito desta chamada terminou.',
+      description: 'O tempo desta chamada terminou.',
     }
   }
 
@@ -325,6 +325,13 @@ function formatSeconds(totalSeconds: number) {
   const minutes = Math.floor(safeSeconds / 60)
   const seconds = safeSeconds % 60
   return `${minutes}:${seconds.toString().padStart(2, '0')}`
+}
+
+function getMeetPlanLabel(room: Extract<RoomResponse, { ok: true }>['room'] | null) {
+  if (!room) return 'Gratis - 20 min'
+  return room.plan === 'vip'
+    ? `VIP - ${room.maxDurationMinutes} min`
+    : `Gratis - ${room.maxDurationMinutes} min`
 }
 
 function formatTime(timestamp: number) {
@@ -506,6 +513,8 @@ function PortugueseConference({
   mediaPermissionMessage,
   participantName,
   pendingRequests,
+  roomPlanLabel,
+  roomPlan,
   roomName,
   secondsLeft,
   soundAlertsEnabled,
@@ -521,6 +530,8 @@ function PortugueseConference({
   mediaPermissionMessage: string | null
   participantName: string
   pendingRequests: Extract<RequestsResponse, { ok: true }>['requests']
+  roomPlanLabel: string
+  roomPlan: 'free' | 'vip'
   roomName: string
   secondsLeft: number | null
   soundAlertsEnabled: boolean
@@ -975,6 +986,13 @@ function PortugueseConference({
               <span className="shrink-0 text-blue-100/80">
                 Tempo restante: {secondsLeft === null ? '--:--' : formatSeconds(secondsLeft)}
               </span>
+              <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-black ${
+                roomPlan === 'vip'
+                  ? 'border-amber-300/30 bg-amber-300/10 text-amber-100'
+                  : 'border-blue-300/20 bg-blue-500/10 text-blue-100'
+              }`}>
+                {roomPlanLabel}
+              </span>
             </div>
           </div>
         </div>
@@ -1146,7 +1164,7 @@ function PortugueseConference({
                 </div>
                 <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-100/70">Tempo final</p>
                 <h2 className="mt-2 text-xl font-black text-white">
-                  Sua sala gratuita termina em {secondsLeft} segundos
+                  Sua sala {roomPlan === 'vip' ? 'VIP' : 'gratuita'} termina em {secondsLeft} segundos
                 </h2>
                 <p className="mt-2 text-sm leading-6 text-zinc-300">
                   A sala esta acabando e sera encerrada quando o tempo chegar a zero. Os controles continuam livres.
@@ -1675,6 +1693,8 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
   const inCall = joinState === 'connected' && Boolean(accessToken && serverUrl)
   const normalizedParticipantName = normalizeDisplayName(participantName)
   const participantNameIsValid = isValidDisplayName(participantName)
+  const roomPlanLabel = getMeetPlanLabel(roomData)
+  const roomPlan = roomData?.plan || 'free'
 
   const authHeaders = useCallback(async () => {
     const {
@@ -2047,11 +2067,17 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
     return (
       <MeetStatusCard
         title="A sala foi encerrada."
-        description="O tempo gratuito desta chamada terminou."
+        description={`O tempo desta chamada terminou (${roomPlanLabel}).`}
         icon={Clock3}
         primaryAction={{ label: 'Criar nova sala', href: '/meet' }}
         secondaryAction={{ label: 'Voltar ao Meet', href: '/meet' }}
-      />
+      >
+        {roomPlan === 'free' ? (
+          <div className="mx-auto mt-5 max-w-md rounded-2xl border border-amber-300/20 bg-amber-300/10 px-4 py-3 text-sm font-semibold text-amber-100">
+            Usuarios VIP podem criar salas de ate 60 minutos.
+          </div>
+        ) : null}
+      </MeetStatusCard>
     )
   }
 
@@ -2113,6 +2139,8 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
             mediaPermissionMessage={mediaPermissionMessage}
             participantName={normalizedParticipantName}
             pendingRequests={pendingRequests}
+            roomPlanLabel={roomPlanLabel}
+            roomPlan={roomPlan}
             roomName={roomName}
             secondsLeft={secondsLeft}
             soundAlertsEnabled={soundAlertsEnabled}
@@ -2128,10 +2156,10 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
   }
 
   const statusContent = (() => {
-    if (loading) return { title: 'Carregando sala...', description: 'Verificando autorização e tempo gratuito.', icon: Loader2 }
+    if (loading) return { title: 'Carregando sala...', description: 'Verificando autorização e tempo da sala.', icon: Loader2 }
     if (!roomData && error === 'Sala não encontrada.') return { title: 'Sala não encontrada.', description: 'Confira o link recebido e tente novamente.', icon: X }
     if (!roomData) return { title: 'Entre na sua conta para participar.', description: 'O acesso ao EntreUS Meet exige login.', icon: ShieldCheck }
-    if (expired) return { title: 'Esta sala gratuita expirou.', description: 'O tempo gratuito desta sala acabou.', icon: Clock3 }
+    if (expired) return { title: 'Esta sala expirou.', description: `O tempo desta sala acabou (${roomPlanLabel}).`, icon: Clock3 }
     if (!membership) return { title: 'Pedir entrada', description: 'O administrador precisa aprovar você antes da chamada.', icon: UserCheck }
     if (membership.status === 'pending') return { title: 'Aguardando aprovação', description: 'Aguardando aprovação do administrador da sala.', icon: Clock3 }
     if (membership.status === 'rejected') return { title: 'Entrada recusada', description: 'Sua entrada foi recusada. Você pode pedir novamente.', icon: UserX }
@@ -2160,11 +2188,18 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
               <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zinc-400">
                 <span className="truncate">Sala {roomName}</span>
                 <span className="hidden h-1 w-1 rounded-full bg-blue-300/50 sm:inline-flex" />
-                <span className="shrink-0 text-blue-100/80">
-                  Tempo restante: {secondsLeft === null ? '--:--' : formatSeconds(secondsLeft)}
-                </span>
-              </div>
+              <span className="shrink-0 text-blue-100/80">
+                Tempo restante: {secondsLeft === null ? '--:--' : formatSeconds(secondsLeft)}
+              </span>
+              <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-black ${
+                roomPlan === 'vip'
+                  ? 'border-amber-300/30 bg-amber-300/10 text-amber-100'
+                  : 'border-blue-300/20 bg-blue-500/10 text-blue-100'
+              }`}>
+                {roomPlanLabel}
+              </span>
             </div>
+          </div>
           </div>
 
           <InviteActions compact />
@@ -2211,6 +2246,7 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
               <div className="rounded-2xl border border-blue-400/15 bg-blue-500/10 p-4">
                 <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-100/55">Tempo da sala</p>
                 <p className="mt-2 text-sm font-bold text-white">{secondsLeft === null ? '--:--' : formatSeconds(secondsLeft)}</p>
+                <p className="mt-1 text-xs font-semibold text-blue-100/70">{roomPlanLabel}</p>
               </div>
             </div>
 
@@ -2248,7 +2284,7 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
                 Tempo restante: {secondsLeft === null ? '--:--' : formatSeconds(secondsLeft)}
               </span>
               <span className="rounded-full border border-blue-500/20 bg-blue-500/10 px-3 py-1.5 text-blue-100">
-                Plano gratuito: {roomData.maxDurationMinutes} minutos por sala.
+                {roomPlanLabel}
               </span>
             </div>
           ) : null}

@@ -161,7 +161,7 @@ export default function MeetPage() {
                 <EntreUSWordmark suffix="Meet" />
               </h1>
               <p className="mt-5 max-w-xl text-base leading-7 text-zinc-300 sm:text-lg">
-                Salas privadas com link exclusivo, aprovação de entrada e limite gratuito de 20 minutos.
+                Salas privadas com link exclusivo, aprovação de entrada, 20 minutos no plano comum e até 60 minutos para VIP ativo.
               </p>
             </div>
 
@@ -261,8 +261,8 @@ export default function MeetPage() {
               </article>
               <article className="rounded-2xl border border-blue-500/15 bg-blue-950/15 p-4 ring-1 ring-blue-400/10">
                 <Crown className="mb-3 h-7 w-7 text-blue-300" />
-                <h2 className="text-sm font-bold text-white">VIP em breve</h2>
-                <p className="mt-2 text-xs leading-5 text-zinc-400">Mais tempo, gravação e recursos avançados.</p>
+                <h2 className="text-sm font-bold text-white">VIP ativo</h2>
+                <p className="mt-2 text-xs leading-5 text-zinc-400">Salas criadas por VIP ativo duram até 60 minutos.</p>
               </article>
               <article className="rounded-2xl border border-blue-500/15 bg-blue-950/15 p-4 ring-1 ring-blue-400/10">
                 <Shield className="mb-3 h-7 w-7 text-blue-300" />
