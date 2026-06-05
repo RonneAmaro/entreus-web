@@ -11,7 +11,6 @@ import {
   BadgeCheck,
   Coins,
   Crown,
-  Loader2,
   Palette,
   ShieldCheck,
   Sparkles,
@@ -20,19 +19,14 @@ import {
   Zap,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
-import {
-  calculatePaymentTotals,
-  paymentMethodOptions,
-  type PaymentMethodOption,
-} from '@/lib/payment-fees'
-
-const VIP_PLUS_PRICE_BRL_CENTS = 1490
-const VIP_PLUS_BONUS_ITACASH = 100
 
 type CurrentProfile = {
   username: string | null
   display_name: string | null
   avatar_url: string | null
+  vip_plan: string | null
+  vip_status: string | null
+  vip_expires_at: string | null
 }
 
 const BADGE_MEDIA = {
@@ -52,33 +46,33 @@ const BADGE_MEDIA = {
 
 const benefits = [
   {
-    title: 'Selo VIP Plus no perfil',
-    description: 'Um sinal visual para destacar sua presenca dentro da comunidade.',
+    title: 'Selo VIP no perfil',
+    description: 'Identidade visual ativa para destacar sua presenca dentro da comunidade.',
     icon: BadgeCheck,
   },
   {
-    title: 'Moldura especial futuramente',
-    description: 'Base preparada para arco e detalhes visuais no avatar em uma proxima fase.',
+    title: 'Meet de 1 hora',
+    description: 'Beneficio previsto para chamadas maiores quando a regra VIP do Meet for ativada.',
     icon: Crown,
   },
   {
-    title: 'Destaque visual no perfil',
-    description: 'Mais estilo para sua identidade EntreUS ficar mais reconhecivel.',
+    title: 'Prioridade em recursos futuros',
+    description: 'Base pronta para liberar vantagens antes para quem estiver com VIP ativo.',
     icon: Star,
   },
   {
-    title: 'Bonus inicial de ItaCash',
-    description: `${VIP_PLUS_BONUS_ITACASH} ItaCash para testar presentes digitais e movimentar a rede.`,
-    icon: Coins,
+    title: 'Gravacao em fase futura',
+    description: 'Estrutura preparada para beneficios de gravacao quando o produto autorizar.',
+    icon: ShieldCheck,
   },
   {
-    title: 'Acesso antecipado visual',
-    description: 'Prioridade para experimentar recursos esteticos e personalizacao.',
+    title: 'Traducao em fase futura',
+    description: 'Acesso previsto para experiencias multilingues nas proximas etapas.',
     icon: WandSparkles,
   },
   {
-    title: 'Beneficios futuros',
-    description: 'O VIP Plus sera expandido junto com a evolucao da plataforma.',
+    title: 'Beneficios expansiveis',
+    description: 'O VIP sera ampliado sem depender de pagamentos nesta primeira base.',
     icon: Zap,
   },
 ]
@@ -91,11 +85,19 @@ function BrandWordmark() {
   )
 }
 
-function formatBRLFromCents(value: number) {
-  return (value / 100).toLocaleString('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  })
+function isVipActive(profile: CurrentProfile | null) {
+  if (!profile || profile.vip_status !== 'active' || !profile.vip_expires_at) return false
+  return new Date(profile.vip_expires_at).getTime() > Date.now()
+}
+
+function formatVipDate(value: string | null | undefined) {
+  if (!value) return 'data indisponivel'
+
+  try {
+    return new Date(value).toLocaleDateString('pt-BR')
+  } catch {
+    return 'data indisponivel'
+  }
 }
 
 export default function VipPlusPage() {
@@ -107,11 +109,6 @@ export default function VipPlusPage() {
   const [currentProfile, setCurrentProfile] = useState<CurrentProfile | null>(null)
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0)
   const [videoFailed, setVideoFailed] = useState(false)
-  const [loadingPayment, setLoadingPayment] = useState(false)
-  const [paymentLink, setPaymentLink] = useState('')
-  const [message, setMessage] = useState('')
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethodOption>('mercadopago_pix')
-  const [autoRenew, setAutoRenew] = useState(true)
 
   useEffect(() => {
     setMounted(true)
@@ -121,13 +118,7 @@ export default function VipPlusPage() {
     loadNavigationShell()
   }, [])
 
-  const visiblePaymentMethods = paymentMethodOptions.filter((method) =>
-    ['mercadopago_pix', 'mercadopago_credit_30d', 'pix_manual', 'open_finance'].includes(method.value)
-  )
-
-  const totals = useMemo(() => {
-    return calculatePaymentTotals(VIP_PLUS_PRICE_BRL_CENTS, paymentMethod)
-  }, [paymentMethod])
+  const vipActive = useMemo(() => isVipActive(currentProfile), [currentProfile])
 
   async function loadNavigationShell() {
     const {
@@ -147,7 +138,7 @@ export default function VipPlusPage() {
   async function loadNavigationProfile(currentUserId: string) {
     const { data } = await supabase
       .from('profiles')
-      .select('username, display_name, avatar_url')
+      .select('username, display_name, avatar_url, vip_plan, vip_status, vip_expires_at')
       .eq('id', currentUserId)
       .maybeSingle()
 
@@ -157,6 +148,9 @@ export default function VipPlusPage() {
       username: data.username,
       display_name: data.display_name,
       avatar_url: data.avatar_url,
+      vip_plan: data.vip_plan,
+      vip_status: data.vip_status,
+      vip_expires_at: data.vip_expires_at,
     })
   }
 
@@ -181,58 +175,6 @@ export default function VipPlusPage() {
 
   function handlePostClick() {
     router.push('/feed')
-  }
-
-  async function createMercadoPagoPayment() {
-    setLoadingPayment(true)
-    setMessage('')
-    setPaymentLink('')
-
-    if (paymentMethod === 'pix_manual') {
-      setMessage('Pix manual podera ser disponibilizado pela equipe.')
-      setLoadingPayment(false)
-      return
-    }
-
-    if (!totals.method.available) {
-      setMessage('Este metodo de pagamento ainda nao esta disponivel.')
-      setLoadingPayment(false)
-      return
-    }
-
-    const {
-      data: { session },
-    } = await supabase.auth.getSession()
-
-    if (!session?.access_token) {
-      setMessage('Entre na sua conta para comprar VIP Plus.')
-      setLoadingPayment(false)
-      return
-    }
-
-    const response = await fetch('/api/payments/mercadopago/create-preference', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${session.access_token}`,
-        'Content-Type': 'application/json',
-      },
-        body: JSON.stringify({
-          product_type: 'vip_plus',
-          payment_method_option: paymentMethod,
-          auto_renew: autoRenew,
-        }),
-      })
-
-    const data = await response.json().catch(() => null)
-    setLoadingPayment(false)
-
-    if (!response.ok || !data?.provider_init_point) {
-      setMessage(data?.error || 'Nao foi possivel iniciar pagamento Mercado Pago.')
-      return
-    }
-
-    setPaymentLink(data.provider_init_point)
-    setMessage('Pagamento criado. Voce pode seguir para o Mercado Pago.')
   }
 
   return (
@@ -304,15 +246,15 @@ export default function VipPlusPage() {
             <div className="mt-8 grid gap-3 sm:grid-cols-3">
               <div className="rounded-3xl border border-blue-300/20 bg-blue-500/10 p-4 ring-1 ring-blue-300/10">
                 <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-200/70">Plano</p>
-                <p className="mt-2 text-2xl font-black">VIP Plus</p>
+                <p className="mt-2 text-2xl font-black">VIP</p>
               </div>
               <div className="rounded-3xl border border-white/10 bg-zinc-950/75 p-4 ring-1 ring-white/5">
-                <p className="text-xs font-black uppercase tracking-[0.2em] text-zinc-500">Preco base</p>
-                <p className="mt-2 text-2xl font-black">{formatBRLFromCents(VIP_PLUS_PRICE_BRL_CENTS)}</p>
+                <p className="text-xs font-black uppercase tracking-[0.2em] text-zinc-500">Assinatura</p>
+                <p className="mt-2 text-2xl font-black">Em breve</p>
               </div>
               <div className="rounded-3xl border border-emerald-300/20 bg-emerald-500/10 p-4">
-                <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-200/70">Bonus</p>
-                <p className="mt-2 text-2xl font-black">{VIP_PLUS_BONUS_ITACASH} ItaCash</p>
+                <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-200/70">Status</p>
+                <p className="mt-2 text-2xl font-black">{vipActive ? 'Ativo' : 'Manual'}</p>
               </div>
             </div>
           </div>
@@ -358,11 +300,11 @@ export default function VipPlusPage() {
               <div className="absolute bottom-4 left-4 right-4 rounded-3xl border border-white/10 bg-black/55 p-4 backdrop-blur-xl">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-200/70">Plano ativo</p>
-                    <p className="text-xl font-black">VIP Plus</p>
+                    <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-200/70">Selo VIP</p>
+                    <p className="text-xl font-black">{vipActive ? 'Ativo' : 'Disponivel em breve'}</p>
                   </div>
                   <span className="rounded-full bg-blue-500 px-3 py-1 text-xs font-black text-white">
-                    +{VIP_PLUS_BONUS_ITACASH} ItaCash
+                    Base 1
                   </span>
                 </div>
               </div>
@@ -416,134 +358,49 @@ export default function VipPlusPage() {
               </span>
               <div>
                 <p className="text-sm font-bold text-zinc-400">Resumo</p>
-                <p className="text-2xl font-black">VIP Plus mensal</p>
+                <p className="text-2xl font-black">VIP Base</p>
               </div>
             </div>
 
-              <div className="mt-5 space-y-3 text-sm">
-              <div className="rounded-3xl border border-emerald-300/20 bg-emerald-500/10 p-4 font-black text-emerald-100">
-                Recomendado: Pix Mercado Pago, menor taxa da operadora.
-              </div>
-
-              <div className="grid gap-3">
-                {visiblePaymentMethods.map((method) => {
-                  const active = paymentMethod === method.value
-
-                  return (
-                    <button
-                      key={method.value}
-                      type="button"
-                      onClick={() => {
-                        if (method.available) setPaymentMethod(method.value)
-                      }}
-                      disabled={!method.available}
-                      className={`rounded-3xl border p-4 text-left transition hover:-translate-y-0.5 ${
-                        active
-                          ? 'border-blue-300/40 bg-blue-500/15 text-blue-50'
-                          : 'border-white/10 bg-black/35 text-zinc-300 hover:border-blue-300/20 disabled:cursor-not-allowed disabled:opacity-60'
-                      }`}
-                    >
-                      <p className="font-black">{method.label}</p>
-                      <p className="mt-1 text-sm text-zinc-400">
-                        Taxa operadora {method.operatorFeePercent}%
-                      </p>
-                      <p className="mt-2 text-xs text-zinc-500">{method.note}</p>
-                      {method.recommended && (
-                        <span className="mt-3 inline-flex rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-black text-emerald-200">
-                          Recomendado
-                        </span>
-                      )}
-                    </button>
-                  )
-                })}
-              </div>
-
-              <div className="flex items-center justify-between rounded-2xl bg-black/35 px-4 py-3">
-                <span className="text-zinc-400">Valor do plano</span>
-                <strong>{formatBRLFromCents(VIP_PLUS_PRICE_BRL_CENTS)}</strong>
-              </div>
-              <div className="flex items-center justify-between rounded-2xl bg-black/35 px-4 py-3">
-                <span className="text-zinc-400">Taxa de servico EntreUS</span>
-                <strong>{formatBRLFromCents(totals.platformFeeBrlCents)}</strong>
-              </div>
-              <div className="flex items-center justify-between rounded-2xl bg-black/35 px-4 py-3">
-                <span className="text-zinc-400">Taxa da operadora {totals.operatorFeePercent}%</span>
-                <strong>{formatBRLFromCents(totals.operatorFeeBrlCents)}</strong>
-              </div>
+            <div className={`mt-5 rounded-3xl border p-4 ${
+              vipActive
+                ? 'border-emerald-300/20 bg-emerald-500/10 text-emerald-100'
+                : 'border-blue-300/20 bg-blue-500/10 text-blue-100'
+            }`}>
+              <p className="text-xs font-black uppercase tracking-[0.2em] opacity-70">Status da conta</p>
+              <p className="mt-2 text-2xl font-black">
+                {vipActive ? 'Voce ja e VIP' : 'Em breve voce podera assinar pela plataforma'}
+              </p>
+              {vipActive && (
+                <p className="mt-2 text-sm font-semibold opacity-80">
+                  Seu VIP expira em {formatVipDate(currentProfile?.vip_expires_at)}.
+                </p>
+              )}
             </div>
 
-            <div className="mt-5 rounded-3xl border border-blue-300/20 bg-blue-500/10 p-4">
-              <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-200/70">Total</p>
-              <p className="mt-2 text-3xl font-black">{formatBRLFromCents(totals.totalBrlCents)}</p>
-            </div>
-
-            <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-3xl border border-white/10 bg-black/35 p-4">
-              <input
-                type="checkbox"
-                checked={autoRenew}
-                onChange={(event) => setAutoRenew(event.target.checked)}
-                className="mt-1 h-5 w-5 rounded border-white/20 bg-black accent-blue-500"
-              />
-              <span>
-                <span className="block font-black">Renovar automaticamente meu VIP Plus</span>
-                <span className="mt-1 block text-sm leading-6 text-zinc-400">
-                  A cobranca recorrente real sera ativada em uma fase futura. Por enquanto, essa escolha fica registrada no pedido.
-                </span>
-              </span>
-            </label>
-
-            <div className="mt-4 rounded-3xl border border-white/10 bg-black/35 p-4">
-              <p className="text-xs font-black uppercase tracking-[0.2em] text-zinc-500">Status futuro</p>
-              <div className="mt-3 space-y-2 text-sm text-zinc-300">
-                <div className="flex items-center justify-between gap-3">
-                  <span>Status do plano</span>
-                  <strong className="text-blue-100">Preparado</strong>
-                </div>
-                <div className="flex items-center justify-between gap-3">
-                  <span>Renovacao automatica</span>
-                  <strong className={autoRenew ? 'text-emerald-300' : 'text-zinc-400'}>
-                    {autoRenew ? 'Intencao ativa' : 'Desativada'}
-                  </strong>
-                </div>
-                <button
-                  type="button"
-                  disabled
-                  className="mt-2 w-full cursor-not-allowed rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-black text-zinc-500"
-                >
-                  Cancelar renovacao em breve
-                </button>
+            <div className="mt-4 grid gap-3 text-sm text-zinc-300">
+              <div className="rounded-2xl border border-white/10 bg-black/35 px-4 py-3">
+                <strong className="block text-white">Origem manual agora</strong>
+                <span className="mt-1 block text-zinc-400">Administradores podem ativar, estender ou cancelar VIP enquanto a assinatura publica nao entra.</span>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-black/35 px-4 py-3">
+                <strong className="block text-white">Pagamentos depois</strong>
+                <span className="mt-1 block text-zinc-400">Nenhum pagamento real e iniciado nesta tela neste pacote.</span>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-black/35 px-4 py-3">
+                <strong className="block text-white">Plano atual</strong>
+                <span className="mt-1 block text-zinc-400">{currentProfile?.vip_plan || 'Sem plano VIP ativo'}</span>
               </div>
             </div>
 
             <button
               type="button"
-              onClick={createMercadoPagoPayment}
-              disabled={loadingPayment}
-              className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-black text-black shadow-sm shadow-blue-500/15 transition hover:-translate-y-0.5 hover:bg-blue-50 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled
+              className="mt-5 inline-flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-full border border-white/10 bg-white/5 px-5 py-3 text-sm font-black text-zinc-500"
             >
-              {loadingPayment ? <Loader2 className="h-4 w-4 animate-spin" /> : <Crown className="h-4 w-4" />}
-              Comprar VIP Plus
+              <Crown className="h-4 w-4" />
+              Assinatura em breve
             </button>
-
-            {paymentLink && (
-              <Link
-                href={paymentLink}
-                target="_blank"
-                className="mt-3 inline-flex w-full items-center justify-center rounded-full bg-blue-500 px-5 py-3 text-sm font-black text-white transition hover:bg-blue-400"
-              >
-                Pagar com Mercado Pago
-              </Link>
-            )}
-
-            {message && (
-              <div className="mt-4 rounded-2xl border border-blue-300/20 bg-blue-500/10 px-4 py-3 text-sm font-semibold text-blue-100">
-                {message}
-              </div>
-            )}
-
-            <p className="mt-4 text-sm leading-6 text-zinc-500">
-              Pix manual podera ser disponibilizado pela equipe.
-            </p>
           </aside>
         </section>
       </section>

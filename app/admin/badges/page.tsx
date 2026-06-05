@@ -49,7 +49,12 @@ type UserProfile = {
   email: string | null
   vip_plan?: string | null
   vip_status?: string | null
+  vip_started_at?: string | null
+  vip_expires_at?: string | null
   vip_plus_badge_enabled?: boolean | null
+  vip_source?: string | null
+  vip_reason?: string | null
+  vip_updated_at?: string | null
   badges: UserBadge[]
 }
 
@@ -96,6 +101,12 @@ type BadgeSuggestionsResponse = {
 
 const featuredBadgeSlugs = ['community', 'elder', 'vip', 'vip_premium']
 const communitySuggestionReason = 'Sugerido automaticamente por engajamento na comunidade.'
+const vipDurationOptions = [
+  { label: '7 dias', value: 7 },
+  { label: '30 dias', value: 30 },
+  { label: '90 dias', value: 90 },
+  { label: '1 ano', value: 365 },
+]
 
 function getInitial(text: string) {
   return (text || 'U').slice(0, 1).toUpperCase()
@@ -119,6 +130,25 @@ function formatDate(value: string | null | undefined) {
   }
 }
 
+function isVipActive(profile: UserProfile) {
+  if (profile.vip_status !== 'active' || !profile.vip_expires_at) return false
+  return new Date(profile.vip_expires_at).getTime() > Date.now()
+}
+
+function getVipStatusLabel(profile: UserProfile) {
+  if (isVipActive(profile)) return 'Ativo'
+  if (profile.vip_status === 'active') return 'Expirado'
+  if (profile.vip_status === 'canceled') return 'Cancelado'
+  if (profile.vip_status === 'pending') return 'Pendente'
+  return 'Inativo'
+}
+
+function getVipStatusClass(profile: UserProfile) {
+  if (isVipActive(profile)) return 'border-emerald-300/25 bg-emerald-500/10 text-emerald-100'
+  if (profile.vip_status === 'canceled') return 'border-red-300/20 bg-red-500/10 text-red-100'
+  return 'border-white/10 bg-white/5 text-zinc-300'
+}
+
 function getFriendlyError(message?: string) {
   if (!message) return 'Nao foi possivel concluir agora.'
   return message
@@ -133,6 +163,8 @@ export default function AdminBadgesPage() {
   const [adminProfile, setAdminProfile] = useState<AdminProfile | null>(null)
   const [query, setQuery] = useState('')
   const [reason, setReason] = useState('')
+  const [vipPlan, setVipPlan] = useState<'vip' | 'vip_premium'>('vip')
+  const [vipDurationDays, setVipDurationDays] = useState(30)
   const [badges, setBadges] = useState<Badge[]>([])
   const [users, setUsers] = useState<UserProfile[]>([])
   const [suggestionsLoading, setSuggestionsLoading] = useState(false)
@@ -334,6 +366,60 @@ export default function AdminBadgesPage() {
       }
     } catch {
       setMessage('Nao foi possivel atualizar selo agora.')
+    } finally {
+      setUpdatingKey('')
+    }
+  }
+
+  async function submitVipAction(payload: {
+    action: 'grant_vip' | 'cancel_vip'
+    userId: string
+    label: string
+  }) {
+    if (payload.action === 'cancel_vip') {
+      const confirmed = window.confirm(`Cancelar VIP de ${payload.label}? Os selos VIP tambem serao removidos.`)
+      if (!confirmed) return
+    }
+
+    setUpdatingKey(`${payload.action}-${payload.userId}`)
+    setMessage('')
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+
+    if (!session?.access_token) {
+      setMessage('Sessao expirada. Entre novamente para atualizar VIP.')
+      setUpdatingKey('')
+      return
+    }
+
+    try {
+      const response = await fetch('/api/admin/badges', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: payload.action,
+          userId: payload.userId,
+          planKey: vipPlan,
+          durationDays: vipDurationDays,
+          reason: reason.trim() || null,
+        }),
+      })
+      const data = (await response.json()) as BadgesApiResponse
+
+      if (!response.ok || !data.ok) {
+        setMessage(getFriendlyError(data.error))
+      } else {
+        setMessage(data.message || 'VIP atualizado com sucesso.')
+        await loadBadges(query)
+        await loadSuggestions()
+      }
+    } catch {
+      setMessage('Nao foi possivel atualizar VIP agora.')
     } finally {
       setUpdatingKey('')
     }
@@ -557,6 +643,32 @@ export default function AdminBadgesPage() {
               className="mt-2 w-full resize-none rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm text-white outline-none placeholder:text-zinc-600 focus:border-blue-300"
             />
           </label>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <label>
+              <span className="text-sm font-black text-zinc-200">Plano VIP manual</span>
+              <select
+                value={vipPlan}
+                onChange={(event) => setVipPlan(event.target.value === 'vip_premium' ? 'vip_premium' : 'vip')}
+                className="mt-2 w-full rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm font-black text-white outline-none focus:border-blue-300"
+              >
+                <option value="vip">VIP</option>
+                <option value="vip_premium">VIP Premium</option>
+              </select>
+            </label>
+            <label>
+              <span className="text-sm font-black text-zinc-200">Periodo para concessao</span>
+              <select
+                value={vipDurationDays}
+                onChange={(event) => setVipDurationDays(Number(event.target.value))}
+                className="mt-2 w-full rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm font-black text-white outline-none focus:border-blue-300"
+              >
+                {vipDurationOptions.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </label>
+          </div>
         </section>
 
         <div className="mt-5 grid gap-4">
@@ -570,6 +682,7 @@ export default function AdminBadgesPage() {
             users.map((user) => {
               const name = getProfileName(user)
               const currentBadgeSlugs = new Set(user.badges.map((item) => item.badge?.slug).filter(Boolean))
+              const vipActive = isVipActive(user)
 
               return (
                 <article key={user.id} className="rounded-[2rem] border border-white/10 bg-zinc-950/85 p-4 ring-1 ring-white/5 sm:p-5">
@@ -592,8 +705,8 @@ export default function AdminBadgesPage() {
                           <p className="truncate text-sm text-zinc-500">@{user.username || 'sem-username'}</p>
                           {user.email && <p className="truncate text-sm text-zinc-500">{user.email}</p>}
                           <div className="mt-2 flex flex-wrap gap-2">
-                            <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-black text-zinc-300">
-                              VIP: {user.vip_status || 'indisponivel'}
+                            <span className={`rounded-full border px-3 py-1 text-xs font-black ${getVipStatusClass(user)}`}>
+                              VIP: {getVipStatusLabel(user)}
                             </span>
                             {user.vip_plan && (
                               <span className="rounded-full border border-blue-300/20 bg-blue-500/10 px-3 py-1 text-xs font-black text-blue-100">
@@ -601,6 +714,12 @@ export default function AdminBadgesPage() {
                               </span>
                             )}
                           </div>
+                          {user.vip_expires_at && (
+                            <p className="mt-2 text-xs font-semibold text-zinc-500">
+                              Expira em {formatDate(user.vip_expires_at)}
+                              {user.vip_source ? ` - origem ${user.vip_source}` : ''}
+                            </p>
+                          )}
                         </div>
                       </div>
 
@@ -636,6 +755,40 @@ export default function AdminBadgesPage() {
                     </div>
 
                     <div className="grid gap-3">
+                      <div className="rounded-3xl border border-amber-300/20 bg-amber-500/10 p-4">
+                        <p className="text-xs font-black uppercase tracking-[0.16em] text-amber-100/70">VIP manual</p>
+                        <div className="mt-3 grid gap-2">
+                          <div className="rounded-2xl border border-white/10 bg-black/25 px-3 py-2 text-sm text-amber-50/85">
+                            <strong>Status:</strong> {getVipStatusLabel(user)}
+                            {user.vip_expires_at ? ` - expira em ${formatDate(user.vip_expires_at)}` : ''}
+                            {user.vip_source ? ` - origem ${user.vip_source}` : ''}
+                          </div>
+                          {user.vip_reason && (
+                            <p className="text-xs leading-5 text-amber-50/70">Motivo atual: {user.vip_reason}</p>
+                          )}
+                          <div className="grid gap-2 sm:grid-cols-2">
+                            <button
+                              type="button"
+                              onClick={() => submitVipAction({ action: 'grant_vip', userId: user.id, label: name })}
+                              disabled={updatingKey === `grant_vip-${user.id}`}
+                              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-emerald-300/20 bg-emerald-500/10 px-4 py-2 text-xs font-black text-emerald-100 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              {updatingKey === `grant_vip-${user.id}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Crown className="h-3.5 w-3.5" />}
+                              {vipActive ? 'Estender VIP' : 'Conceder VIP'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => submitVipAction({ action: 'cancel_vip', userId: user.id, label: name })}
+                              disabled={!vipActive || updatingKey === `cancel_vip-${user.id}`}
+                              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-red-300/20 bg-red-500/10 px-4 py-2 text-xs font-black text-red-100 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              {updatingKey === `cancel_vip-${user.id}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <MinusCircle className="h-3.5 w-3.5" />}
+                              Cancelar VIP
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
                       <div className="rounded-3xl border border-white/10 bg-black/30 p-4">
                         <p className="text-xs font-black uppercase tracking-[0.16em] text-zinc-500">Conceder selo</p>
                         <div className="mt-3 grid gap-2 sm:grid-cols-2">
