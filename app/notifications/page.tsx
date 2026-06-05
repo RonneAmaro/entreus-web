@@ -5,7 +5,7 @@ import MobileNavigation from '../components/MobileNavigation'
 import BrandHeader from '../components/BrandHeader'
 import UserBadges from '../components/UserBadges'
 import Link from 'next/link'
-import { AlertTriangle, Bell, CheckCheck, CheckCircle2, Coins, Gift, Heart, MessageCircle, Repeat2, UserPlus } from 'lucide-react'
+import { AlertTriangle, Award, Bell, CheckCheck, CheckCircle2, Coins, Gift, Heart, MessageCircle, Repeat2, UserPlus } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
@@ -27,6 +27,7 @@ type Notification = {
   comment_id: string | null
   user_gift_id: string | null
   itacash_purchase_request_id: string | null
+  badge_id?: string | null
   amount: number | null
   read: boolean | null
   created_at: string
@@ -77,12 +78,20 @@ type ItaCashPurchaseRequestSummary = {
   rejection_reason: string | null
 }
 
+type BadgeSummary = {
+  id: string
+  slug: string
+  name: string
+  title: string | null
+}
+
 type NotificationView = Notification & {
   actor: ProfileSummary | null
   post: PostSummary | null
   comment: CommentSummary | null
   gift: GiftSummary | null
   itacashPurchaseRequest: ItaCashPurchaseRequestSummary | null
+  badge: BadgeSummary | null
 }
 
 const POST_HIDDEN_NOTIFICATION_TEXT =
@@ -104,6 +113,7 @@ function getNotificationIcon(type: string) {
   if (type === 'itacash_purchase_approved') return <CheckCircle2 className="h-5 w-5 text-emerald-500" />
   if (type === 'itacash_purchase_rejected') return <AlertTriangle className="h-5 w-5 text-red-500" />
   if (type === 'post_hidden' || type === 'moderation_warning') return <AlertTriangle className="h-5 w-5 text-amber-500" />
+  if (type === 'badge_awarded') return <Award className="h-5 w-5 text-blue-500" />
 
   return <Bell className="h-5 w-5 text-zinc-500" />
 }
@@ -129,6 +139,10 @@ function isItaCashFinancialNotification(type: string) {
 
 function isModerationNotification(type: string) {
   return type === 'post_hidden' || type === 'moderation_warning'
+}
+
+function isBadgeNotification(type: string) {
+  return type === 'badge_awarded'
 }
 
 function getItaCashNotificationText(notification: NotificationView) {
@@ -182,6 +196,16 @@ function getNotificationActionTextView(notification: NotificationView) {
   if (notification.type === 'moderation_warning') {
     return 'Voce recebeu um aviso da moderacao.'
   }
+  if (notification.type === 'badge_awarded') {
+    const slug = notification.badge?.slug
+    if (slug === 'community') return 'Voce ganhou o Selo Comunidade! Obrigado por participar e fortalecer a EntreUS.'
+    if (slug === 'elder') return 'Voce recebeu o Selo Anciao! Sua presenca e historia agora fazem parte da identidade da comunidade.'
+    if (slug === 'vip') return 'Voce recebeu o Selo VIP! Seus beneficios especiais ja podem aparecer na plataforma.'
+    if (slug === 'vip_premium') return 'Voce recebeu o Selo VIP Premium! Obrigado por apoiar a evolucao da EntreUS.'
+    return notification.badge?.name
+      ? `Voce recebeu o Selo ${notification.badge.name}!`
+      : 'Voce recebeu um novo selo EntreUS!'
+  }
   if (notification.type === 'promotional_itacash') {
     return `Voce recebeu ItaCash promocional.`
   }
@@ -228,6 +252,10 @@ function getNotificationHref(notification: NotificationView) {
 
   if (isModerationNotification(notification.type) && notification.post_id) {
     return `/post/${notification.post_id}`
+  }
+
+  if (isBadgeNotification(notification.type)) {
+    return '/selos'
   }
 
   if (notification.post_id) {
@@ -322,13 +350,13 @@ export default function NotificationsPage() {
 
     let { data, error } = await supabase
       .from('notifications')
-      .select('id, user_id, actor_id, type, post_id, comment_id, user_gift_id, itacash_purchase_request_id, amount, read, created_at')
+      .select('id, user_id, actor_id, type, post_id, comment_id, user_gift_id, itacash_purchase_request_id, badge_id, amount, read, created_at')
       .eq('user_id', currentUserId)
       .order('created_at', { ascending: false })
       .limit(60)
 
-    if (error && error.message.includes('itacash_purchase_request_id')) {
-      console.warn('[Notifications] itacash_purchase_request_id unavailable, loading base notifications:', error.message)
+    if (error && (error.message.includes('itacash_purchase_request_id') || error.message.includes('badge_id'))) {
+      console.warn('[Notifications] Optional notification columns unavailable, loading base notifications:', error.message)
       const fallback = await supabase
         .from('notifications')
         .select('id, user_id, actor_id, type, post_id, comment_id, user_gift_id, amount, read, created_at')
@@ -339,6 +367,7 @@ export default function NotificationsPage() {
       data = (fallback.data || []).map((item) => ({
         ...item,
         itacash_purchase_request_id: null,
+        badge_id: null,
       }))
       error = fallback.error
     }
@@ -370,11 +399,16 @@ export default function NotificationsPage() {
       new Set(rawNotifications.map((item) => item.itacash_purchase_request_id).filter(Boolean))
     ) as string[]
 
+    const badgeIds = Array.from(
+      new Set(rawNotifications.map((item) => item.badge_id).filter(Boolean))
+    ) as string[]
+
     let profilesById: Record<string, ProfileSummary> = {}
     let postsById: Record<string, PostSummary> = {}
     let commentsById: Record<string, CommentSummary> = {}
     let giftsById: Record<string, GiftSummary> = {}
     let purchaseRequestsById: Record<string, ItaCashPurchaseRequestSummary> = {}
+    let badgesById: Record<string, BadgeSummary> = {}
 
     if (actorIds.length > 0) {
       const { data: profilesData, error: profilesError } = await supabase
@@ -479,6 +513,25 @@ export default function NotificationsPage() {
       )
     }
 
+    if (badgeIds.length > 0) {
+      const { data: badgesData, error: badgesError } = await supabase
+        .from('badges')
+        .select('id, slug, name, title')
+        .in('id', badgeIds)
+
+      if (badgesError) {
+        console.error('Erro ao carregar selos das notificacoes:', badgesError.message)
+      }
+
+      badgesById = ((badgesData || []) as BadgeSummary[]).reduce(
+        (acc, badge) => {
+          acc[badge.id] = badge
+          return acc
+        },
+        {} as Record<string, BadgeSummary>
+      )
+    }
+
     const normalizedNotifications: NotificationView[] = rawNotifications.map((item) => ({
       ...item,
       actor: item.actor_id ? profilesById[item.actor_id] || null : null,
@@ -488,6 +541,7 @@ export default function NotificationsPage() {
       itacashPurchaseRequest: item.itacash_purchase_request_id
         ? purchaseRequestsById[item.itacash_purchase_request_id] || null
         : null,
+      badge: item.badge_id ? badgesById[item.badge_id] || null : null,
     }))
 
     setNotifications(normalizedNotifications)
@@ -651,14 +705,15 @@ export default function NotificationsPage() {
             const isItaCashPurchaseStatus = isItaCashPurchaseStatusNotification(notification.type)
             const isItaCashFinancial = isItaCashFinancialNotification(notification.type)
             const isModeration = isModerationNotification(notification.type)
-            const actorName = isItaCashFinancial || isModeration
+            const isBadge = isBadgeNotification(notification.type)
+            const actorName = isItaCashFinancial || isModeration || isBadge
               ? 'EntreUS'
               : notification.actor?.display_name ||
                 notification.actor?.username ||
                 'Usuario'
 
             const actorUsername = notification.actor?.username || 'usuario'
-            const actorAvatar = isItaCashFinancial || isModeration ? '' : notification.actor?.avatar_url || ''
+            const actorAvatar = isItaCashFinancial || isModeration || isBadge ? '' : notification.actor?.avatar_url || ''
             const href = getNotificationHref(notification)
             const unread = !notification.read
 
@@ -696,20 +751,20 @@ export default function NotificationsPage() {
                     <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
                       <div>
                         <p className="inline-flex max-w-full items-center gap-1 break-words font-semibold text-zinc-950 dark:text-white">
-                          {notification.actor_id && !isItaCashFinancial && !isModeration && (
+                          {notification.actor_id && !isItaCashFinancial && !isModeration && !isBadge && (
                             <UserBadges userId={notification.actor_id} size="sm" max={1} />
                           )}
 
                           <span className="min-w-0 break-words">
                             {isItaCashFinancial
                               ? getItaCashNotificationText(notification)
-                              : isModeration
+                              : isModeration || isBadge
                                 ? getNotificationActionTextView(notification)
                               : `${actorName} ${getNotificationActionTextView(notification)}`}
                           </span>
                         </p>
 
-                        {notification.actor?.username && !isItaCashFinancial && !isModeration && (
+                        {notification.actor?.username && !isItaCashFinancial && !isModeration && !isBadge && (
                           <p className="mt-0.5 text-sm text-zinc-500">
                             @{actorUsername}
                           </p>
@@ -770,6 +825,12 @@ export default function NotificationsPage() {
                     {isModeration && notification.type !== 'post_hidden' && (
                       <p className="mt-3 rounded-xl bg-amber-100 px-3 py-2 text-sm font-semibold text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
                         Identificamos que ele nao esta de acordo com as diretrizes da plataforma. Revise nossas regras. Novas violacoes podem gerar restricoes na conta.
+                      </p>
+                    )}
+
+                    {isBadge && (
+                      <p className="mt-3 rounded-xl bg-blue-100 px-3 py-2 text-sm font-semibold text-blue-800 dark:bg-blue-950/40 dark:text-blue-100">
+                        Toque para conhecer os Selos EntreUS.
                       </p>
                     )}
 

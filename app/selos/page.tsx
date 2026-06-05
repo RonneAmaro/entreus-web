@@ -33,6 +33,18 @@ const badges = [
     note: 'Benefícios, valores e prazos serão apresentados antes da contratação do plano.',
   },
   {
+    name: 'Selo VIP Premium',
+    image: '/badges/vip-premium.png',
+    description:
+      'Destaque premium mais forte para apoiadores e usuários com reconhecimento especial dentro da EntreUS.',
+    benefits: [
+      'Destaque visual diferenciado no perfil e nas áreas sociais.',
+      'Reconhecimento por apoio direto à evolução da plataforma.',
+      'Benefícios premium poderão evoluir conforme regras específicas.',
+    ],
+    note: 'Este selo não altera regras financeiras por si só; benefícios dependem de configuração e termos próprios.',
+  },
+  {
     name: 'Selo Ancião',
     image: '/badges/anciao.png',
     description:

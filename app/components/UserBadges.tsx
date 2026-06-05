@@ -23,6 +23,14 @@ type UserBadgesProps = {
   max?: number
 }
 
+function getBadgeRingClass(slug: string) {
+  if (slug === 'elder') return 'rounded-full ring-2 ring-amber-300/70 drop-shadow-[0_0_8px_rgba(251,191,36,0.35)]'
+  if (slug === 'vip_premium') return 'rounded-full ring-2 ring-fuchsia-300/70 drop-shadow-[0_0_8px_rgba(217,70,239,0.35)]'
+  if (slug === 'vip') return 'rounded-full ring-2 ring-blue-300/70 drop-shadow-[0_0_8px_rgba(59,130,246,0.35)]'
+  if (slug === 'community') return 'rounded-full ring-2 ring-cyan-300/70 drop-shadow-[0_0_8px_rgba(34,211,238,0.32)]'
+  return 'rounded-full ring-1 ring-zinc-300/70 dark:ring-zinc-700'
+}
+
 export default function UserBadges({
   userId,
   size = 'sm',
@@ -89,7 +97,7 @@ export default function UserBadges({
             src={badge.icon || `/badges/${badge.slug}.png`}
             alt={title}
             title={title}
-            className={`${imageSize} shrink-0 object-contain align-middle`}
+            className={`${imageSize} ${getBadgeRingClass(badge.slug)} shrink-0 bg-white/80 object-contain align-middle dark:bg-black/50`}
           />
         )
       })}

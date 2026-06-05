@@ -16,6 +16,12 @@ type BadgeRow = {
   rarity: string | null
 }
 
+type BadgeGrantRow = {
+  id: string
+  slug: string
+  name: string
+}
+
 type ProfileRow = {
   id: string
   username: string | null
@@ -273,6 +279,26 @@ async function logBadgeAction(
   }
 }
 
+async function notifyBadgeAwarded(
+  supabase: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
+  payload: {
+    userId: string
+    adminId: string
+    badgeId: string
+  },
+) {
+  const { error } = await supabase.from('notifications').insert({
+    user_id: payload.userId,
+    actor_id: payload.adminId,
+    type: 'badge_awarded',
+    badge_id: payload.badgeId,
+  })
+
+  if (error) {
+    console.warn('[AdminBadges] Badge notification failed:', error.message)
+  }
+}
+
 export async function GET(request: Request) {
   const admin = await requireAdmin(request)
   if ('error' in admin) return admin.error
@@ -337,12 +363,13 @@ export async function POST(request: Request) {
         .maybeSingle()
 
       if (badgeError || !badge) return jsonError('Selo nao encontrado.', 404)
+      const selectedBadge = badge as BadgeGrantRow
 
       const { data: existing, error: existingError } = await admin.supabase
         .from('user_badges')
         .select('id')
         .eq('user_id', userId)
-        .eq('badge_id', badge.id)
+        .eq('badge_id', selectedBadge.id)
         .maybeSingle()
 
       if (existingError) return jsonError('Nao foi possivel verificar selo atual.', 500)
@@ -350,7 +377,7 @@ export async function POST(request: Request) {
       if (!existing) {
         const { error: insertError } = await admin.supabase.from('user_badges').insert({
           user_id: userId,
-          badge_id: badge.id,
+          badge_id: selectedBadge.id,
           awarded_by: admin.adminId,
           reason,
         })
@@ -359,17 +386,23 @@ export async function POST(request: Request) {
 
         await logBadgeAction(admin.supabase, {
           userId,
-          badgeId: badge.id,
-          badgeSlug: badge.slug,
+          badgeId: selectedBadge.id,
+          badgeSlug: selectedBadge.slug,
           action: 'granted',
           adminId: admin.adminId,
           reason,
+        })
+
+        await notifyBadgeAwarded(admin.supabase, {
+          userId,
+          adminId: admin.adminId,
+          badgeId: selectedBadge.id,
         })
       }
 
       return NextResponse.json({
         ok: true,
-        message: existing ? 'Usuario ja possui este selo.' : `Selo ${badge.name} concedido com sucesso.`,
+        message: existing ? 'Usuario ja possui este selo.' : `Selo ${selectedBadge.name} concedido com sucesso.`,
       })
     }
 

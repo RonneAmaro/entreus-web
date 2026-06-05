@@ -100,6 +100,22 @@ export default function UserBadgesPanel({
     return `Selo ${badge.name}`
   }
 
+  function getBadgeCardClass(slug: string) {
+    if (slug === 'elder') return 'border-amber-200 bg-amber-50/80 dark:border-amber-900/60 dark:bg-amber-950/20'
+    if (slug === 'vip_premium') return 'border-fuchsia-200 bg-fuchsia-50/80 dark:border-fuchsia-900/60 dark:bg-fuchsia-950/20'
+    if (slug === 'vip') return 'border-blue-200 bg-blue-50/80 dark:border-blue-900/60 dark:bg-blue-950/20'
+    if (slug === 'community') return 'border-cyan-200 bg-cyan-50/80 dark:border-cyan-900/60 dark:bg-cyan-950/20'
+    return 'border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950'
+  }
+
+  function getBadgeIconClass(slug: string) {
+    if (slug === 'elder') return 'border-amber-200 bg-white shadow-sm shadow-amber-500/15 dark:border-amber-800 dark:bg-black'
+    if (slug === 'vip_premium') return 'border-fuchsia-200 bg-white shadow-sm shadow-fuchsia-500/15 dark:border-fuchsia-800 dark:bg-black'
+    if (slug === 'vip') return 'border-blue-200 bg-white shadow-sm shadow-blue-500/15 dark:border-blue-800 dark:bg-black'
+    if (slug === 'community') return 'border-cyan-200 bg-white shadow-sm shadow-cyan-500/15 dark:border-cyan-800 dark:bg-black'
+    return 'border-zinc-200 bg-white dark:border-zinc-700 dark:bg-black'
+  }
+
   return (
     <section className="rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900 sm:p-6">
       <div className="mb-4 flex items-start justify-between gap-3">
@@ -153,11 +169,11 @@ export default function UserBadgesPanel({
             return (
               <article
                 key={badge.id}
-                className="group rounded-2xl border border-zinc-200 bg-zinc-50 p-4 transition hover:-translate-y-[1px] hover:bg-white hover:shadow-sm dark:border-zinc-800 dark:bg-zinc-950 dark:hover:bg-zinc-900"
+                className={`group rounded-2xl border p-4 transition hover:-translate-y-[1px] hover:shadow-sm ${getBadgeCardClass(badge.slug)}`}
                 title={badgeDescription}
               >
                 <div className="flex items-center gap-3">
-                  <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-zinc-200 bg-white p-2 dark:border-zinc-700 dark:bg-black">
+                  <div className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border p-2 ${getBadgeIconClass(badge.slug)}`}>
                     <img
                       src={badge.icon || `/badges/${badge.slug}.png`}
                       alt={`Selo ${badgeTitle}`}
@@ -175,7 +191,7 @@ export default function UserBadgesPanel({
                     </p>
 
                     {badge.rarity && (
-                      <p className="mt-2 inline-flex rounded-full border border-zinc-200 px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
+                      <p className="mt-2 inline-flex rounded-full border border-current/20 bg-white/50 px-2 py-0.5 text-[11px] font-black uppercase tracking-wide text-zinc-600 dark:bg-black/30 dark:text-zinc-300">
                         {badge.rarity}
                       </p>
                     )}
