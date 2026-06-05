@@ -166,6 +166,7 @@ Mercado Pago / ItaCash payments:
 
 - `MERCADO_PAGO_ACCESS_TOKEN`
 - `MERCADO_PAGO_NOTIFICATION_URL`
+- `MERCADO_PAGO_WEBHOOK_SECRET` (recommended for validating `x-signature`; webhook still fetches the real payment from Mercado Pago before processing)
 - `PIX_KEY`
 - `PIX_PAYMENT_LINK`
 - `PIX_RECEIVER_NAME`
@@ -276,6 +277,12 @@ Do not change financial rules during smoke tests.
 - `/buy-itacash` loads purchase options.
 - Manual Pix instructions load if configured.
 - Mercado Pago Pix/preference creation works in sandbox/test mode.
+- Mercado Pago webhook fetches the real payment from the Mercado Pago API before crediting ItaCash or activating VIP.
+- Mercado Pago webhook signature validation is enabled when `MERCADO_PAGO_WEBHOOK_SECRET` is configured.
+- Repeated Mercado Pago webhook for the same approved ItaCash payment does not duplicate balance.
+- Repeated Mercado Pago webhook for the same approved VIP payment does not extend VIP twice.
+- Pending, rejected, cancelled, expired, refunded, or chargeback-like payment statuses do not credit ItaCash or activate VIP.
+- Payment logs show payment id, status, and order references only; they must not expose access tokens, secrets, full payloads, card data, or service role keys.
 - `/admin/itacash-purchases` loads purchase requests.
 - Admin can view proof via signed URL.
 - `/gifts` loads digital gifts.

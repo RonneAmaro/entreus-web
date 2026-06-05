@@ -113,11 +113,15 @@ const riskCards = [
     ],
   },
   {
-    title: 'ItaCash',
+    title: 'Pagamentos Mercado Pago',
     tone: 'critical' as const,
     items: [
-      'Webhook Mercado Pago precisa ser idempotente.',
-      'Saldo nao pode duplicar com webhook repetido.',
+      'Webhook deve buscar o pagamento real na API Mercado Pago antes de processar.',
+      'Configurar MERCADO_PAGO_WEBHOOK_SECRET para validar x-signature.',
+      'Webhook duplicado de ItaCash nao pode duplicar saldo.',
+      'Webhook duplicado de VIP nao pode estender VIP duas vezes.',
+      'Status pendente/rejeitado/cancelado nao pode ativar beneficio.',
+      'Logs nao devem exibir tokens, secrets, payload completo ou dados de cartao.',
       'Nao apresentar ItaCash como cripto/investimento.',
     ],
   },
@@ -141,7 +145,10 @@ const manualTests = [
   'Testar arquivo bloqueado no chat do Meet.',
   'Testar post sensivel com usuario menor/nao verificado.',
   'Testar ocultar/restaurar conteudo denunciado.',
-  'Testar webhook duplicado do Mercado Pago em ambiente controlado.',
+  'Testar webhook sem payment id e confirmar que nada e processado.',
+  'Testar webhook com payment id inexistente e confirmar que nada e processado.',
+  'Testar webhook pending/rejected do Mercado Pago e confirmar que nao ativa ItaCash/VIP.',
+  'Testar webhook duplicado de ItaCash e VIP em ambiente controlado.',
 ]
 
 function getBadgeClass(tone: BadgeTone) {

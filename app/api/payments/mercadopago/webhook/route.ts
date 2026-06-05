@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import crypto from 'crypto'
 
 type MercadoPagoPayment = {
   id?: number | string
@@ -104,6 +105,82 @@ function getResourceId(request: Request, body: unknown) {
   return ''
 }
 
+function parseMercadoPagoSignatureHeader(value: string | null) {
+  if (!value) return null
+
+  return value.split(',').reduce<Record<string, string>>((acc, part) => {
+    const [key, ...rest] = part.trim().split('=')
+    const cleanKey = key?.trim()
+    const cleanValue = rest.join('=').trim()
+
+    if (cleanKey && cleanValue) acc[cleanKey] = cleanValue
+    return acc
+  }, {})
+}
+
+function getSignatureDataId(request: Request, body: unknown) {
+  const url = new URL(request.url)
+  const queryDataId = url.searchParams.get('data.id') || url.searchParams.get('id')
+
+  if (queryDataId) return queryDataId.toLowerCase()
+
+  if (body && typeof body === 'object') {
+    const record = body as MercadoPagoWebhookPayload
+    const bodyDataId = record.data?.id || record.id
+    if (bodyDataId) return String(bodyDataId).toLowerCase()
+  }
+
+  return ''
+}
+
+function safeTimingCompareHex(left: string, right: string) {
+  if (!/^[a-f0-9]+$/i.test(left) || !/^[a-f0-9]+$/i.test(right)) return false
+
+  const leftBuffer = Buffer.from(left, 'hex')
+  const rightBuffer = Buffer.from(right, 'hex')
+
+  if (leftBuffer.length !== rightBuffer.length) return false
+  return crypto.timingSafeEqual(leftBuffer, rightBuffer)
+}
+
+function verifyMercadoPagoWebhookSignature(request: Request, body: unknown) {
+  const secret = process.env.MERCADO_PAGO_WEBHOOK_SECRET?.trim()
+
+  if (!secret) {
+    return {
+      configured: false,
+      ok: true,
+      reason: 'signature_secret_not_configured',
+    }
+  }
+
+  const signatureParts = parseMercadoPagoSignatureHeader(request.headers.get('x-signature'))
+  const requestId = request.headers.get('x-request-id')?.trim() || ''
+  const dataId = getSignatureDataId(request, body)
+  const timestamp = signatureParts?.ts || ''
+  const receivedSignature = signatureParts?.v1 || ''
+
+  if (!signatureParts || !requestId || !dataId || !timestamp || !receivedSignature) {
+    return {
+      configured: true,
+      ok: false,
+      reason: 'missing_signature_parts',
+    }
+  }
+
+  const manifest = `id:${dataId};request-id:${requestId};ts:${timestamp};`
+  const expectedSignature = crypto
+    .createHmac('sha256', secret)
+    .update(manifest)
+    .digest('hex')
+
+  return {
+    configured: true,
+    ok: safeTimingCompareHex(expectedSignature, receivedSignature),
+    reason: 'signature_checked',
+  }
+}
+
 async function fetchMercadoPagoJson<T>(url: string, accessToken: string) {
   const response = await fetch(url, {
     method: 'GET',
@@ -155,6 +232,21 @@ function getRpcErrorLog(error: {
     code: error.code || null,
     details: error.details || null,
     hint: error.hint || null,
+  }
+}
+
+function getSafeRpcResultLog(data: unknown) {
+  if (!data || typeof data !== 'object') return null
+
+  const record = data as Record<string, unknown>
+  return {
+    success: typeof record.success === 'boolean' ? record.success : null,
+    paid: typeof record.paid === 'boolean' ? record.paid : null,
+    alreadyProcessed: typeof record.already_processed === 'boolean' ? record.already_processed : null,
+    credited: typeof record.credited === 'boolean' ? record.credited : null,
+    vipActivated: typeof record.vip_activated === 'boolean' ? record.vip_activated : null,
+    reason: typeof record.reason === 'string' ? record.reason : null,
+    productType: typeof record.product_type === 'string' ? record.product_type : null,
   }
 }
 
@@ -299,7 +391,7 @@ async function processPaymentId(
     console.info('Mercado Pago pagamento processado', {
       paymentId: providerPaymentId,
       status: providerStatus,
-      result: data,
+      result: getSafeRpcResultLog(data),
     })
 
     return NextResponse.json({
@@ -307,7 +399,7 @@ async function processPaymentId(
       received: true,
       processed: true,
       paymentId: providerPaymentId,
-      result: data,
+      result: getSafeRpcResultLog(data),
     })
   }
 
@@ -315,7 +407,7 @@ async function processPaymentId(
     console.info('Mercado Pago pagamento ainda nao aprovado', {
       paymentId: providerPaymentId,
       status: providerStatus,
-      result: data,
+      result: getSafeRpcResultLog(data),
     })
 
     return NextResponse.json({
@@ -324,7 +416,7 @@ async function processPaymentId(
       pending: true,
       paymentId: providerPaymentId,
       status: providerStatus,
-      result: data,
+      result: getSafeRpcResultLog(data),
     })
   }
 
@@ -332,7 +424,7 @@ async function processPaymentId(
     console.info('Mercado Pago pagamento ainda nao aprovado', {
       paymentId: providerPaymentId,
       status: providerStatus,
-      result: data,
+      result: getSafeRpcResultLog(data),
     })
 
     return NextResponse.json({
@@ -342,14 +434,14 @@ async function processPaymentId(
       reason: 'payment_not_approved',
       paymentId: providerPaymentId,
       status: providerStatus,
-      result: data,
+      result: getSafeRpcResultLog(data),
     })
   }
 
   console.info('Mercado Pago pagamento ainda nao aprovado', {
     paymentId: providerPaymentId,
     status: providerStatus,
-    result: data,
+    result: getSafeRpcResultLog(data),
   })
 
   return NextResponse.json({
@@ -359,7 +451,7 @@ async function processPaymentId(
     reason: 'payment_status_not_approved',
     paymentId: providerPaymentId,
     status: providerStatus,
-    result: data,
+    result: getSafeRpcResultLog(data),
   })
 }
 
@@ -442,6 +534,20 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => null)
     const eventType = getWebhookEvent(request, body)
     const resourceId = getResourceId(request, body)
+    const signature = verifyMercadoPagoWebhookSignature(request, body)
+
+    if (!signature.ok) {
+      console.warn('Mercado Pago webhook rejeitado por assinatura invalida.', {
+        reason: signature.reason,
+        eventType,
+        hasResourceId: Boolean(resourceId),
+      })
+
+      return NextResponse.json(
+        { ok: false, ignored: true, reason: 'invalid_webhook_signature' },
+        { status: 401 },
+      )
+    }
 
     console.info('Mercado Pago webhook recebido', {
       eventType,
@@ -449,6 +555,7 @@ export async function POST(request: Request) {
       topic: body && typeof body === 'object' ? (body as MercadoPagoWebhookPayload).topic || null : null,
       liveMode: body && typeof body === 'object' ? (body as MercadoPagoWebhookPayload).live_mode ?? null : null,
       resourceId,
+      signatureConfigured: signature.configured,
     })
 
     if (!resourceId) {
@@ -471,7 +578,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ok: true, received: true, ignored: true, reason: 'unsupported_event', eventType })
   } catch (error) {
-    console.error('Erro no webhook Mercado Pago:', error)
+    console.error('Erro no webhook Mercado Pago:', error instanceof Error ? error.message : 'unknown_error')
 
     return NextResponse.json(
       { ok: false, error: 'Erro interno controlado no webhook Mercado Pago.' },
