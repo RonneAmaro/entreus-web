@@ -9,8 +9,10 @@ import MobileNavigation from '../components/MobileNavigation'
 import {
   ArrowLeft,
   BadgeCheck,
+  CheckCircle2,
   Coins,
   Crown,
+  Loader2,
   Palette,
   ShieldCheck,
   Sparkles,
@@ -19,6 +21,8 @@ import {
   Zap,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { calculatePaymentTotals } from '@/lib/payment-fees'
+import { VIP_PURCHASE_PLANS, type VipPlanKey } from '@/lib/vip-plans'
 
 type CurrentProfile = {
   username: string | null
@@ -28,6 +32,24 @@ type CurrentProfile = {
   vip_status: string | null
   vip_expires_at: string | null
 }
+
+type VipPurchaseOrderResponse =
+  | {
+      ok: true
+      order: {
+        id: string
+        externalReference: string
+        status: string
+        planKey: VipPlanKey
+        planLabel: string
+        days: number
+        totals: ReturnType<typeof calculatePaymentTotals>
+      }
+    }
+  | {
+      ok: false
+      error: string
+    }
 
 const BADGE_MEDIA = {
   ansiao: {
@@ -52,7 +74,7 @@ const benefits = [
   },
   {
     title: 'Meet de 1 hora',
-    description: 'Beneficio previsto para chamadas maiores quando a regra VIP do Meet for ativada.',
+    description: 'Salas criadas por VIP ativo duram ate 60 minutos no EntreUS Meet.',
     icon: Crown,
   },
   {
@@ -100,6 +122,13 @@ function formatVipDate(value: string | null | undefined) {
   }
 }
 
+function formatBRLFromCents(value: number) {
+  return (value / 100).toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  })
+}
+
 export default function VipPlusPage() {
   const router = useRouter()
   const { theme, setTheme } = useTheme()
@@ -109,6 +138,10 @@ export default function VipPlusPage() {
   const [currentProfile, setCurrentProfile] = useState<CurrentProfile | null>(null)
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0)
   const [videoFailed, setVideoFailed] = useState(false)
+  const [selectedPlanKey, setSelectedPlanKey] = useState<VipPlanKey>('vip_90d')
+  const [preparingPurchase, setPreparingPurchase] = useState(false)
+  const [purchaseMessage, setPurchaseMessage] = useState('')
+  const [preparedOrder, setPreparedOrder] = useState<Extract<VipPurchaseOrderResponse, { ok: true }>['order'] | null>(null)
 
   useEffect(() => {
     setMounted(true)
@@ -119,6 +152,14 @@ export default function VipPlusPage() {
   }, [])
 
   const vipActive = useMemo(() => isVipActive(currentProfile), [currentProfile])
+  const selectedPlan = useMemo(
+    () => VIP_PURCHASE_PLANS.find((plan) => plan.planKey === selectedPlanKey) || VIP_PURCHASE_PLANS[0],
+    [selectedPlanKey],
+  )
+  const selectedPlanTotals = useMemo(
+    () => calculatePaymentTotals(selectedPlan.amountBrlCents, 'mercadopago_pix'),
+    [selectedPlan],
+  )
 
   async function loadNavigationShell() {
     const {
@@ -175,6 +216,48 @@ export default function VipPlusPage() {
 
   function handlePostClick() {
     router.push('/feed')
+  }
+
+  async function prepareVipPurchase() {
+    setPreparingPurchase(true)
+    setPurchaseMessage('')
+    setPreparedOrder(null)
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+
+    if (!session?.access_token) {
+      setPurchaseMessage('Entre na sua conta para preparar a compra VIP.')
+      setPreparingPurchase(false)
+      return
+    }
+
+    try {
+      const response = await fetch('/api/vip/purchase-orders', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          plan_key: selectedPlan.planKey,
+        }),
+      })
+      const data = (await response.json()) as VipPurchaseOrderResponse
+
+      if (!response.ok || !data.ok) {
+        setPurchaseMessage(data.ok ? 'Nao foi possivel preparar a compra VIP.' : data.error)
+        return
+      }
+
+      setPreparedOrder(data.order)
+      setPurchaseMessage('Pedido VIP pendente criado. Nenhum VIP foi ativado sem pagamento confirmado.')
+    } catch {
+      setPurchaseMessage('Nao foi possivel preparar a compra VIP agora.')
+    } finally {
+      setPreparingPurchase(false)
+    }
   }
 
   return (
@@ -250,11 +333,11 @@ export default function VipPlusPage() {
               </div>
               <div className="rounded-3xl border border-white/10 bg-zinc-950/75 p-4 ring-1 ring-white/5">
                 <p className="text-xs font-black uppercase tracking-[0.2em] text-zinc-500">Assinatura</p>
-                <p className="mt-2 text-2xl font-black">Em breve</p>
+                <p className="mt-2 text-2xl font-black">Preparada</p>
               </div>
               <div className="rounded-3xl border border-emerald-300/20 bg-emerald-500/10 p-4">
                 <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-200/70">Status</p>
-                <p className="mt-2 text-2xl font-black">{vipActive ? 'Ativo' : 'Manual'}</p>
+                <p className="mt-2 text-2xl font-black">{vipActive ? 'Ativo' : 'Comprar'}</p>
               </div>
             </div>
           </div>
@@ -343,11 +426,59 @@ export default function VipPlusPage() {
             <div className="mt-5 rounded-[2rem] border border-white/10 bg-zinc-950/90 p-5 ring-1 ring-white/5">
               <div className="flex items-center gap-3">
                 <Palette className="h-6 w-6 text-blue-200" />
-                <h2 className="text-xl font-black">VIP Premium em breve</h2>
+                <h2 className="text-xl font-black">Gravacao e traducao em fase futura</h2>
               </div>
               <p className="mt-3 text-sm leading-6 text-zinc-400">
-                VIP Premium ficara para uma proxima fase, quando o EntreUS Meet estiver mais completo.
+                Gravacao de sala, traducao simultanea e recursos premium futuros serao liberados em pacotes posteriores.
               </p>
+            </div>
+
+            <div className="mt-5 rounded-[2rem] border border-blue-300/20 bg-blue-500/10 p-5 ring-1 ring-blue-300/10">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-xl font-black">Planos iniciais</h2>
+                  <p className="mt-1 text-sm text-blue-50/70">Valores placeholder configuraveis no codigo.</p>
+                </div>
+                <span className="rounded-full border border-blue-200/20 bg-black/30 px-3 py-1 text-xs font-black text-blue-100">
+                  Pedido pendente seguro
+                </span>
+              </div>
+
+              <div className="mt-4 grid gap-3 md:grid-cols-3">
+                {VIP_PURCHASE_PLANS.map((plan) => {
+                  const selected = selectedPlanKey === plan.planKey
+
+                  return (
+                    <button
+                      key={plan.planKey}
+                      type="button"
+                      onClick={() => {
+                        setSelectedPlanKey(plan.planKey)
+                        setPreparedOrder(null)
+                        setPurchaseMessage('')
+                      }}
+                      className={`rounded-3xl border p-4 text-left transition hover:-translate-y-0.5 ${
+                        selected
+                          ? 'border-blue-200/45 bg-white text-black shadow-xl shadow-blue-950/20'
+                          : 'border-white/10 bg-black/35 text-blue-50 hover:border-blue-200/25 hover:bg-blue-500/15'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="font-black">{plan.label}</p>
+                        {plan.featured && (
+                          <span className={`rounded-full px-2 py-1 text-[10px] font-black ${selected ? 'bg-blue-100 text-blue-700' : 'bg-blue-500/15 text-blue-100'}`}>
+                            Popular
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-3 text-2xl font-black">{formatBRLFromCents(plan.amountBrlCents)}</p>
+                      <p className={`mt-2 text-xs font-semibold ${selected ? 'text-zinc-600' : 'text-blue-50/65'}`}>
+                        {plan.days} dias de VIP apos pagamento confirmado.
+                      </p>
+                    </button>
+                  )
+                })}
+              </div>
             </div>
           </div>
 
@@ -369,7 +500,7 @@ export default function VipPlusPage() {
             }`}>
               <p className="text-xs font-black uppercase tracking-[0.2em] opacity-70">Status da conta</p>
               <p className="mt-2 text-2xl font-black">
-                {vipActive ? 'Voce ja e VIP' : 'Em breve voce podera assinar pela plataforma'}
+                {vipActive ? 'Voce ja e VIP' : 'Escolha um plano para preparar a compra'}
               </p>
               {vipActive && (
                 <p className="mt-2 text-sm font-semibold opacity-80">
@@ -380,12 +511,14 @@ export default function VipPlusPage() {
 
             <div className="mt-4 grid gap-3 text-sm text-zinc-300">
               <div className="rounded-2xl border border-white/10 bg-black/35 px-4 py-3">
-                <strong className="block text-white">Origem manual agora</strong>
-                <span className="mt-1 block text-zinc-400">Administradores podem ativar, estender ou cancelar VIP enquanto a assinatura publica nao entra.</span>
+                <strong className="block text-white">{selectedPlan.label}</strong>
+                <span className="mt-1 block text-zinc-400">{selectedPlan.days} dias de VIP apos confirmacao futura do pagamento.</span>
               </div>
               <div className="rounded-2xl border border-white/10 bg-black/35 px-4 py-3">
-                <strong className="block text-white">Pagamentos depois</strong>
-                <span className="mt-1 block text-zinc-400">Nenhum pagamento real e iniciado nesta tela neste pacote.</span>
+                <strong className="block text-white">Total previsto</strong>
+                <span className="mt-1 block text-zinc-400">
+                  {formatBRLFromCents(selectedPlanTotals.totalBrlCents)} com taxa estimada de Pix Mercado Pago.
+                </span>
               </div>
               <div className="rounded-2xl border border-white/10 bg-black/35 px-4 py-3">
                 <strong className="block text-white">Plano atual</strong>
@@ -395,12 +528,31 @@ export default function VipPlusPage() {
 
             <button
               type="button"
-              disabled
-              className="mt-5 inline-flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-full border border-white/10 bg-white/5 px-5 py-3 text-sm font-black text-zinc-500"
+              onClick={prepareVipPurchase}
+              disabled={preparingPurchase}
+              className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-black text-black transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <Crown className="h-4 w-4" />
-              Assinatura em breve
+              {preparingPurchase ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+              Preparar compra
             </button>
+
+            {purchaseMessage && (
+              <div className={`mt-4 rounded-2xl border px-4 py-3 text-sm font-semibold ${
+                preparedOrder
+                  ? 'border-emerald-300/20 bg-emerald-500/10 text-emerald-100'
+                  : 'border-amber-300/20 bg-amber-500/10 text-amber-100'
+              }`}>
+                {purchaseMessage}
+              </div>
+            )}
+
+            {preparedOrder && (
+              <div className="mt-4 rounded-3xl border border-emerald-300/20 bg-emerald-500/10 p-4 text-sm text-emerald-50">
+                <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-200/70">Pedido pendente</p>
+                <p className="mt-2 font-black">{preparedOrder.planLabel}</p>
+                <p className="mt-1 break-all text-xs text-emerald-50/70">Referencia: {preparedOrder.externalReference}</p>
+              </div>
+            )}
           </aside>
         </section>
       </section>
