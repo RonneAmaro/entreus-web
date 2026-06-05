@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { calculatePaymentTotals, getPaymentMethodConfig } from '@/lib/payment-fees'
+import { getVipPurchasePlan, VIP_PRICE_VERSION } from '@/lib/vip-plans'
 
 type ProductType = 'itacash' | 'vip_plus'
 
@@ -20,8 +21,6 @@ type MercadoPagoPreference = {
 }
 
 const PLATFORM_FEE_PERCENT = 2
-const VIP_PLUS_PRICE_BRL_CENTS = 1490
-const VIP_PLUS_BONUS_ITACASH = 100
 
 function getSupabaseForRequest(request: Request) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -46,10 +45,11 @@ function centsToBRL(value: number) {
 function calculateTotals(
   productType: ProductType,
   amountItacash: number | null,
-  paymentMethodOption: string
+  paymentMethodOption: string,
+  vipAmountBrlCents: number | null = null,
 ) {
   const baseAmountBrlCents =
-    productType === 'itacash' ? (amountItacash || 0) * 10 : VIP_PLUS_PRICE_BRL_CENTS
+    productType === 'itacash' ? (amountItacash || 0) * 10 : vipAmountBrlCents || 0
   return calculatePaymentTotals(baseAmountBrlCents, paymentMethodOption)
 }
 
@@ -71,10 +71,16 @@ export async function POST(request: Request) {
       productType === 'itacash' ? Number.parseInt(String(body?.amount_itacash || ''), 10) : null
     const paymentMethodOption = String(body?.payment_method_option || 'mercadopago_pix')
     const paymentMethod = getPaymentMethodConfig(paymentMethodOption)
-    const autoRenewVipPlus = Boolean(body?.auto_renew)
+    const vipPlan = productType === 'vip_plus'
+      ? getVipPurchasePlan(String(body?.plan_key || 'vip_30d'))
+      : null
 
     if (productType !== 'itacash' && productType !== 'vip_plus') {
       return NextResponse.json({ error: 'Produto invalido.' }, { status: 400 })
+    }
+
+    if (productType === 'vip_plus' && !vipPlan) {
+      return NextResponse.json({ error: 'Plano VIP invalido.' }, { status: 400 })
     }
 
     if (productType === 'itacash' && (!amountItacash || amountItacash <= 0)) {
@@ -103,11 +109,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Entre na sua conta para pagar.' }, { status: 401 })
     }
 
-    const totals = calculateTotals(productType, amountItacash, paymentMethod.value)
+    const totals = calculateTotals(productType, amountItacash, paymentMethod.value, vipPlan?.amountBrlCents || null)
 
     const { data: orderData, error: orderError } = await supabase.rpc('create_payment_order', {
       p_product_type: productType,
-      p_product_id: productType === 'vip_plus' ? 'vip_plus_monthly' : null,
+      p_product_id: productType === 'vip_plus' ? vipPlan!.planKey : null,
       p_amount_itacash: amountItacash,
       p_base_amount_brl_cents: totals.baseAmountBrlCents,
       p_platform_fee_percent: PLATFORM_FEE_PERCENT,
@@ -118,9 +124,13 @@ export async function POST(request: Request) {
       p_metadata:
         productType === 'vip_plus'
           ? {
-              vip_plus_bonus_itacash: VIP_PLUS_BONUS_ITACASH,
+              purpose: 'vip_subscription',
+              plan_key: vipPlan!.planKey,
+              plan_label: vipPlan!.label,
+              days: vipPlan!.days,
+              price_version: VIP_PRICE_VERSION,
               payment_method_option: paymentMethod.value,
-              auto_renew_requested: autoRenewVipPlus,
+              activation_pending: true,
             }
           : { payment_method_option: paymentMethod.value },
     })
@@ -135,7 +145,7 @@ export async function POST(request: Request) {
     const order = orderData as PaymentOrder
     const title =
       productType === 'vip_plus'
-        ? 'EntreUS VIP Plus'
+        ? `EntreUS ${vipPlan!.label}`
         : `${amountItacash} ItaCash EntreUS`
 
     const preferenceResponse = await fetch('https://api.mercadopago.com/checkout/preferences', {
@@ -165,7 +175,7 @@ export async function POST(request: Request) {
             title,
             description:
               productType === 'vip_plus'
-                ? 'Plano VIP Plus mensal EntreUS'
+                ? `${vipPlan!.days} dias de VIP EntreUS`
                 : 'Credito ItaCash para uso interno na EntreUS',
             quantity: 1,
             currency_id: 'BRL',
@@ -176,7 +186,8 @@ export async function POST(request: Request) {
           order_id: order.id,
           product_type: productType,
           payment_method_option: paymentMethod.value,
-          auto_renew_requested: productType === 'vip_plus' ? autoRenewVipPlus : undefined,
+          plan_key: productType === 'vip_plus' ? vipPlan!.planKey : undefined,
+          days: productType === 'vip_plus' ? vipPlan!.days : undefined,
           user_id: user.id,
         },
       }),
