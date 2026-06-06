@@ -11,6 +11,10 @@ Do not paste secrets into this file. Apply SQL manually in Supabase after review
 - Confirm no required environment variable is missing in Vercel.
 - Confirm `/manifest.webmanifest` is generated from `app/manifest.ts`.
 
+## 1.1 Guia completo de testes
+
+- Use `docs/test-guide-entreus.md` as the step-by-step platform test guide before inviting real users.
+
 Known PWA follow-up:
 
 - `app/manifest.ts` uses official PNG PWA icons in `public/pwa/icons/` for 192x192, 512x512, and maskable 512x512, with SVG/favicon assets kept as fallbacks.
