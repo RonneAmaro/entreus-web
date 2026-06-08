@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowLeft,
   Award,
@@ -161,17 +161,20 @@ export default function AdminBadgesPage() {
   const [updatingKey, setUpdatingKey] = useState('')
   const [message, setMessage] = useState('')
   const [adminProfile, setAdminProfile] = useState<AdminProfile | null>(null)
-  const [query, setQuery] = useState('')
+  const [searchInput, setSearchInput] = useState('')
+  const [submittedSearch, setSubmittedSearch] = useState('')
   const [reason, setReason] = useState('')
   const [vipPlan, setVipPlan] = useState<'vip' | 'vip_premium'>('vip')
   const [vipDurationDays, setVipDurationDays] = useState(30)
   const [badges, setBadges] = useState<Badge[]>([])
   const [users, setUsers] = useState<UserProfile[]>([])
+  const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null)
   const [suggestionsLoading, setSuggestionsLoading] = useState(false)
   const [suggestionCandidates, setSuggestionCandidates] = useState<BadgeSuggestion[]>([])
   const [alreadyAwardedCommunity, setAlreadyAwardedCommunity] = useState<BadgeSuggestion[]>([])
   const [suggestionWarnings, setSuggestionWarnings] = useState<string[]>([])
   const [metricsUsed, setMetricsUsed] = useState<string[]>([])
+  const searchResultsRef = useRef<HTMLDivElement | null>(null)
 
   const grantableBadges = useMemo(() => {
     const bySlug = new Map(badges.map((badge) => [badge.slug, badge]))
@@ -180,7 +183,7 @@ export default function AdminBadgesPage() {
     return [...featured, ...rest]
   }, [badges])
 
-  const loadBadges = useCallback(async (searchQuery = query) => {
+  const loadBadges = useCallback(async (searchQuery = '') => {
     setSearching(true)
     setMessage('')
 
@@ -191,7 +194,7 @@ export default function AdminBadgesPage() {
     if (!session?.access_token) {
       setMessage('Sessao expirada. Entre novamente para gerenciar selos.')
       setSearching(false)
-      return
+      return []
     }
 
     try {
@@ -208,17 +211,20 @@ export default function AdminBadgesPage() {
       if (!response.ok || !data.ok) {
         setMessage(getFriendlyError(data.error))
         setUsers([])
+        return []
       } else {
         setBadges(data.badges || [])
         setUsers(data.users || [])
+        return data.users || []
       }
     } catch {
       setMessage('Nao foi possivel conectar ao painel de selos agora.')
       setUsers([])
+      return []
     } finally {
       setSearching(false)
     }
-  }, [query])
+  }, [])
 
   const loadSuggestions = useCallback(async () => {
     setSuggestionsLoading(true)
@@ -306,12 +312,19 @@ export default function AdminBadgesPage() {
   async function searchUsers(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
-    if (query.trim().length < 2) {
-      setMessage('Digite pelo menos 2 caracteres para buscar usuario.')
+    const nextSearch = searchInput.trim()
+
+    if (!nextSearch) {
+      setMessage('Digite nome, username, arroba ou e-mail para buscar.')
       return
     }
 
-    await loadBadges(query)
+    setSubmittedSearch(nextSearch)
+    const results = await loadBadges(nextSearch)
+    if (results.length === 0) setSelectedUser(null)
+    window.requestAnimationFrame(() => {
+      searchResultsRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    })
   }
 
   async function submitBadgeAction(payload: {
@@ -361,7 +374,10 @@ export default function AdminBadgesPage() {
         setMessage(getFriendlyError(data.error))
       } else {
         setMessage(data.message || (payload.action === 'grant' ? 'Selo concedido com sucesso.' : 'Selo removido com sucesso.'))
-        await loadBadges(query)
+        const nextUsers = await loadBadges(submittedSearch)
+        if (selectedUser) {
+          setSelectedUser(nextUsers.find((user) => user.id === selectedUser.id) || selectedUser)
+        }
         await loadSuggestions()
       }
     } catch {
@@ -415,7 +431,10 @@ export default function AdminBadgesPage() {
         setMessage(getFriendlyError(data.error))
       } else {
         setMessage(data.message || 'VIP atualizado com sucesso.')
-        await loadBadges(query)
+        const nextUsers = await loadBadges(submittedSearch)
+        if (selectedUser) {
+          setSelectedUser(nextUsers.find((user) => user.id === selectedUser.id) || selectedUser)
+        }
         await loadSuggestions()
       }
     } catch {
@@ -616,8 +635,8 @@ export default function AdminBadgesPage() {
               <div className="mt-2 flex items-center gap-2 rounded-2xl border border-white/10 bg-black px-4 py-3 focus-within:border-blue-300">
                 <Search className="h-5 w-5 shrink-0 text-zinc-500" />
                 <input
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
+                  value={searchInput}
+                  onChange={(event) => setSearchInput(event.target.value)}
                   placeholder="nome, username, @usuario ou e-mail"
                   className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-zinc-600"
                 />
@@ -671,15 +690,83 @@ export default function AdminBadgesPage() {
           </div>
         </section>
 
+        <div ref={searchResultsRef} className="mt-5 grid gap-3">
+          {submittedSearch && (
+            <section className="rounded-[2rem] border border-blue-300/20 bg-zinc-950/80 p-5 ring-1 ring-white/5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-black text-white">Resultados da busca</h2>
+                  <p className="mt-1 text-sm text-zinc-400">Termo buscado: {submittedSearch}</p>
+                </div>
+                <span className="rounded-full border border-blue-300/20 bg-blue-500/10 px-3 py-1 text-xs font-black text-blue-100">
+                  {users.length} encontrado{users.length === 1 ? '' : 's'}
+                </span>
+              </div>
+
+              <div className="mt-4 grid gap-3">
+                {searching ? (
+                  <div className="flex items-center justify-center gap-2 rounded-3xl border border-white/10 bg-black/25 p-5 text-blue-100">
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                    Buscando usuarios...
+                  </div>
+                ) : users.length === 0 ? (
+                  <div className="rounded-3xl border border-white/10 bg-black/25 p-5 text-center text-sm font-semibold text-zinc-300">
+                    Nenhum usuario encontrado.
+                  </div>
+                ) : (
+                  users.map((user) => {
+                    const name = getProfileName(user)
+                    const selected = selectedUser?.id === user.id
+
+                    return (
+                      <article key={user.id} className="rounded-3xl border border-white/10 bg-black/25 p-4">
+                        <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center">
+                          <div className="flex min-w-0 items-center gap-3">
+                            {user.avatar_url ? (
+                              <img
+                                src={user.avatar_url}
+                                alt={name}
+                                className="h-12 w-12 rounded-full border border-blue-300/20 object-cover"
+                              />
+                            ) : (
+                              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-blue-300/20 bg-blue-950/40 text-sm font-black text-blue-100">
+                                {getInitial(name)}
+                              </span>
+                            )}
+                            <div className="min-w-0">
+                              <h3 className="truncate text-base font-black text-white">{name}</h3>
+                              <p className="truncate text-sm text-zinc-500">@{user.username || 'sem-username'}</p>
+                              {user.email && <p className="truncate text-sm text-zinc-500">{user.email}</p>}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedUser(user)}
+                            disabled={selected}
+                            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-blue-300/20 bg-blue-500/10 px-4 py-2 text-xs font-black text-blue-100 transition hover:bg-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {selected ? <CheckCircle2 className="h-3.5 w-3.5" /> : <UserRound className="h-3.5 w-3.5" />}
+                            {selected ? 'Selecionado' : 'Selecionar'}
+                          </button>
+                        </div>
+                      </article>
+                    )
+                  })
+                )}
+              </div>
+            </section>
+          )}
+        </div>
+
         <div className="mt-5 grid gap-4">
-          {users.length === 0 ? (
+          {!selectedUser ? (
             <div className="rounded-[2rem] border border-white/10 bg-zinc-950/80 p-7 text-center text-zinc-400 ring-1 ring-white/5">
               <Sparkles className="mx-auto h-8 w-8 text-blue-100" />
               <p className="mt-3 font-black text-white">Nenhum usuario selecionado</p>
               <p className="mt-1 text-sm">Busque por nome, username, arroba ou e-mail para gerenciar selos.</p>
             </div>
           ) : (
-            users.map((user) => {
+            [selectedUser].map((user) => {
               const name = getProfileName(user)
               const currentBadgeSlugs = new Set(user.badges.map((item) => item.badge?.slug).filter(Boolean))
               const vipActive = isVipActive(user)
