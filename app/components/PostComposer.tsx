@@ -208,12 +208,12 @@ export default function PostComposer({
 
     for (const file of selectedFiles) {
       if (!isImage(file) && !isVideo(file)) {
-        setError(t('postComposer.errors.unsupported'))
+        setError('Formato nao permitido. Use JPG, PNG, WEBP ou GIF.')
         continue
       }
 
       if (isImage(file) && file.size > MAX_IMAGE_SIZE) {
-        setError(t('postComposer.errors.imageTooLarge'))
+        setError(file.type === 'image/gif' ? 'Arquivo muito grande. Tente um GIF menor.' : t('postComposer.errors.imageTooLarge'))
         continue
       }
 

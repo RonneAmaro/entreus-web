@@ -28,7 +28,7 @@ export type PostCardMedia = {
   post_id: string
   user_id: string
   media_url: string
-  media_type: 'image' | 'video'
+  media_type: 'image' | 'video' | 'gif'
   position: number
   created_at?: string
 }

@@ -210,7 +210,7 @@ export async function POST(request: Request) {
       {
         ok: false,
         error: 'INVALID_FILE_TYPE',
-        message: 'Tipo de arquivo nao permitido.',
+        message: 'Formato nao permitido. Use JPG, PNG, WEBP ou GIF.',
       },
       { status: 415 },
     )
@@ -238,6 +238,8 @@ export async function POST(request: Request) {
         error: 'FILE_TOO_LARGE',
         message: body.contentType.startsWith('video/')
           ? 'Video muito grande. O limite atual e 30 MB.'
+          : body.contentType === 'image/gif'
+            ? 'Arquivo muito grande. Tente um GIF menor.'
           : 'Imagem muito grande. O limite atual e 5 MB.',
       },
       { status: 413 },

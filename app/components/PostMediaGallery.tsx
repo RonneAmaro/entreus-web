@@ -8,7 +8,7 @@ type PostMedia = {
   post_id: string
   user_id: string
   media_url: string
-  media_type: 'image' | 'video'
+  media_type: 'image' | 'video' | 'gif'
   position: number
   created_at?: string
 }
@@ -219,7 +219,7 @@ function MediaThumb({
     >
       {failed ? (
         <MediaFallback label={item.media_type === 'video' ? 'Video indisponivel' : 'Imagem indisponivel'} />
-      ) : item.media_type === 'image' ? (
+      ) : item.media_type === 'image' || item.media_type === 'gif' ? (
         <img
           src={item.media_url}
           alt="Imagem da publicação"
@@ -463,7 +463,7 @@ function PostMediaGallery({ media }: PostMediaGalleryProps) {
               <div className="h-[50dvh] w-full max-w-3xl overflow-hidden rounded-2xl">
                 <MediaFallback label={activeMedia.media_type === 'video' ? 'Video indisponivel' : 'Imagem indisponivel'} />
               </div>
-            ) : activeMedia.media_type === 'image' ? (
+            ) : activeMedia.media_type === 'image' || activeMedia.media_type === 'gif' ? (
               <img
                 src={activeMedia.media_url}
                 alt="Imagem ampliada"
