@@ -62,6 +62,7 @@ type BadgesApiResponse = {
   ok: boolean
   badges?: Badge[]
   users?: UserProfile[]
+  count?: number
   message?: string
   error?: string
 }
@@ -326,8 +327,7 @@ export default function AdminBadgesPage() {
     }
 
     setSubmittedSearch(nextSearch)
-    const results = await loadBadges(nextSearch)
-    if (results.length === 0) setSelectedUser(null)
+    await loadBadges(nextSearch)
     window.requestAnimationFrame(() => {
       searchResultsRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
     })
@@ -726,7 +726,7 @@ export default function AdminBadgesPage() {
                   </div>
                 ) : users.length === 0 ? (
                   <div className="rounded-3xl border border-white/10 bg-black/25 p-5 text-center text-sm font-semibold text-zinc-300">
-                    Nenhum usuario encontrado.
+                    Nenhum usuario encontrado em profiles. Confira se o cadastro foi concluido ou tente buscar pelo nome ou @username correto.
                   </div>
                 ) : (
                   users.map((user) => {

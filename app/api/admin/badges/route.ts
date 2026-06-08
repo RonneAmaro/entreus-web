@@ -29,6 +29,7 @@ type ProfileRow = {
   username: string | null
   display_name: string | null
   avatar_url: string | null
+  created_at?: string | null
   vip_plan?: string | null
   vip_status?: string | null
   vip_started_at?: string | null
@@ -64,6 +65,16 @@ type VipActionProfileRow = {
   vip_expires_at: string | null
 }
 
+type ProfileSearchDiagnostics = {
+  originalTerm: string
+  normalizedTerm: string
+  usernameTerm: string
+  directCount: number
+  fallbackScannedCount: number
+  fallbackCount: number
+  finalCount: number
+}
+
 class SafeApiError extends Error {
   status: number
 
@@ -86,6 +97,18 @@ function normalizeSearchText(value: string | null | undefined) {
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
+}
+
+function createSearchDiagnostics(originalQuery: string, query: string): ProfileSearchDiagnostics {
+  return {
+    originalTerm: originalQuery,
+    normalizedTerm: normalizeSearchText(query),
+    usernameTerm: getUsernameSearchQuery(query),
+    directCount: 0,
+    fallbackScannedCount: 0,
+    fallbackCount: 0,
+    finalCount: 0,
+  }
 }
 
 function profileMatchesSearch(profile: ProfileRow, query: string) {
@@ -169,6 +192,21 @@ async function loadProfilesByIds(
   return (data || []) as ProfileRow[]
 }
 
+async function enrichProfilesByIds(
+  supabase: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
+  profiles: ProfileRow[],
+) {
+  if (profiles.length === 0) return []
+
+  const enrichedProfiles = await loadProfilesByIds(
+    supabase,
+    profiles.map((profile) => profile.id),
+  )
+  const enrichedById = new Map(enrichedProfiles.map((profile) => [profile.id, profile]))
+
+  return profiles.map((profile) => enrichedById.get(profile.id) || profile)
+}
+
 function mergeProfiles(profileGroups: ProfileRow[][]) {
   const profilesById = new Map<string, ProfileRow>()
 
@@ -185,49 +223,37 @@ async function loadProfilesBySearch(
   supabase: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
   query: string,
 ) {
-  const selectWithVip = 'id, username, display_name, avatar_url, vip_plan, vip_status, vip_started_at, vip_expires_at, vip_plus_badge_enabled, vip_source, vip_reason, vip_updated_at'
-  const selectFallback = 'id, username, display_name, avatar_url'
+  const baseSelect = 'id, username, display_name, avatar_url, created_at'
   const usernameQuery = getUsernameSearchQuery(query)
+  const displayTerms = Array.from(new Set([query, usernameQuery].filter(Boolean)))
 
   async function runProfileSearch(column: 'username' | 'display_name', term: string) {
-    let { data, error } = await supabase
+    const { data, error } = await supabase
       .from('profiles')
-      .select(selectWithVip)
+      .select(baseSelect)
       .ilike(column, `%${term}%`)
-      .order('display_name', { ascending: true, nullsFirst: false })
+      .order('created_at', { ascending: false })
       .limit(MAX_SEARCH_RESULTS)
-
-    if (error && /vip_/i.test(error.message)) {
-      const fallback = await supabase
-        .from('profiles')
-        .select(selectFallback)
-        .ilike(column, `%${term}%`)
-        .order('display_name', { ascending: true, nullsFirst: false })
-        .limit(MAX_SEARCH_RESULTS)
-
-      data = fallback.data as typeof data
-      error = fallback.error
-    }
 
     if (error) throw error
     return (data || []) as ProfileRow[]
   }
 
-  const [usernameMatches, nameMatches] = await Promise.all([
+  const [usernameMatches, ...nameMatchGroups] = await Promise.all([
     runProfileSearch('username', usernameQuery),
-    runProfileSearch('display_name', query),
+    ...displayTerms.map((term) => runProfileSearch('display_name', term)),
   ])
 
-  return mergeProfiles([usernameMatches, nameMatches])
+  return mergeProfiles([usernameMatches, ...nameMatchGroups])
 }
 
 async function scanProfilesBySearch(
   supabase: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
   query: string,
   originalQuery: string,
+  diagnostics: ProfileSearchDiagnostics,
 ) {
-  const selectWithVip = 'id, username, display_name, avatar_url, vip_plan, vip_status, vip_started_at, vip_expires_at, vip_plus_badge_enabled, vip_source, vip_reason, vip_updated_at'
-  const selectFallback = 'id, username, display_name, avatar_url'
+  const baseSelect = 'id, username, display_name, avatar_url, created_at'
   const matches: ProfileRow[] = []
   let scannedCount = 0
 
@@ -235,22 +261,11 @@ async function scanProfilesBySearch(
     const from = page * PROFILE_SCAN_PAGE_SIZE
     const to = from + PROFILE_SCAN_PAGE_SIZE - 1
 
-    let { data, error } = await supabase
+    const { data, error } = await supabase
       .from('profiles')
-      .select(selectWithVip)
-      .order('display_name', { ascending: true, nullsFirst: false })
+      .select(baseSelect)
+      .order('created_at', { ascending: false })
       .range(from, to)
-
-    if (error && /vip_/i.test(error.message)) {
-      const fallback = await supabase
-        .from('profiles')
-        .select(selectFallback)
-        .order('display_name', { ascending: true, nullsFirst: false })
-        .range(from, to)
-
-      data = fallback.data as typeof data
-      error = fallback.error
-    }
 
     if (error) throw error
 
@@ -263,6 +278,9 @@ async function scanProfilesBySearch(
 
     if (rows.length < PROFILE_SCAN_PAGE_SIZE) break
   }
+
+  diagnostics.fallbackScannedCount = scannedCount
+  diagnostics.fallbackCount = matches.length
 
   console.info('[AdminBadges] Profile search fallback', {
     originalTerm: originalQuery,
@@ -329,7 +347,15 @@ async function searchProfiles(
   query: string,
   originalQuery: string,
 ) {
-  if (query.length < 2) return { profiles: [] as ProfileRow[], emailsById: {} as Record<string, string | null> }
+  const diagnostics = createSearchDiagnostics(originalQuery, query)
+
+  if (query.length < 2) {
+    return {
+      profiles: [] as ProfileRow[],
+      emailsById: {} as Record<string, string | null>,
+      diagnostics,
+    }
+  }
 
   const emailSearch = await searchAuthUserIdsByEmail(supabase, query)
   let profiles: ProfileRow[] = []
@@ -338,9 +364,13 @@ async function searchProfiles(
     profiles = await loadProfilesByIds(supabase, emailSearch.ids)
   } else {
     profiles = await loadProfilesBySearch(supabase, query)
+    diagnostics.directCount = profiles.length
+
     if (profiles.length === 0) {
-      profiles = await scanProfilesBySearch(supabase, query, originalQuery)
+      profiles = await scanProfilesBySearch(supabase, query, originalQuery, diagnostics)
     }
+
+    profiles = await enrichProfilesByIds(supabase, profiles)
   }
 
   const emailsById = await loadEmailsById(
@@ -349,7 +379,11 @@ async function searchProfiles(
     emailSearch.emailsById,
   )
 
-  return { profiles, emailsById }
+  diagnostics.finalCount = profiles.length
+
+  console.info('[AdminBadges] Profile search summary', diagnostics)
+
+  return { profiles, emailsById, diagnostics }
 }
 
 async function ensureProfileExists(
@@ -568,12 +602,19 @@ export async function GET(request: Request) {
 
   try {
     const badges = await loadBadges(admin.supabase)
-    const { profiles, emailsById } = await searchProfiles(admin.supabase, query, rawQuery)
+    const { profiles, emailsById, diagnostics } = await searchProfiles(admin.supabase, query, rawQuery)
     const userBadgesByUserId = await loadUserBadges(admin.supabase, profiles.map((profile) => profile.id))
 
     return NextResponse.json({
       ok: true,
       badges,
+      count: profiles.length,
+      diagnostics: {
+        directCount: diagnostics.directCount,
+        fallbackScannedCount: diagnostics.fallbackScannedCount,
+        fallbackCount: diagnostics.fallbackCount,
+        finalCount: diagnostics.finalCount,
+      },
       users: profiles.map((profile) => ({
         ...profile,
         email: emailsById[profile.id] || null,
