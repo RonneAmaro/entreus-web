@@ -5,6 +5,8 @@ import { NextResponse } from 'next/server'
 const MAX_SEARCH_RESULTS = 12
 const MAX_EMAIL_SCAN_PAGES = 3
 const EMAIL_SCAN_PAGE_SIZE = 100
+const PROFILE_SCAN_PAGE_SIZE = 500
+const MAX_PROFILE_SCAN_PAGES = 6
 
 type BadgeRow = {
   id: string
@@ -62,8 +64,35 @@ type VipActionProfileRow = {
   vip_expires_at: string | null
 }
 
+class SafeApiError extends Error {
+  status: number
+
+  constructor(message: string, status = 500) {
+    super(message)
+    this.status = status
+  }
+}
+
 function cleanSearchQuery(value: string | null) {
-  return (value || '').trim().replace(/^@+/, '').replace(/[%,]/g, '').slice(0, 80)
+  return (value || '').trim().replace(/^@+/, '').replace(/[%,]/g, '').replace(/\s+/g, ' ').slice(0, 80)
+}
+
+function normalizeSearchText(value: string | null | undefined) {
+  return (value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+}
+
+function profileMatchesSearch(profile: ProfileRow, query: string) {
+  const normalizedQuery = normalizeSearchText(query)
+  const normalizedUsernameQuery = normalizeSearchText(query.replace(/^@+/, ''))
+  if (!normalizedQuery) return false
+
+  return [
+    normalizeSearchText(profile.display_name),
+    normalizeSearchText(profile.username),
+  ].some((value) => value.includes(normalizedQuery) || value.includes(normalizedUsernameQuery))
 }
 
 function normalizeReason(value: unknown) {
@@ -136,6 +165,79 @@ async function loadProfilesByIds(
   return (data || []) as ProfileRow[]
 }
 
+async function loadProfilesBySearch(
+  supabase: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
+  query: string,
+) {
+  const selectWithVip = 'id, username, display_name, avatar_url, vip_plan, vip_status, vip_started_at, vip_expires_at, vip_plus_badge_enabled, vip_source, vip_reason, vip_updated_at'
+  const selectFallback = 'id, username, display_name, avatar_url'
+
+  let { data, error } = await supabase
+    .from('profiles')
+    .select(selectWithVip)
+    .or(`username.ilike.%${query}%,display_name.ilike.%${query}%`)
+    .order('display_name', { ascending: true, nullsFirst: false })
+    .limit(MAX_SEARCH_RESULTS)
+
+  if (error && /vip_/i.test(error.message)) {
+    const fallback = await supabase
+      .from('profiles')
+      .select(selectFallback)
+      .or(`username.ilike.%${query}%,display_name.ilike.%${query}%`)
+      .order('display_name', { ascending: true, nullsFirst: false })
+      .limit(MAX_SEARCH_RESULTS)
+
+    data = fallback.data as typeof data
+    error = fallback.error
+  }
+
+  if (error) throw error
+  return (data || []) as ProfileRow[]
+}
+
+async function scanProfilesBySearch(
+  supabase: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
+  query: string,
+) {
+  const selectWithVip = 'id, username, display_name, avatar_url, vip_plan, vip_status, vip_started_at, vip_expires_at, vip_plus_badge_enabled, vip_source, vip_reason, vip_updated_at'
+  const selectFallback = 'id, username, display_name, avatar_url'
+  const matches: ProfileRow[] = []
+
+  for (let page = 0; page < MAX_PROFILE_SCAN_PAGES && matches.length < MAX_SEARCH_RESULTS; page += 1) {
+    const from = page * PROFILE_SCAN_PAGE_SIZE
+    const to = from + PROFILE_SCAN_PAGE_SIZE - 1
+
+    let { data, error } = await supabase
+      .from('profiles')
+      .select(selectWithVip)
+      .order('display_name', { ascending: true, nullsFirst: false })
+      .range(from, to)
+
+    if (error && /vip_/i.test(error.message)) {
+      const fallback = await supabase
+        .from('profiles')
+        .select(selectFallback)
+        .order('display_name', { ascending: true, nullsFirst: false })
+        .range(from, to)
+
+      data = fallback.data as typeof data
+      error = fallback.error
+    }
+
+    if (error) throw error
+
+    const rows = (data || []) as ProfileRow[]
+    for (const profile of rows) {
+      if (profileMatchesSearch(profile, query)) matches.push(profile)
+      if (matches.length >= MAX_SEARCH_RESULTS) break
+    }
+
+    if (rows.length < PROFILE_SCAN_PAGE_SIZE) break
+  }
+
+  return matches
+}
+
 async function searchAuthUserIdsByEmail(
   supabase: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
   query: string,
@@ -198,28 +300,10 @@ async function searchProfiles(
   if (emailSearch.ids.length > 0) {
     profiles = await loadProfilesByIds(supabase, emailSearch.ids)
   } else {
-    const selectWithVip = 'id, username, display_name, avatar_url, vip_plan, vip_status, vip_started_at, vip_expires_at, vip_plus_badge_enabled, vip_source, vip_reason, vip_updated_at'
-    const selectFallback = 'id, username, display_name, avatar_url'
-
-    let { data, error } = await supabase
-      .from('profiles')
-      .select(selectWithVip)
-      .or(`username.ilike.%${query}%,display_name.ilike.%${query}%`)
-      .limit(MAX_SEARCH_RESULTS)
-
-    if (error && /vip_/i.test(error.message)) {
-      const fallback = await supabase
-        .from('profiles')
-        .select(selectFallback)
-        .or(`username.ilike.%${query}%,display_name.ilike.%${query}%`)
-        .limit(MAX_SEARCH_RESULTS)
-
-      data = fallback.data as typeof data
-      error = fallback.error
+    profiles = await loadProfilesBySearch(supabase, query)
+    if (profiles.length === 0) {
+      profiles = await scanProfilesBySearch(supabase, query)
     }
-
-    if (error) throw error
-    profiles = (data || []) as ProfileRow[]
   }
 
   const emailsById = await loadEmailsById(
@@ -229,6 +313,20 @@ async function searchProfiles(
   )
 
   return { profiles, emailsById }
+}
+
+async function ensureProfileExists(
+  supabase: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
+  userId: string,
+) {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('id', userId)
+    .maybeSingle()
+
+  if (error) throw new SafeApiError('Nao foi possivel verificar usuario.', 500)
+  if (!data) throw new SafeApiError('Usuario nao encontrado.', 404)
 }
 
 async function loadUserBadges(
@@ -322,7 +420,8 @@ async function loadBadgeBySlug(
     .eq('slug', badgeSlug)
     .maybeSingle()
 
-  if (error || !data) return null
+  if (error) throw new SafeApiError('Falha ao buscar selo.', 500)
+  if (!data) return null
   return data as BadgeGrantRow
 }
 
@@ -355,7 +454,23 @@ async function grantBadgeIfMissing(
     reason: payload.reason,
   })
 
-  if (insertError) throw insertError
+  if (insertError?.code === '23505') return { badge: selectedBadge, inserted: false }
+
+  if (insertError && /awarded_by|reason/i.test(insertError.message)) {
+    const { error: fallbackInsertError } = await supabase.from('user_badges').insert({
+      user_id: payload.userId,
+      badge_id: selectedBadge.id,
+    })
+
+    if (fallbackInsertError?.code === '23505') return { badge: selectedBadge, inserted: false }
+    if (fallbackInsertError) {
+      console.warn('[AdminBadges] Badge fallback insert failed:', fallbackInsertError.message)
+      throw new SafeApiError('Falha ao salvar selo.', 500)
+    }
+  } else if (insertError) {
+    console.warn('[AdminBadges] Badge insert failed:', insertError.message)
+    throw new SafeApiError('Falha ao salvar selo.', 500)
+  }
 
   await logBadgeAction(supabase, {
     userId: payload.userId,
@@ -462,6 +577,8 @@ export async function POST(request: Request) {
   if (!userId) return jsonError('Usuario invalido.', 400)
 
   try {
+    await ensureProfileExists(admin.supabase, userId)
+
     if (action === 'grant') {
       if (!badgeSlug) return jsonError('Selo invalido.', 400)
 
@@ -618,6 +735,7 @@ export async function POST(request: Request) {
     })
   } catch (error) {
     console.warn('[AdminBadges] Action failed:', error instanceof Error ? error.message : 'unknown error')
+    if (error instanceof SafeApiError) return jsonError(error.message, error.status)
     return jsonError('Nao foi possivel atualizar selo agora.', 500)
   }
 }

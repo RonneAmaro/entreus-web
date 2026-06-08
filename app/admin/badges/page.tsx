@@ -209,6 +209,7 @@ export default function AdminBadgesPage() {
       const data = (await response.json()) as BadgesApiResponse
 
       if (!response.ok || !data.ok) {
+        console.error('[AdminBadges] Falha ao buscar usuarios:', data.error || response.statusText)
         setMessage(getFriendlyError(data.error))
         setUsers([])
         return []
@@ -217,7 +218,8 @@ export default function AdminBadgesPage() {
         setUsers(data.users || [])
         return data.users || []
       }
-    } catch {
+    } catch (error) {
+      console.error('[AdminBadges] Erro inesperado ao buscar usuarios:', error)
       setMessage('Nao foi possivel conectar ao painel de selos agora.')
       setUsers([])
       return []
@@ -371,6 +373,7 @@ export default function AdminBadgesPage() {
       const data = (await response.json()) as BadgesApiResponse
 
       if (!response.ok || !data.ok) {
+        console.error('[AdminBadges] Falha ao atualizar selo:', data.error || response.statusText)
         setMessage(getFriendlyError(data.error))
       } else {
         setMessage(data.message || (payload.action === 'grant' ? 'Selo concedido com sucesso.' : 'Selo removido com sucesso.'))
@@ -380,7 +383,8 @@ export default function AdminBadgesPage() {
         }
         await loadSuggestions()
       }
-    } catch {
+    } catch (error) {
+      console.error('[AdminBadges] Erro inesperado ao atualizar selo:', error)
       setMessage('Nao foi possivel atualizar selo agora.')
     } finally {
       setUpdatingKey('')
@@ -428,6 +432,7 @@ export default function AdminBadgesPage() {
       const data = (await response.json()) as BadgesApiResponse
 
       if (!response.ok || !data.ok) {
+        console.error('[AdminBadges] Falha ao atualizar VIP:', data.error || response.statusText)
         setMessage(getFriendlyError(data.error))
       } else {
         setMessage(data.message || 'VIP atualizado com sucesso.')
@@ -437,7 +442,8 @@ export default function AdminBadgesPage() {
         }
         await loadSuggestions()
       }
-    } catch {
+    } catch (error) {
+      console.error('[AdminBadges] Erro inesperado ao atualizar VIP:', error)
       setMessage('Nao foi possivel atualizar VIP agora.')
     } finally {
       setUpdatingKey('')
