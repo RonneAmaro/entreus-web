@@ -174,6 +174,7 @@ export default function AdminBadgesPage() {
   const [alreadyAwardedCommunity, setAlreadyAwardedCommunity] = useState<BadgeSuggestion[]>([])
   const [suggestionWarnings, setSuggestionWarnings] = useState<string[]>([])
   const [metricsUsed, setMetricsUsed] = useState<string[]>([])
+  const [suggestionThreshold, setSuggestionThreshold] = useState<BadgeSuggestionsResponse['threshold'] | null>(null)
   const searchResultsRef = useRef<HTMLDivElement | null>(null)
 
   const grantableBadges = useMemo(() => {
@@ -251,16 +252,19 @@ export default function AdminBadgesPage() {
       if (!response.ok || !data.ok) {
         setSuggestionCandidates([])
         setAlreadyAwardedCommunity([])
+        setSuggestionThreshold(null)
         setSuggestionWarnings([getFriendlyError(data.error)])
       } else {
         setSuggestionCandidates(data.candidates || [])
         setAlreadyAwardedCommunity(data.alreadyAwarded || [])
+        setSuggestionThreshold(data.threshold || null)
         setSuggestionWarnings(data.warnings || [])
         setMetricsUsed(data.metricsUsed || [])
       }
     } catch {
       setSuggestionCandidates([])
       setAlreadyAwardedCommunity([])
+      setSuggestionThreshold(null)
       setSuggestionWarnings(['Nao foi possivel carregar recomendacoes agora.'])
     } finally {
       setSuggestionsLoading(false)
@@ -514,6 +518,11 @@ export default function AdminBadgesPage() {
               {metricsUsed.length > 0 && (
                 <p className="mt-2 text-xs leading-5 text-blue-100/60">
                   Metricas usadas: {metricsUsed.join(', ')}.
+                </p>
+              )}
+              {suggestionThreshold && (
+                <p className="mt-2 text-xs leading-5 text-blue-100/75">
+                  Regra atual: score minimo {suggestionThreshold.score}. {suggestionThreshold.alternative}.
                 </p>
               )}
             </div>

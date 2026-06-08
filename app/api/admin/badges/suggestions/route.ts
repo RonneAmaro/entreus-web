@@ -1,11 +1,18 @@
 import { isAdminRole } from '@/lib/admin'
+import {
+  COMMUNITY_BADGE_INITIAL_VALIDITY_DAYS,
+  COMMUNITY_BADGE_MIN_SCORE,
+  COMMUNITY_BADGE_SCORE_RULES,
+  COMMUNITY_BADGE_SLUG,
+  getCommunityBadgeScore,
+  isCommunityBadgeEligible,
+} from '@/lib/community-badge-rules'
 import { getSupabaseAdmin, jsonError, requireUser } from '@/lib/meet-server'
 import { NextResponse } from 'next/server'
 
 const MAX_SOURCE_ROWS = 5000
 const MAX_CANDIDATES = 50
 const MAX_ALREADY_AWARDED = 20
-const COMMUNITY_BADGE_SLUG = 'community'
 
 type PostMetricRow = {
   id: string
@@ -70,22 +77,19 @@ function getRelatedBadgeSlug(value: UserBadgeRow['badges']) {
 }
 
 function getScore(metrics: UserMetrics) {
-  const activeDayBonus = Math.min(metrics.activeDays.size, 10)
-
-  return (
-    metrics.postsPublished * 5 +
-    metrics.commentsMade * 2 +
-    metrics.likesReceived +
-    metrics.commentsReceived * 2 +
-    metrics.repostsReceived * 3 +
-    activeDayBonus -
-    metrics.hiddenPosts * 20
-  )
+  return getCommunityBadgeScore({
+    postsPublished: metrics.postsPublished,
+    commentsMade: metrics.commentsMade,
+    likesReceived: metrics.likesReceived,
+    commentsReceived: metrics.commentsReceived,
+    repostsReceived: metrics.repostsReceived,
+    hiddenPosts: metrics.hiddenPosts,
+    activeDays: metrics.activeDays.size,
+  })
 }
 
-function isEligible(metrics: UserMetrics, score: number) {
-  const realInteractions = metrics.likesReceived + metrics.commentsReceived + metrics.repostsReceived + metrics.commentsMade
-  return score >= 50 || (metrics.postsPublished >= 10 && realInteractions >= 30)
+function isEligible(score: number) {
+  return isCommunityBadgeEligible(score)
 }
 
 async function requireAdmin(request: Request) {
@@ -282,7 +286,7 @@ export async function GET(request: Request) {
         return {
           metrics,
           score,
-          eligible: isEligible(metrics, score),
+          eligible: isEligible(score),
           hasCommunityBadge: communityBadgeHolders.has(metrics.userId),
         }
       })
@@ -327,17 +331,12 @@ export async function GET(request: Request) {
     return NextResponse.json({
       ok: true,
       threshold: {
-        score: 50,
-        alternative: '10 posts e 30 interacoes reais',
+        score: COMMUNITY_BADGE_MIN_SCORE,
+        alternative: `validade inicial de ${COMMUNITY_BADGE_INITIAL_VALIDITY_DAYS} dias; manutencao depende de continuar participando e respeitando as diretrizes`,
       },
       scoring: {
-        postPublished: 5,
-        commentMade: 2,
-        likeReceived: 1,
-        commentReceived: 2,
-        repostReceived: 3,
-        activeDayBonusMax: 10,
-        hiddenPostPenalty: -20,
+        ...COMMUNITY_BADGE_SCORE_RULES,
+        initialValidityDays: COMMUNITY_BADGE_INITIAL_VALIDITY_DAYS,
       },
       metricsUsed: [
         'posts publicados',

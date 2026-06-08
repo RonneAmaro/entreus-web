@@ -1,10 +1,15 @@
 import type { Metadata } from 'next'
 import Image from 'next/image'
+import {
+  COMMUNITY_BADGE_INITIAL_VALIDITY_DAYS,
+  COMMUNITY_BADGE_MIN_SCORE,
+  COMMUNITY_BADGE_SCORE_RULES,
+} from '@/lib/community-badge-rules'
 import InstitutionalPageLayout from '../components/InstitutionalPageLayout'
 
 export const metadata: Metadata = {
   title: 'Selos EntreUS',
-  description: 'Informações sobre os Selos EntreUS.',
+  description: 'Informacoes sobre os Selos EntreUS.',
 }
 
 const badges = [
@@ -12,49 +17,55 @@ const badges = [
     name: 'Selo Comunidade',
     image: '/badges/comunidade.png',
     description:
-      'Reconhecimento para usuários participativos que ajudam a manter a comunidade viva, útil e acolhedora.',
+      'Reconhecimento para usuarios participativos que fortalecem a EntreUS com presenca real, conversas saudaveis e engajamento positivo.',
     benefits: [
-      'Critérios futuros por posts, curtidas, comentários e engajamento positivo.',
-      'Possível recompensa em ItaCash por conquistas e campanhas internas.',
-      'Destaque visual no perfil e em áreas sociais da plataforma.',
+      `Score minimo sugerido: ${COMMUNITY_BADGE_MIN_SCORE} pontos.`,
+      `Validade inicial: ${COMMUNITY_BADGE_INITIAL_VALIDITY_DAYS} dias.`,
+      `Posts publicados: +${COMMUNITY_BADGE_SCORE_RULES.postPublished} pontos cada.`,
+      `Comentarios feitos: +${COMMUNITY_BADGE_SCORE_RULES.commentMade} pontos cada.`,
+      `Curtidas recebidas: +${COMMUNITY_BADGE_SCORE_RULES.likeReceived} ponto cada.`,
+      `Comentarios recebidos: +${COMMUNITY_BADGE_SCORE_RULES.commentReceived} pontos cada.`,
+      `Reposts recebidos: +${COMMUNITY_BADGE_SCORE_RULES.repostReceived} pontos cada.`,
+      `Dias ativos: +${COMMUNITY_BADGE_SCORE_RULES.activeDay} pontos cada.`,
+      `Conteudo ocultado/removido: ${COMMUNITY_BADGE_SCORE_RULES.hiddenPostPenalty} pontos, quando o historico de moderacao estiver disponivel.`,
     ],
-    note: 'Os critérios serão ajustados para valorizar participação real, não spam ou comportamento artificial.',
+    note: 'Para manter o selo, o usuario precisa continuar participando da comunidade e respeitando as diretrizes. Conteudos ocultados/removidos podem prejudicar a pontuacao.',
   },
   {
     name: 'Selo VIP',
     image: '/badges/vip-premium.png',
     description:
-      'Identidade premium para usuários pagantes, com acesso a benefícios exclusivos conforme o plano ativo.',
+      'Identidade premium para usuarios pagantes, com acesso a beneficios exclusivos conforme o plano ativo.',
     benefits: [
-      'Mais tempo no EntreUS Meet, com possibilidade futura de salas de até 1 hora.',
-      'Gravações temporárias futuras e recursos avançados da plataforma.',
-      'Prioridade em experiências premium, personalização e ferramentas especiais.',
+      'Mais tempo no EntreUS Meet, com possibilidade futura de salas de ate 1 hora.',
+      'Gravacoes temporarias futuras e recursos avancados da plataforma.',
+      'Prioridade em experiencias premium, personalizacao e ferramentas especiais.',
     ],
-    note: 'Benefícios, valores e prazos serão apresentados antes da contratação do plano.',
+    note: 'Beneficios, valores e prazos serao apresentados antes da contratacao do plano.',
   },
   {
     name: 'Selo VIP Premium',
     image: '/badges/vip-premium.png',
     description:
-      'Destaque premium mais forte para apoiadores e usuários com reconhecimento especial dentro da EntreUS.',
+      'Destaque premium mais forte para apoiadores e usuarios com reconhecimento especial dentro da EntreUS.',
     benefits: [
-      'Destaque visual diferenciado no perfil e nas áreas sociais.',
-      'Reconhecimento por apoio direto à evolução da plataforma.',
-      'Benefícios premium poderão evoluir conforme regras específicas.',
+      'Destaque visual diferenciado no perfil e nas areas sociais.',
+      'Reconhecimento por apoio direto a evolucao da plataforma.',
+      'Beneficios premium poderao evoluir conforme regras especificas.',
     ],
-    note: 'Este selo não altera regras financeiras por si só; benefícios dependem de configuração e termos próprios.',
+    note: 'Este selo nao altera regras financeiras por si so; beneficios dependem de configuracao e termos proprios.',
   },
   {
-    name: 'Selo Ancião',
+    name: 'Selo Anciao',
     image: '/badges/anciao.png',
     description:
-      'Selo vitalício e limitado a 100 unidades, pensado para membros fundadores e vozes especiais da comunidade.',
+      'Selo vitalicio e limitado a 100 unidades, pensado para membros fundadores e vozes especiais da comunidade.',
     benefits: [
       'Acesso especial e reconhecimento permanente dentro do EntreUS.',
-      'Voz diferenciada em decisões, votações ou consultas internas futuras.',
-      'Possível participação financeira futura, se houver regras próprias aprovadas.',
+      'Voz diferenciada em decisoes, votacoes ou consultas internas futuras.',
+      'Possivel participacao financeira futura, se houver regras proprias aprovadas.',
     ],
-    note: 'Por ser limitado, terá regras específicas de elegibilidade, transferência e manutenção.',
+    note: 'Por ser limitado, tera regras especificas de elegibilidade, transferencia e manutencao.',
   },
 ]
 
@@ -62,8 +73,8 @@ export default function SelosPage() {
   return (
     <InstitutionalPageLayout
       title="Selos EntreUS"
-      description="Os Selos EntreUS combinam identidade, reconhecimento e acesso. Eles destacam participação, benefícios premium e papéis especiais dentro da comunidade."
-      notice="Benefícios financeiros e regras avançadas dependerão de regulamentação interna e documentos próprios da plataforma."
+      description="Os Selos EntreUS combinam identidade, reconhecimento e acesso. Eles destacam participacao, beneficios premium e papeis especiais dentro da comunidade."
+      notice="Beneficios financeiros e regras avancadas dependerao de regulamentacao interna e documentos proprios da plataforma."
     >
       <div className="space-y-4">
         {badges.map((badge) => (
