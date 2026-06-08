@@ -24,6 +24,11 @@ type BadgeGrantRow = {
   name: string
 }
 
+type BadgeLoadResult = {
+  badges: BadgeRow[]
+  warnings: string[]
+}
+
 type ProfileRow = {
   id: string
   username: string | null
@@ -133,6 +138,18 @@ function normalizeRelatedBadge(value: BadgeRow | BadgeRow[] | null) {
   return value
 }
 
+function normalizeBadgeRow(row: Partial<BadgeRow> & { id: string; slug: string; name: string }): BadgeRow {
+  return {
+    id: row.id,
+    slug: row.slug,
+    name: row.name,
+    title: row.title ?? null,
+    icon: row.icon ?? null,
+    color: row.color ?? null,
+    rarity: row.rarity ?? null,
+  }
+}
+
 async function requireAdmin(request: Request) {
   const auth = await requireUser(request)
   if ('error' in auth) return { error: auth.error }
@@ -152,14 +169,36 @@ async function requireAdmin(request: Request) {
   return { supabase, adminId: auth.user.id }
 }
 
-async function loadBadges(supabase: NonNullable<ReturnType<typeof getSupabaseAdmin>>) {
-  const { data, error } = await supabase
+async function loadBadges(supabase: NonNullable<ReturnType<typeof getSupabaseAdmin>>): Promise<BadgeLoadResult> {
+  const warnings: string[] = []
+  const fullSelect = await supabase
     .from('badges')
     .select('id, slug, name, title, icon, color, rarity')
     .order('name', { ascending: true })
 
-  if (error) throw error
-  return (data || []) as BadgeRow[]
+  if (!fullSelect.error) {
+    const badges = ((fullSelect.data || []) as BadgeRow[]).map(normalizeBadgeRow)
+    if (badges.length === 0) throw new SafeApiError('Nenhum selo cadastrado na tabela badges.', 404)
+    return { badges, warnings }
+  }
+
+  console.warn('[AdminBadges] Badge full select failed:', fullSelect.error.message)
+  warnings.push('Campos opcionais de badges indisponiveis; usando id, slug e name.')
+
+  const fallback = await supabase
+    .from('badges')
+    .select('id, slug, name')
+    .order('name', { ascending: true })
+
+  if (fallback.error) {
+    console.warn('[AdminBadges] Badge fallback select failed:', fallback.error.message)
+    throw new SafeApiError('Falha ao consultar tabela badges.', 500)
+  }
+
+  const badges = ((fallback.data || []) as Array<{ id: string; slug: string; name: string }>).map(normalizeBadgeRow)
+  if (badges.length === 0) throw new SafeApiError('Nenhum selo cadastrado na tabela badges.', 404)
+
+  return { badges, warnings }
 }
 
 async function loadProfilesByIds(
@@ -427,7 +466,10 @@ async function loadUserBadges(
     .in('user_id', userIds)
     .order('awarded_at', { ascending: true })
 
-  if (error) throw error
+  if (error) {
+    console.warn('[AdminBadges] User badges load failed:', error.message)
+    return {}
+  }
 
   return ((data || []) as UserBadgeRow[]).reduce<Record<string, UserBadgeRow[]>>((acc, row) => {
     acc[row.user_id] = acc[row.user_id] || []
@@ -601,14 +643,25 @@ export async function GET(request: Request) {
   const query = cleanSearchQuery(rawQuery)
 
   try {
-    const badges = await loadBadges(admin.supabase)
+    const { badges, warnings } = await loadBadges(admin.supabase)
+    if (!badges.some((badge) => badge.slug === 'community')) {
+      warnings.push('Selo Comunidade nao encontrado na tabela badges.')
+    }
+
     const { profiles, emailsById, diagnostics } = await searchProfiles(admin.supabase, query, rawQuery)
     const userBadgesByUserId = await loadUserBadges(admin.supabase, profiles.map((profile) => profile.id))
+
+    console.info('[AdminBadges] Load result', {
+      badgesCount: badges.length,
+      usersCount: profiles.length,
+      warnings,
+    })
 
     return NextResponse.json({
       ok: true,
       badges,
       count: profiles.length,
+      warnings,
       diagnostics: {
         directCount: diagnostics.directCount,
         fallbackScannedCount: diagnostics.fallbackScannedCount,
@@ -628,7 +681,8 @@ export async function GET(request: Request) {
     })
   } catch (error) {
     console.warn('[AdminBadges] Load failed:', error instanceof Error ? error.message : 'unknown error')
-    return jsonError('Nao foi possivel carregar selos. Confira se a migration de selos foi aplicada.', 500)
+    if (error instanceof SafeApiError) return jsonError(error.message, error.status)
+    return jsonError('Nao foi possivel carregar selos agora. Verifique os logs seguros da rota admin/badges.', 500)
   }
 }
 

@@ -63,6 +63,7 @@ type BadgesApiResponse = {
   badges?: Badge[]
   users?: UserProfile[]
   count?: number
+  warnings?: string[]
   message?: string
   error?: string
 }
@@ -218,6 +219,9 @@ export default function AdminBadgesPage() {
       } else {
         setBadges(data.badges || [])
         setUsers(data.users || [])
+        if (data.warnings?.length) {
+          console.warn('[AdminBadges] Avisos da busca de selos:', data.warnings)
+        }
         return data.users || []
       }
     } catch (error) {
