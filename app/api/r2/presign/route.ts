@@ -318,6 +318,7 @@ export async function POST(request: Request) {
     const uploadUrl = await getSignedUrl(client, command, {
       expiresIn: PRESIGNED_URL_EXPIRES_IN_SECONDS,
     })
+    const publicUrl = buildPublicUrl(publicBaseUrl, key)
 
     console.info('[R2Presign] Upload preparado:', {
       fileName: body.fileName,
@@ -326,12 +327,15 @@ export async function POST(request: Request) {
       contentType,
       folder,
       status: 200,
+      hasUploadUrl: Boolean(uploadUrl),
+      hasPublicUrl: Boolean(publicUrl),
+      hasKey: Boolean(key),
     })
 
     return NextResponse.json({
       ok: true,
       uploadUrl,
-      publicUrl: buildPublicUrl(publicBaseUrl, key),
+      publicUrl,
       key,
       contentType,
       expiresIn: PRESIGNED_URL_EXPIRES_IN_SECONDS,

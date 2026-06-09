@@ -203,6 +203,7 @@ const FEED_INITIAL_REACTION_LIMIT = 500
 const FEED_INITIAL_REPOST_LIMIT = 120
 const POST_IMAGE_MAX_SIZE_BYTES = 5 * 1024 * 1024
 const POST_VIDEO_MAX_SIZE_BYTES = 30 * 1024 * 1024
+const ACCEPTED_MEDIA_FORMATS_MESSAGE = 'Formato nao permitido. Use JPG, PNG, WEBP, GIF, MP4, WEBM ou OGG.'
 const ACCEPTED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
 const ACCEPTED_IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif'])
 const IMAGE_CONTENT_TYPE_BY_EXTENSION: Record<string, string> = {
@@ -1809,7 +1810,7 @@ function FeedContent() {
     }
 
     if (status === 415 || error === 'INVALID_FILE_TYPE') {
-      return message || 'Formato nao permitido. Use JPG, PNG, WEBP ou GIF.'
+      return message || ACCEPTED_MEDIA_FORMATS_MESSAGE
     }
 
     if (status === 429 || error === 'RATE_LIMITED') {
@@ -1817,6 +1818,66 @@ function FeedContent() {
     }
 
     return message || error || 'Falha ao preparar upload para o R2.'
+  }
+
+  function getStorageFailureMessage(mediaType: 'image' | 'video' | 'gif', status?: number) {
+    const suffix = status ? ` (HTTP ${status}).` : '.'
+
+    if (mediaType === 'video') {
+      return `Nao foi possivel enviar para o storage${suffix}`
+    }
+
+    if (mediaType === 'gif') {
+      return `Nao foi possivel enviar o GIF para o storage${suffix}`
+    }
+
+    return `Nao foi possivel enviar para o storage${suffix}`
+  }
+
+  function getSafeErrorText(error: unknown) {
+    return error instanceof Error ? error.message : 'Erro inesperado no upload R2.'
+  }
+
+  function isFetchBlockedOrNetworkError(error: unknown) {
+    const message = getSafeErrorText(error).toLowerCase()
+    return message.includes('failed to fetch') || message.includes('networkerror') || message.includes('load failed')
+  }
+
+  async function readSafeResponseText(response: Response) {
+    try {
+      const text = await response.text()
+      return text ? text.slice(0, 500) : ''
+    } catch {
+      return ''
+    }
+  }
+
+  function getPresignContractFlags(data: {
+    uploadUrl?: string
+    publicUrl?: string
+    key?: string
+    contentType?: string
+  } | null) {
+    return {
+      hasUploadUrl: typeof data?.uploadUrl === 'string' && data.uploadUrl.length > 0,
+      hasPublicUrl: typeof data?.publicUrl === 'string' && data.publicUrl.length > 0,
+      hasKey: typeof data?.key === 'string' && data.key.length > 0,
+      returnedContentType: data?.contentType || null,
+    }
+  }
+
+  function getR2PutCorsDebugInfo(folder: 'posts' | 'comments', contentType: string) {
+    return {
+      possibleCause: 'CORS/conexao/R2 bloqueou o PUT antes de retornar status HTTP.',
+      requestMethod: 'PUT',
+      requestHeaders: ['Content-Type'],
+      contentType,
+      folder,
+      allowedMethodsNeeded: ['PUT', 'GET', 'HEAD'],
+      allowedHeadersNeeded: ['Content-Type'],
+      exposeHeadersSuggested: ['ETag'],
+      origin: typeof window !== 'undefined' ? window.location.origin : null,
+    }
   }
 
   function isSafeHttpMediaUrl(value: unknown) {
@@ -1860,7 +1921,7 @@ function FeedContent() {
 
   async function uploadMediaFile(
     file: File
-  ): Promise<{ url: string; type: 'image' | 'video' } | null> {
+  ): Promise<{ url: string; type: 'image' | 'video' | 'gif' } | null> {
     if (!userId) return null
 
     const uploadContentType = getEffectiveContentType(file)
@@ -1885,7 +1946,7 @@ function FeedContent() {
     }
 
     if (!mediaType || !uploadContentType) {
-      setMessage('Formato nao permitido. Use JPG, PNG, WEBP ou GIF.')
+      setMessage(ACCEPTED_MEDIA_FORMATS_MESSAGE)
       return null
     }
 
@@ -1905,6 +1966,8 @@ function FeedContent() {
       setMessage('Enviando video direto para o storage. Mantenha esta aba aberta ate concluir.')
     }
 
+    let uploadStep = 'presign-request'
+
     try {
       const authHeaders = await getPresignAuthHeaders()
 
@@ -1913,6 +1976,7 @@ function FeedContent() {
         return null
       }
 
+      uploadStep = 'presign-request'
       const presignResponse = await fetch('/api/r2/presign', {
         method: 'POST',
         headers: authHeaders,
@@ -1943,6 +2007,7 @@ function FeedContent() {
         status: presignResponse.status,
         step: 'presign-response',
         error: presignData?.error,
+        ...getPresignContractFlags(presignData),
       })
 
       if (!presignResponse.ok || !presignData?.ok) {
@@ -1955,12 +2020,14 @@ function FeedContent() {
         console.error('[FeedUpload] Falha ao preparar upload R2:', {
           fileName: file.name,
           fileType: file.type || null,
+          fileSize: file.size,
           contentType: uploadContentType,
           sizeMb: Number((file.size / 1024 / 1024).toFixed(2)),
           folder: 'posts',
           status: presignResponse.status,
           step: 'presign',
           error: presignData?.error,
+          ...getPresignContractFlags(presignData),
         })
 
         setMessage(
@@ -1980,18 +2047,45 @@ function FeedContent() {
           folder: 'posts',
           status: presignResponse.status,
           step: 'presign-validation',
+          ...getPresignContractFlags(presignData),
         })
         setMessage('Nao foi possivel preparar o upload da midia. Tente novamente.')
         return null
       }
 
-      const uploadResponse = await fetch(presignData.uploadUrl, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': uploadContentType,
-        },
-        body: file,
-      })
+      let uploadResponse: Response
+
+      uploadStep = 'r2-put'
+      try {
+        uploadResponse = await fetch(presignData.uploadUrl, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': uploadContentType,
+          },
+          body: file,
+        })
+      } catch (error) {
+        const errorText = getSafeErrorText(error)
+
+        console.error('[FeedUpload] Erro de rede/browser no PUT R2:', {
+          fileName: file.name,
+          fileType: file.type || null,
+          fileSize: file.size,
+          contentType: uploadContentType,
+          folder: 'posts',
+          step: 'r2-put',
+          message: errorText,
+          fetchBlockedOrNetworkError: isFetchBlockedOrNetworkError(error),
+          corsDebug: getR2PutCorsDebugInfo('posts', uploadContentType),
+        })
+
+        setMessage(
+          mediaType === 'image'
+            ? t('feed.messages.uploadImageError') + getStorageFailureMessage(uploadContentType === 'image/gif' ? 'gif' : 'image')
+            : t('feed.messages.uploadVideoError') + getStorageFailureMessage('video')
+        )
+        return null
+      }
 
       console.info('[FeedUpload] Resposta do PUT R2:', {
         fileName: file.name,
@@ -2004,6 +2098,8 @@ function FeedContent() {
       })
 
       if (!uploadResponse.ok) {
+        const uploadErrorText = await readSafeResponseText(uploadResponse)
+
         console.error('[FeedUpload] Falha ao enviar midia para o R2:', {
           fileName: file.name,
           fileType: file.type || null,
@@ -2012,14 +2108,13 @@ function FeedContent() {
           folder: 'posts',
           status: uploadResponse.status,
           step: 'r2-put',
+          responseText: uploadErrorText,
         })
 
-        const friendlyMessage =
-          mediaType === 'video'
-            ? 'Nao foi possivel enviar o video. Tente novamente ou use um video menor.'
-            : uploadContentType === 'image/gif'
-              ? 'Nao foi possivel enviar o GIF para o storage. Verifique sua conexao e tente novamente.'
-              : 'Nao foi possivel enviar a imagem. Verifique sua conexao e tente novamente.'
+        const friendlyMessage = getStorageFailureMessage(
+          mediaType === 'video' ? 'video' : uploadContentType === 'image/gif' ? 'gif' : 'image',
+          uploadResponse.status,
+        )
 
         setMessage(
           mediaType === 'image'
@@ -2031,17 +2126,13 @@ function FeedContent() {
 
       return {
         url: presignData.publicUrl,
-        type: mediaType,
+        type: uploadContentType === 'image/gif' ? 'gif' : mediaType,
       }
     } catch (error) {
       const errorMessage =
-        mediaType === 'video'
-          ? 'Nao foi possivel enviar o video. Tente novamente ou use um video menor.'
-          : uploadContentType === 'image/gif'
-            ? 'Nao foi possivel enviar o GIF para o storage. Verifique sua conexao e tente novamente.'
-          : error instanceof Error
-            ? error.message
-            : 'Erro inesperado no upload R2.'
+        uploadStep.startsWith('presign')
+          ? 'Nao foi possivel preparar o envio. Verifique sua conexao e tente novamente.'
+          : getStorageFailureMessage(mediaType === 'video' ? 'video' : uploadContentType === 'image/gif' ? 'gif' : 'image')
 
       console.error('[FeedUpload] Erro ao enviar midia do post:', {
         fileName: file.name,
@@ -2049,8 +2140,8 @@ function FeedContent() {
         contentType: uploadContentType,
         sizeMb: Number((file.size / 1024 / 1024).toFixed(2)),
         folder: 'posts',
-        step: 'r2-put',
-        message: error instanceof Error ? error.message : 'Erro inesperado no upload R2.',
+        step: uploadStep,
+        message: getSafeErrorText(error),
       })
 
       setMessage(
@@ -2097,7 +2188,7 @@ function FeedContent() {
             : null
 
     if (!mediaType || !uploadContentType) {
-      setMessage('Formato nao permitido. Use JPG, PNG, WEBP ou GIF.')
+      setMessage(ACCEPTED_MEDIA_FORMATS_MESSAGE)
       return null
     }
 
@@ -2108,6 +2199,8 @@ function FeedContent() {
       return null
     }
 
+    let uploadStep = 'presign-request'
+
     try {
       const authHeaders = await getPresignAuthHeaders()
 
@@ -2116,6 +2209,7 @@ function FeedContent() {
         return null
       }
 
+      uploadStep = 'presign-request'
       const presignResponse = await fetch('/api/r2/presign', {
         method: 'POST',
         headers: authHeaders,
@@ -2137,15 +2231,30 @@ function FeedContent() {
         error?: string
       } | null
 
+      console.info('[FeedUpload] Resposta do presign de comentario:', {
+        fileName: file.name,
+        fileType: file.type || null,
+        fileSize: file.size,
+        contentType: uploadContentType,
+        folder: 'comments',
+        status: presignResponse.status,
+        step: 'presign-response',
+        error: presignData?.error,
+        ...getPresignContractFlags(presignData),
+      })
+
       if (!presignResponse.ok || !presignData?.ok) {
         console.error('[FeedUpload] Falha ao preparar upload R2 de comentario:', {
           fileName: file.name,
           fileType: file.type || null,
+          fileSize: file.size,
           contentType: uploadContentType,
           sizeMb: Number((file.size / 1024 / 1024).toFixed(2)),
+          folder: 'comments',
           status: presignResponse.status,
           step: 'presign',
           error: presignData?.error,
+          ...getPresignContractFlags(presignData),
         })
         setMessage(
           getPresignFailureMessage(
@@ -2163,30 +2272,69 @@ function FeedContent() {
           fileType: file.type || null,
           contentType: uploadContentType,
           sizeMb: Number((file.size / 1024 / 1024).toFixed(2)),
+          folder: 'comments',
+          status: presignResponse.status,
           step: 'presign-validation',
+          ...getPresignContractFlags(presignData),
         })
         setMessage('Nao foi possivel preparar o upload da midia. Tente novamente.')
         return null
       }
 
-      const uploadResponse = await fetch(presignData.uploadUrl, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': uploadContentType,
-        },
-        body: file,
+      let uploadResponse: Response
+
+      uploadStep = 'r2-put'
+      try {
+        uploadResponse = await fetch(presignData.uploadUrl, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': uploadContentType,
+          },
+          body: file,
+        })
+      } catch (error) {
+        const errorText = getSafeErrorText(error)
+
+        console.error('[FeedUpload] Erro de rede/browser no PUT R2 de comentario:', {
+          fileName: file.name,
+          fileType: file.type || null,
+          fileSize: file.size,
+          contentType: uploadContentType,
+          folder: 'comments',
+          step: 'r2-put',
+          message: errorText,
+          fetchBlockedOrNetworkError: isFetchBlockedOrNetworkError(error),
+          corsDebug: getR2PutCorsDebugInfo('comments', uploadContentType),
+        })
+
+        setMessage(getStorageFailureMessage(mediaType === 'video' ? 'video' : mediaType === 'gif' ? 'gif' : 'image'))
+        return null
+      }
+
+      console.info('[FeedUpload] Resposta do PUT R2 de comentario:', {
+        fileName: file.name,
+        fileType: file.type || null,
+        fileSize: file.size,
+        contentType: uploadContentType,
+        folder: 'comments',
+        status: uploadResponse.status,
+        step: 'r2-put-response',
       })
 
       if (!uploadResponse.ok) {
+        const uploadErrorText = await readSafeResponseText(uploadResponse)
+
         console.error('[FeedUpload] Falha ao enviar midia de comentario para o R2:', {
           fileName: file.name,
           fileType: file.type || null,
           contentType: uploadContentType,
           sizeMb: Number((file.size / 1024 / 1024).toFixed(2)),
+          folder: 'comments',
           status: uploadResponse.status,
           step: 'r2-put',
+          responseText: uploadErrorText,
         })
-        setMessage(mediaType === 'gif' ? 'Nao foi possivel enviar o GIF para o storage. Verifique sua conexao e tente novamente.' : 'Nao foi possivel enviar a midia do comentario.')
+        setMessage(getStorageFailureMessage(mediaType === 'video' ? 'video' : mediaType === 'gif' ? 'gif' : 'image', uploadResponse.status))
         return null
       }
 
@@ -2200,10 +2348,11 @@ function FeedContent() {
         fileType: file.type || null,
         contentType: uploadContentType,
         sizeMb: Number((file.size / 1024 / 1024).toFixed(2)),
-        step: 'r2-put',
-        message: error instanceof Error ? error.message : 'Erro inesperado no upload R2.',
+        folder: 'comments',
+        step: uploadStep,
+        message: getSafeErrorText(error),
       })
-      setMessage(mediaType === 'gif' ? 'Nao foi possivel enviar o GIF para o storage. Verifique sua conexao e tente novamente.' : 'Nao foi possivel enviar a midia. Verifique sua conexao e tente novamente.')
+      setMessage(uploadStep.startsWith('presign') ? 'Nao foi possivel preparar o envio. Verifique sua conexao e tente novamente.' : getStorageFailureMessage(mediaType === 'video' ? 'video' : mediaType === 'gif' ? 'gif' : 'image'))
       return null
     }
   }
@@ -2235,7 +2384,7 @@ function FeedContent() {
 
     const uploadedMedia: {
       url: string
-      type: 'image' | 'video'
+      type: 'image' | 'video' | 'gif'
     }[] = []
 
     for (const file of finalMediaFiles) {
@@ -2248,7 +2397,7 @@ function FeedContent() {
       uploadedMedia.push(uploaded)
     }
 
-    const firstImage = uploadedMedia.find((item) => item.type === 'image')?.url || null
+    const firstImage = uploadedMedia.find((item) => item.type === 'image' || item.type === 'gif')?.url || null
     const firstVideo = uploadedMedia.find((item) => item.type === 'video')?.url || null
 
     console.info('[FeedUpload] Salvando post apos upload:', {
@@ -2719,7 +2868,7 @@ function FeedContent() {
     if (!file) return
 
     if (!isImage(file) && !isVideo(file)) {
-      setMessage('Formato nao permitido. Use JPG, PNG, WEBP ou GIF.')
+      setMessage(ACCEPTED_MEDIA_FORMATS_MESSAGE)
       return
     }
 
