@@ -42,6 +42,18 @@ const EXTENSIONS_BY_CONTENT_TYPE: Record<string, string> = {
   'video/ogg': 'ogg',
 }
 
+const CONTENT_TYPES_BY_EXTENSION: Record<string, string> = {
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  webp: 'image/webp',
+  gif: 'image/gif',
+  mp4: 'video/mp4',
+  webm: 'video/webm',
+  mov: 'video/quicktime',
+  ogg: 'video/ogg',
+}
+
 type RateLimitEntry = {
   count: number
   resetAt: number
@@ -94,6 +106,20 @@ function buildObjectKey(folder: string, userId: string, contentType: string) {
   const extension = EXTENSIONS_BY_CONTENT_TYPE[contentType] || 'bin'
 
   return `${folder}/${userId}/${timestamp}-${crypto.randomUUID()}.${extension}`
+}
+
+function getFileExtension(fileName: string) {
+  const extension = fileName.trim().toLowerCase().split('.').pop()
+  return extension && extension !== fileName.toLowerCase() ? extension : ''
+}
+
+function normalizeContentType(contentType: unknown, fileName: string) {
+  if (typeof contentType === 'string' && ACCEPTED_CONTENT_TYPES.has(contentType)) {
+    return contentType
+  }
+
+  const extension = getFileExtension(fileName)
+  return CONTENT_TYPES_BY_EXTENSION[extension] || null
 }
 
 function buildPublicUrl(baseUrl: string, key: string) {
@@ -205,7 +231,18 @@ export async function POST(request: Request) {
     )
   }
 
-  if (typeof body.contentType !== 'string' || !ACCEPTED_CONTENT_TYPES.has(body.contentType)) {
+  const contentType = normalizeContentType(body.contentType, body.fileName)
+  const folder = getFolder(body.folder)
+
+  console.info('[R2Presign] Upload solicitado:', {
+    fileName: body.fileName,
+    fileType: typeof body.contentType === 'string' ? body.contentType : null,
+    fileSize: typeof body.fileSize === 'number' ? body.fileSize : null,
+    contentType,
+    folder,
+  })
+
+  if (!contentType) {
     return NextResponse.json(
       {
         ok: false,
@@ -231,22 +268,20 @@ export async function POST(request: Request) {
     )
   }
 
-  if (body.fileSize > getMaxSize(body.contentType)) {
+  if (body.fileSize > getMaxSize(contentType)) {
     return NextResponse.json(
       {
         ok: false,
         error: 'FILE_TOO_LARGE',
-        message: body.contentType.startsWith('video/')
+        message: contentType.startsWith('video/')
           ? 'Video muito grande. O limite atual e 30 MB.'
-          : body.contentType === 'image/gif'
-            ? 'Arquivo muito grande. Tente um GIF menor.'
+          : contentType === 'image/gif'
+            ? 'GIF muito grande. O limite atual e 5 MB.'
           : 'Imagem muito grande. O limite atual e 5 MB.',
       },
       { status: 413 },
     )
   }
-
-  const folder = getFolder(body.folder)
 
   if (!folder) {
     return NextResponse.json(
@@ -264,7 +299,7 @@ export async function POST(request: Request) {
   const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY as string
   const bucketName = process.env.R2_BUCKET_NAME as string
   const publicBaseUrl = process.env.R2_PUBLIC_BASE_URL as string
-  const key = buildObjectKey(folder, user.id, body.contentType)
+  const key = buildObjectKey(folder, user.id, contentType)
 
   const client = new S3Client({
     region: 'auto',
@@ -279,10 +314,18 @@ export async function POST(request: Request) {
     const command = new PutObjectCommand({
       Bucket: bucketName,
       Key: key,
-      ContentType: body.contentType,
     })
     const uploadUrl = await getSignedUrl(client, command, {
       expiresIn: PRESIGNED_URL_EXPIRES_IN_SECONDS,
+    })
+
+    console.info('[R2Presign] Upload preparado:', {
+      fileName: body.fileName,
+      fileType: typeof body.contentType === 'string' ? body.contentType : null,
+      fileSize: body.fileSize,
+      contentType,
+      folder,
+      status: 200,
     })
 
     return NextResponse.json({
@@ -290,10 +333,19 @@ export async function POST(request: Request) {
       uploadUrl,
       publicUrl: buildPublicUrl(publicBaseUrl, key),
       key,
-      contentType: body.contentType,
+      contentType,
       expiresIn: PRESIGNED_URL_EXPIRES_IN_SECONDS,
     })
-  } catch {
+  } catch (error) {
+    console.error('[R2Presign] Falha ao preparar upload:', {
+      fileName: body.fileName,
+      fileType: typeof body.contentType === 'string' ? body.contentType : null,
+      fileSize: body.fileSize,
+      contentType,
+      folder,
+      error: error instanceof Error ? error.message : 'Erro inesperado no presign.',
+    })
+
     return NextResponse.json(
       {
         ok: false,

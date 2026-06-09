@@ -79,6 +79,9 @@ const MAX_MEDIA_FILES = 5
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024
 const MAX_VIDEO_SIZE = 30 * 1024 * 1024
 const HEAVY_VIDEO_WARNING_SIZE = 20 * 1024 * 1024
+const ACCEPTED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
+const ACCEPTED_IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif'])
+const ACCEPTED_VIDEO_TYPES = new Set(['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime'])
 const POST_EMOJI_GROUPS = [
   {
     title: 'Populares',
@@ -111,12 +114,21 @@ function getInitial(name: string) {
   return name.slice(0, 1).toUpperCase()
 }
 
+function getFileExtension(file: File) {
+  const extension = file.name.trim().toLowerCase().split('.').pop()
+  return extension && extension !== file.name.toLowerCase() ? extension : ''
+}
+
 function isImage(file: File) {
-  return ['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type)
+  return ACCEPTED_IMAGE_TYPES.has(file.type) || ACCEPTED_IMAGE_EXTENSIONS.has(getFileExtension(file))
 }
 
 function isVideo(file: File) {
-  return ['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime'].includes(file.type)
+  return ACCEPTED_VIDEO_TYPES.has(file.type)
+}
+
+function isGif(file: File) {
+  return file.type === 'image/gif' || getFileExtension(file) === 'gif'
 }
 
 function getVideoSizeError() {
@@ -213,7 +225,7 @@ export default function PostComposer({
       }
 
       if (isImage(file) && file.size > MAX_IMAGE_SIZE) {
-        setError(file.type === 'image/gif' ? 'Arquivo muito grande. Tente um GIF menor.' : t('postComposer.errors.imageTooLarge'))
+        setError(isGif(file) ? 'GIF muito grande. O limite atual e 5 MB.' : t('postComposer.errors.imageTooLarge'))
         continue
       }
 
@@ -524,7 +536,7 @@ export default function PostComposer({
                   <input
                     ref={mediaInputRef}
                     type="file"
-                    accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/ogg,video/quicktime"
+                    accept="image/jpeg,image/png,image/webp,image/gif,.jpg,.jpeg,.png,.webp,.gif,video/mp4,video/webm,video/ogg,video/quicktime"
                     multiple
                     className="hidden"
                     onChange={(event) => addFiles(event.target.files)}

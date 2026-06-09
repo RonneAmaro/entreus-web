@@ -203,6 +203,16 @@ const FEED_INITIAL_REACTION_LIMIT = 500
 const FEED_INITIAL_REPOST_LIMIT = 120
 const POST_IMAGE_MAX_SIZE_BYTES = 5 * 1024 * 1024
 const POST_VIDEO_MAX_SIZE_BYTES = 30 * 1024 * 1024
+const ACCEPTED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
+const ACCEPTED_IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif'])
+const IMAGE_CONTENT_TYPE_BY_EXTENSION: Record<string, string> = {
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  webp: 'image/webp',
+  gif: 'image/gif',
+}
+const ACCEPTED_VIDEO_TYPES = new Set(['video/mp4', 'video/webm', 'video/quicktime', 'video/ogg'])
 const FEED_ITEM_ACTIVE_ROOT_MARGIN = '1800px 0px 2200px 0px'
 const FEED_MEDIA_PLACEHOLDER_HEIGHT = 360
 const FEED_COMMENTS_PLACEHOLDER_HEIGHT = 180
@@ -1742,12 +1752,30 @@ function FeedContent() {
     }
   }
 
+  function getFileExtension(file: File) {
+    const extension = file.name.trim().toLowerCase().split('.').pop()
+    return extension && extension !== file.name.toLowerCase() ? extension : ''
+  }
+
+  function getEffectiveImageContentType(file: File) {
+    if (ACCEPTED_IMAGE_TYPES.has(file.type)) return file.type
+    return IMAGE_CONTENT_TYPE_BY_EXTENSION[getFileExtension(file)] || null
+  }
+
+  function getEffectiveContentType(file: File) {
+    return getEffectiveImageContentType(file) || (ACCEPTED_VIDEO_TYPES.has(file.type) ? file.type : null)
+  }
+
   function isImage(file: File) {
-    return ['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type)
+    return Boolean(getEffectiveImageContentType(file))
   }
 
   function isVideo(file: File) {
-    return ['video/mp4', 'video/webm', 'video/quicktime', 'video/ogg'].includes(file.type)
+    return ACCEPTED_VIDEO_TYPES.has(file.type)
+  }
+
+  function isGif(file: File) {
+    return getEffectiveImageContentType(file) === 'image/gif'
   }
 
   function getVideoTooLargeMessage() {
@@ -1815,6 +1843,7 @@ function FeedContent() {
     } | null,
     file: File,
     folder: 'posts' | 'comments',
+    expectedContentType: string,
   ): data is {
     uploadUrl: string
     publicUrl: string
@@ -1823,7 +1852,7 @@ function FeedContent() {
   } {
     if (!data) return false
     if (!isSafeHttpMediaUrl(data.uploadUrl) || !isSafeHttpMediaUrl(data.publicUrl)) return false
-    if (data.contentType !== file.type) return false
+    if (data.contentType !== expectedContentType) return false
     if (typeof data.key !== 'string' || !data.key.startsWith(`${folder}/${userId}/`)) return false
 
     return true
@@ -1834,15 +1863,16 @@ function FeedContent() {
   ): Promise<{ url: string; type: 'image' | 'video' } | null> {
     if (!userId) return null
 
-    const mediaType: 'image' | 'video' | null = isImage(file)
+    const uploadContentType = getEffectiveContentType(file)
+    const mediaType: 'image' | 'video' | null = uploadContentType && getEffectiveImageContentType(file)
       ? 'image'
-      : isVideo(file)
+      : uploadContentType && isVideo(file)
         ? 'video'
         : null
 
     if (mediaType === 'image') {
       if (file.size > POST_IMAGE_MAX_SIZE_BYTES) {
-        setMessage(file.type === 'image/gif' ? 'Arquivo muito grande. Tente um GIF menor.' : t('feed.messages.imageTooLarge'))
+        setMessage(isGif(file) ? 'GIF muito grande. O limite atual e 5 MB.' : t('feed.messages.imageTooLarge'))
         return null
       }
     }
@@ -1854,10 +1884,19 @@ function FeedContent() {
       }
     }
 
-    if (!mediaType) {
+    if (!mediaType || !uploadContentType) {
       setMessage('Formato nao permitido. Use JPG, PNG, WEBP ou GIF.')
       return null
     }
+
+    console.info('[FeedUpload] Iniciando upload de midia:', {
+      fileName: file.name,
+      fileType: file.type || null,
+      fileSize: file.size,
+      contentType: uploadContentType,
+      folder: 'posts',
+      step: 'frontend-validation',
+    })
 
     if (mediaType === 'image') {
       setUploadingPostImage(true)
@@ -1879,7 +1918,7 @@ function FeedContent() {
         headers: authHeaders,
         body: JSON.stringify({
           fileName: file.name,
-          contentType: file.type,
+          contentType: uploadContentType,
           fileSize: file.size,
           folder: 'posts',
         }),
@@ -1895,6 +1934,17 @@ function FeedContent() {
         error?: string
       } | null
 
+      console.info('[FeedUpload] Resposta do presign:', {
+        fileName: file.name,
+        fileType: file.type || null,
+        fileSize: file.size,
+        contentType: uploadContentType,
+        folder: 'posts',
+        status: presignResponse.status,
+        step: 'presign-response',
+        error: presignData?.error,
+      })
+
       if (!presignResponse.ok || !presignData?.ok) {
         const errorMessage = getPresignFailureMessage(
           presignResponse.status,
@@ -1904,8 +1954,10 @@ function FeedContent() {
 
         console.error('[FeedUpload] Falha ao preparar upload R2:', {
           fileName: file.name,
-          contentType: file.type,
+          fileType: file.type || null,
+          contentType: uploadContentType,
           sizeMb: Number((file.size / 1024 / 1024).toFixed(2)),
+          folder: 'posts',
           status: presignResponse.status,
           step: 'presign',
           error: presignData?.error,
@@ -1919,11 +1971,14 @@ function FeedContent() {
         return null
       }
 
-      if (!isValidPresignData(presignData, file, 'posts')) {
+      if (!isValidPresignData(presignData, file, 'posts', uploadContentType)) {
         console.error('[FeedUpload] Presign retornou dados invalidos:', {
           fileName: file.name,
-          contentType: file.type,
+          fileType: file.type || null,
+          contentType: uploadContentType,
           sizeMb: Number((file.size / 1024 / 1024).toFixed(2)),
+          folder: 'posts',
+          status: presignResponse.status,
           step: 'presign-validation',
         })
         setMessage('Nao foi possivel preparar o upload da midia. Tente novamente.')
@@ -1933,16 +1988,28 @@ function FeedContent() {
       const uploadResponse = await fetch(presignData.uploadUrl, {
         method: 'PUT',
         headers: {
-          'Content-Type': file.type,
+          'Content-Type': uploadContentType,
         },
         body: file,
+      })
+
+      console.info('[FeedUpload] Resposta do PUT R2:', {
+        fileName: file.name,
+        fileType: file.type || null,
+        fileSize: file.size,
+        contentType: uploadContentType,
+        folder: 'posts',
+        status: uploadResponse.status,
+        step: 'r2-put-response',
       })
 
       if (!uploadResponse.ok) {
         console.error('[FeedUpload] Falha ao enviar midia para o R2:', {
           fileName: file.name,
-          contentType: file.type,
+          fileType: file.type || null,
+          contentType: uploadContentType,
           sizeMb: Number((file.size / 1024 / 1024).toFixed(2)),
+          folder: 'posts',
           status: uploadResponse.status,
           step: 'r2-put',
         })
@@ -1950,8 +2017,8 @@ function FeedContent() {
         const friendlyMessage =
           mediaType === 'video'
             ? 'Nao foi possivel enviar o video. Tente novamente ou use um video menor.'
-            : file.type === 'image/gif'
-              ? 'Nao foi possivel enviar o GIF. Tente um GIF menor ou verifique sua conexao.'
+            : uploadContentType === 'image/gif'
+              ? 'Nao foi possivel enviar o GIF para o storage. Verifique sua conexao e tente novamente.'
               : 'Nao foi possivel enviar a imagem. Verifique sua conexao e tente novamente.'
 
         setMessage(
@@ -1970,16 +2037,18 @@ function FeedContent() {
       const errorMessage =
         mediaType === 'video'
           ? 'Nao foi possivel enviar o video. Tente novamente ou use um video menor.'
-          : file.type === 'image/gif'
-            ? 'Nao foi possivel enviar o GIF. Tente um GIF menor ou verifique sua conexao.'
+          : uploadContentType === 'image/gif'
+            ? 'Nao foi possivel enviar o GIF para o storage. Verifique sua conexao e tente novamente.'
           : error instanceof Error
             ? error.message
             : 'Erro inesperado no upload R2.'
 
       console.error('[FeedUpload] Erro ao enviar midia do post:', {
         fileName: file.name,
-        contentType: file.type,
+        fileType: file.type || null,
+        contentType: uploadContentType,
         sizeMb: Number((file.size / 1024 / 1024).toFixed(2)),
+        folder: 'posts',
         step: 'r2-put',
         message: error instanceof Error ? error.message : 'Erro inesperado no upload R2.',
       })
@@ -2017,16 +2086,17 @@ function FeedContent() {
     if (!draft.file) return null
 
     const file = draft.file
+    const uploadContentType = getEffectiveContentType(file)
     const mediaType: 'image' | 'video' | 'gif' | null =
-      file.type === 'image/gif'
+      uploadContentType === 'image/gif'
         ? 'gif'
-        : isImage(file)
+        : uploadContentType && getEffectiveImageContentType(file)
           ? 'image'
-          : isVideo(file)
+          : uploadContentType && isVideo(file)
             ? 'video'
             : null
 
-    if (!mediaType) {
+    if (!mediaType || !uploadContentType) {
       setMessage('Formato nao permitido. Use JPG, PNG, WEBP ou GIF.')
       return null
     }
@@ -2034,7 +2104,7 @@ function FeedContent() {
     const maxSizeInBytes = mediaType === 'video' ? POST_VIDEO_MAX_SIZE_BYTES : POST_IMAGE_MAX_SIZE_BYTES
 
     if (file.size > maxSizeInBytes) {
-      setMessage(mediaType === 'video' ? getVideoTooLargeMessage() : mediaType === 'gif' ? 'Arquivo muito grande. Tente um GIF menor.' : t('feed.messages.imageTooLarge'))
+      setMessage(mediaType === 'video' ? getVideoTooLargeMessage() : mediaType === 'gif' ? 'GIF muito grande. O limite atual e 5 MB.' : t('feed.messages.imageTooLarge'))
       return null
     }
 
@@ -2051,7 +2121,7 @@ function FeedContent() {
         headers: authHeaders,
         body: JSON.stringify({
           fileName: file.name,
-          contentType: file.type,
+          contentType: uploadContentType,
           fileSize: file.size,
           folder: 'comments',
         }),
@@ -2070,7 +2140,8 @@ function FeedContent() {
       if (!presignResponse.ok || !presignData?.ok) {
         console.error('[FeedUpload] Falha ao preparar upload R2 de comentario:', {
           fileName: file.name,
-          contentType: file.type,
+          fileType: file.type || null,
+          contentType: uploadContentType,
           sizeMb: Number((file.size / 1024 / 1024).toFixed(2)),
           status: presignResponse.status,
           step: 'presign',
@@ -2086,10 +2157,11 @@ function FeedContent() {
         return null
       }
 
-      if (!isValidPresignData(presignData, file, 'comments')) {
+      if (!isValidPresignData(presignData, file, 'comments', uploadContentType)) {
         console.error('[FeedUpload] Presign de comentario retornou dados invalidos:', {
           fileName: file.name,
-          contentType: file.type,
+          fileType: file.type || null,
+          contentType: uploadContentType,
           sizeMb: Number((file.size / 1024 / 1024).toFixed(2)),
           step: 'presign-validation',
         })
@@ -2100,7 +2172,7 @@ function FeedContent() {
       const uploadResponse = await fetch(presignData.uploadUrl, {
         method: 'PUT',
         headers: {
-          'Content-Type': file.type,
+          'Content-Type': uploadContentType,
         },
         body: file,
       })
@@ -2108,12 +2180,13 @@ function FeedContent() {
       if (!uploadResponse.ok) {
         console.error('[FeedUpload] Falha ao enviar midia de comentario para o R2:', {
           fileName: file.name,
-          contentType: file.type,
+          fileType: file.type || null,
+          contentType: uploadContentType,
           sizeMb: Number((file.size / 1024 / 1024).toFixed(2)),
           status: uploadResponse.status,
           step: 'r2-put',
         })
-        setMessage(mediaType === 'gif' ? 'Nao foi possivel enviar o GIF. Tente um GIF menor ou verifique sua conexao.' : 'Nao foi possivel enviar a midia do comentario.')
+        setMessage(mediaType === 'gif' ? 'Nao foi possivel enviar o GIF para o storage. Verifique sua conexao e tente novamente.' : 'Nao foi possivel enviar a midia do comentario.')
         return null
       }
 
@@ -2124,12 +2197,13 @@ function FeedContent() {
     } catch (error) {
       console.error('[FeedUpload] Erro ao enviar midia de comentario:', {
         fileName: file.name,
-        contentType: file.type,
+        fileType: file.type || null,
+        contentType: uploadContentType,
         sizeMb: Number((file.size / 1024 / 1024).toFixed(2)),
         step: 'r2-put',
         message: error instanceof Error ? error.message : 'Erro inesperado no upload R2.',
       })
-      setMessage(mediaType === 'gif' ? 'Nao foi possivel enviar o GIF. Tente um GIF menor ou verifique sua conexao.' : 'Nao foi possivel enviar a midia. Verifique sua conexao e tente novamente.')
+      setMessage(mediaType === 'gif' ? 'Nao foi possivel enviar o GIF para o storage. Verifique sua conexao e tente novamente.' : 'Nao foi possivel enviar a midia. Verifique sua conexao e tente novamente.')
       return null
     }
   }
@@ -2177,6 +2251,14 @@ function FeedContent() {
     const firstImage = uploadedMedia.find((item) => item.type === 'image')?.url || null
     const firstVideo = uploadedMedia.find((item) => item.type === 'video')?.url || null
 
+    console.info('[FeedUpload] Salvando post apos upload:', {
+      mediaCount: uploadedMedia.length,
+      mediaTypes: uploadedMedia.map((item) => item.type),
+      hasImage: Boolean(firstImage),
+      hasVideo: Boolean(firstVideo),
+      step: 'database-post-save',
+    })
+
     const { data: insertedPost, error } = await supabase
       .from('posts')
       .insert({
@@ -2192,6 +2274,12 @@ function FeedContent() {
       .single()
 
     if (error) {
+      console.error('[FeedUpload] Falha ao salvar post apos upload:', {
+        mediaCount: uploadedMedia.length,
+        mediaTypes: uploadedMedia.map((item) => item.type),
+        step: 'database-post-save',
+        error: error.message,
+      })
       setMessage(t('feed.messages.publishError') + error.message)
       return false
     }
@@ -2210,6 +2298,13 @@ function FeedContent() {
         .insert(mediaRows)
 
       if (mediaError) {
+        console.error('[FeedUpload] Falha ao salvar midias do post:', {
+          postId: insertedPost.id,
+          mediaCount: mediaRows.length,
+          mediaTypes: mediaRows.map((item) => item.media_type),
+          step: 'database-media-save',
+          error: mediaError.message,
+        })
         setMessage(t('feed.messages.mediaSavePartial') + mediaError.message)
 
         await reloadInitialFeed()
@@ -2217,6 +2312,13 @@ function FeedContent() {
 
         return false
       }
+
+      console.info('[FeedUpload] Midias do post salvas:', {
+        postId: insertedPost.id,
+        mediaCount: mediaRows.length,
+        mediaTypes: mediaRows.map((item) => item.media_type),
+        step: 'database-media-save',
+      })
     }
 
     setMessage(t('feed.messages.publishedSuccess'))
@@ -2633,7 +2735,7 @@ function FeedContent() {
         [postId]: {
           file,
           url: URL.createObjectURL(file),
-          type: file.type === 'image/gif' ? 'gif' : isVideo(file) ? 'video' : 'image',
+          type: isGif(file) ? 'gif' : isVideo(file) ? 'video' : 'image',
           source: 'file',
         },
       }
@@ -3231,7 +3333,7 @@ function FeedContent() {
                       >
                         <input
                           type="file"
-                          accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime"
+                          accept="image/jpeg,image/png,image/webp,image/gif,.jpg,.jpeg,.png,.webp,.gif,video/mp4,video/webm,video/quicktime"
                           className="hidden"
                           onChange={(event) => {
                             handleSelectCommentMedia(replyModalPost.id, event.target.files)
