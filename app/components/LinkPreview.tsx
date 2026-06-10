@@ -1,7 +1,7 @@
 'use client'
 
 import { ExternalLink, Link2, Play } from 'lucide-react'
-import { detectExternalEmbed } from '@/lib/external-embeds'
+import { detectExternalEmbed, type ExternalEmbed } from '@/lib/external-embeds'
 
 type LinkPreviewProps = {
   content: string | null
@@ -42,6 +42,43 @@ function getUrlMeta(url: string) {
       title: 'Link externo',
       description: url,
     }
+  }
+}
+
+function getEmbedDisplay(embed: ExternalEmbed) {
+  if (embed.provider === 'tiktok') {
+    return {
+      domain: 'tiktok.com',
+      title: 'Video do TikTok',
+      iframeTitle: 'Video do TikTok incorporado',
+      buttonLabel: 'Abrir no TikTok',
+      ariaLabel: 'Abrir video no TikTok em nova aba',
+      buttonClassName:
+        'border-zinc-300 bg-white text-zinc-950 hover:border-zinc-400 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white dark:hover:border-zinc-500 dark:hover:bg-zinc-800',
+      frameWrapClassName: 'flex justify-center bg-black p-2 sm:p-3',
+      frameClassName:
+        'relative aspect-[9/16] w-full max-w-[23.5rem] max-h-[70vh] overflow-hidden rounded-[1.25rem] bg-black',
+      allow:
+        'autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share',
+      sandbox:
+        'allow-scripts allow-same-origin allow-presentation allow-popups',
+    }
+  }
+
+  return {
+    domain: 'youtube.com',
+    title: 'Video do YouTube',
+    iframeTitle: 'Video do YouTube incorporado',
+    buttonLabel: 'YouTube',
+    ariaLabel: 'Abrir video no YouTube em nova aba',
+    buttonClassName:
+      'border-red-200 bg-white text-red-700 hover:border-red-300 hover:bg-red-50 dark:border-red-900/70 dark:bg-zinc-900 dark:text-red-200 dark:hover:border-red-700 dark:hover:bg-red-950/40',
+    frameWrapClassName: 'bg-black',
+    frameClassName: 'relative aspect-video w-full bg-black',
+    allow:
+      'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share',
+    sandbox:
+      'allow-scripts allow-same-origin allow-presentation allow-popups',
   }
 }
 
@@ -95,7 +132,7 @@ export default function LinkPreview({
   const externalEmbed = detectExternalEmbed(url)
   const meta = getUrlMeta(url)
 
-  if (!externalEmbed) {
+  if (!externalEmbed || (!enableExternalEmbeds && externalEmbed.provider !== 'youtube')) {
     return (
       <a
         href={url}
@@ -171,31 +208,35 @@ export default function LinkPreview({
     )
   }
 
+  const embedDisplay = getEmbedDisplay(externalEmbed)
+
   return (
     <div
       className="mb-4 overflow-hidden rounded-[1.5rem] bg-zinc-950 shadow-sm shadow-black/10 ring-1 ring-zinc-200/70 dark:ring-zinc-800/80"
     >
-      <div className="relative aspect-video w-full bg-black">
-        <iframe
-          src={externalEmbed.embedUrl}
-          title="Video do YouTube incorporado"
-          loading="lazy"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-          allowFullScreen
-          sandbox="allow-scripts allow-same-origin allow-presentation allow-popups"
-          referrerPolicy="strict-origin-when-cross-origin"
-          className="absolute inset-0 h-full w-full border-0"
-        />
+      <div className={embedDisplay.frameWrapClassName}>
+        <div className={embedDisplay.frameClassName}>
+          <iframe
+            src={externalEmbed.embedUrl}
+            title={embedDisplay.iframeTitle}
+            loading="lazy"
+            allow={embedDisplay.allow}
+            allowFullScreen
+            sandbox={embedDisplay.sandbox}
+            referrerPolicy="strict-origin-when-cross-origin"
+            className="absolute inset-0 h-full w-full border-0"
+          />
+        </div>
       </div>
 
       <div className="flex flex-col gap-3 bg-zinc-50/95 p-3.5 dark:bg-zinc-950/95 sm:flex-row sm:items-center sm:justify-between sm:p-4">
         <div className="min-w-0">
           <div className="mb-1 flex min-w-0 items-center gap-1.5 text-xs font-semibold uppercase text-zinc-500 dark:text-zinc-400">
-            <span className="truncate">youtube.com</span>
+            <span className="truncate">{embedDisplay.domain}</span>
           </div>
 
           <p className="text-sm font-bold text-zinc-950 dark:text-white">
-            Video do YouTube
+            {embedDisplay.title}
           </p>
 
           <p className="mt-1 truncate text-xs text-zinc-500 dark:text-zinc-400">
@@ -207,10 +248,10 @@ export default function LinkPreview({
           href={externalEmbed.originalUrl}
           target="_blank"
           rel="noopener noreferrer"
-          aria-label="Abrir video no YouTube em nova aba"
-          className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full border border-red-200 bg-white px-3.5 py-2 text-sm font-bold text-red-700 shadow-sm transition hover:border-red-300 hover:bg-red-50 dark:border-red-900/70 dark:bg-zinc-900 dark:text-red-200 dark:hover:border-red-700 dark:hover:bg-red-950/40"
+          aria-label={embedDisplay.ariaLabel}
+          className={`inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-full border px-3.5 py-2 text-sm font-bold shadow-sm transition sm:w-auto ${embedDisplay.buttonClassName}`}
         >
-          YouTube
+          {embedDisplay.buttonLabel}
           <ExternalLink className="h-4 w-4" />
         </a>
       </div>
