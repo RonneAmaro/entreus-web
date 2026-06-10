@@ -499,7 +499,7 @@ export default function PostCard({
 
           <TranslatePostButton content={post.content} />
 
-          <LinkPreview content={post.content} />
+          <LinkPreview content={post.content} enableExternalEmbeds />
 
           {!isSharedGiftPost && <PostMediaGallery media={postMedia} />}
         </SensitiveContent>
@@ -516,7 +516,7 @@ export default function PostCard({
 
           <TranslatePostButton content={post.content} />
 
-          <LinkPreview content={post.content} />
+          <LinkPreview content={post.content} enableExternalEmbeds />
 
           {!isSharedGiftPost && <PostMediaGallery media={postMedia} />}
         </>

@@ -3843,7 +3843,7 @@ function FeedContent() {
 
                             <TranslatePostButton content={post.content} />
 
-                            <LinkPreview content={post.content} />
+                            <LinkPreview content={post.content} enableExternalEmbeds />
 
                             {!isSharedGiftPost && postMedia.length > 0 && (
                               <DeferredFeedSection active={isNearViewport} minHeight={FEED_MEDIA_PLACEHOLDER_HEIGHT}>
@@ -3866,7 +3866,7 @@ function FeedContent() {
 
                             <TranslatePostButton content={post.content} />
 
-                            <LinkPreview content={post.content} />
+                            <LinkPreview content={post.content} enableExternalEmbeds />
 
                             {!isSharedGiftPost && postMedia.length > 0 && (
                               <DeferredFeedSection active={isNearViewport} minHeight={FEED_MEDIA_PLACEHOLDER_HEIGHT}>
