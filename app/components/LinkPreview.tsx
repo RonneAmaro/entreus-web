@@ -1,5 +1,6 @@
 'use client'
 
+import { type ReactNode } from 'react'
 import { Camera, ExternalLink, Link2, Play } from 'lucide-react'
 import { detectExternalEmbed, type ExternalEmbed } from '@/lib/external-embeds'
 
@@ -11,6 +12,21 @@ type LinkPreviewProps = {
 type VideoExternalEmbed = Extract<ExternalEmbed, { provider: 'youtube' | 'tiktok' }>
 type XExternalEmbed = Extract<ExternalEmbed, { provider: 'x' }>
 type InstagramExternalEmbed = Extract<ExternalEmbed, { provider: 'instagram' }>
+
+type EmbedDisplay = {
+  providerLabel: string
+  title: string
+  iframeTitle: string
+  buttonLabel: string
+  ariaLabel: string
+  mark: ReactNode
+  markClassName: string
+  actionClassName: string
+  frameWrapClassName: string
+  frameClassName: string
+  allow: string
+  sandbox: string
+}
 
 function getFirstUrl(text: string) {
   const urlRegex = /(https?:\/\/[^\s<]+)/i
@@ -49,19 +65,129 @@ function getUrlMeta(url: string) {
   }
 }
 
-function getEmbedDisplay(embed: VideoExternalEmbed) {
+function ExternalActionLink({
+  href,
+  label,
+  ariaLabel,
+  className,
+}: {
+  href: string
+  label: string
+  ariaLabel: string
+  className: string
+}) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={ariaLabel}
+      className={`inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-full border px-3.5 py-2 text-sm font-bold shadow-sm transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-zinc-950 sm:w-auto ${className}`}
+    >
+      {label}
+      <ExternalLink className="h-4 w-4" />
+    </a>
+  )
+}
+
+function ProviderMark({
+  children,
+  className,
+}: {
+  children: ReactNode
+  className: string
+}) {
+  return (
+    <div
+      className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl shadow-sm ring-1 ring-black/5 dark:ring-white/10 ${className}`}
+    >
+      {children}
+    </div>
+  )
+}
+
+function EmbedShell({
+  providerLabel,
+  title,
+  subtitle,
+  originalUrl,
+  buttonLabel,
+  ariaLabel,
+  actionClassName,
+  mark,
+  markClassName,
+  children,
+}: {
+  providerLabel: string
+  title: string
+  subtitle?: ReactNode
+  originalUrl: string
+  buttonLabel: string
+  ariaLabel: string
+  actionClassName: string
+  mark: ReactNode
+  markClassName: string
+  children: ReactNode
+}) {
+  return (
+    <div className="group/embed mb-4 overflow-hidden rounded-[1.35rem] border border-zinc-200/75 bg-white/95 shadow-sm shadow-black/5 ring-1 ring-black/[0.02] transition duration-300 hover:border-blue-200 hover:shadow-lg hover:shadow-blue-500/10 dark:border-zinc-800/80 dark:bg-zinc-950/95 dark:ring-white/[0.03] dark:hover:border-zinc-700">
+      <div className="flex flex-col gap-3 border-b border-zinc-200/70 bg-zinc-50/80 px-3.5 py-3 dark:border-zinc-800/80 dark:bg-zinc-950 sm:flex-row sm:items-center sm:justify-between sm:px-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <ProviderMark className={markClassName}>
+            {mark}
+          </ProviderMark>
+
+          <div className="min-w-0">
+            <div className="mb-0.5 text-xs font-bold uppercase text-zinc-500 dark:text-zinc-400">
+              {providerLabel}
+            </div>
+
+            <p className="truncate text-sm font-black text-zinc-950 dark:text-white">
+              {title}
+            </p>
+
+            {subtitle && (
+              <div className="mt-0.5 truncate text-xs text-zinc-500 dark:text-zinc-400">
+                {subtitle}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <ExternalActionLink
+          href={originalUrl}
+          label={buttonLabel}
+          ariaLabel={ariaLabel}
+          className={actionClassName}
+        />
+      </div>
+
+      {children}
+
+      <div className="border-t border-zinc-200/70 bg-white/90 px-3.5 py-2.5 dark:border-zinc-800/80 dark:bg-zinc-950/95 sm:px-4">
+        <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">
+          {originalUrl}
+        </p>
+      </div>
+    </div>
+  )
+}
+
+function getEmbedDisplay(embed: VideoExternalEmbed): EmbedDisplay {
   if (embed.provider === 'tiktok') {
     return {
-      domain: 'tiktok.com',
+      providerLabel: 'TikTok',
       title: 'Video do TikTok',
       iframeTitle: 'Video do TikTok incorporado',
       buttonLabel: 'Abrir no TikTok',
       ariaLabel: 'Abrir video no TikTok em nova aba',
-      buttonClassName:
+      mark: <span className="text-base font-black">T</span>,
+      markClassName: 'bg-zinc-950 text-white dark:bg-white dark:text-zinc-950',
+      actionClassName:
         'border-zinc-300 bg-white text-zinc-950 hover:border-zinc-400 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white dark:hover:border-zinc-500 dark:hover:bg-zinc-800',
-      frameWrapClassName: 'flex justify-center bg-black p-2 sm:p-3',
+      frameWrapClassName: 'flex justify-center bg-zinc-950 p-2 sm:p-3',
       frameClassName:
-        'relative aspect-[9/16] w-full max-w-[23.5rem] max-h-[70vh] overflow-hidden rounded-[1.25rem] bg-black',
+        'relative aspect-[9/16] w-full max-w-[20rem] overflow-hidden rounded-[1.1rem] bg-black shadow-2xl shadow-black/30 sm:rounded-[1.25rem]',
       allow:
         'autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share',
       sandbox:
@@ -70,15 +196,18 @@ function getEmbedDisplay(embed: VideoExternalEmbed) {
   }
 
   return {
-    domain: 'youtube.com',
+    providerLabel: 'YouTube',
     title: 'Video do YouTube',
     iframeTitle: 'Video do YouTube incorporado',
-    buttonLabel: 'YouTube',
+    buttonLabel: 'Abrir no YouTube',
     ariaLabel: 'Abrir video no YouTube em nova aba',
-    buttonClassName:
+    mark: <Play className="ml-0.5 h-5 w-5 fill-current" />,
+    markClassName: 'bg-red-600 text-white',
+    actionClassName:
       'border-red-200 bg-white text-red-700 hover:border-red-300 hover:bg-red-50 dark:border-red-900/70 dark:bg-zinc-900 dark:text-red-200 dark:hover:border-red-700 dark:hover:bg-red-950/40',
-    frameWrapClassName: 'bg-black',
-    frameClassName: 'relative aspect-video w-full bg-black',
+    frameWrapClassName: 'bg-zinc-950 p-1 sm:p-1.5',
+    frameClassName:
+      'relative aspect-video w-full overflow-hidden rounded-[1rem] bg-black sm:rounded-[1.2rem]',
     allow:
       'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share',
     sandbox:
@@ -88,50 +217,35 @@ function getEmbedDisplay(embed: VideoExternalEmbed) {
 
 function XPostPreview({ embed }: { embed: XExternalEmbed }) {
   return (
-    <div className="mb-4 overflow-hidden rounded-[1.5rem] bg-white shadow-sm shadow-black/5 ring-1 ring-zinc-200/70 dark:bg-zinc-950 dark:ring-zinc-800/80">
-      <div className="bg-zinc-950 p-4 text-white sm:p-5">
-        <div className="flex items-start gap-3">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white text-lg font-black text-zinc-950 ring-1 ring-white/20">
-            X
-          </div>
+    <EmbedShell
+      providerLabel="X/Twitter"
+      title="Publicacao no X/Twitter"
+      subtitle={`@${embed.username}`}
+      originalUrl={embed.originalUrl}
+      buttonLabel="Abrir no X"
+      ariaLabel="Abrir publicacao no X em nova aba"
+      mark={<span className="text-base font-black">X</span>}
+      markClassName="bg-zinc-950 text-white dark:bg-white dark:text-zinc-950"
+      actionClassName="border-zinc-300 bg-white text-zinc-950 hover:border-zinc-400 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white dark:hover:border-zinc-500 dark:hover:bg-zinc-800"
+    >
+      <div className="bg-zinc-50/60 p-3.5 dark:bg-zinc-950/60 sm:p-4">
+        <div className="rounded-[1.1rem] border border-zinc-200/70 bg-white p-4 dark:border-zinc-800/80 dark:bg-zinc-900/40">
+          <p className="text-sm font-semibold text-zinc-950 dark:text-white">
+            Publicacao no X/Twitter
+          </p>
 
-          <div className="min-w-0 flex-1">
-            <div className="mb-1 flex min-w-0 items-center gap-1.5 text-xs font-semibold uppercase text-zinc-400">
-              <span className="truncate">X/Twitter</span>
-            </div>
-
-            <p className="text-base font-black text-white">
-              Publicacao no X/Twitter
-            </p>
-
-            <p className="mt-2 break-words text-sm text-zinc-300">
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+            <span className="rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 font-semibold dark:border-zinc-800 dark:bg-zinc-950">
               @{embed.username}
-            </p>
+            </span>
 
-            <p className="mt-1 break-all text-xs text-zinc-500">
+            <span className="max-w-full truncate rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 dark:border-zinc-800 dark:bg-zinc-950">
               ID {embed.postId}
-            </p>
+            </span>
           </div>
         </div>
       </div>
-
-      <div className="flex flex-col gap-3 bg-zinc-50/95 p-3.5 dark:bg-zinc-950/95 sm:flex-row sm:items-center sm:justify-between sm:p-4">
-        <p className="min-w-0 truncate text-xs text-zinc-500 dark:text-zinc-400">
-          {embed.originalUrl}
-        </p>
-
-        <a
-          href={embed.originalUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label="Abrir publicacao no X em nova aba"
-          className="inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-full border border-zinc-300 bg-white px-3.5 py-2 text-sm font-bold text-zinc-950 shadow-sm transition hover:border-zinc-400 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white dark:hover:border-zinc-500 dark:hover:bg-zinc-800 sm:w-auto"
-        >
-          Abrir no X
-          <ExternalLink className="h-4 w-4" />
-        </a>
-      </div>
-    </div>
+    </EmbedShell>
   )
 }
 
@@ -146,52 +260,121 @@ function InstagramPreview({ embed }: { embed: InstagramExternalEmbed }) {
   const contentLabel = getInstagramContentLabel(embed.contentType)
 
   return (
-    <div className="mb-4 overflow-hidden rounded-[1.5rem] bg-white shadow-sm shadow-black/5 ring-1 ring-zinc-200/70 dark:bg-zinc-950 dark:ring-zinc-800/80">
-      <div className="bg-zinc-950 p-4 text-white sm:p-5">
-        <div className="flex items-start gap-3">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-zinc-950 ring-1 ring-white/20">
-            <Camera className="h-5 w-5" />
-          </div>
+    <EmbedShell
+      providerLabel="Instagram"
+      title={`${contentLabel} no Instagram`}
+      subtitle={embed.username ? `@${embed.username}` : undefined}
+      originalUrl={embed.originalUrl}
+      buttonLabel="Abrir no Instagram"
+      ariaLabel="Abrir conteudo no Instagram em nova aba"
+      mark={<Camera className="h-5 w-5" />}
+      markClassName="bg-pink-600 text-white"
+      actionClassName="border-pink-200 bg-white text-pink-700 hover:border-pink-300 hover:bg-pink-50 dark:border-pink-900/70 dark:bg-zinc-900 dark:text-pink-200 dark:hover:border-pink-700 dark:hover:bg-pink-950/40"
+    >
+      <div className="bg-zinc-50/60 p-3.5 dark:bg-zinc-950/60 sm:p-4">
+        <div className="rounded-[1.1rem] border border-pink-100 bg-white p-4 dark:border-pink-950/70 dark:bg-zinc-900/40">
+          <p className="text-sm font-semibold text-zinc-950 dark:text-white">
+            {contentLabel} no Instagram
+          </p>
 
-          <div className="min-w-0 flex-1">
-            <div className="mb-1 flex min-w-0 items-center gap-1.5 text-xs font-semibold uppercase text-pink-200">
-              <span className="truncate">Instagram</span>
-            </div>
-
-            <p className="text-base font-black text-white">
-              {contentLabel} no Instagram
-            </p>
-
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
             {embed.username && (
-              <p className="mt-2 break-words text-sm text-zinc-300">
+              <span className="rounded-full border border-pink-100 bg-pink-50 px-2.5 py-1 font-semibold text-pink-700 dark:border-pink-950/70 dark:bg-pink-950/30 dark:text-pink-200">
                 @{embed.username}
-              </p>
+              </span>
             )}
 
-            <p className="mt-1 break-all text-xs text-zinc-500">
+            <span className="max-w-full truncate rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 dark:border-zinc-800 dark:bg-zinc-950">
               Codigo {embed.postId}
-            </p>
+            </span>
+          </div>
+        </div>
+      </div>
+    </EmbedShell>
+  )
+}
+
+function GenericLinkPreview({
+  url,
+  meta,
+}: {
+  url: string
+  meta: ReturnType<typeof getUrlMeta>
+}) {
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="group mb-4 block overflow-hidden rounded-[1.35rem] border border-zinc-200/75 bg-white/95 shadow-sm shadow-black/5 ring-1 ring-black/[0.02] transition duration-300 hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-lg hover:shadow-blue-500/10 dark:border-zinc-800/80 dark:bg-zinc-950/95 dark:ring-white/[0.03] dark:hover:border-zinc-700"
+    >
+      <div className="flex items-stretch">
+        <div className="flex w-20 shrink-0 items-center justify-center bg-zinc-50 text-blue-600 dark:bg-zinc-950 dark:text-blue-300 sm:w-24">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white shadow-sm ring-1 ring-zinc-200/80 transition group-hover:scale-105 dark:bg-zinc-900/80 dark:ring-zinc-700/80">
+            <Link2 className="h-5 w-5" />
+          </div>
+        </div>
+
+        <div className="min-w-0 flex-1 p-3.5 sm:p-4">
+          <div className="mb-1 flex min-w-0 items-center gap-1.5 text-xs font-bold uppercase text-zinc-500 dark:text-zinc-400">
+            <span className="truncate">{meta.domain}</span>
+            <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+          </div>
+
+          <p className="truncate text-sm font-black text-zinc-950 dark:text-white">
+            {meta.title}
+          </p>
+
+          <p className="mt-1 line-clamp-2 break-all text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+            {meta.description}
+          </p>
+        </div>
+      </div>
+    </a>
+  )
+}
+
+function YouTubeThumbnailPreview({ embed }: { embed: VideoExternalEmbed }) {
+  const thumbnailUrl = `https://img.youtube.com/vi/${embed.videoId}/hqdefault.jpg`
+
+  return (
+    <a
+      href={embed.originalUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="group mb-4 block overflow-hidden rounded-[1.35rem] border border-zinc-200/75 bg-white/95 shadow-sm shadow-black/5 ring-1 ring-black/[0.02] transition duration-300 hover:-translate-y-0.5 hover:border-red-200 hover:shadow-lg hover:shadow-red-500/10 dark:border-zinc-800/80 dark:bg-zinc-950/95 dark:ring-white/[0.03] dark:hover:border-red-900/70"
+    >
+      <div className="relative aspect-video w-full overflow-hidden bg-black">
+        <img
+          src={thumbnailUrl}
+          alt="Capa do video do YouTube"
+          className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]"
+        />
+
+        <div className="absolute inset-0 flex items-center justify-center bg-black/25">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-red-600 text-white shadow-xl ring-1 ring-white/30 transition group-hover:scale-105 sm:h-16 sm:w-16">
+            <Play className="ml-1 h-7 w-7 fill-current sm:h-8 sm:w-8" />
           </div>
         </div>
       </div>
 
-      <div className="flex flex-col gap-3 bg-zinc-50/95 p-3.5 dark:bg-zinc-950/95 sm:flex-row sm:items-center sm:justify-between sm:p-4">
-        <p className="min-w-0 truncate text-xs text-zinc-500 dark:text-zinc-400">
-          {embed.originalUrl}
-        </p>
+      <div className="flex flex-col gap-3 p-3.5 sm:flex-row sm:items-center sm:justify-between sm:p-4">
+        <div className="min-w-0">
+          <div className="mb-1 flex min-w-0 items-center gap-1.5 text-xs font-bold uppercase text-zinc-500 dark:text-zinc-400">
+            <span className="truncate">YouTube</span>
+            <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+          </div>
 
-        <a
-          href={embed.originalUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label="Abrir conteudo no Instagram em nova aba"
-          className="inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-full border border-pink-200 bg-white px-3.5 py-2 text-sm font-bold text-pink-700 shadow-sm transition hover:border-pink-300 hover:bg-pink-50 dark:border-pink-900/70 dark:bg-zinc-900 dark:text-pink-200 dark:hover:border-pink-700 dark:hover:bg-pink-950/40 sm:w-auto"
-        >
-          Abrir no Instagram
-          <ExternalLink className="h-4 w-4" />
-        </a>
+          <p className="text-sm font-black text-zinc-950 dark:text-white">
+            Video do YouTube
+          </p>
+
+          <p className="mt-1 truncate text-xs text-zinc-500 dark:text-zinc-400">
+            {embed.originalUrl}
+          </p>
+        </div>
       </div>
-    </div>
+    </a>
   )
 }
 
@@ -246,79 +429,11 @@ export default function LinkPreview({
   const meta = getUrlMeta(url)
 
   if (!externalEmbed || (!enableExternalEmbeds && externalEmbed.provider !== 'youtube')) {
-    return (
-      <a
-        href={url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="group mb-4 block overflow-hidden rounded-[1.5rem] bg-zinc-50/90 shadow-sm shadow-black/5 ring-1 ring-zinc-200/70 transition duration-300 hover:-translate-y-0.5 hover:bg-white hover:shadow-lg hover:shadow-blue-500/10 hover:ring-blue-300/70 dark:bg-zinc-950/80 dark:ring-zinc-800/80 dark:hover:bg-zinc-900/90 dark:hover:ring-blue-500/40"
-      >
-        <div className="flex items-stretch">
-          <div className="flex w-20 shrink-0 items-center justify-center bg-gradient-to-br from-blue-50 via-white to-zinc-100 text-blue-600 dark:from-blue-950/50 dark:via-zinc-950 dark:to-zinc-900 dark:text-blue-300 sm:w-24">
-            <div className="flex h-11 w-11 items-center justify-center rounded-full bg-white/80 shadow-sm ring-1 ring-zinc-200/80 transition group-hover:scale-105 dark:bg-zinc-900/80 dark:ring-zinc-700/80">
-              <Link2 className="h-5 w-5" />
-            </div>
-          </div>
-
-          <div className="min-w-0 flex-1 p-3.5 sm:p-4">
-            <div className="mb-1 flex min-w-0 items-center gap-1.5 text-xs font-semibold uppercase text-zinc-500 dark:text-zinc-400">
-              <span className="truncate">{meta.domain}</span>
-              <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-            </div>
-
-            <p className="truncate text-sm font-bold text-zinc-950 dark:text-white">
-              {meta.title}
-            </p>
-
-            <p className="mt-1 line-clamp-2 break-all text-xs leading-5 text-zinc-500 dark:text-zinc-400">
-              {meta.description}
-            </p>
-          </div>
-        </div>
-      </a>
-    )
+    return <GenericLinkPreview url={url} meta={meta} />
   }
 
   if (!enableExternalEmbeds && externalEmbed.provider === 'youtube') {
-    const thumbnailUrl = `https://img.youtube.com/vi/${externalEmbed.videoId}/hqdefault.jpg`
-
-    return (
-      <a
-        href={externalEmbed.originalUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="group mb-4 block overflow-hidden rounded-[1.5rem] bg-zinc-50/90 shadow-sm shadow-black/5 ring-1 ring-zinc-200/70 transition duration-300 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-red-500/10 hover:ring-red-300/70 dark:bg-zinc-950/80 dark:ring-zinc-800/80 dark:hover:bg-zinc-900/90 dark:hover:ring-red-500/40"
-      >
-        <div className="relative aspect-video w-full overflow-hidden bg-black">
-          <img
-            src={thumbnailUrl}
-            alt="Capa do video do YouTube"
-            className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]"
-          />
-
-          <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-red-600 text-white shadow-xl ring-1 ring-white/30 transition group-hover:scale-105 sm:h-16 sm:w-16">
-              <Play className="ml-1 h-7 w-7 fill-current sm:h-8 sm:w-8" />
-            </div>
-          </div>
-        </div>
-
-        <div className="p-3.5 sm:p-4">
-          <div className="mb-1 flex min-w-0 items-center gap-1.5 text-xs font-semibold uppercase text-zinc-500 dark:text-zinc-400">
-            <span className="truncate">youtube.com</span>
-            <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-          </div>
-
-          <p className="text-sm font-bold text-zinc-950 dark:text-white">
-            Video do YouTube
-          </p>
-
-          <p className="mt-1 truncate text-xs text-zinc-500 dark:text-zinc-400">
-            {externalEmbed.originalUrl}
-          </p>
-        </div>
-      </a>
-    )
+    return <YouTubeThumbnailPreview embed={externalEmbed} />
   }
 
   if (externalEmbed.provider === 'x') {
@@ -332,8 +447,15 @@ export default function LinkPreview({
   const embedDisplay = getEmbedDisplay(externalEmbed)
 
   return (
-    <div
-      className="mb-4 overflow-hidden rounded-[1.5rem] bg-zinc-950 shadow-sm shadow-black/10 ring-1 ring-zinc-200/70 dark:ring-zinc-800/80"
+    <EmbedShell
+      providerLabel={embedDisplay.providerLabel}
+      title={embedDisplay.title}
+      originalUrl={externalEmbed.originalUrl}
+      buttonLabel={embedDisplay.buttonLabel}
+      ariaLabel={embedDisplay.ariaLabel}
+      mark={embedDisplay.mark}
+      markClassName={embedDisplay.markClassName}
+      actionClassName={embedDisplay.actionClassName}
     >
       <div className={embedDisplay.frameWrapClassName}>
         <div className={embedDisplay.frameClassName}>
@@ -349,33 +471,6 @@ export default function LinkPreview({
           />
         </div>
       </div>
-
-      <div className="flex flex-col gap-3 bg-zinc-50/95 p-3.5 dark:bg-zinc-950/95 sm:flex-row sm:items-center sm:justify-between sm:p-4">
-        <div className="min-w-0">
-          <div className="mb-1 flex min-w-0 items-center gap-1.5 text-xs font-semibold uppercase text-zinc-500 dark:text-zinc-400">
-            <span className="truncate">{embedDisplay.domain}</span>
-          </div>
-
-          <p className="text-sm font-bold text-zinc-950 dark:text-white">
-            {embedDisplay.title}
-          </p>
-
-          <p className="mt-1 truncate text-xs text-zinc-500 dark:text-zinc-400">
-            {externalEmbed.originalUrl}
-          </p>
-        </div>
-
-        <a
-          href={externalEmbed.originalUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label={embedDisplay.ariaLabel}
-          className={`inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-full border px-3.5 py-2 text-sm font-bold shadow-sm transition sm:w-auto ${embedDisplay.buttonClassName}`}
-        >
-          {embedDisplay.buttonLabel}
-          <ExternalLink className="h-4 w-4" />
-        </a>
-      </div>
-    </div>
+    </EmbedShell>
   )
 }
