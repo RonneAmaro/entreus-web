@@ -8,6 +8,9 @@ type LinkPreviewProps = {
   enableExternalEmbeds?: boolean
 }
 
+type VideoExternalEmbed = Extract<ExternalEmbed, { provider: 'youtube' | 'tiktok' }>
+type XExternalEmbed = Extract<ExternalEmbed, { provider: 'x' }>
+
 function getFirstUrl(text: string) {
   const urlRegex = /(https?:\/\/[^\s<]+)/i
   const match = text.match(urlRegex)
@@ -45,7 +48,7 @@ function getUrlMeta(url: string) {
   }
 }
 
-function getEmbedDisplay(embed: ExternalEmbed) {
+function getEmbedDisplay(embed: VideoExternalEmbed) {
   if (embed.provider === 'tiktok') {
     return {
       domain: 'tiktok.com',
@@ -80,6 +83,55 @@ function getEmbedDisplay(embed: ExternalEmbed) {
     sandbox:
       'allow-scripts allow-same-origin allow-presentation allow-popups',
   }
+}
+
+function XPostPreview({ embed }: { embed: XExternalEmbed }) {
+  return (
+    <div className="mb-4 overflow-hidden rounded-[1.5rem] bg-white shadow-sm shadow-black/5 ring-1 ring-zinc-200/70 dark:bg-zinc-950 dark:ring-zinc-800/80">
+      <div className="bg-zinc-950 p-4 text-white sm:p-5">
+        <div className="flex items-start gap-3">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white text-lg font-black text-zinc-950 ring-1 ring-white/20">
+            X
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <div className="mb-1 flex min-w-0 items-center gap-1.5 text-xs font-semibold uppercase text-zinc-400">
+              <span className="truncate">X/Twitter</span>
+            </div>
+
+            <p className="text-base font-black text-white">
+              Publicacao no X/Twitter
+            </p>
+
+            <p className="mt-2 break-words text-sm text-zinc-300">
+              @{embed.username}
+            </p>
+
+            <p className="mt-1 break-all text-xs text-zinc-500">
+              ID {embed.postId}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-3 bg-zinc-50/95 p-3.5 dark:bg-zinc-950/95 sm:flex-row sm:items-center sm:justify-between sm:p-4">
+        <p className="min-w-0 truncate text-xs text-zinc-500 dark:text-zinc-400">
+          {embed.originalUrl}
+        </p>
+
+        <a
+          href={embed.originalUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Abrir publicacao no X em nova aba"
+          className="inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-full border border-zinc-300 bg-white px-3.5 py-2 text-sm font-bold text-zinc-950 shadow-sm transition hover:border-zinc-400 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white dark:hover:border-zinc-500 dark:hover:bg-zinc-800 sm:w-auto"
+        >
+          Abrir no X
+          <ExternalLink className="h-4 w-4" />
+        </a>
+      </div>
+    </div>
+  )
 }
 
 export function LinkedPostText({
@@ -166,7 +218,7 @@ export default function LinkPreview({
     )
   }
 
-  if (!enableExternalEmbeds) {
+  if (!enableExternalEmbeds && externalEmbed.provider === 'youtube') {
     const thumbnailUrl = `https://img.youtube.com/vi/${externalEmbed.videoId}/hqdefault.jpg`
 
     return (
@@ -206,6 +258,10 @@ export default function LinkPreview({
         </div>
       </a>
     )
+  }
+
+  if (externalEmbed.provider === 'x') {
+    return <XPostPreview embed={externalEmbed} />
   }
 
   const embedDisplay = getEmbedDisplay(externalEmbed)
