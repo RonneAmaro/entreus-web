@@ -1,6 +1,7 @@
 type VideoExternalEmbedProvider = 'youtube' | 'tiktok'
 
-export type ExternalEmbedProvider = VideoExternalEmbedProvider | 'x'
+export type InstagramContentType = 'post' | 'reel' | 'tv' | 'story'
+export type ExternalEmbedProvider = VideoExternalEmbedProvider | 'x' | 'instagram'
 
 type VideoExternalEmbed = {
   provider: VideoExternalEmbedProvider
@@ -16,7 +17,15 @@ type XExternalEmbed = {
   originalUrl: string
 }
 
-export type ExternalEmbed = VideoExternalEmbed | XExternalEmbed
+type InstagramExternalEmbed = {
+  provider: 'instagram'
+  postId: string
+  username?: string
+  contentType: InstagramContentType
+  originalUrl: string
+}
+
+export type ExternalEmbed = VideoExternalEmbed | XExternalEmbed | InstagramExternalEmbed
 
 const YOUTUBE_HOSTS = new Set(['youtube.com', 'www.youtube.com', 'm.youtube.com'])
 const YOUTU_BE_HOSTS = new Set(['youtu.be', 'www.youtu.be'])
@@ -33,10 +42,18 @@ const X_HOSTS = new Set([
   'www.twitter.com',
   'mobile.twitter.com',
 ])
+const INSTAGRAM_HOSTS = new Set([
+  'instagram.com',
+  'www.instagram.com',
+  'm.instagram.com',
+])
 const SAFE_YOUTUBE_VIDEO_ID = /^[A-Za-z0-9_-]{6,128}$/
 const SAFE_TIKTOK_VIDEO_ID = /^\d{6,32}$/
 const SAFE_X_POST_ID = /^\d{6,32}$/
 const SAFE_X_USERNAME = /^[A-Za-z0-9_]{1,15}$/
+const SAFE_INSTAGRAM_CODE = /^[A-Za-z0-9_-]{3,128}$/
+const SAFE_INSTAGRAM_USERNAME = /^[A-Za-z0-9._]{1,30}$/
+const SAFE_INSTAGRAM_STORY_ID = /^\d{6,32}$/
 
 function isSafeYouTubeVideoId(value: string | null) {
   return Boolean(value && SAFE_YOUTUBE_VIDEO_ID.test(value))
@@ -52,6 +69,18 @@ function isSafeXPostId(value: string | null) {
 
 function isSafeXUsername(value: string | null) {
   return Boolean(value && SAFE_X_USERNAME.test(value))
+}
+
+function isSafeInstagramCode(value: string | null) {
+  return Boolean(value && SAFE_INSTAGRAM_CODE.test(value))
+}
+
+function isSafeInstagramUsername(value: string | null) {
+  return Boolean(value && SAFE_INSTAGRAM_USERNAME.test(value))
+}
+
+function isSafeInstagramStoryId(value: string | null) {
+  return Boolean(value && SAFE_INSTAGRAM_STORY_ID.test(value))
 }
 
 export function getYouTubeVideoId(url: string): string | null {
@@ -163,6 +192,93 @@ export function getXOriginalUrl(username: string, postId: string): string {
   return `https://x.com/${username}/status/${postId}`
 }
 
+function getInstagramDetails(url: string): {
+  contentType: InstagramContentType
+  postId: string
+  username?: string
+} | null {
+  try {
+    const parsedUrl = new URL(url)
+    const hostname = parsedUrl.hostname.toLowerCase()
+
+    if (parsedUrl.protocol !== 'https:' && parsedUrl.protocol !== 'http:') {
+      return null
+    }
+
+    if (!INSTAGRAM_HOSTS.has(hostname)) {
+      return null
+    }
+
+    const pathnameParts = parsedUrl.pathname.split('/').filter(Boolean)
+    const contentTypeByPath: Record<string, InstagramContentType> = {
+      p: 'post',
+      reel: 'reel',
+      tv: 'tv',
+    }
+    const contentType = contentTypeByPath[pathnameParts[0]]
+
+    if (contentType) {
+      const postId = pathnameParts[1] || null
+
+      if (!postId || !isSafeInstagramCode(postId)) {
+        return null
+      }
+
+      return {
+        contentType,
+        postId,
+      }
+    }
+
+    if (pathnameParts[0] === 'stories') {
+      const username = pathnameParts[1] || null
+      const postId = pathnameParts[2] || null
+
+      if (
+        !username ||
+        !postId ||
+        !isSafeInstagramUsername(username) ||
+        !isSafeInstagramStoryId(postId)
+      ) {
+        return null
+      }
+
+      return {
+        contentType: 'story',
+        username,
+        postId,
+      }
+    }
+
+    return null
+  } catch {
+    return null
+  }
+}
+
+export function getInstagramPostId(url: string): string | null {
+  return getInstagramDetails(url)?.postId || null
+}
+
+export function getInstagramOriginalUrl(
+  contentType: InstagramContentType,
+  postId: string,
+  username?: string
+): string {
+  if (contentType === 'story' && username) {
+    return `https://www.instagram.com/stories/${username}/${postId}/`
+  }
+
+  const path =
+    contentType === 'reel'
+      ? 'reel'
+      : contentType === 'tv'
+        ? 'tv'
+        : 'p'
+
+  return `https://www.instagram.com/${path}/${postId}/`
+}
+
 export function detectExternalEmbed(url: string): ExternalEmbed | null {
   const youtubeVideoId = getYouTubeVideoId(url)
 
@@ -189,12 +305,28 @@ export function detectExternalEmbed(url: string): ExternalEmbed | null {
 
   const xPostDetails = getXPostDetails(url)
 
-  if (!xPostDetails) return null
+  if (xPostDetails) {
+    return {
+      provider: 'x',
+      username: xPostDetails.username,
+      postId: xPostDetails.postId,
+      originalUrl: getXOriginalUrl(xPostDetails.username, xPostDetails.postId),
+    }
+  }
+
+  const instagramDetails = getInstagramDetails(url)
+
+  if (!instagramDetails) return null
 
   return {
-    provider: 'x',
-    username: xPostDetails.username,
-    postId: xPostDetails.postId,
-    originalUrl: getXOriginalUrl(xPostDetails.username, xPostDetails.postId),
+    provider: 'instagram',
+    username: instagramDetails.username,
+    postId: instagramDetails.postId,
+    contentType: instagramDetails.contentType,
+    originalUrl: getInstagramOriginalUrl(
+      instagramDetails.contentType,
+      instagramDetails.postId,
+      instagramDetails.username
+    ),
   }
 }

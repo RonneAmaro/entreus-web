@@ -1,6 +1,6 @@
 'use client'
 
-import { ExternalLink, Link2, Play } from 'lucide-react'
+import { Camera, ExternalLink, Link2, Play } from 'lucide-react'
 import { detectExternalEmbed, type ExternalEmbed } from '@/lib/external-embeds'
 
 type LinkPreviewProps = {
@@ -10,6 +10,7 @@ type LinkPreviewProps = {
 
 type VideoExternalEmbed = Extract<ExternalEmbed, { provider: 'youtube' | 'tiktok' }>
 type XExternalEmbed = Extract<ExternalEmbed, { provider: 'x' }>
+type InstagramExternalEmbed = Extract<ExternalEmbed, { provider: 'instagram' }>
 
 function getFirstUrl(text: string) {
   const urlRegex = /(https?:\/\/[^\s<]+)/i
@@ -127,6 +128,66 @@ function XPostPreview({ embed }: { embed: XExternalEmbed }) {
           className="inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-full border border-zinc-300 bg-white px-3.5 py-2 text-sm font-bold text-zinc-950 shadow-sm transition hover:border-zinc-400 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white dark:hover:border-zinc-500 dark:hover:bg-zinc-800 sm:w-auto"
         >
           Abrir no X
+          <ExternalLink className="h-4 w-4" />
+        </a>
+      </div>
+    </div>
+  )
+}
+
+function getInstagramContentLabel(contentType: InstagramExternalEmbed['contentType']) {
+  if (contentType === 'reel') return 'Reels'
+  if (contentType === 'tv') return 'IGTV'
+  if (contentType === 'story') return 'Story'
+  return 'Publicacao'
+}
+
+function InstagramPreview({ embed }: { embed: InstagramExternalEmbed }) {
+  const contentLabel = getInstagramContentLabel(embed.contentType)
+
+  return (
+    <div className="mb-4 overflow-hidden rounded-[1.5rem] bg-white shadow-sm shadow-black/5 ring-1 ring-zinc-200/70 dark:bg-zinc-950 dark:ring-zinc-800/80">
+      <div className="bg-zinc-950 p-4 text-white sm:p-5">
+        <div className="flex items-start gap-3">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-zinc-950 ring-1 ring-white/20">
+            <Camera className="h-5 w-5" />
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <div className="mb-1 flex min-w-0 items-center gap-1.5 text-xs font-semibold uppercase text-pink-200">
+              <span className="truncate">Instagram</span>
+            </div>
+
+            <p className="text-base font-black text-white">
+              {contentLabel} no Instagram
+            </p>
+
+            {embed.username && (
+              <p className="mt-2 break-words text-sm text-zinc-300">
+                @{embed.username}
+              </p>
+            )}
+
+            <p className="mt-1 break-all text-xs text-zinc-500">
+              Codigo {embed.postId}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-3 bg-zinc-50/95 p-3.5 dark:bg-zinc-950/95 sm:flex-row sm:items-center sm:justify-between sm:p-4">
+        <p className="min-w-0 truncate text-xs text-zinc-500 dark:text-zinc-400">
+          {embed.originalUrl}
+        </p>
+
+        <a
+          href={embed.originalUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Abrir conteudo no Instagram em nova aba"
+          className="inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-full border border-pink-200 bg-white px-3.5 py-2 text-sm font-bold text-pink-700 shadow-sm transition hover:border-pink-300 hover:bg-pink-50 dark:border-pink-900/70 dark:bg-zinc-900 dark:text-pink-200 dark:hover:border-pink-700 dark:hover:bg-pink-950/40 sm:w-auto"
+        >
+          Abrir no Instagram
           <ExternalLink className="h-4 w-4" />
         </a>
       </div>
@@ -262,6 +323,10 @@ export default function LinkPreview({
 
   if (externalEmbed.provider === 'x') {
     return <XPostPreview embed={externalEmbed} />
+  }
+
+  if (externalEmbed.provider === 'instagram') {
+    return <InstagramPreview embed={externalEmbed} />
   }
 
   const embedDisplay = getEmbedDisplay(externalEmbed)
