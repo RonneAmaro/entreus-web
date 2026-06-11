@@ -168,6 +168,28 @@ export default function HelpPage() {
           </div>
 
           <aside className="rounded-3xl border border-white/10 bg-white/5 p-5 shadow-2xl shadow-black/30">
+            <Link
+              href="/help/links-externos"
+              className="mb-5 flex items-center justify-between gap-4 rounded-3xl border border-blue-300/20 bg-blue-500/10 p-4 text-left transition hover:border-blue-200/40 hover:bg-blue-500/15"
+            >
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-blue-400/15 text-blue-100 ring-1 ring-blue-200/20">
+                <MonitorPlay className="h-5 w-5" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-xs font-black uppercase tracking-[0.18em] text-blue-200">
+                  Guia rapido
+                </span>
+                <span className="mt-1 block text-sm font-black text-white">
+                  Links externos aceitos
+                </span>
+                <span className="mt-1 block text-xs leading-5 text-zinc-400">
+                  Veja como YouTube, TikTok, X, Instagram, Facebook e Vimeo
+                  aparecem nos posts.
+                </span>
+              </span>
+              <ChevronRight className="h-4 w-4 shrink-0 text-blue-200" />
+            </Link>
+
             <h2 className="text-lg font-black">Artigos populares</h2>
             <div className="mt-4 space-y-2">
               {popularArticles.map((article) => (
