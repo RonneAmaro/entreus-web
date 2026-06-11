@@ -9,9 +9,14 @@ type LinkPreviewProps = {
   enableExternalEmbeds?: boolean
 }
 
-type VideoExternalEmbed = Extract<ExternalEmbed, { provider: 'youtube' | 'tiktok' }>
+type IframeExternalEmbed = Extract<
+  ExternalEmbed,
+  { provider: 'youtube' | 'tiktok' | 'vimeo' }
+>
+type YouTubeExternalEmbed = Extract<ExternalEmbed, { provider: 'youtube' }>
 type XExternalEmbed = Extract<ExternalEmbed, { provider: 'x' }>
 type InstagramExternalEmbed = Extract<ExternalEmbed, { provider: 'instagram' }>
+type FacebookExternalEmbed = Extract<ExternalEmbed, { provider: 'facebook' }>
 
 type EmbedDisplay = {
   providerLabel: string
@@ -173,7 +178,7 @@ function EmbedShell({
   )
 }
 
-function getEmbedDisplay(embed: VideoExternalEmbed): EmbedDisplay {
+function getEmbedDisplay(embed: IframeExternalEmbed): EmbedDisplay {
   if (embed.provider === 'tiktok') {
     return {
       providerLabel: 'TikTok',
@@ -190,6 +195,26 @@ function getEmbedDisplay(embed: VideoExternalEmbed): EmbedDisplay {
         'relative aspect-[9/16] w-full max-w-[20rem] overflow-hidden rounded-[1.1rem] bg-black shadow-2xl shadow-black/30 sm:rounded-[1.25rem]',
       allow:
         'autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share',
+      sandbox:
+        'allow-scripts allow-same-origin allow-presentation allow-popups',
+    }
+  }
+
+  if (embed.provider === 'vimeo') {
+    return {
+      providerLabel: 'Vimeo',
+      title: 'Video do Vimeo',
+      iframeTitle: 'Video do Vimeo incorporado',
+      buttonLabel: 'Abrir no Vimeo',
+      ariaLabel: 'Abrir video no Vimeo em nova aba',
+      mark: <span className="text-base font-black">V</span>,
+      markClassName: 'bg-sky-500 text-white',
+      actionClassName:
+        'border-sky-200 bg-white text-sky-700 hover:border-sky-300 hover:bg-sky-50 dark:border-sky-900/70 dark:bg-zinc-900 dark:text-sky-200 dark:hover:border-sky-700 dark:hover:bg-sky-950/40',
+      frameWrapClassName: 'bg-zinc-950 p-1 sm:p-1.5',
+      frameClassName:
+        'relative aspect-video w-full overflow-hidden rounded-[1rem] bg-black sm:rounded-[1.2rem]',
+      allow: 'autoplay; clipboard-write; fullscreen; picture-in-picture',
       sandbox:
         'allow-scripts allow-same-origin allow-presentation allow-popups',
     }
@@ -242,6 +267,58 @@ function XPostPreview({ embed }: { embed: XExternalEmbed }) {
             <span className="max-w-full truncate rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 dark:border-zinc-800 dark:bg-zinc-950">
               ID {embed.postId}
             </span>
+          </div>
+        </div>
+      </div>
+    </EmbedShell>
+  )
+}
+
+function getFacebookContentLabel(contentType: FacebookExternalEmbed['contentType']) {
+  if (contentType === 'post') return 'Publicacao'
+  if (contentType === 'video') return 'Video'
+  if (contentType === 'reel') return 'Reel'
+  if (contentType === 'watch') return 'Watch'
+  return 'Link'
+}
+
+function FacebookPreview({ embed }: { embed: FacebookExternalEmbed }) {
+  const contentLabel = getFacebookContentLabel(embed.contentType)
+
+  return (
+    <EmbedShell
+      providerLabel="Facebook"
+      title={`${contentLabel} no Facebook`}
+      subtitle={embed.username ? `@${embed.username}` : undefined}
+      originalUrl={embed.originalUrl}
+      buttonLabel="Abrir no Facebook"
+      ariaLabel="Abrir conteudo no Facebook em nova aba"
+      mark={<span className="text-lg font-black">f</span>}
+      markClassName="bg-blue-600 text-white"
+      actionClassName="border-blue-200 bg-white text-blue-700 hover:border-blue-300 hover:bg-blue-50 dark:border-blue-900/70 dark:bg-zinc-900 dark:text-blue-200 dark:hover:border-blue-700 dark:hover:bg-blue-950/40"
+    >
+      <div className="bg-zinc-50/60 p-3.5 dark:bg-zinc-950/60 sm:p-4">
+        <div className="rounded-[1.1rem] border border-blue-100 bg-white p-4 dark:border-blue-950/70 dark:bg-zinc-900/40">
+          <p className="text-sm font-semibold text-zinc-950 dark:text-white">
+            Conteudo publico no Facebook
+          </p>
+
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+            <span className="rounded-full border border-blue-100 bg-blue-50 px-2.5 py-1 font-semibold text-blue-700 dark:border-blue-950/70 dark:bg-blue-950/30 dark:text-blue-200">
+              Tipo {contentLabel}
+            </span>
+
+            {embed.username && (
+              <span className="rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 font-semibold dark:border-zinc-800 dark:bg-zinc-950">
+                @{embed.username}
+              </span>
+            )}
+
+            {embed.postId && (
+              <span className="max-w-full truncate rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 dark:border-zinc-800 dark:bg-zinc-950">
+                ID {embed.postId}
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -334,7 +411,7 @@ function GenericLinkPreview({
   )
 }
 
-function YouTubeThumbnailPreview({ embed }: { embed: VideoExternalEmbed }) {
+function YouTubeThumbnailPreview({ embed }: { embed: YouTubeExternalEmbed }) {
   const thumbnailUrl = `https://img.youtube.com/vi/${embed.videoId}/hqdefault.jpg`
 
   return (
@@ -442,6 +519,10 @@ export default function LinkPreview({
 
   if (externalEmbed.provider === 'instagram') {
     return <InstagramPreview embed={externalEmbed} />
+  }
+
+  if (externalEmbed.provider === 'facebook') {
+    return <FacebookPreview embed={externalEmbed} />
   }
 
   const embedDisplay = getEmbedDisplay(externalEmbed)
