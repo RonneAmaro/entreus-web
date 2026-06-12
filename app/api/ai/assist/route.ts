@@ -1,14 +1,33 @@
 import { NextResponse } from 'next/server'
 import { callGeminiText, GeminiError } from '@/lib/ai/gemini'
 import { buildImprovePostPrompt } from '@/lib/ai/prompts'
+import { requireUser } from '@/lib/meet-server'
 import type { AiAssistMode, AiAssistRequest, AiAssistResponse } from '@/lib/ai/types'
 
 export const runtime = 'nodejs'
 
 const MIN_TEXT_LENGTH = 3
 const MAX_TEXT_LENGTH = 1200
+const MAX_INVISIBLE_CHARACTERS = 20
+const MAX_INVISIBLE_CHARACTER_RATIO = 0.1
+const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000
+const RATE_LIMIT_MAX_REQUESTS = 10
 const INVALID_JSON = Symbol('invalid-json')
 const ALLOWED_MODES = new Set<AiAssistMode>(['improve_post'])
+const LOGIN_REQUIRED_ERROR = 'Faca login para usar a IA da EntreUS.'
+const TEMPORARY_RATE_LIMIT_ERROR =
+  'Voce atingiu o limite temporario de uso da IA. Tente novamente em alguns minutos.'
+const AI_UNAVAILABLE_ERROR =
+  'Nao foi possivel usar a IA agora. Tente novamente em instantes.'
+const INVISIBLE_CHARACTER_PATTERN =
+  /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u00AD\u034F\u061C\u115F\u1160\u17B4\u17B5\u180E\u200B-\u200F\u2028-\u202E\u2060-\u206F\uFEFF]/g
+
+type RateLimitEntry = {
+  count: number
+  resetAt: number
+}
+
+const aiAssistRateLimits = new Map<string, RateLimitEntry>()
 
 type TextValidation =
   | {
@@ -45,12 +64,36 @@ function isAllowedMode(mode: unknown): mode is AiAssistMode {
   return typeof mode === 'string' && ALLOWED_MODES.has(mode as AiAssistMode)
 }
 
+function countInvisibleCharacters(value: string) {
+  return value.match(INVISIBLE_CHARACTER_PATTERN)?.length ?? 0
+}
+
+function normalizeUserText(value: string) {
+  return value
+    .replace(INVISIBLE_CHARACTER_PATTERN, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 function validateText(value: unknown): TextValidation {
   if (typeof value !== 'string') {
     return { ok: false, error: 'O campo text deve ser uma string.', status: 400 }
   }
 
-  const text = value.trim()
+  const invisibleCharacters = countInvisibleCharacters(value)
+
+  if (
+    invisibleCharacters > MAX_INVISIBLE_CHARACTERS ||
+    invisibleCharacters > value.length * MAX_INVISIBLE_CHARACTER_RATIO
+  ) {
+    return {
+      ok: false,
+      error: 'O texto contem caracteres invalidos demais.',
+      status: 400,
+    }
+  }
+
+  const text = normalizeUserText(value)
 
   if (!text) {
     return { ok: false, error: 'Informe um texto para melhorar.', status: 400 }
@@ -71,6 +114,43 @@ function validateText(value: unknown): TextValidation {
   return { ok: true, text }
 }
 
+function cleanupExpiredRateLimits(now: number) {
+  for (const [userId, entry] of aiAssistRateLimits.entries()) {
+    if (entry.resetAt <= now) {
+      aiAssistRateLimits.delete(userId)
+    }
+  }
+}
+
+function checkRateLimit(userId: string) {
+  const now = Date.now()
+  const current = aiAssistRateLimits.get(userId)
+
+  if (!current || current.resetAt <= now) {
+    if (aiAssistRateLimits.size > 1000) {
+      cleanupExpiredRateLimits(now)
+    }
+
+    aiAssistRateLimits.set(userId, {
+      count: 1,
+      resetAt: now + RATE_LIMIT_WINDOW_MS,
+    })
+
+    return true
+  }
+
+  if (current.count >= RATE_LIMIT_MAX_REQUESTS) {
+    return false
+  }
+
+  current.count += 1
+  return true
+}
+
+function getSafeUserRef(userId: string) {
+  return userId.slice(0, 8)
+}
+
 export async function GET() {
   return jsonError('Use POST para acessar a assistente de IA.', 405)
 }
@@ -78,6 +158,12 @@ export async function GET() {
 export async function POST(request: Request) {
   if (request.method !== 'POST') {
     return jsonError('Metodo nao permitido.', 405)
+  }
+
+  const auth = await requireUser(request)
+
+  if ('error' in auth) {
+    return jsonError(LOGIN_REQUIRED_ERROR, 401)
   }
 
   const body = await readJsonBody(request)
@@ -110,22 +196,31 @@ export async function POST(request: Request) {
     return jsonError(textValidation.error, textValidation.status)
   }
 
-  // TODO: Exigir usuario autenticado antes de liberar esta rota em producao.
-  // A validacao foi adiada para nao acoplar este pacote ao Supabase pausado.
+  // Protecao temporaria em memoria para o MVP.
+  // Em serverless, a janela pode resetar entre instancias; substituir por DB/Redis depois.
+  if (!checkRateLimit(auth.user.id)) {
+    return jsonError(TEMPORARY_RATE_LIMIT_ERROR, 429)
+  }
+
   try {
     const result = await callGeminiText(buildImprovePostPrompt(textValidation.text))
 
     return jsonResponse({ ok: true, result })
   } catch (error) {
     if (error instanceof GeminiError) {
-      return jsonError(error.safeMessage, error.status)
+      return jsonError(AI_UNAVAILABLE_ERROR, error.status)
     }
 
     console.error(
-      'Erro na rota de IA:',
-      error instanceof Error ? error.message : 'erro desconhecido',
+      'Erro inesperado na rota de IA:',
+      {
+        user: getSafeUserRef(auth.user.id),
+        mode: payload.mode,
+        textLength: textValidation.text.length,
+        error: error instanceof Error ? error.message : 'erro desconhecido',
+      },
     )
 
-    return jsonError('Nao foi possivel processar o texto agora.', 500)
+    return jsonError(AI_UNAVAILABLE_ERROR, 500)
   }
 }
