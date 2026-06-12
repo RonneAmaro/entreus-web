@@ -7,18 +7,21 @@ import {
   Camera,
   Globe2,
   ImagePlus,
+  Loader2,
   Lock,
   Scissors,
   Video,
   Play,
   Send,
   Smile,
+  Sparkles,
   Tag,
   Trash2,
   Users,
   X,
 } from 'lucide-react'
 import { useLanguage } from './LanguageProvider'
+import { supabase } from '@/lib/supabase'
 
 type VisibilityType = 'public' | 'followers' | 'private'
 
@@ -41,6 +44,21 @@ type PostComposerProps = {
     videoFile: File | null
     mediaFiles: File[]
   }) => boolean | void | Promise<boolean | void>
+}
+
+type AiAssistResponse =
+  | {
+      ok: true
+      result: string
+    }
+  | {
+      ok: false
+      error?: string
+    }
+
+type AiFeedback = {
+  type: 'success' | 'error'
+  message: string
 }
 
 const CATEGORY_OPTIONS = [
@@ -79,6 +97,11 @@ const MAX_MEDIA_FILES = 5
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024
 const MAX_VIDEO_SIZE = 30 * 1024 * 1024
 const HEAVY_VIDEO_WARNING_SIZE = 20 * 1024 * 1024
+const AI_MIN_TEXT_LENGTH = 3
+const AI_MAX_TEXT_LENGTH = 1200
+const AI_LOGIN_ERROR = 'Faca login para usar a IA da EntreUS.'
+const AI_GENERIC_ERROR = 'Nao foi possivel melhorar o texto agora. Tente novamente em instantes.'
+const AI_TOO_LONG_ERROR = 'O texto esta muito grande para melhorar com IA. Reduza um pouco e tente novamente.'
 const ACCEPTED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
 const ACCEPTED_IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif'])
 const ACCEPTED_VIDEO_TYPES = new Set(['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime'])
@@ -152,6 +175,8 @@ export default function PostComposer({
   const [visibility, setVisibility] = useState<VisibilityType>('public')
   const [media, setMedia] = useState<MediaPreview[]>([])
   const [error, setError] = useState('')
+  const [aiFeedback, setAiFeedback] = useState<AiFeedback | null>(null)
+  const [isImprovingWithAi, setIsImprovingWithAi] = useState(false)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [showMediaMenu, setShowMediaMenu] = useState(false)
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -269,11 +294,17 @@ export default function PostComposer({
     })
   }
 
+  function handleContentChange(value: string) {
+    setContent(value)
+    setAiFeedback(null)
+  }
+
   function insertEmoji(emoji: string) {
     const textarea = textareaRef.current
 
     if (!textarea) {
       setContent((current) => `${current}${emoji}`)
+      setAiFeedback(null)
       setShowEmojiPicker(false)
       return
     }
@@ -284,12 +315,119 @@ export default function PostComposer({
     const nextCursorPosition = selectionStart + emoji.length
 
     setContent(nextContent)
+    setAiFeedback(null)
     setShowEmojiPicker(false)
 
     window.requestAnimationFrame(() => {
       textarea.focus()
       textarea.setSelectionRange(nextCursorPosition, nextCursorPosition)
     })
+  }
+
+  async function handleImproveWithAi() {
+    if (isImprovingWithAi || submitting) return
+
+    const text = content.trim()
+
+    if (text.length < AI_MIN_TEXT_LENGTH) {
+      setAiFeedback({
+        type: 'error',
+        message: 'Escreva pelo menos 3 caracteres para usar a IA.',
+      })
+      return
+    }
+
+    if (text.length > AI_MAX_TEXT_LENGTH) {
+      setAiFeedback({
+        type: 'error',
+        message: AI_TOO_LONG_ERROR,
+      })
+      return
+    }
+
+    setIsImprovingWithAi(true)
+    setAiFeedback(null)
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+
+      if (!session?.access_token) {
+        setAiFeedback({
+          type: 'error',
+          message: AI_LOGIN_ERROR,
+        })
+        return
+      }
+
+      const response = await fetch('/api/ai/assist', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          mode: 'improve_post',
+          text,
+        }),
+      })
+      const data = (await response.json().catch(() => null)) as AiAssistResponse | null
+
+      if (!data) {
+        setAiFeedback({
+          type: 'error',
+          message: AI_GENERIC_ERROR,
+        })
+        return
+      }
+
+      if (!data.ok) {
+        setAiFeedback({
+          type: 'error',
+          message:
+            response.status === 401 || data.error === AI_LOGIN_ERROR
+              ? AI_LOGIN_ERROR
+              : AI_GENERIC_ERROR,
+        })
+        return
+      }
+
+      if (!response.ok) {
+        setAiFeedback({
+          type: 'error',
+          message: AI_GENERIC_ERROR,
+        })
+        return
+      }
+
+      const improvedText = data.result.trim()
+
+      if (!improvedText || improvedText === text) {
+        setAiFeedback({
+          type: 'error',
+          message: 'A IA nao encontrou melhorias agora. Seu texto foi mantido.',
+        })
+        return
+      }
+
+      setContent(improvedText)
+      setAiFeedback({
+        type: 'success',
+        message: 'Texto melhorado. Revise antes de publicar.',
+      })
+
+      window.requestAnimationFrame(() => {
+        textareaRef.current?.focus()
+      })
+    } catch {
+      setAiFeedback({
+        type: 'error',
+        message: AI_GENERIC_ERROR,
+      })
+    } finally {
+      setIsImprovingWithAi(false)
+    }
   }
 
   async function handleSubmit() {
@@ -328,6 +466,8 @@ export default function PostComposer({
   }
 
   const canPublish = content.trim().length > 0 || media.length > 0
+  const canImproveWithAi =
+    content.trim().length >= AI_MIN_TEXT_LENGTH && !submitting && !isImprovingWithAi
   const placeholderText = t('postComposer.placeholder').replace('{name}', userName)
 
   return (
@@ -443,7 +583,7 @@ export default function PostComposer({
           <textarea
             ref={textareaRef}
             value={content}
-            onChange={(event) => setContent(event.target.value)}
+            onChange={(event) => handleContentChange(event.target.value)}
             placeholder={t('postComposer.placeholder').replace('{name}', userName)}
             className="min-h-[76px] w-full resize-none border-0 bg-transparent px-0 py-2 text-lg text-zinc-900 outline-none placeholder:text-zinc-500 dark:text-zinc-100 dark:placeholder:text-zinc-500 sm:min-h-[92px] sm:text-xl"
           />
@@ -526,6 +666,19 @@ export default function PostComposer({
           {error && (
             <p className="mt-3 rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300">
               {error}
+            </p>
+          )}
+
+          {aiFeedback && (
+            <p
+              className={`mt-3 rounded-2xl border px-3 py-2 text-sm ${
+                aiFeedback.type === 'success'
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300'
+                  : 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300'
+              }`}
+              role="status"
+            >
+              {aiFeedback.message}
             </p>
           )}
 
@@ -680,6 +833,22 @@ export default function PostComposer({
                       </div>
                     )}
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={handleImproveWithAi}
+                    disabled={!canImproveWithAi}
+                    className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-full border border-violet-200 bg-violet-50 px-3 text-xs font-bold text-violet-700 transition hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-violet-900/60 dark:bg-violet-950/30 dark:text-violet-200 dark:hover:bg-violet-950/50"
+                    aria-label="Melhorar com IA"
+                    title="Melhorar com IA"
+                  >
+                    {isImprovingWithAi ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Sparkles className="h-4 w-4" />
+                    )}
+                    <span>{isImprovingWithAi ? 'Melhorando...' : 'Melhorar com IA'}</span>
+                  </button>
 
                   <div
                     className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-200 text-zinc-600 transition hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900"
