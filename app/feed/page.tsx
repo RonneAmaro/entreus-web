@@ -45,6 +45,13 @@ import {
   isModeratedHidden,
   type ModeratedPostFields,
 } from '@/lib/post-moderation'
+import {
+  IMAGE_UPLOAD_MAX_SIZE_BYTES,
+  VIDEO_UPLOAD_MAX_SIZE_BYTES,
+  getAllowedUploadContentType,
+  isAllowedImageMimeType,
+  isAllowedVideoMimeType,
+} from '@/lib/media/upload-limits'
 
 type VisibilityType = 'public' | 'followers' | 'private'
 type ComposerSubmitData = {
@@ -201,19 +208,7 @@ const FEED_NEXT_POST_LIMIT = 12
 const FEED_INITIAL_COMMENT_LIMIT = 160
 const FEED_INITIAL_REACTION_LIMIT = 500
 const FEED_INITIAL_REPOST_LIMIT = 120
-const POST_IMAGE_MAX_SIZE_BYTES = 5 * 1024 * 1024
-const POST_VIDEO_MAX_SIZE_BYTES = 30 * 1024 * 1024
-const ACCEPTED_MEDIA_FORMATS_MESSAGE = 'Formato nao permitido. Use JPG, PNG, WEBP, GIF, MP4, WEBM ou OGG.'
-const ACCEPTED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
-const ACCEPTED_IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif'])
-const IMAGE_CONTENT_TYPE_BY_EXTENSION: Record<string, string> = {
-  jpg: 'image/jpeg',
-  jpeg: 'image/jpeg',
-  png: 'image/png',
-  webp: 'image/webp',
-  gif: 'image/gif',
-}
-const ACCEPTED_VIDEO_TYPES = new Set(['video/mp4', 'video/webm', 'video/quicktime', 'video/ogg'])
+const ACCEPTED_MEDIA_FORMATS_MESSAGE = 'Formato nao permitido. Use JPG, PNG, WEBP, GIF, MP4, WebM ou MOV.'
 const FEED_ITEM_ACTIVE_ROOT_MARGIN = '1800px 0px 2200px 0px'
 const FEED_MEDIA_PLACEHOLDER_HEIGHT = 360
 const FEED_COMMENTS_PLACEHOLDER_HEIGHT = 180
@@ -1753,18 +1748,13 @@ function FeedContent() {
     }
   }
 
-  function getFileExtension(file: File) {
-    const extension = file.name.trim().toLowerCase().split('.').pop()
-    return extension && extension !== file.name.toLowerCase() ? extension : ''
-  }
-
   function getEffectiveImageContentType(file: File) {
-    if (ACCEPTED_IMAGE_TYPES.has(file.type)) return file.type
-    return IMAGE_CONTENT_TYPE_BY_EXTENSION[getFileExtension(file)] || null
+    const contentType = getAllowedUploadContentType(file.type, file.name)
+    return contentType && isAllowedImageMimeType(contentType) ? contentType : null
   }
 
   function getEffectiveContentType(file: File) {
-    return getEffectiveImageContentType(file) || (ACCEPTED_VIDEO_TYPES.has(file.type) ? file.type : null)
+    return getAllowedUploadContentType(file.type, file.name)
   }
 
   function isImage(file: File) {
@@ -1772,7 +1762,8 @@ function FeedContent() {
   }
 
   function isVideo(file: File) {
-    return ACCEPTED_VIDEO_TYPES.has(file.type)
+    const contentType = getEffectiveContentType(file)
+    return Boolean(contentType && isAllowedVideoMimeType(contentType))
   }
 
   function isGif(file: File) {
@@ -1932,14 +1923,14 @@ function FeedContent() {
         : null
 
     if (mediaType === 'image') {
-      if (file.size > POST_IMAGE_MAX_SIZE_BYTES) {
+      if (file.size > IMAGE_UPLOAD_MAX_SIZE_BYTES) {
         setMessage(isGif(file) ? 'GIF muito grande. O limite atual e 5 MB.' : t('feed.messages.imageTooLarge'))
         return null
       }
     }
 
     if (mediaType === 'video') {
-      if (file.size > POST_VIDEO_MAX_SIZE_BYTES) {
+      if (file.size > VIDEO_UPLOAD_MAX_SIZE_BYTES) {
         setMessage(getVideoTooLargeMessage())
         return null
       }
@@ -2192,7 +2183,7 @@ function FeedContent() {
       return null
     }
 
-    const maxSizeInBytes = mediaType === 'video' ? POST_VIDEO_MAX_SIZE_BYTES : POST_IMAGE_MAX_SIZE_BYTES
+    const maxSizeInBytes = mediaType === 'video' ? VIDEO_UPLOAD_MAX_SIZE_BYTES : IMAGE_UPLOAD_MAX_SIZE_BYTES
 
     if (file.size > maxSizeInBytes) {
       setMessage(mediaType === 'video' ? getVideoTooLargeMessage() : mediaType === 'gif' ? 'GIF muito grande. O limite atual e 5 MB.' : t('feed.messages.imageTooLarge'))

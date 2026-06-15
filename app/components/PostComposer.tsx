@@ -24,6 +24,16 @@ import {
 import { useLanguage } from './LanguageProvider'
 import { supabase } from '@/lib/supabase'
 import type { AiAssistMode } from '@/lib/ai/types'
+import {
+  HEAVY_VIDEO_WARNING_SIZE_BYTES,
+  IMAGE_UPLOAD_MAX_SIZE_BYTES,
+  POST_VIDEO_MAX_DURATION_SECONDS,
+  VIDEO_UPLOAD_MAX_SIZE_BYTES,
+  getAllowedUploadContentType,
+  isAllowedImageMimeType,
+  isAllowedVideoMimeType,
+  looksLikeVideoUpload,
+} from '@/lib/media/upload-limits'
 
 type VisibilityType = 'public' | 'followers' | 'private'
 
@@ -96,9 +106,6 @@ const VISIBILITY_OPTIONS: {
 ]
 
 const MAX_MEDIA_FILES = 5
-const MAX_IMAGE_SIZE = 5 * 1024 * 1024
-const MAX_VIDEO_SIZE = 30 * 1024 * 1024
-const HEAVY_VIDEO_WARNING_SIZE = 20 * 1024 * 1024
 const AI_MIN_TEXT_LENGTH = 3
 const AI_MAX_TEXT_LENGTH = 1200
 const AI_SHORT_TEXT_HINT = 'Escreva pelo menos 3 caracteres para usar a IA.'
@@ -123,9 +130,6 @@ const AI_LOADING_LABELS: Record<AiAssistMode, string> = {
   improve_post: 'Melhorando...',
   suggest_caption: 'Gerando legenda...',
 }
-const ACCEPTED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
-const ACCEPTED_IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif'])
-const ACCEPTED_VIDEO_TYPES = new Set(['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime'])
 const POST_EMOJI_GROUPS = [
   {
     title: 'Populares',
@@ -158,25 +162,46 @@ function getInitial(name: string) {
   return name.slice(0, 1).toUpperCase()
 }
 
-function getFileExtension(file: File) {
-  const extension = file.name.trim().toLowerCase().split('.').pop()
-  return extension && extension !== file.name.toLowerCase() ? extension : ''
-}
-
-function isImage(file: File) {
-  return ACCEPTED_IMAGE_TYPES.has(file.type) || ACCEPTED_IMAGE_EXTENSIONS.has(getFileExtension(file))
-}
-
-function isVideo(file: File) {
-  return ACCEPTED_VIDEO_TYPES.has(file.type)
+function getEffectiveContentType(file: File) {
+  return getAllowedUploadContentType(file.type, file.name)
 }
 
 function isGif(file: File) {
-  return file.type === 'image/gif' || getFileExtension(file) === 'gif'
+  return getEffectiveContentType(file) === 'image/gif'
 }
 
 function getVideoSizeError() {
-  return 'Esse video esta muito grande para envio direto. Use um video de ate 30MB ou abra o editor para otimizar antes de publicar.'
+  return 'Este video esta muito pesado. Tente enviar um video menor ou comprimido.'
+}
+
+function readVideoDurationSeconds(file: File) {
+  return new Promise<number | null>((resolve) => {
+    const objectUrl = URL.createObjectURL(file)
+    const video = document.createElement('video')
+    let completed = false
+    let timeoutId: number | null = null
+
+    function finish(duration: number | null) {
+      if (completed) return
+      completed = true
+
+      if (timeoutId !== null) window.clearTimeout(timeoutId)
+      video.onloadedmetadata = null
+      video.onerror = null
+      video.removeAttribute('src')
+      video.load()
+      URL.revokeObjectURL(objectUrl)
+      resolve(duration)
+    }
+
+    timeoutId = window.setTimeout(() => finish(null), 10000)
+    video.preload = 'metadata'
+    video.onloadedmetadata = () => {
+      finish(Number.isFinite(video.duration) ? video.duration : null)
+    }
+    video.onerror = () => finish(null)
+    video.src = objectUrl
+  })
 }
 
 export default function PostComposer({
@@ -190,6 +215,7 @@ export default function PostComposer({
   const cameraPhotoInputRef = useRef<HTMLInputElement | null>(null)
   const cameraVideoInputRef = useRef<HTMLInputElement | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
+  const mediaRef = useRef<MediaPreview[]>([])
 
   const [content, setContent] = useState('')
   const [category, setCategory] = useState('cotidiano')
@@ -212,10 +238,14 @@ export default function PostComposer({
   }, [visibility])
 
   useEffect(() => {
-    return () => {
-      media.forEach((item) => URL.revokeObjectURL(item.url))
-    }
+    mediaRef.current = media
   }, [media])
+
+  useEffect(() => {
+    return () => {
+      mediaRef.current.forEach((item) => URL.revokeObjectURL(item.url))
+    }
+  }, [])
 
   useEffect(() => {
     setPortalElement(document.body)
@@ -247,7 +277,7 @@ export default function PostComposer({
     }
   }, [content, isModalOpen, media.length])
 
-  function addFiles(files: FileList | null) {
+  async function addFiles(files: FileList | null) {
     if (!files || files.length === 0) return
 
     setError('')
@@ -265,30 +295,49 @@ export default function PostComposer({
     const newMedia: MediaPreview[] = []
 
     for (const file of selectedFiles) {
-      if (!isImage(file) && !isVideo(file)) {
-        setError('Formato nao permitido. Use JPG, PNG, WEBP ou GIF.')
+      const contentType = getEffectiveContentType(file)
+      const fileIsImage = Boolean(contentType && isAllowedImageMimeType(contentType))
+      const fileIsVideo = Boolean(contentType && isAllowedVideoMimeType(contentType))
+
+      if (!fileIsImage && !fileIsVideo) {
+        setError(
+          looksLikeVideoUpload(file.type, file.name)
+            ? 'Formato de video nao aceito. Use MP4, WebM ou MOV.'
+            : 'Formato nao permitido. Use JPG, PNG, WEBP ou GIF.',
+        )
         continue
       }
 
-      if (isImage(file) && file.size > MAX_IMAGE_SIZE) {
+      if (fileIsImage && file.size > IMAGE_UPLOAD_MAX_SIZE_BYTES) {
         setError(isGif(file) ? 'GIF muito grande. O limite atual e 5 MB.' : t('postComposer.errors.imageTooLarge'))
         continue
       }
 
-      if (isVideo(file) && file.size > MAX_VIDEO_SIZE) {
+      if (fileIsVideo && file.size > VIDEO_UPLOAD_MAX_SIZE_BYTES) {
         setError(getVideoSizeError())
         continue
       }
 
-      if (isVideo(file) && file.size > HEAVY_VIDEO_WARNING_SIZE) {
+      if (fileIsVideo) {
+        const duration = await readVideoDurationSeconds(file)
+
+        if (duration !== null && duration > POST_VIDEO_MAX_DURATION_SECONDS) {
+          setError('Para manter a EntreUS rapida, envie videos de ate 60 segundos.')
+          continue
+        }
+      }
+
+      if (fileIsVideo && file.size > HEAVY_VIDEO_WARNING_SIZE_BYTES) {
         setError('Video pesado selecionado. Se o upload falhar no celular, reduza a duracao/qualidade ou use o editor para otimizar.')
       }
+
+      // TODO(Pacote 16): comprimir para 720p/480p antes do presign, com progresso e fallback por navegador.
 
       newMedia.push({
         id: `${file.name}-${file.size}-${Date.now()}-${Math.random()}`,
         file,
         url: URL.createObjectURL(file),
-        type: isImage(file) ? 'image' : 'video',
+        type: fileIsImage ? 'image' : 'video',
       })
     }
 
@@ -724,7 +773,7 @@ export default function PostComposer({
                   <input
                     ref={mediaInputRef}
                     type="file"
-                    accept="image/jpeg,image/png,image/webp,image/gif,.jpg,.jpeg,.png,.webp,.gif,video/mp4,video/webm,video/ogg,video/quicktime"
+                    accept="image/jpeg,image/png,image/webp,image/gif,.jpg,.jpeg,.png,.webp,.gif,video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov"
                     multiple
                     className="hidden"
                     onChange={(event) => addFiles(event.target.files)}

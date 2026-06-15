@@ -2,25 +2,19 @@ import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
+import {
+  UPLOAD_EXTENSION_BY_MIME_TYPE,
+  getAllowedUploadContentType,
+  getUploadMaxSizeBytes,
+  isAllowedVideoMimeType,
+  looksLikeVideoUpload,
+} from '@/lib/media/upload-limits'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-const ACCEPTED_CONTENT_TYPES = new Set([
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-  'image/gif',
-  'video/mp4',
-  'video/webm',
-  'video/quicktime',
-  'video/ogg',
-])
-
 const ACCEPTED_FOLDERS = new Set(['posts', 'comments'])
 const PRESIGNED_URL_EXPIRES_IN_SECONDS = 60
-const IMAGE_MAX_SIZE_BYTES = 5 * 1024 * 1024
-const VIDEO_MAX_SIZE_BYTES = 30 * 1024 * 1024
 const RATE_LIMIT_WINDOW_MS = 60 * 1000
 const RATE_LIMIT_MAX_REQUESTS = 20
 
@@ -29,29 +23,6 @@ type PresignBody = {
   contentType?: unknown
   folder?: unknown
   fileSize?: unknown
-}
-
-const EXTENSIONS_BY_CONTENT_TYPE: Record<string, string> = {
-  'image/jpeg': 'jpg',
-  'image/png': 'png',
-  'image/webp': 'webp',
-  'image/gif': 'gif',
-  'video/mp4': 'mp4',
-  'video/webm': 'webm',
-  'video/quicktime': 'mov',
-  'video/ogg': 'ogg',
-}
-
-const CONTENT_TYPES_BY_EXTENSION: Record<string, string> = {
-  jpg: 'image/jpeg',
-  jpeg: 'image/jpeg',
-  png: 'image/png',
-  webp: 'image/webp',
-  gif: 'image/gif',
-  mp4: 'video/mp4',
-  webm: 'video/webm',
-  mov: 'video/quicktime',
-  ogg: 'video/ogg',
 }
 
 type RateLimitEntry = {
@@ -103,31 +74,17 @@ function getFolder(value: unknown) {
 
 function buildObjectKey(folder: string, userId: string, contentType: string) {
   const timestamp = Date.now()
-  const extension = EXTENSIONS_BY_CONTENT_TYPE[contentType] || 'bin'
+  const extension = UPLOAD_EXTENSION_BY_MIME_TYPE[contentType] || 'bin'
 
   return `${folder}/${userId}/${timestamp}-${crypto.randomUUID()}.${extension}`
 }
 
-function getFileExtension(fileName: string) {
-  const extension = fileName.trim().toLowerCase().split('.').pop()
-  return extension && extension !== fileName.toLowerCase() ? extension : ''
-}
-
 function normalizeContentType(contentType: unknown, fileName: string) {
-  if (typeof contentType === 'string' && ACCEPTED_CONTENT_TYPES.has(contentType)) {
-    return contentType
-  }
-
-  const extension = getFileExtension(fileName)
-  return CONTENT_TYPES_BY_EXTENSION[extension] || null
+  return getAllowedUploadContentType(contentType, fileName)
 }
 
 function buildPublicUrl(baseUrl: string, key: string) {
   return `${baseUrl.replace(/\/+$/, '')}/${key}`
-}
-
-function getMaxSize(contentType: string) {
-  return contentType.startsWith('video/') ? VIDEO_MAX_SIZE_BYTES : IMAGE_MAX_SIZE_BYTES
 }
 
 function getRateLimitIp(request: Request) {
@@ -247,7 +204,9 @@ export async function POST(request: Request) {
       {
         ok: false,
         error: 'INVALID_FILE_TYPE',
-        message: 'Formato nao permitido. Use JPG, PNG, WEBP ou GIF.',
+        message: looksLikeVideoUpload(body.contentType, body.fileName)
+          ? 'Formato de video nao aceito. Use MP4, WebM ou MOV.'
+          : 'Formato nao permitido. Use JPG, PNG, WEBP ou GIF.',
       },
       { status: 415 },
     )
@@ -268,13 +227,15 @@ export async function POST(request: Request) {
     )
   }
 
-  if (body.fileSize > getMaxSize(contentType)) {
+  const maxFileSize = getUploadMaxSizeBytes(contentType)
+
+  if (!maxFileSize || body.fileSize > maxFileSize) {
     return NextResponse.json(
       {
         ok: false,
         error: 'FILE_TOO_LARGE',
-        message: contentType.startsWith('video/')
-          ? 'Video muito grande. O limite atual e 30 MB.'
+        message: isAllowedVideoMimeType(contentType)
+          ? 'Este video esta muito pesado. Tente enviar um video menor ou comprimido.'
           : contentType === 'image/gif'
             ? 'GIF muito grande. O limite atual e 5 MB.'
           : 'Imagem muito grande. O limite atual e 5 MB.',
@@ -314,6 +275,7 @@ export async function POST(request: Request) {
     const command = new PutObjectCommand({
       Bucket: bucketName,
       Key: key,
+      ContentType: contentType,
     })
     const uploadUrl = await getSignedUrl(client, command, {
       expiresIn: PRESIGNED_URL_EXPIRES_IN_SECONDS,
