@@ -34,6 +34,10 @@ import {
   isAllowedVideoMimeType,
   looksLikeVideoUpload,
 } from '@/lib/media/upload-limits'
+import {
+  canAttemptVideoCompression,
+  compressVideoForPost,
+} from '@/lib/media/video-compression'
 
 type VisibilityType = 'public' | 'followers' | 'private'
 
@@ -70,6 +74,11 @@ type AiAssistResponse =
 
 type AiFeedback = {
   type: 'success' | 'error'
+  message: string
+}
+
+type MediaFeedback = {
+  type: 'info' | 'success' | 'warning'
   message: string
 }
 
@@ -204,6 +213,18 @@ function readVideoDurationSeconds(file: File) {
   })
 }
 
+function getMediaFeedbackClassName(type: MediaFeedback['type']) {
+  if (type === 'success') {
+    return 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300'
+  }
+
+  if (type === 'warning') {
+    return 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200'
+  }
+
+  return 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-300'
+}
+
 export default function PostComposer({
   userName,
   userAvatarUrl,
@@ -222,12 +243,14 @@ export default function PostComposer({
   const [visibility, setVisibility] = useState<VisibilityType>('public')
   const [media, setMedia] = useState<MediaPreview[]>([])
   const [error, setError] = useState('')
+  const [mediaFeedback, setMediaFeedback] = useState<MediaFeedback | null>(null)
   const [aiFeedback, setAiFeedback] = useState<AiFeedback | null>(null)
   const [activeAiMode, setActiveAiMode] = useState<AiAssistMode | null>(null)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [showMediaMenu, setShowMediaMenu] = useState(false)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [portalElement, setPortalElement] = useState<HTMLElement | null>(null)
+  const [isOptimizingVideo, setIsOptimizingVideo] = useState(false)
 
   const selectedCategory = useMemo(() => {
     return CATEGORY_OPTIONS.find((item) => item.value === category)
@@ -281,6 +304,7 @@ export default function PostComposer({
     if (!files || files.length === 0) return
 
     setError('')
+    setMediaFeedback(null)
     setShowMediaMenu(false)
 
     const currentMedia = [...media]
@@ -295,6 +319,7 @@ export default function PostComposer({
     const newMedia: MediaPreview[] = []
 
     for (const file of selectedFiles) {
+      let fileToAttach = file
       const contentType = getEffectiveContentType(file)
       const fileIsImage = Boolean(contentType && isAllowedImageMimeType(contentType))
       const fileIsVideo = Boolean(contentType && isAllowedVideoMimeType(contentType))
@@ -328,15 +353,20 @@ export default function PostComposer({
       }
 
       if (fileIsVideo && file.size > HEAVY_VIDEO_WARNING_SIZE_BYTES) {
-        setError('Video pesado selecionado. Se o upload falhar no celular, reduza a duracao/qualidade ou use o editor para otimizar.')
+        setMediaFeedback({
+          type: 'warning',
+          message: 'Video pesado selecionado. Se o upload falhar no celular, reduza a duracao/qualidade ou use o editor para otimizar.',
+        })
       }
 
-      // TODO(Pacote 16): comprimir para 720p/480p antes do presign, com progresso e fallback por navegador.
+      if (fileIsVideo) {
+        fileToAttach = await optimizeVideoForComposer(file)
+      }
 
       newMedia.push({
-        id: `${file.name}-${file.size}-${Date.now()}-${Math.random()}`,
-        file,
-        url: URL.createObjectURL(file),
+        id: `${fileToAttach.name}-${fileToAttach.size}-${Date.now()}-${Math.random()}`,
+        file: fileToAttach,
+        url: URL.createObjectURL(fileToAttach),
         type: fileIsImage ? 'image' : 'video',
       })
     }
@@ -345,7 +375,9 @@ export default function PostComposer({
       setError(t('postComposer.errors.partialAdded').replace('{count}', String(availableSlots)).replace('{max}', String(MAX_MEDIA_FILES)))
     }
 
-    setMedia([...currentMedia, ...newMedia])
+    if (newMedia.length > 0) {
+      setMedia((current) => [...current, ...newMedia])
+    }
 
     if (mediaInputRef.current) mediaInputRef.current.value = ''
     if (cameraPhotoInputRef.current) cameraPhotoInputRef.current.value = ''
@@ -362,6 +394,51 @@ export default function PostComposer({
 
       return current.filter((item) => item.id !== id)
     })
+  }
+
+  async function optimizeVideoForComposer(file: File) {
+    if (!canAttemptVideoCompression(file)) {
+      setMediaFeedback({
+        type: 'warning',
+        message: 'Seu navegador nao permitiu otimizar o video automaticamente.',
+      })
+      return file
+    }
+
+    setIsOptimizingVideo(true)
+    setMediaFeedback({
+      type: 'info',
+      message: 'Otimizando video...',
+    })
+
+    try {
+      const result = await compressVideoForPost(file)
+
+      if (result.ok) {
+        setMediaFeedback({
+          type: 'success',
+          message: result.message || 'Video otimizado para publicar mais rapido.',
+        })
+        return result.file
+      }
+
+      setMediaFeedback({
+        type: 'warning',
+        message:
+          result.reason === 'unsupported'
+            ? 'Seu navegador nao permitiu otimizar o video automaticamente.'
+            : 'Nao foi possivel otimizar o video, mas ele ainda pode ser enviado se estiver dentro dos limites.',
+      })
+      return file
+    } catch {
+      setMediaFeedback({
+        type: 'warning',
+        message: 'Nao foi possivel otimizar o video, mas ele ainda pode ser enviado se estiver dentro dos limites.',
+      })
+      return file
+    } finally {
+      setIsOptimizingVideo(false)
+    }
   }
 
   function handleContentChange(value: string) {
@@ -504,6 +581,14 @@ export default function PostComposer({
   async function handleSubmit() {
     const trimmedContent = content.trim()
 
+    if (isOptimizingVideo) {
+      setMediaFeedback({
+        type: 'info',
+        message: 'Otimizando video...',
+      })
+      return
+    }
+
     if (!trimmedContent && media.length === 0) {
       setError(t('postComposer.errors.empty'))
       return
@@ -529,6 +614,7 @@ export default function PostComposer({
     setContent('')
     setShowEmojiPicker(false)
     setShowMediaMenu(false)
+    setMediaFeedback(null)
     setIsModalOpen(false)
     setMedia((current) => {
       current.forEach((item) => URL.revokeObjectURL(item.url))
@@ -537,7 +623,7 @@ export default function PostComposer({
   }
 
   const trimmedContentLength = content.trim().length
-  const canPublish = trimmedContentLength > 0 || media.length > 0
+  const canPublish = (trimmedContentLength > 0 || media.length > 0) && !isOptimizingVideo
   const canUseAi =
     trimmedContentLength >= AI_MIN_TEXT_LENGTH && !submitting && !activeAiMode
   const getAiButtonTitle = (mode: AiAssistMode) => {
@@ -640,7 +726,7 @@ export default function PostComposer({
                 onClick={handleSubmit}
                 className="rounded-full bg-blue-600 px-4 py-2 text-sm font-black text-white shadow-sm shadow-blue-600/20 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-zinc-300 disabled:text-zinc-600 dark:disabled:bg-zinc-800 dark:disabled:text-zinc-500"
               >
-                {submitting ? t('postComposer.posting') : t('postComposer.post')}
+                {isOptimizingVideo ? 'Otimizando...' : submitting ? t('postComposer.posting') : t('postComposer.post')}
               </button>
             </div>
 
@@ -751,6 +837,16 @@ export default function PostComposer({
             </p>
           )}
 
+          {mediaFeedback && (
+            <p
+              className={`mt-3 rounded-2xl border px-3 py-2 text-sm ${getMediaFeedbackClassName(mediaFeedback.type)}`}
+              role="status"
+              aria-live="polite"
+            >
+              {mediaFeedback.message}
+            </p>
+          )}
+
           {aiFeedback && (
             <p
               id="ai-assistance-feedback"
@@ -776,6 +872,7 @@ export default function PostComposer({
                     accept="image/jpeg,image/png,image/webp,image/gif,.jpg,.jpeg,.png,.webp,.gif,video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov"
                     multiple
                     className="hidden"
+                    disabled={isOptimizingVideo}
                     onChange={(event) => addFiles(event.target.files)}
                   />
 
@@ -785,6 +882,7 @@ export default function PostComposer({
                     accept="image/*"
                     capture="environment"
                     className="hidden"
+                    disabled={isOptimizingVideo}
                     onChange={(event) => addFiles(event.target.files)}
                   />
 
@@ -794,6 +892,7 @@ export default function PostComposer({
                     accept="video/*"
                     capture="environment"
                     className="hidden"
+                    disabled={isOptimizingVideo}
                     onChange={(event) => addFiles(event.target.files)}
                   />
 
@@ -801,11 +900,12 @@ export default function PostComposer({
                     <button
                       type="button"
                       onClick={() => setShowMediaMenu((current) => !current)}
+                      disabled={isOptimizingVideo}
                       className={`flex h-10 w-10 items-center justify-center rounded-full transition ${
                         showMediaMenu
                           ? 'bg-blue-50 text-blue-600 ring-1 ring-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:ring-blue-500/30'
                           : 'text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/30'
-                      }`}
+                      } disabled:cursor-not-allowed disabled:opacity-50`}
                       title="Adicionar midia"
                       aria-label="Adicionar midia"
                       aria-expanded={showMediaMenu}
@@ -818,7 +918,8 @@ export default function PostComposer({
                         <button
                           type="button"
                           onClick={() => mediaInputRef.current?.click()}
-                          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-bold transition hover:bg-blue-50 dark:hover:bg-blue-950/30"
+                          disabled={isOptimizingVideo}
+                          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-bold transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-blue-950/30"
                         >
                           <ImagePlus className="h-4 w-4 text-blue-500" />
                           Galeria
@@ -827,7 +928,8 @@ export default function PostComposer({
                         <button
                           type="button"
                           onClick={() => cameraPhotoInputRef.current?.click()}
-                          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-bold transition hover:bg-blue-50 dark:hover:bg-blue-950/30"
+                          disabled={isOptimizingVideo}
+                          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-bold transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-blue-950/30"
                         >
                           <Camera className="h-4 w-4 text-blue-500" />
                           Camera
@@ -836,7 +938,8 @@ export default function PostComposer({
                         <button
                           type="button"
                           onClick={() => cameraVideoInputRef.current?.click()}
-                          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-bold transition hover:bg-blue-50 dark:hover:bg-blue-950/30"
+                          disabled={isOptimizingVideo}
+                          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-bold transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-blue-950/30"
                         >
                           <Video className="h-4 w-4 text-blue-500" />
                           Gravar video
@@ -1011,8 +1114,8 @@ export default function PostComposer({
                   onClick={handleSubmit}
                   className="flex h-10 w-full items-center justify-center gap-2 rounded-full bg-zinc-900 px-6 text-sm font-bold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-black sm:w-auto sm:min-w-[110px]"
                 >
-                  <Send className="h-4 w-4" />
-                  {submitting ? t('postComposer.posting') : t('postComposer.post')}
+                  {isOptimizingVideo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                  {isOptimizingVideo ? 'Otimizando...' : submitting ? t('postComposer.posting') : t('postComposer.post')}
                 </button>
               </div>
 
