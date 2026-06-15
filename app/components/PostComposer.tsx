@@ -9,6 +9,7 @@ import {
   ImagePlus,
   Loader2,
   Lock,
+  MessageSquareText,
   Scissors,
   Video,
   Play,
@@ -22,6 +23,7 @@ import {
 } from 'lucide-react'
 import { useLanguage } from './LanguageProvider'
 import { supabase } from '@/lib/supabase'
+import type { AiAssistMode } from '@/lib/ai/types'
 
 type VisibilityType = 'public' | 'followers' | 'private'
 
@@ -101,8 +103,26 @@ const AI_MIN_TEXT_LENGTH = 3
 const AI_MAX_TEXT_LENGTH = 1200
 const AI_SHORT_TEXT_HINT = 'Escreva pelo menos 3 caracteres para usar a IA.'
 const AI_LOGIN_ERROR = 'Faca login para usar a IA da EntreUS.'
-const AI_GENERIC_ERROR = 'Nao foi possivel melhorar o texto agora. Tente novamente em instantes.'
-const AI_TOO_LONG_ERROR = 'O texto esta muito grande para melhorar com IA. Reduza um pouco e tente novamente.'
+const AI_GENERIC_ERRORS: Record<AiAssistMode, string> = {
+  improve_post: 'Nao foi possivel melhorar o texto agora. Tente novamente em instantes.',
+  suggest_caption: 'Nao foi possivel sugerir uma legenda agora. Tente novamente em instantes.',
+}
+const AI_TOO_LONG_ERRORS: Record<AiAssistMode, string> = {
+  improve_post: 'O texto esta muito grande para melhorar com IA. Reduza um pouco e tente novamente.',
+  suggest_caption: 'O texto esta muito grande para usar a IA. Reduza um pouco e tente novamente.',
+}
+const AI_UNCHANGED_ERRORS: Record<AiAssistMode, string> = {
+  improve_post: 'A IA nao encontrou melhorias agora. Seu texto foi mantido.',
+  suggest_caption: 'A IA nao encontrou uma legenda diferente agora. Seu texto foi mantido.',
+}
+const AI_SUCCESS_MESSAGES: Record<AiAssistMode, string> = {
+  improve_post: 'Texto melhorado. Revise antes de publicar.',
+  suggest_caption: 'Legenda sugerida. Revise antes de publicar.',
+}
+const AI_LOADING_LABELS: Record<AiAssistMode, string> = {
+  improve_post: 'Melhorando...',
+  suggest_caption: 'Gerando legenda...',
+}
 const ACCEPTED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
 const ACCEPTED_IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif'])
 const ACCEPTED_VIDEO_TYPES = new Set(['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime'])
@@ -177,7 +197,7 @@ export default function PostComposer({
   const [media, setMedia] = useState<MediaPreview[]>([])
   const [error, setError] = useState('')
   const [aiFeedback, setAiFeedback] = useState<AiFeedback | null>(null)
-  const [isImprovingWithAi, setIsImprovingWithAi] = useState(false)
+  const [activeAiMode, setActiveAiMode] = useState<AiAssistMode | null>(null)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [showMediaMenu, setShowMediaMenu] = useState(false)
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -325,10 +345,11 @@ export default function PostComposer({
     })
   }
 
-  async function handleImproveWithAi() {
-    if (isImprovingWithAi || submitting) return
+  async function handleAiAssist(mode: AiAssistMode) {
+    if (activeAiMode || submitting) return
 
     const text = content.trim()
+    const genericError = AI_GENERIC_ERRORS[mode]
 
     if (text.length < AI_MIN_TEXT_LENGTH) {
       setAiFeedback({
@@ -341,12 +362,12 @@ export default function PostComposer({
     if (text.length > AI_MAX_TEXT_LENGTH) {
       setAiFeedback({
         type: 'error',
-        message: AI_TOO_LONG_ERROR,
+        message: AI_TOO_LONG_ERRORS[mode],
       })
       return
     }
 
-    setIsImprovingWithAi(true)
+    setActiveAiMode(mode)
     setAiFeedback(null)
 
     try {
@@ -369,7 +390,7 @@ export default function PostComposer({
           Authorization: `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
-          mode: 'improve_post',
+          mode,
           text,
         }),
       })
@@ -378,7 +399,7 @@ export default function PostComposer({
       if (!data) {
         setAiFeedback({
           type: 'error',
-          message: AI_GENERIC_ERROR,
+          message: genericError,
         })
         return
       }
@@ -389,7 +410,7 @@ export default function PostComposer({
           message:
             response.status === 401 || data.error === AI_LOGIN_ERROR
               ? AI_LOGIN_ERROR
-              : AI_GENERIC_ERROR,
+              : genericError,
         })
         return
       }
@@ -397,25 +418,25 @@ export default function PostComposer({
       if (!response.ok) {
         setAiFeedback({
           type: 'error',
-          message: AI_GENERIC_ERROR,
+          message: genericError,
         })
         return
       }
 
-      const improvedText = data.result.trim()
+      const assistedText = data.result.trim()
 
-      if (!improvedText || improvedText === text) {
+      if (!assistedText || assistedText === text) {
         setAiFeedback({
           type: 'error',
-          message: 'A IA nao encontrou melhorias agora. Seu texto foi mantido.',
+          message: AI_UNCHANGED_ERRORS[mode],
         })
         return
       }
 
-      setContent(improvedText)
+      setContent(assistedText)
       setAiFeedback({
         type: 'success',
-        message: 'Texto melhorado. Revise antes de publicar.',
+        message: AI_SUCCESS_MESSAGES[mode],
       })
 
       window.requestAnimationFrame(() => {
@@ -424,10 +445,10 @@ export default function PostComposer({
     } catch {
       setAiFeedback({
         type: 'error',
-        message: AI_GENERIC_ERROR,
+        message: genericError,
       })
     } finally {
-      setIsImprovingWithAi(false)
+      setActiveAiMode(null)
     }
   }
 
@@ -468,15 +489,18 @@ export default function PostComposer({
 
   const trimmedContentLength = content.trim().length
   const canPublish = trimmedContentLength > 0 || media.length > 0
-  const canImproveWithAi =
-    trimmedContentLength >= AI_MIN_TEXT_LENGTH && !submitting && !isImprovingWithAi
-  const aiButtonTitle = isImprovingWithAi
-    ? 'Melhorando...'
-    : trimmedContentLength < AI_MIN_TEXT_LENGTH
-      ? AI_SHORT_TEXT_HINT
-      : trimmedContentLength > AI_MAX_TEXT_LENGTH
-        ? AI_TOO_LONG_ERROR
-        : 'Melhorar texto com IA da EntreUS'
+  const canUseAi =
+    trimmedContentLength >= AI_MIN_TEXT_LENGTH && !submitting && !activeAiMode
+  const getAiButtonTitle = (mode: AiAssistMode) => {
+    if (activeAiMode === mode) return AI_LOADING_LABELS[mode]
+    if (activeAiMode) return 'Aguarde a outra acao da IA terminar.'
+    if (trimmedContentLength < AI_MIN_TEXT_LENGTH) return AI_SHORT_TEXT_HINT
+    if (trimmedContentLength > AI_MAX_TEXT_LENGTH) return AI_TOO_LONG_ERRORS[mode]
+
+    return mode === 'suggest_caption'
+      ? 'Sugerir legenda com IA da EntreUS'
+      : 'Melhorar texto com IA da EntreUS'
+  }
   const placeholderText = t('postComposer.placeholder').replace('{name}', userName)
 
   return (
@@ -847,19 +871,44 @@ export default function PostComposer({
 
                   <button
                     type="button"
-                    onClick={handleImproveWithAi}
-                    disabled={!canImproveWithAi}
+                    onClick={() => handleAiAssist('improve_post')}
+                    disabled={!canUseAi}
                     className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-full border border-violet-200 bg-violet-50 px-3 text-xs font-bold text-violet-700 transition hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-violet-900/60 dark:bg-violet-950/30 dark:text-violet-200 dark:hover:bg-violet-950/50"
                     aria-label="Melhorar texto com IA da EntreUS"
                     aria-describedby="ai-assistance-note"
-                    title={aiButtonTitle}
+                    title={getAiButtonTitle('improve_post')}
                   >
-                    {isImprovingWithAi ? (
+                    {activeAiMode === 'improve_post' ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
                       <Sparkles className="h-4 w-4" />
                     )}
-                    <span>{isImprovingWithAi ? 'Melhorando...' : 'Melhorar com IA'}</span>
+                    <span>
+                      {activeAiMode === 'improve_post'
+                        ? AI_LOADING_LABELS.improve_post
+                        : 'Melhorar com IA'}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleAiAssist('suggest_caption')}
+                    disabled={!canUseAi}
+                    className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-full border border-violet-200/80 bg-white px-3 text-xs font-bold text-violet-700 transition hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-violet-900/60 dark:bg-zinc-950 dark:text-violet-200 dark:hover:bg-violet-950/30"
+                    aria-label="Sugerir legenda com IA da EntreUS"
+                    aria-describedby="ai-assistance-note"
+                    title={getAiButtonTitle('suggest_caption')}
+                  >
+                    {activeAiMode === 'suggest_caption' ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <MessageSquareText className="h-4 w-4" />
+                    )}
+                    <span>
+                      {activeAiMode === 'suggest_caption'
+                        ? AI_LOADING_LABELS.suggest_caption
+                        : 'Sugerir legenda'}
+                    </span>
                   </button>
 
                   <div
@@ -923,7 +972,7 @@ export default function PostComposer({
                 className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-violet-200/70 bg-violet-50/60 px-3 py-2 text-[11px] leading-5 text-violet-700 dark:border-violet-900/50 dark:bg-violet-950/20 dark:text-violet-200"
               >
                 <Sparkles className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                <span>A IA apenas sugere melhorias. Revise antes de publicar.</span>
+                <span>A IA apenas sugere melhorias e legendas. Revise antes de publicar.</span>
                 <Link
                   href="/help/ia"
                   className="font-bold underline decoration-violet-300 underline-offset-2 transition hover:text-violet-900 dark:decoration-violet-700 dark:hover:text-white"

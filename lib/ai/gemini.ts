@@ -41,7 +41,9 @@ function sanitizeGeminiText(value: string) {
   let text = value.trim()
 
   text = text.replace(/^```(?:\w+)?\s*/i, '').replace(/\s*```$/i, '').trim()
-  text = text.replace(/^(texto\s+(final\s+)?(melhorado|revisado)|resposta):\s*/i, '').trim()
+  text = text
+    .replace(/^(texto\s+(final\s+)?(melhorado|revisado)|legenda|resposta):\s*/i, '')
+    .trim()
 
   const quotePairs = [
     ['"', '"'],

@@ -1,4 +1,4 @@
-export type AiAssistMode = 'improve_post'
+export type AiAssistMode = 'improve_post' | 'suggest_caption'
 
 export type AiAssistRequest = {
   mode?: unknown

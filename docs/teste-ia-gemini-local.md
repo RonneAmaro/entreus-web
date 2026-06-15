@@ -14,6 +14,9 @@ Fluxo esperado:
 7. O composer substitui apenas o texto.
 8. O post continua aguardando o clique do usuario em publicar.
 
+A rota aceita os modos `improve_post` e `suggest_caption`. Ambos usam a mesma
+autenticacao, validacao de texto e protecao de rate limit.
+
 ## 1. Configurar a chave local
 
 Use somente o arquivo local:
@@ -79,6 +82,18 @@ inicie o servidor novamente.
 11. Confirme que nenhum post foi publicado automaticamente.
 12. Se houver midia anexada, confirme que ela continua anexada.
 
+### Testar sugestao de legenda
+
+1. Escreva: `foto do meu treino de hoje`.
+2. Clique em **Sugerir legenda**.
+3. Aguarde o estado **Gerando legenda...**.
+4. Confirme que a ideia foi substituida por uma legenda natural.
+5. Confirme a mensagem `Legenda sugerida. Revise antes de publicar.`.
+6. Confirme que o post nao foi publicado automaticamente.
+7. Se houver midia anexada, confirme que ela continua anexada.
+8. Teste **Melhorar com IA** novamente para garantir que o primeiro modo
+   continua funcionando.
+
 Para conferir a chamada, abra as ferramentas do navegador, acesse a aba
 **Network** e procure por `assist`. O resultado esperado e:
 
@@ -95,8 +110,8 @@ Nao copie nem compartilhe o valor do cabecalho `Authorization`.
 ### Texto curto
 
 1. Digite menos de 3 caracteres, por exemplo `oi`.
-2. Confirme que o botao fica desabilitado.
-3. Passe o cursor sobre o botao e confira a orientacao para escrever pelo
+2. Confirme que os dois botoes de IA ficam desabilitados.
+3. Passe o cursor sobre os botoes e confira a orientacao para escrever pelo
    menos 3 caracteres.
 4. Confirme que nenhuma chamada para `/api/ai/assist` foi feita.
 
@@ -177,6 +192,22 @@ Resposta esperada com configuracao e token validos:
 }
 ```
 
+Exemplo para o modo `suggest_caption`:
+
+```powershell
+$token = 'TOKEN_AQUI'
+
+curl.exe -i --request POST "http://127.0.0.1:3001/api/ai/assist" `
+  --header "Authorization: Bearer $token" `
+  --header "Content-Type: application/json" `
+  --data-raw '{"mode":"suggest_caption","text":"foto do meu treino de hoje"}'
+
+Remove-Variable token
+```
+
+A resposta esperada usa o mesmo contrato `{ "ok": true, "result": "..." }`
+e retorna somente a legenda final.
+
 Teste sem login, sem incluir o cabecalho `Authorization`:
 
 ```powershell
@@ -216,6 +247,8 @@ servidor depois para limpar o limitador local.
 - [ ] O `PostComposer` envia o Bearer token para `/api/ai/assist`.
 - [ ] A API valida o usuario antes de chamar o Gemini.
 - [ ] Um texto valido retorna melhorado.
+- [ ] Uma ideia valida retorna uma legenda pelo modo `suggest_caption`.
+- [ ] Os botoes **Melhorar com IA** e **Sugerir legenda** funcionam separadamente.
 - [ ] A mensagem pede revisao antes da publicacao.
 - [ ] O post nao e publicado automaticamente.
 - [ ] Midias anexadas permanecem no composer.
@@ -223,4 +256,3 @@ servidor depois para limpar o limitador local.
 - [ ] `npm.cmd run build` passa.
 - [ ] `git status --short` nao mostra `.env.local`.
 - [ ] Nenhuma chave ou access token aparece no diff do Git.
-

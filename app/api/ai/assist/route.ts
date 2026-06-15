@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { callGeminiText, GeminiError } from '@/lib/ai/gemini'
-import { buildImprovePostPrompt } from '@/lib/ai/prompts'
+import { buildImprovePostPrompt, buildSuggestCaptionPrompt } from '@/lib/ai/prompts'
 import { requireUser } from '@/lib/meet-server'
 import type { AiAssistMode, AiAssistRequest, AiAssistResponse } from '@/lib/ai/types'
 
@@ -13,7 +13,7 @@ const MAX_INVISIBLE_CHARACTER_RATIO = 0.1
 const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000
 const RATE_LIMIT_MAX_REQUESTS = 10
 const INVALID_JSON = Symbol('invalid-json')
-const ALLOWED_MODES = new Set<AiAssistMode>(['improve_post'])
+const ALLOWED_MODES = new Set<AiAssistMode>(['improve_post', 'suggest_caption'])
 const LOGIN_REQUIRED_ERROR = 'Faca login para usar a IA da EntreUS.'
 const TEMPORARY_RATE_LIMIT_ERROR =
   'Voce atingiu o limite temporario de uso da IA. Tente novamente em alguns minutos.'
@@ -151,6 +151,12 @@ function getSafeUserRef(userId: string) {
   return userId.slice(0, 8)
 }
 
+function buildPrompt(mode: AiAssistMode, text: string) {
+  return mode === 'suggest_caption'
+    ? buildSuggestCaptionPrompt(text)
+    : buildImprovePostPrompt(text)
+}
+
 export async function GET() {
   return jsonError('Use POST para acessar a assistente de IA.', 405)
 }
@@ -203,7 +209,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await callGeminiText(buildImprovePostPrompt(textValidation.text))
+    const result = await callGeminiText(buildPrompt(payload.mode, textValidation.text))
 
     return jsonResponse({ ok: true, result })
   } catch (error) {

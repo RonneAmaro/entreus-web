@@ -17,7 +17,7 @@ import {
 export const metadata: Metadata = {
   title: 'IA na EntreUS | EntreUS',
   description:
-    'Entenda como usar a IA da EntreUS com seguran\u00e7a para melhorar textos antes de publicar.',
+    'Entenda como usar a IA da EntreUS com seguran\u00e7a para melhorar textos e sugerir legendas antes de publicar.',
 }
 
 type InfoSection = {
@@ -35,6 +35,7 @@ const infoSections: InfoSection[] = [
     description: 'A IA oferece apoio durante a escrita. Ela pode:',
     items: [
       'Sugerir melhorias de escrita.',
+      'Transformar uma ideia base em uma legenda para o post.',
       'Deixar o texto mais claro, natural e organizado.',
       'Ajudar voce a revisar sua ideia antes de publicar.',
     ],
@@ -71,7 +72,7 @@ const infoSections: InfoSection[] = [
 
 const usageSteps = [
   'Escreva uma ideia base.',
-  'Clique em "Melhorar com IA".',
+  'Escolha "Melhorar com IA" ou "Sugerir legenda".',
   'Leia o resultado com atencao.',
   'Ajuste o texto com o seu jeito.',
   'Publique somente se estiver de acordo.',
@@ -118,8 +119,8 @@ export default function AiHelpPage() {
             </h1>
             <p className="mt-5 max-w-3xl text-base leading-7 text-zinc-300 sm:text-lg">
               A IA da EntreUS e uma ferramenta de apoio para melhorar textos,
-              organizar ideias e trazer mais clareza. No momento, ela ajuda a
-              melhorar o texto dos seus posts antes da publicacao.
+              organizar ideias, trazer mais clareza e sugerir legendas para os
+              seus posts antes da publicacao.
             </p>
           </div>
 
