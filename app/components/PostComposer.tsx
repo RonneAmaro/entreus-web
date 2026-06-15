@@ -99,6 +99,7 @@ const MAX_VIDEO_SIZE = 30 * 1024 * 1024
 const HEAVY_VIDEO_WARNING_SIZE = 20 * 1024 * 1024
 const AI_MIN_TEXT_LENGTH = 3
 const AI_MAX_TEXT_LENGTH = 1200
+const AI_SHORT_TEXT_HINT = 'Escreva pelo menos 3 caracteres para usar a IA.'
 const AI_LOGIN_ERROR = 'Faca login para usar a IA da EntreUS.'
 const AI_GENERIC_ERROR = 'Nao foi possivel melhorar o texto agora. Tente novamente em instantes.'
 const AI_TOO_LONG_ERROR = 'O texto esta muito grande para melhorar com IA. Reduza um pouco e tente novamente.'
@@ -332,7 +333,7 @@ export default function PostComposer({
     if (text.length < AI_MIN_TEXT_LENGTH) {
       setAiFeedback({
         type: 'error',
-        message: 'Escreva pelo menos 3 caracteres para usar a IA.',
+        message: AI_SHORT_TEXT_HINT,
       })
       return
     }
@@ -465,9 +466,17 @@ export default function PostComposer({
     })
   }
 
-  const canPublish = content.trim().length > 0 || media.length > 0
+  const trimmedContentLength = content.trim().length
+  const canPublish = trimmedContentLength > 0 || media.length > 0
   const canImproveWithAi =
-    content.trim().length >= AI_MIN_TEXT_LENGTH && !submitting && !isImprovingWithAi
+    trimmedContentLength >= AI_MIN_TEXT_LENGTH && !submitting && !isImprovingWithAi
+  const aiButtonTitle = isImprovingWithAi
+    ? 'Melhorando...'
+    : trimmedContentLength < AI_MIN_TEXT_LENGTH
+      ? AI_SHORT_TEXT_HINT
+      : trimmedContentLength > AI_MAX_TEXT_LENGTH
+        ? AI_TOO_LONG_ERROR
+        : 'Melhorar texto com IA da EntreUS'
   const placeholderText = t('postComposer.placeholder').replace('{name}', userName)
 
   return (
@@ -671,12 +680,14 @@ export default function PostComposer({
 
           {aiFeedback && (
             <p
+              id="ai-assistance-feedback"
               className={`mt-3 rounded-2xl border px-3 py-2 text-sm ${
                 aiFeedback.type === 'success'
                   ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300'
                   : 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300'
               }`}
               role="status"
+              aria-live="polite"
             >
               {aiFeedback.message}
             </p>
@@ -839,8 +850,9 @@ export default function PostComposer({
                     onClick={handleImproveWithAi}
                     disabled={!canImproveWithAi}
                     className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-full border border-violet-200 bg-violet-50 px-3 text-xs font-bold text-violet-700 transition hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-violet-900/60 dark:bg-violet-950/30 dark:text-violet-200 dark:hover:bg-violet-950/50"
-                    aria-label="Melhorar com IA"
-                    title="Melhorar com IA"
+                    aria-label="Melhorar texto com IA da EntreUS"
+                    aria-describedby="ai-assistance-note"
+                    title={aiButtonTitle}
                   >
                     {isImprovingWithAi ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -904,6 +916,21 @@ export default function PostComposer({
                   <Send className="h-4 w-4" />
                   {submitting ? t('postComposer.posting') : t('postComposer.post')}
                 </button>
+              </div>
+
+              <div
+                id="ai-assistance-note"
+                className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-violet-200/70 bg-violet-50/60 px-3 py-2 text-[11px] leading-5 text-violet-700 dark:border-violet-900/50 dark:bg-violet-950/20 dark:text-violet-200"
+              >
+                <Sparkles className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                <span>A IA apenas sugere melhorias. Revise antes de publicar.</span>
+                <Link
+                  href="/help/ia"
+                  className="font-bold underline decoration-violet-300 underline-offset-2 transition hover:text-violet-900 dark:decoration-violet-700 dark:hover:text-white"
+                  aria-label="Saiba mais sobre a IA da EntreUS"
+                >
+                  Saiba mais
+                </Link>
               </div>
 
               <div className="flex flex-wrap items-center gap-2 pl-1 text-xs text-zinc-500 dark:text-zinc-500">
