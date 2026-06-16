@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import {
   Camera,
+  CheckCircle2,
   Globe2,
   ImagePlus,
   Loader2,
@@ -29,6 +30,7 @@ import {
   IMAGE_UPLOAD_MAX_SIZE_BYTES,
   POST_VIDEO_MAX_DURATION_SECONDS,
   VIDEO_UPLOAD_MAX_SIZE_BYTES,
+  formatUploadBytes,
   getAllowedUploadContentType,
   isAllowedImageMimeType,
   isAllowedVideoMimeType,
@@ -46,6 +48,15 @@ type MediaPreview = {
   file: File
   url: string
   type: 'image' | 'video'
+  videoOptimization?: VideoOptimizationInfo
+}
+
+type VideoOptimizationInfo = {
+  originalSize: number
+  compressedSize: number
+  savedBytes: number
+  savedPercent: number
+  message: string
 }
 
 type PostComposerProps = {
@@ -183,6 +194,16 @@ function getVideoSizeError() {
   return 'Este video esta muito pesado. Tente enviar um video menor ou comprimido.'
 }
 
+function getVideoOptimizationMessage(originalSize: number, compressedSize: number) {
+  return `Video otimizado: ${formatUploadBytes(originalSize)} -> ${formatUploadBytes(compressedSize)}`
+}
+
+function hasVideoOptimization(item: MediaPreview): item is MediaPreview & {
+  videoOptimization: VideoOptimizationInfo
+} {
+  return item.type === 'video' && Boolean(item.videoOptimization)
+}
+
 function readVideoDurationSeconds(file: File) {
   return new Promise<number | null>((resolve) => {
     const objectUrl = URL.createObjectURL(file)
@@ -260,6 +281,10 @@ export default function PostComposer({
     return VISIBILITY_OPTIONS.find((item) => item.value === visibility)
   }, [visibility])
 
+  const optimizedVideoItems = useMemo(() => {
+    return media.filter(hasVideoOptimization)
+  }, [media])
+
   useEffect(() => {
     mediaRef.current = media
   }, [media])
@@ -320,6 +345,7 @@ export default function PostComposer({
 
     for (const file of selectedFiles) {
       let fileToAttach = file
+      let videoOptimization: VideoOptimizationInfo | undefined
       const contentType = getEffectiveContentType(file)
       const fileIsImage = Boolean(contentType && isAllowedImageMimeType(contentType))
       const fileIsVideo = Boolean(contentType && isAllowedVideoMimeType(contentType))
@@ -360,7 +386,9 @@ export default function PostComposer({
       }
 
       if (fileIsVideo) {
-        fileToAttach = await optimizeVideoForComposer(file)
+        const optimizedVideo = await optimizeVideoForComposer(file)
+        fileToAttach = optimizedVideo.file
+        videoOptimization = optimizedVideo.videoOptimization
       }
 
       newMedia.push({
@@ -368,6 +396,7 @@ export default function PostComposer({
         file: fileToAttach,
         url: URL.createObjectURL(fileToAttach),
         type: fileIsImage ? 'image' : 'video',
+        videoOptimization,
       })
     }
 
@@ -396,13 +425,16 @@ export default function PostComposer({
     })
   }
 
-  async function optimizeVideoForComposer(file: File) {
+  async function optimizeVideoForComposer(file: File): Promise<{
+    file: File
+    videoOptimization?: VideoOptimizationInfo
+  }> {
     if (!canAttemptVideoCompression(file)) {
       setMediaFeedback({
         type: 'warning',
         message: 'Seu navegador nao permitiu otimizar o video automaticamente.',
       })
-      return file
+      return { file }
     }
 
     setIsOptimizingVideo(true)
@@ -415,11 +447,17 @@ export default function PostComposer({
       const result = await compressVideoForPost(file)
 
       if (result.ok) {
-        setMediaFeedback({
-          type: 'success',
-          message: result.message || 'Video otimizado para publicar mais rapido.',
-        })
-        return result.file
+        setMediaFeedback(null)
+        return {
+          file: result.file,
+          videoOptimization: {
+            originalSize: result.originalSize,
+            compressedSize: result.compressedSize,
+            savedBytes: result.savedBytes,
+            savedPercent: result.savedPercent,
+            message: getVideoOptimizationMessage(result.originalSize, result.compressedSize),
+          },
+        }
       }
 
       setMediaFeedback({
@@ -429,13 +467,13 @@ export default function PostComposer({
             ? 'Seu navegador nao permitiu otimizar o video automaticamente.'
             : 'Nao foi possivel otimizar o video, mas ele ainda pode ser enviado se estiver dentro dos limites.',
       })
-      return file
+      return { file }
     } catch {
       setMediaFeedback({
         type: 'warning',
         message: 'Nao foi possivel otimizar o video, mas ele ainda pode ser enviado se estiver dentro dos limites.',
       })
-      return file
+      return { file }
     } finally {
       setIsOptimizingVideo(false)
     }
@@ -826,6 +864,26 @@ export default function PostComposer({
                   <div className="absolute bottom-2 left-2 rounded-full bg-black/70 px-2 py-1 text-[11px] font-medium text-white">
                     {item.type === 'image' ? t('postComposer.image') : t('postComposer.video')}
                   </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {optimizedVideoItems.length > 0 && (
+            <div className="mt-2 space-y-2" role="status" aria-live="polite">
+              {optimizedVideoItems.map((item) => (
+                <div
+                  key={`${item.id}-optimization`}
+                  className="flex flex-col gap-1 rounded-2xl border border-emerald-200/80 bg-emerald-50/80 px-3 py-2 text-xs text-emerald-800 shadow-sm shadow-emerald-950/5 dark:border-emerald-900/50 dark:bg-emerald-950/25 dark:text-emerald-200 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <span className="flex min-w-0 items-center gap-2 font-bold">
+                    <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+                    <span className="min-w-0 truncate">{item.videoOptimization.message}</span>
+                  </span>
+
+                  <span className="shrink-0 font-black">
+                    Economia de {item.videoOptimization.savedPercent}%
+                  </span>
                 </div>
               ))}
             </div>

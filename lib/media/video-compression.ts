@@ -13,6 +13,8 @@ export type VideoCompressionResult =
       file: File
       originalSize: number
       compressedSize: number
+      savedBytes: number
+      savedPercent: number
       message?: string
     }
   | {
@@ -20,6 +22,13 @@ export type VideoCompressionResult =
       reason: 'unsupported' | 'failed' | 'not_smaller'
       message: string
     }
+
+export type VideoCompressionSavings = {
+  originalSize: number
+  compressedSize: number
+  savedBytes: number
+  savedPercent: number
+}
 
 type FfmpegRuntime = {
   ffmpeg: FFmpeg
@@ -48,6 +57,32 @@ export function canAttemptVideoCompression(file: File): boolean {
   const contentType = getAllowedUploadContentType(file.type, file.name)
 
   return Boolean(contentType && isAllowedVideoMimeType(contentType))
+}
+
+export function getVideoCompressionSavings(
+  originalSize: number,
+  compressedSize: number,
+): VideoCompressionSavings | null {
+  if (!Number.isFinite(originalSize) || !Number.isFinite(compressedSize)) return null
+
+  const normalizedOriginalSize = Math.max(0, Math.round(originalSize))
+  const normalizedCompressedSize = Math.max(0, Math.round(compressedSize))
+
+  if (normalizedOriginalSize <= 0 || normalizedCompressedSize <= 0) return null
+  if (normalizedCompressedSize >= normalizedOriginalSize) return null
+
+  const savedBytes = normalizedOriginalSize - normalizedCompressedSize
+  const savedPercent = Math.min(
+    99,
+    Math.max(1, Math.round((savedBytes / normalizedOriginalSize) * 100)),
+  )
+
+  return {
+    originalSize: normalizedOriginalSize,
+    compressedSize: normalizedCompressedSize,
+    savedBytes,
+    savedPercent,
+  }
 }
 
 export async function compressVideoForPost(file: File): Promise<VideoCompressionResult> {
@@ -125,7 +160,14 @@ async function runFfmpegCompression(file: File): Promise<VideoCompressionResult>
       throw new Error('FFmpeg gerou um video vazio.')
     }
 
-    if (compressedBytes.byteLength >= file.size) {
+    const compressedBlob = new Blob([compressedBytes as BlobPart], { type: OUTPUT_MIME_TYPE })
+    const compressedFile = new File([compressedBlob], getOptimizedFileName(file.name), {
+      type: OUTPUT_MIME_TYPE,
+      lastModified: Date.now(),
+    })
+    const savings = getVideoCompressionSavings(file.size, compressedFile.size)
+
+    if (!savings) {
       return {
         ok: false,
         reason: 'not_smaller',
@@ -133,17 +175,13 @@ async function runFfmpegCompression(file: File): Promise<VideoCompressionResult>
       }
     }
 
-    const compressedBlob = new Blob([compressedBytes as BlobPart], { type: OUTPUT_MIME_TYPE })
-    const compressedFile = new File([compressedBlob], getOptimizedFileName(file.name), {
-      type: OUTPUT_MIME_TYPE,
-      lastModified: Date.now(),
-    })
-
     return {
       ok: true,
       file: compressedFile,
-      originalSize: file.size,
-      compressedSize: compressedFile.size,
+      originalSize: savings.originalSize,
+      compressedSize: savings.compressedSize,
+      savedBytes: savings.savedBytes,
+      savedPercent: savings.savedPercent,
       message: 'Video otimizado para publicar mais rapido.',
     }
   } catch (error) {

@@ -52,6 +52,31 @@ const knownVideoExtensions = new Set([
   'ogv',
 ])
 
+export function formatUploadBytes(bytes: number) {
+  const normalizedBytes = Number.isFinite(bytes) && bytes > 0 ? Math.round(bytes) : 0
+
+  if (normalizedBytes === 0) return '0 B'
+
+  const megabytes = normalizedBytes / (1024 * 1024)
+
+  if (megabytes >= 1) {
+    const roundedMegabytes = Math.round(megabytes * 10) / 10
+    return `${formatUploadSizeValue(roundedMegabytes)} MB`
+  }
+
+  const kilobytes = normalizedBytes / 1024
+
+  if (kilobytes >= 1) {
+    return `${Math.round(kilobytes)} KB`
+  }
+
+  return `${normalizedBytes} B`
+}
+
+function formatUploadSizeValue(value: number) {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1)
+}
+
 export function getUploadFileExtension(fileName: string) {
   const extension = fileName.trim().toLowerCase().split('.').pop()
   return extension && extension !== fileName.toLowerCase() ? extension : ''

@@ -36,11 +36,21 @@ A otimizacao roda somente no navegador e somente depois que o video passou pelas
 - a duracao precisa estar em ate 60 segundos quando o navegador consegue ler os metadados;
 - arquivos acima do limite continuam bloqueados antes de qualquer tentativa de compressao.
 
-Durante a tentativa, o composer mostra `Otimizando video...` e desabilita a publicacao. Se a saida otimizada for menor, o composer usa o novo arquivo e mostra `Video otimizado para publicar mais rapido.`. Se nao for possivel otimizar, mas o original ainda estiver dentro dos limites, o usuario pode seguir com o original e ve `Nao foi possivel otimizar o video, mas ele ainda pode ser enviado se estiver dentro dos limites.`.
+Durante a tentativa, o composer mostra `Otimizando video...` e desabilita a publicacao. Se a saida otimizada for menor, o composer usa o novo arquivo e mostra o indicador de economia. Se nao for possivel otimizar, mas o original ainda estiver dentro dos limites, o usuario pode seguir com o original e ve `Nao foi possivel otimizar o video, mas ele ainda pode ser enviado se estiver dentro dos limites.`.
 
 Quando o navegador nao oferece os recursos minimos para a estrategia com FFmpeg.wasm, o composer mostra `Seu navegador nao permitiu otimizar o video automaticamente.` e mantem o fluxo normal para videos validos.
 
 O FFmpeg ja existia no projeto por causa do editor de video. Este pacote reaproveita a dependencia instalada e nao altera `package.json`.
+
+## Indicador de economia
+
+Quando a compressao termina com um arquivo menor que o original, o `PostComposer` guarda o tamanho original, o tamanho final, os bytes economizados, o percentual economizado e a mensagem curta de sucesso.
+
+O indicador aparece perto da midia anexada, abaixo do preview, com uma mensagem no formato `Video otimizado: X MB -> Y MB` e a linha `Economia de Z%`.
+
+O percentual e calculado com `Math.round(((originalSize - compressedSize) / originalSize) * 100)` e exibido entre 1% e 99%. O composer nao mostra o indicador quando o tamanho original e invalido, quando nao ha reducao real ou quando o arquivo final fica maior ou igual ao original.
+
+A economia depende do video, do navegador, do aparelho e do carregamento do FFmpeg.wasm. Nem todo video fica menor. Quando nao houver reducao, o original valido pode seguir no fluxo normal sem indicador de economia.
 
 ## Limitacoes
 
@@ -56,7 +66,7 @@ O FFmpeg ja existia no projeto por causa do editor de video. Este pacote reaprov
 2. Anexar e publicar uma imagem JPEG/PNG/WebP/GIF menor que 5 MB.
 3. Anexar e publicar um MP4, WebM ou MOV menor que 30 MB e com ate 60 segundos.
 4. Confirmar que, ao selecionar video valido em navegador suportado, aparece `Otimizando video...`.
-5. Confirmar que, se a saida ficar menor, a midia anexada usa o arquivo otimizado e a mensagem `Video otimizado para publicar mais rapido.` aparece.
+5. Confirmar que, se a saida ficar menor, a midia anexada usa o arquivo otimizado e aparece o indicador `Video otimizado: X MB -> Y MB` com `Economia de Z%`.
 6. Confirmar que, se a otimizacao falhar ou nao reduzir tamanho, o original continua anexando quando esta dentro dos limites.
 7. Confirmar que, quando o navegador nao permite otimizar, aparece `Seu navegador nao permitiu otimizar o video automaticamente.`.
 8. Confirmar que um video acima de 30 MB e bloqueado antes do upload.
