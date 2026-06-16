@@ -4,6 +4,7 @@ import Link from 'next/link'
 import type { ComponentType } from 'react'
 import { useMemo, useState } from 'react'
 import {
+  Activity,
   Award,
   BrainCircuit,
   Bug,
@@ -210,6 +211,28 @@ export default function HelpPage() {
                 </span>
               </span>
               <ChevronRight className="h-4 w-4 shrink-0 text-violet-200" />
+            </Link>
+
+            <Link
+              href="/status"
+              className="mb-5 flex items-center justify-between gap-4 rounded-3xl border border-emerald-300/20 bg-emerald-500/10 p-4 text-left transition hover:border-emerald-200/40 hover:bg-emerald-500/15"
+            >
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-400/15 text-emerald-100 ring-1 ring-emerald-200/20">
+                <Activity className="h-5 w-5" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-xs font-black uppercase tracking-[0.18em] text-emerald-200">
+                  Avisos temporarios
+                </span>
+                <span className="mt-1 block text-sm font-black text-white">
+                  Status da EntreUS
+                </span>
+                <span className="mt-1 block text-xs leading-5 text-zinc-400">
+                  Consulte instabilidades, manutencao e orientacoes em caso de
+                  falhas temporarias.
+                </span>
+              </span>
+              <ChevronRight className="h-4 w-4 shrink-0 text-emerald-200" />
             </Link>
 
             <h2 className="text-lg font-black">Artigos populares</h2>
