@@ -258,6 +258,7 @@ export default function PostComposer({
   const cameraVideoInputRef = useRef<HTMLInputElement | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const mediaRef = useRef<MediaPreview[]>([])
+  const mediaReplacementIdRef = useRef<string | null>(null)
 
   const [content, setContent] = useState('')
   const [category, setCategory] = useState('cotidiano')
@@ -325,22 +326,46 @@ export default function PostComposer({
     }
   }, [content, isModalOpen, media.length])
 
+  function openMediaPicker(replacementMediaId?: string) {
+    mediaReplacementIdRef.current = replacementMediaId || null
+    mediaInputRef.current?.click()
+  }
+
+  function openCameraPhotoPicker() {
+    mediaReplacementIdRef.current = null
+    cameraPhotoInputRef.current?.click()
+  }
+
+  function openCameraVideoPicker() {
+    mediaReplacementIdRef.current = null
+    cameraVideoInputRef.current?.click()
+  }
+
   async function addFiles(files: FileList | null) {
-    if (!files || files.length === 0) return
+    if (!files || files.length === 0) {
+      mediaReplacementIdRef.current = null
+      return
+    }
 
     setError('')
     setMediaFeedback(null)
     setShowMediaMenu(false)
 
     const currentMedia = [...media]
-    const availableSlots = MAX_MEDIA_FILES - currentMedia.length
+    const replacementMediaId = mediaReplacementIdRef.current
+    const replacementMedia = replacementMediaId
+      ? currentMedia.find((item) => item.id === replacementMediaId)
+      : null
+    const availableSlots = MAX_MEDIA_FILES - currentMedia.length + (replacementMedia ? 1 : 0)
+
+    mediaReplacementIdRef.current = null
 
     if (availableSlots <= 0) {
       setError(t('postComposer.errors.maxMedia').replace('{max}', String(MAX_MEDIA_FILES)))
       return
     }
 
-    const selectedFiles = Array.from(files).slice(0, availableSlots)
+    const selectedFiles = Array.from(files).slice(0, replacementMedia ? 1 : availableSlots)
     const newMedia: MediaPreview[] = []
 
     for (const file of selectedFiles) {
@@ -405,7 +430,29 @@ export default function PostComposer({
     }
 
     if (newMedia.length > 0) {
-      setMedia((current) => [...current, ...newMedia])
+      if (replacementMedia) {
+        const replacementItem = newMedia[0]
+
+        setMedia((current) => {
+          let replaced = false
+          const nextMedia = current.map((item) => {
+            if (item.id !== replacementMedia.id) return item
+
+            replaced = true
+            URL.revokeObjectURL(item.url)
+            return replacementItem
+          })
+
+          if (!replaced) {
+            URL.revokeObjectURL(replacementItem.url)
+            return current
+          }
+
+          return nextMedia
+        })
+      } else {
+        setMedia((current) => [...current, ...newMedia])
+      }
     }
 
     if (mediaInputRef.current) mediaInputRef.current.value = ''
@@ -843,7 +890,7 @@ export default function PostComposer({
                   <div className="absolute left-2 top-2 flex items-center gap-1">
                     <button
                       type="button"
-                      onClick={() => mediaInputRef.current?.click()}
+                      onClick={() => openMediaPicker(item.id)}
                       className="flex h-8 w-8 items-center justify-center rounded-full bg-black/70 text-white transition hover:bg-black"
                       title="Trocar midia"
                       aria-label="Trocar midia"
@@ -975,7 +1022,7 @@ export default function PostComposer({
                       <div className="absolute left-0 top-12 z-[10000] w-[min(17rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-blue-400/25 bg-white p-1.5 text-zinc-900 shadow-2xl shadow-blue-950/20 ring-1 ring-black/5 dark:bg-zinc-950 dark:text-white dark:ring-white/10">
                         <button
                           type="button"
-                          onClick={() => mediaInputRef.current?.click()}
+                          onClick={() => openMediaPicker()}
                           disabled={isOptimizingVideo}
                           className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-bold transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-blue-950/30"
                         >
@@ -985,7 +1032,7 @@ export default function PostComposer({
 
                         <button
                           type="button"
-                          onClick={() => cameraPhotoInputRef.current?.click()}
+                          onClick={openCameraPhotoPicker}
                           disabled={isOptimizingVideo}
                           className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-bold transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-blue-950/30"
                         >
@@ -995,7 +1042,7 @@ export default function PostComposer({
 
                         <button
                           type="button"
-                          onClick={() => cameraVideoInputRef.current?.click()}
+                          onClick={openCameraVideoPicker}
                           disabled={isOptimizingVideo}
                           className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-bold transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-blue-950/30"
                         >

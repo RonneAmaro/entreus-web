@@ -114,12 +114,14 @@ Resultado esperado:
 5. Confirme que a economia e recalculada para o novo arquivo, quando houver reducao real.
 6. Anexe uma imagem depois de testar video.
 7. Confirme que a imagem nao herda indicador de economia.
-8. Se usar o botao `Trocar midia`, observe o comportamento atual do composer com multiplas midias. Para validar substituicao limpa, remova a midia anterior e selecione a nova.
+8. Use o botao `Trocar midia` no preview e selecione outro arquivo.
+9. Confirme que o item antigo foi substituido, que a URL antiga nao fica no preview e que o indicador foi recalculado ou removido conforme o novo arquivo.
 
 Resultado esperado:
 
 - O indicador pertence ao item de video anexado.
 - Remover o item remove o indicador.
+- Trocar o item substitui a midia antiga em vez de anexar uma segunda midia.
 - Novo video calcula nova economia.
 - Imagens seguem sem indicador de video.
 
