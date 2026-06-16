@@ -4,6 +4,8 @@ Data: 2026-06-10
 
 Escopo: auditoria tecnica somente leitura para localizar uso de Supabase Storage/CDN e campos de banco que guardam midias. Nenhum arquivo foi migrado, nenhum dado foi atualizado, nenhuma migration foi criada.
 
+Guia operacional relacionado: para a retomada quando o Supabase estiver liberado, use `docs/retomada-supabase-migracao-r2.md`.
+
 ## Resumo executivo
 
 O fluxo principal de novos uploads do feed ja usa Cloudflare R2 para posts e comentarios por meio de `/api/r2/presign`. O endpoint legado `/api/r2/upload` esta desativado com status 410.

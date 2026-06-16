@@ -23,6 +23,10 @@ O conteudo atual orienta o usuario a tentar novamente depois, verificar a conexa
 - Rota direta: `/status`.
 - Link discreto na central de ajuda: `/help`.
 
+## Guia interno relacionado
+
+Para retomada operacional do Supabase e planejamento seguro de migracao de midias para R2, consulte `docs/retomada-supabase-migracao-r2.md`.
+
 ## Futuras evolucoes
 
 Quando fizer sentido, a pagina pode evoluir para:
