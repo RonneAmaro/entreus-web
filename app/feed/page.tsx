@@ -51,6 +51,7 @@ import {
   getAllowedUploadContentType,
   isAllowedImageMimeType,
   isAllowedVideoMimeType,
+  looksLikeVideoUpload,
 } from '@/lib/media/upload-limits'
 
 type VisibilityType = 'public' | 'followers' | 'private'
@@ -209,6 +210,13 @@ const FEED_INITIAL_COMMENT_LIMIT = 160
 const FEED_INITIAL_REACTION_LIMIT = 500
 const FEED_INITIAL_REPOST_LIMIT = 120
 const ACCEPTED_MEDIA_FORMATS_MESSAGE = 'Formato nao permitido. Use JPG, PNG, WEBP, GIF, MP4, WebM ou MOV.'
+const VIDEO_FORMAT_NOT_ACCEPTED_MESSAGE = 'Formato nao aceito. Use MP4, WebM ou MOV para videos.'
+const VIDEO_TOO_LARGE_UPLOAD_MESSAGE = 'Este video esta muito pesado. Envie um video menor ou comprimido.'
+const PRESIGN_UPLOAD_FAILURE_MESSAGE = 'Nao foi possivel preparar o upload agora. Tente novamente em instantes.'
+const R2_UPLOAD_FAILURE_MESSAGE = 'Nao foi possivel enviar a midia agora. Verifique sua conexao e tente novamente.'
+const PUBLISH_LOGIN_MESSAGE = 'Faca login novamente para publicar.'
+const GENERIC_PUBLISH_FAILURE_MESSAGE = 'Nao foi possivel publicar agora. Tente novamente em instantes.'
+const PARTIAL_MEDIA_SAVE_FAILURE_MESSAGE = 'Post criado, mas nao foi possivel concluir as midias agora. Tente novamente em instantes.'
 const FEED_ITEM_ACTIVE_ROOT_MARGIN = '1800px 0px 2200px 0px'
 const FEED_MEDIA_PLACEHOLDER_HEIGHT = 360
 const FEED_COMMENTS_PLACEHOLDER_HEIGHT = 180
@@ -1771,11 +1779,11 @@ function FeedContent() {
   }
 
   function getVideoTooLargeMessage() {
-    return `${t('feed.messages.videoTooLarge')} Esse video esta muito grande para envio direto. Tente usar um video menor ou abra o editor para otimizar antes de publicar.`
+    return VIDEO_TOO_LARGE_UPLOAD_MESSAGE
   }
 
   function getVideoUploadFailureMessage() {
-    return 'Nao foi possivel enviar o video. Tente novamente, use outro navegador ou publique uma versao menor pelo editor.'
+    return R2_UPLOAD_FAILURE_MESSAGE
   }
 
   async function getPresignAuthHeaders() {
@@ -1793,11 +1801,11 @@ function FeedContent() {
 
   function getPresignFailureMessage(status: number, error?: string, message?: string) {
     if (status === 401 || error === 'UNAUTHORIZED') {
-      return 'Sua sessao expirou. Entre novamente para enviar midia.'
+      return PUBLISH_LOGIN_MESSAGE
     }
 
     if (status === 413 || error === 'FILE_TOO_LARGE') {
-      return message || 'Arquivo muito grande.'
+      return message || VIDEO_TOO_LARGE_UPLOAD_MESSAGE
     }
 
     if (status === 415 || error === 'INVALID_FILE_TYPE') {
@@ -1808,21 +1816,11 @@ function FeedContent() {
       return 'Muitos uploads em pouco tempo. Aguarde um pouco.'
     }
 
-    return message || error || 'Falha ao preparar upload para o R2.'
+    return message || PRESIGN_UPLOAD_FAILURE_MESSAGE
   }
 
-  function getStorageFailureMessage(mediaType: 'image' | 'video' | 'gif', status?: number) {
-    const suffix = status ? ` (HTTP ${status}).` : '.'
-
-    if (mediaType === 'video') {
-      return `Nao foi possivel enviar para o storage${suffix}`
-    }
-
-    if (mediaType === 'gif') {
-      return `Nao foi possivel enviar o GIF para o storage${suffix}`
-    }
-
-    return `Nao foi possivel enviar para o storage${suffix}`
+  function getStorageFailureMessage(_mediaType: 'image' | 'video' | 'gif', _status?: number) {
+    return R2_UPLOAD_FAILURE_MESSAGE
   }
 
   function getSafeErrorText(error: unknown) {
@@ -1937,7 +1935,7 @@ function FeedContent() {
     }
 
     if (!mediaType || !uploadContentType) {
-      setMessage(ACCEPTED_MEDIA_FORMATS_MESSAGE)
+      setMessage(looksLikeVideoUpload(file.type, file.name) ? VIDEO_FORMAT_NOT_ACCEPTED_MESSAGE : ACCEPTED_MEDIA_FORMATS_MESSAGE)
       return null
     }
 
@@ -1963,7 +1961,7 @@ function FeedContent() {
       const authHeaders = await getPresignAuthHeaders()
 
       if (!authHeaders) {
-        setMessage('Sua sessao expirou. Entre novamente para enviar midia.')
+        setMessage(PUBLISH_LOGIN_MESSAGE)
         return null
       }
 
@@ -2021,11 +2019,7 @@ function FeedContent() {
           ...getPresignContractFlags(presignData),
         })
 
-        setMessage(
-          mediaType === 'image'
-            ? t('feed.messages.uploadImageError') + errorMessage
-            : t('feed.messages.uploadVideoError') + errorMessage
-        )
+        setMessage(errorMessage)
         return null
       }
 
@@ -2040,7 +2034,7 @@ function FeedContent() {
           step: 'presign-validation',
           ...getPresignContractFlags(presignData),
         })
-        setMessage('Nao foi possivel preparar o upload da midia. Tente novamente.')
+        setMessage(PRESIGN_UPLOAD_FAILURE_MESSAGE)
         return null
       }
 
@@ -2070,11 +2064,7 @@ function FeedContent() {
           corsDebug: getR2PutCorsDebugInfo('posts', uploadContentType),
         })
 
-        setMessage(
-          mediaType === 'image'
-            ? t('feed.messages.uploadImageError') + getStorageFailureMessage(uploadContentType === 'image/gif' ? 'gif' : 'image')
-            : t('feed.messages.uploadVideoError') + getStorageFailureMessage('video')
-        )
+        setMessage(getStorageFailureMessage(mediaType === 'video' ? 'video' : uploadContentType === 'image/gif' ? 'gif' : 'image'))
         return null
       }
 
@@ -2107,11 +2097,7 @@ function FeedContent() {
           uploadResponse.status,
         )
 
-        setMessage(
-          mediaType === 'image'
-            ? t('feed.messages.uploadImageError') + friendlyMessage
-            : t('feed.messages.uploadVideoError') + friendlyMessage
-        )
+        setMessage(friendlyMessage)
         return null
       }
 
@@ -2122,7 +2108,7 @@ function FeedContent() {
     } catch (error) {
       const errorMessage =
         uploadStep.startsWith('presign')
-          ? 'Nao foi possivel preparar o envio. Verifique sua conexao e tente novamente.'
+          ? PRESIGN_UPLOAD_FAILURE_MESSAGE
           : getStorageFailureMessage(mediaType === 'video' ? 'video' : uploadContentType === 'image/gif' ? 'gif' : 'image')
 
       console.error('[FeedUpload] Erro ao enviar midia do post:', {
@@ -2135,11 +2121,7 @@ function FeedContent() {
         message: getSafeErrorText(error),
       })
 
-      setMessage(
-        mediaType === 'image'
-          ? t('feed.messages.uploadImageError') + errorMessage
-          : t('feed.messages.uploadVideoError') + errorMessage
-      )
+      setMessage(errorMessage)
       return null
     } finally {
       if (mediaType === 'image') {
@@ -2179,7 +2161,7 @@ function FeedContent() {
             : null
 
     if (!mediaType || !uploadContentType) {
-      setMessage(ACCEPTED_MEDIA_FORMATS_MESSAGE)
+      setMessage(looksLikeVideoUpload(file.type, file.name) ? VIDEO_FORMAT_NOT_ACCEPTED_MESSAGE : ACCEPTED_MEDIA_FORMATS_MESSAGE)
       return null
     }
 
@@ -2196,7 +2178,7 @@ function FeedContent() {
       const authHeaders = await getPresignAuthHeaders()
 
       if (!authHeaders) {
-        setMessage('Sua sessao expirou. Entre novamente para enviar midia.')
+        setMessage(PUBLISH_LOGIN_MESSAGE)
         return null
       }
 
@@ -2268,7 +2250,7 @@ function FeedContent() {
           step: 'presign-validation',
           ...getPresignContractFlags(presignData),
         })
-        setMessage('Nao foi possivel preparar o upload da midia. Tente novamente.')
+        setMessage(PRESIGN_UPLOAD_FAILURE_MESSAGE)
         return null
       }
 
@@ -2343,7 +2325,7 @@ function FeedContent() {
         step: uploadStep,
         message: getSafeErrorText(error),
       })
-      setMessage(uploadStep.startsWith('presign') ? 'Nao foi possivel preparar o envio. Verifique sua conexao e tente novamente.' : getStorageFailureMessage(mediaType === 'video' ? 'video' : mediaType === 'gif' ? 'gif' : 'image'))
+      setMessage(uploadStep.startsWith('presign') ? PRESIGN_UPLOAD_FAILURE_MESSAGE : getStorageFailureMessage(mediaType === 'video' ? 'video' : mediaType === 'gif' ? 'gif' : 'image'))
       return null
     }
   }
@@ -2420,7 +2402,7 @@ function FeedContent() {
         step: 'database-post-save',
         error: error.message,
       })
-      setMessage(t('feed.messages.publishError') + error.message)
+      setMessage(GENERIC_PUBLISH_FAILURE_MESSAGE)
       return false
     }
 
@@ -2445,7 +2427,7 @@ function FeedContent() {
           step: 'database-media-save',
           error: mediaError.message,
         })
-        setMessage(t('feed.messages.mediaSavePartial') + mediaError.message)
+        setMessage(PARTIAL_MEDIA_SAVE_FAILURE_MESSAGE)
 
         await reloadInitialFeed()
         await loadBookmarks(userId)

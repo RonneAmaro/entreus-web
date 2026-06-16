@@ -118,7 +118,8 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         ok: false,
-        error: 'Configuracao Cloudflare R2 ausente no servidor.',
+        error: 'SERVER_UPLOAD_CONFIG_MISSING',
+        message: 'Nao foi possivel preparar o upload agora. Tente novamente em instantes.',
       },
       { status: 500 },
     )
@@ -129,7 +130,7 @@ export async function POST(request: Request) {
       {
         ok: false,
         error: 'SERVER_AUTH_CONFIG_MISSING',
-        message: 'Autenticacao indisponivel no servidor.',
+        message: 'Nao foi possivel preparar o upload agora. Tente novamente em instantes.',
       },
       { status: 500 },
     )
@@ -146,7 +147,7 @@ export async function POST(request: Request) {
       {
         ok: false,
         error: 'UNAUTHORIZED',
-        message: 'Voce precisa estar logado para enviar midia.',
+        message: 'Faca login novamente para publicar.',
       },
       { status: 401 },
     )
@@ -205,7 +206,7 @@ export async function POST(request: Request) {
         ok: false,
         error: 'INVALID_FILE_TYPE',
         message: looksLikeVideoUpload(body.contentType, body.fileName)
-          ? 'Formato de video nao aceito. Use MP4, WebM ou MOV.'
+          ? 'Formato nao aceito. Use MP4, WebM ou MOV para videos.'
           : 'Formato nao permitido. Use JPG, PNG, WEBP ou GIF.',
       },
       { status: 415 },
@@ -235,7 +236,7 @@ export async function POST(request: Request) {
         ok: false,
         error: 'FILE_TOO_LARGE',
         message: isAllowedVideoMimeType(contentType)
-          ? 'Este video esta muito pesado. Tente enviar um video menor ou comprimido.'
+          ? 'Este video esta muito pesado. Envie um video menor ou comprimido.'
           : contentType === 'image/gif'
             ? 'GIF muito grande. O limite atual e 5 MB.'
           : 'Imagem muito grande. O limite atual e 5 MB.',
@@ -315,7 +316,8 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         ok: false,
-        error: 'Nao foi possivel preparar o upload para o R2.',
+        error: 'R2_PRESIGN_FAILED',
+        message: 'Nao foi possivel preparar o upload agora. Tente novamente em instantes.',
       },
       { status: 502 },
     )

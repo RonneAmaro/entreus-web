@@ -160,6 +160,23 @@ Resultado esperado:
 - O endpoint `/api/r2/presign` exige usuario autenticado, tipo permitido, tamanho valido e folder aceito.
 - Upload valido segue sem mexer em CORS, bucket ou credenciais.
 
+## Testes de erro e instabilidade
+
+1. Simule internet ruim ou queda de conexao antes de publicar uma midia.
+2. Confirme que falha de presign mostra `Nao foi possivel preparar o upload agora. Tente novamente em instantes.`.
+3. Confirme que falha no PUT para R2 mostra `Nao foi possivel enviar a midia agora. Verifique sua conexao e tente novamente.`.
+4. Expire a sessao, remova o login em outra aba ou teste sem login e tente publicar.
+5. Confirme que a falha de sessao mostra `Faca login novamente para publicar.`.
+6. Tente anexar video acima de 30 MB.
+7. Confirme que aparece `Este video esta muito pesado. Envie um video menor ou comprimido.`.
+8. Tente anexar formato de video nao aceito, como OGG.
+9. Confirme que aparece `Formato nao aceito. Use MP4, WebM ou MOV para videos.`.
+10. Force uma falha de otimizacao ou use navegador sem suporte suficiente.
+11. Confirme que aparece `Nao foi possivel otimizar o video, mas ele ainda pode ser enviado se estiver dentro dos limites.`.
+12. Simule indisponibilidade do Supabase ao salvar o post.
+13. Confirme que a tela mostra `Nao foi possivel publicar agora. Tente novamente em instantes.` e nao exibe stack trace, URL assinada, token, segredo ou erro tecnico bruto.
+14. Confirme que as midias anexadas permanecem no composer quando a falha nao exige limpeza.
+
 ## Checklist de Regressao
 
 - [ ] Feed carrega.
@@ -180,6 +197,7 @@ Resultado esperado:
 - [ ] Fallback de compressao nao bloqueia original valido.
 - [ ] Presign recebe `contentType` e `fileSize`.
 - [ ] PUT para R2 conclui para midia valida.
+- [ ] Falhas de upload/postagem mostram mensagens amigaveis, sem erro tecnico bruto.
 - [ ] Links externos continuam funcionando.
 - [ ] `npm.cmd run build` passa apos os testes.
 

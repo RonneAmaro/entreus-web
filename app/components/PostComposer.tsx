@@ -191,7 +191,7 @@ function isGif(file: File) {
 }
 
 function getVideoSizeError() {
-  return 'Este video esta muito pesado. Tente enviar um video menor ou comprimido.'
+  return 'Este video esta muito pesado. Envie um video menor ou comprimido.'
 }
 
 function getVideoOptimizationMessage(originalSize: number, compressedSize: number) {
@@ -378,7 +378,7 @@ export default function PostComposer({
       if (!fileIsImage && !fileIsVideo) {
         setError(
           looksLikeVideoUpload(file.type, file.name)
-            ? 'Formato de video nao aceito. Use MP4, WebM ou MOV.'
+            ? 'Formato nao aceito. Use MP4, WebM ou MOV para videos.'
             : 'Formato nao permitido. Use JPG, PNG, WEBP ou GIF.',
         )
         continue
