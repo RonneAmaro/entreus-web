@@ -62,6 +62,8 @@ A economia depende do video, do navegador, do aparelho e do carregamento do FFmp
 
 ## Como testar
 
+O roteiro completo de auditoria manual fica em `docs/teste-upload-inteligente-video.md`.
+
 1. Publicar um post apenas com texto.
 2. Anexar e publicar uma imagem JPEG/PNG/WebP/GIF menor que 5 MB.
 3. Anexar e publicar um MP4, WebM ou MOV menor que 30 MB e com ate 60 segundos.
