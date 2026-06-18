@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "media:migration:dry-run": "node scripts/audit-media-migration-to-r2.js",
+    "media:migration:extended-dry-run": "node scripts/audit-media-extended-to-r2.js",
     "lint": "eslint"
   },
   "dependencies": {
