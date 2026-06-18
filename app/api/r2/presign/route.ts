@@ -13,7 +13,17 @@ import {
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-const ACCEPTED_FOLDERS = new Set(['posts', 'comments'])
+type R2UploadFolder = 'posts' | 'comments' | 'profiles/avatars' | 'profiles/banners'
+
+const ACCEPTED_FOLDERS = new Set<R2UploadFolder>([
+  'posts',
+  'comments',
+  'profiles/avatars',
+  'profiles/banners',
+])
+const PROFILE_IMAGE_CONTENT_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
+const PROFILE_AVATAR_MAX_SIZE_BYTES = 5 * 1024 * 1024
+const PROFILE_BANNER_MAX_SIZE_BYTES = 10 * 1024 * 1024
 const PRESIGNED_URL_EXPIRES_IN_SECONDS = 60
 const RATE_LIMIT_WINDOW_MS = 60 * 1000
 const RATE_LIMIT_MAX_REQUESTS = 20
@@ -67,16 +77,36 @@ function getFolder(value: unknown) {
   if (typeof value !== 'string') return null
 
   const folder = value.trim()
-  if (!folder || folder.includes('/') || folder.includes('\\') || folder.includes('..')) return null
+  if (!folder || folder.includes('\\') || folder.includes('..')) return null
 
-  return ACCEPTED_FOLDERS.has(folder) ? folder : null
+  return ACCEPTED_FOLDERS.has(folder as R2UploadFolder) ? (folder as R2UploadFolder) : null
 }
 
-function buildObjectKey(folder: string, userId: string, contentType: string) {
+function buildObjectKey(folder: R2UploadFolder, userId: string, contentType: string) {
   const timestamp = Date.now()
   const extension = UPLOAD_EXTENSION_BY_MIME_TYPE[contentType] || 'bin'
 
   return `${folder}/${userId}/${timestamp}-${crypto.randomUUID()}.${extension}`
+}
+
+function isProfileMediaFolder(folder: R2UploadFolder) {
+  return folder === 'profiles/avatars' || folder === 'profiles/banners'
+}
+
+function getMaxFileSize(folder: R2UploadFolder, contentType: string) {
+  if (folder === 'profiles/avatars') return PROFILE_AVATAR_MAX_SIZE_BYTES
+  if (folder === 'profiles/banners') return PROFILE_BANNER_MAX_SIZE_BYTES
+  return getUploadMaxSizeBytes(contentType)
+}
+
+function getFileTooLargeMessage(folder: R2UploadFolder, contentType: string) {
+  if (folder === 'profiles/avatars') return 'Avatar muito grande. O limite atual e 5 MB.'
+  if (folder === 'profiles/banners') return 'Banner muito grande. O limite atual e 10 MB.'
+  return isAllowedVideoMimeType(contentType)
+    ? 'Este video esta muito pesado. Envie um video menor ou comprimido.'
+    : contentType === 'image/gif'
+      ? 'GIF muito grande. O limite atual e 5 MB.'
+    : 'Imagem muito grande. O limite atual e 5 MB.'
 }
 
 function normalizeContentType(contentType: unknown, fileName: string) {
@@ -200,12 +230,25 @@ export async function POST(request: Request) {
     folder,
   })
 
-  if (!contentType) {
+  if (!folder) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: 'INVALID_FOLDER',
+        message: 'Pasta de upload invalida.',
+      },
+      { status: 400 },
+    )
+  }
+
+  if (!contentType || (folder && isProfileMediaFolder(folder) && !PROFILE_IMAGE_CONTENT_TYPES.has(contentType))) {
     return NextResponse.json(
       {
         ok: false,
         error: 'INVALID_FILE_TYPE',
-        message: looksLikeVideoUpload(body.contentType, body.fileName)
+        message: folder && isProfileMediaFolder(folder)
+          ? 'Formato nao permitido. Use JPG, PNG ou WEBP.'
+          : looksLikeVideoUpload(body.contentType, body.fileName)
           ? 'Formato nao aceito. Use MP4, WebM ou MOV para videos.'
           : 'Formato nao permitido. Use JPG, PNG, WEBP ou GIF.',
       },
@@ -228,31 +271,16 @@ export async function POST(request: Request) {
     )
   }
 
-  const maxFileSize = getUploadMaxSizeBytes(contentType)
+  const maxFileSize = getMaxFileSize(folder, contentType)
 
   if (!maxFileSize || body.fileSize > maxFileSize) {
     return NextResponse.json(
       {
         ok: false,
         error: 'FILE_TOO_LARGE',
-        message: isAllowedVideoMimeType(contentType)
-          ? 'Este video esta muito pesado. Envie um video menor ou comprimido.'
-          : contentType === 'image/gif'
-            ? 'GIF muito grande. O limite atual e 5 MB.'
-          : 'Imagem muito grande. O limite atual e 5 MB.',
+        message: getFileTooLargeMessage(folder, contentType),
       },
       { status: 413 },
-    )
-  }
-
-  if (!folder) {
-    return NextResponse.json(
-      {
-        ok: false,
-        error: 'INVALID_FOLDER',
-        message: 'Pasta de upload invalida.',
-      },
-      { status: 400 },
     )
   }
 

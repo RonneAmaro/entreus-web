@@ -8,6 +8,9 @@
     "start": "next start",
     "media:migration:dry-run": "node scripts/audit-media-migration-to-r2.js",
     "media:migration:extended-dry-run": "node scripts/audit-media-extended-to-r2.js",
+    "profile-media:migrate:dry-run": "node scripts/migrate-profile-media-to-r2.js --dry-run",
+    "profile-media:migrate:execute": "node scripts/migrate-profile-media-to-r2.js --execute",
+    "profile-media:migrate:repair-db": "node scripts/migrate-profile-media-to-r2.js --repair-db",
     "lint": "eslint"
   },
   "dependencies": {

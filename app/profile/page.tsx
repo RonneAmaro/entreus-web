@@ -110,6 +110,23 @@ type ParentalConsentRequest = {
   created_at: string
 }
 
+type ProfileMediaKind = 'avatar' | 'banner'
+
+type ProfileMediaPresignData = {
+  ok?: boolean
+  uploadUrl?: string
+  publicUrl?: string
+  key?: string
+  contentType?: string
+  message?: string
+  error?: string
+}
+
+const PROFILE_MEDIA_FOLDERS: Record<ProfileMediaKind, string> = {
+  avatar: 'profiles/avatars',
+  banner: 'profiles/banners',
+}
+
 
 function getDateLocale(language: string) {
   const locales: Record<string, string> = {
@@ -410,6 +427,107 @@ export default function ProfilePage() {
     }
 
     setMessage(result.message || 'Nao foi possivel enviar automaticamente agora.')
+  }
+
+  async function getR2UploadAuthHeaders() {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+
+    if (!session?.access_token) {
+      setMessage('Entre novamente para enviar a imagem.')
+      return null
+    }
+
+    return {
+      Authorization: `Bearer ${session.access_token}`,
+      'Content-Type': 'application/json',
+    }
+  }
+
+  function isValidProfileMediaPresignData(
+    data: ProfileMediaPresignData | null,
+    file: File,
+    folder: string,
+  ) {
+    return Boolean(
+      data?.ok &&
+        typeof data.uploadUrl === 'string' &&
+        typeof data.publicUrl === 'string' &&
+        typeof data.key === 'string' &&
+        data.key.startsWith(`${folder}/${userId}/`) &&
+        data.contentType === file.type,
+    )
+  }
+
+  async function uploadProfileMediaToR2(file: File, kind: ProfileMediaKind) {
+    const folder = PROFILE_MEDIA_FOLDERS[kind]
+    const authHeaders = await getR2UploadAuthHeaders()
+
+    if (!authHeaders) return null
+
+    try {
+      const presignResponse = await fetch('/api/r2/presign', {
+        method: 'POST',
+        headers: authHeaders,
+        body: JSON.stringify({
+          fileName: file.name,
+          contentType: file.type,
+          fileSize: file.size,
+          folder,
+        }),
+      })
+
+      const presignData = (await presignResponse.json().catch(() => null)) as ProfileMediaPresignData | null
+
+      if (!presignResponse.ok || !isValidProfileMediaPresignData(presignData, file, folder)) {
+        setMessage(
+          presignData?.message ||
+            (kind === 'avatar'
+              ? t('profile.messages.uploadAvatarError')
+              : t('profile.messages.uploadBannerError')),
+        )
+        return null
+      }
+
+      const uploadUrl = presignData?.uploadUrl
+      const publicUrl = presignData?.publicUrl
+
+      if (typeof uploadUrl !== 'string' || typeof publicUrl !== 'string') {
+        setMessage(
+          kind === 'avatar'
+            ? t('profile.messages.uploadAvatarError')
+            : t('profile.messages.uploadBannerError'),
+        )
+        return null
+      }
+
+      const uploadResponse = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': file.type,
+        },
+        body: file,
+      })
+
+      if (!uploadResponse.ok) {
+        setMessage(
+          kind === 'avatar'
+            ? t('profile.messages.uploadAvatarError')
+            : t('profile.messages.uploadBannerError'),
+        )
+        return null
+      }
+
+      return publicUrl
+    } catch {
+      setMessage(
+        kind === 'avatar'
+          ? t('profile.messages.uploadAvatarError')
+          : t('profile.messages.uploadBannerError'),
+      )
+      return null
+    }
   }
 
   function sanitizeUsername(value: string) {
@@ -720,28 +838,15 @@ export default function ProfilePage() {
     const previewUrl = URL.createObjectURL(file)
     setAvatarPreview(previewUrl)
 
-    const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg'
-    const filePath = `${userId}/avatar-${Date.now()}.${fileExt}`
+    const publicUrl = await uploadProfileMediaToR2(file, 'avatar')
 
-    const { error: uploadError } = await supabase.storage
-      .from('avatars')
-      .upload(filePath, file, {
-        cacheControl: '3600',
-        upsert: true,
-      })
-
-    if (uploadError) {
-      setMessage(t('profile.messages.uploadAvatarError') + uploadError.message)
+    if (!publicUrl) {
       setUploadingAvatar(false)
       return
     }
 
-    const { data: publicUrlData } = supabase.storage
-      .from('avatars')
-      .getPublicUrl(filePath)
-
-    setAvatarUrl(publicUrlData.publicUrl)
-    setAvatarPreview(publicUrlData.publicUrl)
+    setAvatarUrl(publicUrl)
+    setAvatarPreview(publicUrl)
     setUploadingAvatar(false)
     setMessage(t('profile.messages.avatarUpdated'))
   }
@@ -769,28 +874,15 @@ export default function ProfilePage() {
     const previewUrl = URL.createObjectURL(file)
     setBannerPreview(previewUrl)
 
-    const fileExt = file.name.split('.').pop()?.toLowerCase() || 'jpg'
-    const filePath = `${userId}/banner-${Date.now()}.${fileExt}`
+    const publicUrl = await uploadProfileMediaToR2(file, 'banner')
 
-    const { error: uploadError } = await supabase.storage
-      .from('profile-banners')
-      .upload(filePath, file, {
-        cacheControl: '3600',
-        upsert: true,
-      })
-
-    if (uploadError) {
-      setMessage(t('profile.messages.uploadBannerError') + uploadError.message)
+    if (!publicUrl) {
       setUploadingBanner(false)
       return
     }
 
-    const { data: publicUrlData } = supabase.storage
-      .from('profile-banners')
-      .getPublicUrl(filePath)
-
-    setBannerUrl(publicUrlData.publicUrl)
-    setBannerPreview(publicUrlData.publicUrl)
+    setBannerUrl(publicUrl)
+    setBannerPreview(publicUrl)
     setUploadingBanner(false)
     setMessage(t('profile.messages.bannerUpdated'))
   }

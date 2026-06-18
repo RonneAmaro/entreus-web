@@ -1,4 +1,4 @@
-export const R2_MEDIA_PREFIXES = ['posts/', 'comments/'] as const
+export const R2_MEDIA_PREFIXES = ['posts/', 'comments/', 'profiles/avatars/', 'profiles/banners/'] as const
 
 export type R2MediaPrefix = (typeof R2_MEDIA_PREFIXES)[number]
 
