@@ -12,6 +12,9 @@
     "profile-media:migrate:execute": "node scripts/migrate-profile-media-to-r2.js --execute",
     "profile-media:migrate:repair-db": "node scripts/migrate-profile-media-to-r2.js --repair-db",
     "watchdog:supabase-r2": "node scripts/watchdog-supabase-r2.js",
+    "env:audit": "node scripts/env-local-maintenance.js --audit",
+    "env:normalize:dry-run": "node scripts/env-local-maintenance.js --normalize --dry-run",
+    "env:normalize:write": "node scripts/env-local-maintenance.js --normalize --write",
     "lint": "eslint"
   },
   "dependencies": {
