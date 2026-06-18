@@ -68,4 +68,62 @@ Sugestao futura:
 
 ## E-mail
 
-O script detecta se `RESEND_API_KEY` e `WATCHDOG_ALERT_EMAIL` existem, mas nao envia e-mail neste pacote para evitar dependencia nova e manter a execucao simples. Essa integracao pode ser adicionada depois com o provedor oficial do projeto.
+O watchdog envia alerta por e-mail via API HTTP da Resend usando `fetch`, sem dependencia nova.
+
+Variaveis esperadas:
+
+- `RESEND_API_KEY`
+- `WATCHDOG_ALERT_EMAIL`
+- `WATCHDOG_ALERT_FROM` opcional; se ausente, o script tenta `EMAIL_FROM` e depois usa o remetente padrao de teste da Resend.
+- `WATCHDOG_ALERT_COOLDOWN_HOURS` opcional; padrao: `12`.
+
+Configure essas variaveis manualmente no ambiente local/servidor. Nao inclua secrets em commits.
+
+O e-mail e enviado somente quando o status geral for `warning` ou `critical`. Quando o status for `ok`, o bloco `emailAlert` do JSON informa que o alerta foi pulado.
+
+Para testar envio mesmo com status `ok`:
+
+```powershell
+npm.cmd run watchdog:supabase-r2 -- --test-email
+```
+
+No modo de teste, o assunto e:
+
+```text
+[EntreUS Watchdog] Teste de alerta
+```
+
+O teste ignora cooldown.
+
+## Cooldown
+
+Para evitar spam, o watchdog grava estado local em:
+
+- `reports/supabase-r2-watchdog-alert-state.json`
+
+O fingerprint do alerta usa:
+
+- status geral;
+- candidatos Supabase Storage;
+- quantidade de warnings;
+- status de saude do Supabase;
+- R2 completo/incompleto.
+
+Se o mesmo alerta ja foi enviado dentro do cooldown, o script nao envia novamente e registra o motivo em `emailAlert`.
+
+## Conteudo do E-mail
+
+O e-mail contem apenas um resumo operacional:
+
+- status geral;
+- data/hora;
+- saude do Supabase;
+- candidatos Supabase Storage;
+- referencias R2;
+- URLs externas;
+- local public;
+- warnings;
+- acao recomendada;
+- caminhos locais dos relatorios JSON e Markdown.
+
+O e-mail nao inclui secrets, signed URLs ou listas completas de URLs. O relatorio JSON mascara o e-mail de destino.

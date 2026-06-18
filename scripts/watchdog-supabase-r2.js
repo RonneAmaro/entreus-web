@@ -11,11 +11,14 @@
 
 const fs = require('node:fs')
 const path = require('node:path')
+const { createHash } = require('node:crypto')
 const { spawnSync } = require('node:child_process')
 
 const JSON_REPORT_PATH = path.join(process.cwd(), 'reports', 'supabase-r2-watchdog.json')
 const MARKDOWN_REPORT_PATH = path.join(process.cwd(), 'reports', 'supabase-r2-watchdog.md')
 const EXTENDED_AUDIT_REPORT_PATH = path.join(process.cwd(), 'reports', 'media-migration-extended-dry-run.json')
+const ALERT_STATE_PATH = path.join(process.cwd(), 'reports', 'supabase-r2-watchdog-alert-state.json')
+const RESEND_EMAILS_API_URL = 'https://api.resend.com/emails'
 const REQUIRED_R2_ENV_KEYS = [
   'R2_ACCOUNT_ID',
   'R2_ACCESS_KEY_ID',
@@ -26,6 +29,8 @@ const REQUIRED_R2_ENV_KEYS = [
 const PUBLIC_AREAS = ['public-profiles', 'public-posts', 'public-comments']
 const SUPABASE_HEALTH_TIMEOUT_MS = 15000
 const EXTENDED_AUDIT_TIMEOUT_MS = 90000
+const RESEND_TIMEOUT_MS = 15000
+const DEFAULT_ALERT_COOLDOWN_HOURS = 12
 
 function loadEnvFile(filePath) {
   if (!fs.existsSync(filePath)) return
@@ -58,6 +63,7 @@ function loadEnvFile(filePath) {
 function sanitizeMessage(message) {
   return String(message || 'Erro inesperado.')
     .replace(/https?:\/\/[^\s)]+/gi, '[url-redacted]')
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[email-redacted]')
     .replace(/\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+/gi, '$1 [redacted]')
     .replace(/\b(token|key|secret|signature|apikey|access_token)=([^&\s]+)/gi, '$1=[redacted]')
     .slice(0, 600)
@@ -82,6 +88,60 @@ function getR2ConfigPresence() {
     missing: Object.entries(variables)
       .filter(([, present]) => !present)
       .map(([key]) => key),
+  }
+}
+
+function isTestEmailMode() {
+  return process.argv.includes('--test-email')
+}
+
+function getPositiveNumber(value, fallback) {
+  const parsed = Number.parseFloat(String(value || ''))
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+}
+
+function getEmailAddress(value) {
+  const raw = String(value || '').trim()
+  const angleMatch = raw.match(/<([^<>\s@]+@[^<>\s@]+)>/)
+  if (angleMatch) return angleMatch[1]
+
+  const emailMatch = raw.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)
+  return emailMatch ? emailMatch[0] : ''
+}
+
+function maskEmail(value) {
+  const email = getEmailAddress(value).toLowerCase()
+  const [local, domain] = email.split('@')
+
+  if (!local || !domain) return '[redacted-email]'
+
+  const domainParts = domain.split('.')
+  const domainName = domainParts.shift() || ''
+  const tld = domainParts.join('.')
+  const maskedLocal = local.length <= 2 ? `${local.slice(0, 1) || '*'}***` : `${local[0]}***${local.slice(-1)}`
+  const maskedDomain = `${domainName.slice(0, 1) || '*'}***${tld ? `.${tld}` : ''}`
+
+  return `${maskedLocal}@${maskedDomain}`
+}
+
+function getEmailAlertConfig() {
+  const cooldownHours = getPositiveNumber(
+    process.env.WATCHDOG_ALERT_COOLDOWN_HOURS,
+    DEFAULT_ALERT_COOLDOWN_HOURS,
+  )
+  const resendApiKey = process.env.RESEND_API_KEY || ''
+  const to = process.env.WATCHDOG_ALERT_EMAIL || ''
+  const from =
+    process.env.WATCHDOG_ALERT_FROM ||
+    process.env.EMAIL_FROM ||
+    'EntreUS Watchdog <onboarding@resend.dev>'
+
+  return {
+    configured: Boolean(resendApiKey && to),
+    resendApiKey,
+    to,
+    from,
+    cooldownHours,
   }
 }
 
@@ -323,17 +383,252 @@ function classifySeverity({ supabaseHealth, r2Config, auditRun, auditSummary }) 
   return { severity, alerts }
 }
 
-function getEmailAlertStatus(severity) {
-  const configured = Boolean(process.env.RESEND_API_KEY && process.env.WATCHDOG_ALERT_EMAIL)
+function buildSummary({ supabaseHealth, r2Config, auditSummary }) {
+  const totals = auditSummary.totals.byClassification
 
   return {
-    configured,
+    totalAnalyzed: auditSummary.totals.scanned,
+    supabaseStorageCandidates: totals['supabase-storage'] || 0,
+    cloudflareR2: totals['cloudflare-r2'] || 0,
+    externalUrls: totals['external-url'] || 0,
+    localPublic: totals['local-public'] || 0,
+    warnings: auditSummary.warningsCount,
+    supabaseHealth: supabaseHealth.status,
+    r2ConfigComplete: r2Config.complete,
+  }
+}
+
+function createAlertFingerprint(report) {
+  const payload = {
+    status: report.status,
+    supabaseStorageCandidates: report.summary.supabaseStorageCandidates,
+    warnings: report.summary.warnings,
+    supabaseHealthStatus: report.supabaseHealth.status,
+    r2ConfigComplete: report.r2Config.complete,
+  }
+
+  return createHash('sha256').update(JSON.stringify(payload)).digest('hex')
+}
+
+function readAlertState() {
+  if (!fs.existsSync(ALERT_STATE_PATH)) return null
+
+  try {
+    return JSON.parse(fs.readFileSync(ALERT_STATE_PATH, 'utf8'))
+  } catch (error) {
+    return {
+      unreadable: true,
+      error: sanitizeMessage(error instanceof Error ? error.message : 'Nao foi possivel ler estado de alerta.'),
+    }
+  }
+}
+
+function writeAlertState(state) {
+  fs.mkdirSync(path.dirname(ALERT_STATE_PATH), { recursive: true })
+  fs.writeFileSync(ALERT_STATE_PATH, `${JSON.stringify(state, null, 2)}\n`, 'utf8')
+}
+
+function getCooldownStatus(state, fingerprint, cooldownHours, nowMs) {
+  if (!state || state.unreadable || state.fingerprint !== fingerprint || !state.sentAt) {
+    return { active: false }
+  }
+
+  const sentAtMs = Date.parse(state.sentAt)
+  if (!Number.isFinite(sentAtMs)) {
+    return { active: false }
+  }
+
+  const cooldownMs = cooldownHours * 60 * 60 * 1000
+  const elapsedMs = nowMs - sentAtMs
+
+  if (elapsedMs >= cooldownMs) {
+    return { active: false }
+  }
+
+  return {
+    active: true,
+    cooldownUntil: new Date(sentAtMs + cooldownMs).toISOString(),
+  }
+}
+
+function getRecommendedAction(report, testEmail) {
+  if (testEmail) return 'Teste manual solicitado; nenhuma acao operacional e necessaria se o status estiver ok.'
+
+  const criticalAlert = report.alerts.find((alert) => alert.severity === 'critical')
+  const firstAlert = criticalAlert || report.alerts[0]
+
+  return firstAlert?.action || 'Nenhuma acao recomendada no momento.'
+}
+
+function buildEmailSubject(status, testEmail) {
+  if (testEmail) return '[EntreUS Watchdog] Teste de alerta'
+  if (status === 'critical') return '[EntreUS Watchdog] CRITICAL - ação necessária'
+  return '[EntreUS Watchdog] WARNING - verificar Supabase/R2'
+}
+
+function buildEmailText(report, testEmail) {
+  const summary = report.summary
+  const action = getRecommendedAction(report, testEmail)
+
+  return [
+    'EntreUS Supabase/R2 Watchdog',
+    '',
+    `Status geral: ${report.status.toUpperCase()}${testEmail ? ' (teste)' : ''}`,
+    `Gerado em: ${report.generatedAt}`,
+    `Supabase health: ${report.supabaseHealth.status}`,
+    `HTTP status Supabase: ${report.supabaseHealth.httpStatus ?? 'n/a'}`,
+    `Supabase Storage candidates: ${summary.supabaseStorageCandidates}`,
+    `Cloudflare R2 references: ${summary.cloudflareR2}`,
+    `External URLs: ${summary.externalUrls}`,
+    `Local public: ${summary.localPublic}`,
+    `Warnings: ${summary.warnings}`,
+    `R2 config completa: ${summary.r2ConfigComplete ? 'sim' : 'nao'}`,
+    '',
+    `Acao recomendada: ${action}`,
+    '',
+    'Relatorios locais:',
+    `- ${report.reports.json}`,
+    `- ${report.reports.markdown}`,
+    '',
+    'Este e-mail nao inclui secrets, signed URLs ou listas completas de URLs.',
+  ].join('\n')
+}
+
+async function sendResendAlert({ resendApiKey, from, to, subject, text }) {
+  let timeout = null
+
+  try {
+    const controller = new AbortController()
+    timeout = setTimeout(() => controller.abort(), RESEND_TIMEOUT_MS)
+    const response = await fetch(RESEND_EMAILS_API_URL, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        Authorization: `Bearer ${resendApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from,
+        to,
+        subject,
+        text,
+      }),
+    })
+    clearTimeout(timeout)
+    timeout = null
+
+    if (!response.ok) {
+      const responseText = await response.text().catch(() => '')
+      return {
+        sent: false,
+        statusCode: response.status,
+        error: sanitizeMessage(responseText || response.statusText),
+      }
+    }
+
+    return {
+      sent: true,
+      statusCode: response.status,
+    }
+  } catch (error) {
+    const timedOut = error instanceof Error && error.name === 'AbortError'
+
+    return {
+      sent: false,
+      statusCode: null,
+      error: timedOut
+        ? `Timeout de ${RESEND_TIMEOUT_MS}ms ao enviar alerta pela Resend.`
+        : sanitizeMessage(error instanceof Error ? error.message : 'Falha ao enviar alerta pela Resend.'),
+    }
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout)
+    }
+  }
+}
+
+async function getEmailAlertStatus(report, { testEmail }) {
+  const config = getEmailAlertConfig()
+  const base = {
+    configured: config.configured,
     attempted: false,
     sent: false,
-    reason: configured
-      ? 'Envio de e-mail nao implementado neste pacote para evitar dependencia nova.'
-      : 'RESEND_API_KEY e WATCHDOG_ALERT_EMAIL nao estao ambos configurados.',
-    wouldSend: configured && severity !== 'ok',
+    provider: 'resend',
+    testEmail,
+    cooldownHours: config.cooldownHours,
+  }
+
+  if (!config.configured) {
+    return {
+      configured: false,
+      attempted: false,
+      sent: false,
+      reason: 'WATCHDOG_ALERT_EMAIL ou RESEND_API_KEY ausente',
+      testEmail,
+      cooldownHours: config.cooldownHours,
+    }
+  }
+
+  const destination = maskEmail(config.to)
+  const shouldSend = testEmail || report.status === 'warning' || report.status === 'critical'
+
+  if (!shouldSend) {
+    return {
+      ...base,
+      to: destination,
+      reason: 'Status ok; alerta nao enviado',
+    }
+  }
+
+  const fingerprint = createAlertFingerprint(report)
+
+  if (!testEmail) {
+    const state = readAlertState()
+    const cooldown = getCooldownStatus(state, fingerprint, config.cooldownHours, Date.now())
+
+    if (cooldown.active) {
+      return {
+        ...base,
+        to: destination,
+        fingerprint,
+        cooldownUntil: cooldown.cooldownUntil,
+        reason: `Mesmo alerta ja enviado dentro do cooldown de ${config.cooldownHours}h`,
+      }
+    }
+  }
+
+  const subject = buildEmailSubject(report.status, testEmail)
+  const result = await sendResendAlert({
+    resendApiKey: config.resendApiKey,
+    from: config.from,
+    to: config.to,
+    subject,
+    text: buildEmailText(report, testEmail),
+  })
+
+  if (result.sent && !testEmail) {
+    writeAlertState({
+      updatedAt: new Date().toISOString(),
+      sentAt: new Date().toISOString(),
+      fingerprint,
+      status: report.status,
+      cooldownHours: config.cooldownHours,
+      provider: 'resend',
+      to: destination,
+    })
+  }
+
+  return {
+    ...base,
+    attempted: true,
+    sent: result.sent,
+    to: destination,
+    from: maskEmail(config.from),
+    subject,
+    fingerprint,
+    statusCode: result.statusCode,
+    reason: result.sent ? 'Alerta enviado pela Resend' : 'Falha ao enviar alerta pela Resend',
+    ...(result.error ? { error: result.error } : {}),
   }
 }
 
@@ -382,7 +677,18 @@ function buildMarkdownReport(report) {
     }
   }
 
+  const emailAlert = report.emailAlert || {}
+
   lines.push(
+    '',
+    '## E-mail',
+    '',
+    `- Configurado: ${emailAlert.configured ? 'sim' : 'nao'}`,
+    `- Tentou enviar: ${emailAlert.attempted ? 'sim' : 'nao'}`,
+    `- Enviado: ${emailAlert.sent ? 'sim' : 'nao'}`,
+    `- Teste: ${emailAlert.testEmail ? 'sim' : 'nao'}`,
+    `- Destino: ${emailAlert.to || 'n/a'}`,
+    `- Motivo: ${emailAlert.reason || 'n/a'}`,
     '',
     '## Quota',
     '',
@@ -417,6 +723,7 @@ function printConsoleSummary(report) {
   console.log(`Supabase Storage candidates: ${totals['supabase-storage'] || 0}`)
   console.log(`R2 references: ${totals['cloudflare-r2'] || 0}`)
   console.log(`Warnings: ${report.audit.warningsCount}`)
+  console.log(`Email alert: ${report.emailAlert.sent ? 'sent' : report.emailAlert.attempted ? 'attempted' : 'skipped'}`)
   if (action) {
     console.log(`Action: ${action}`)
   }
@@ -424,6 +731,8 @@ function printConsoleSummary(report) {
 }
 
 async function main() {
+  const testEmail = isTestEmailMode()
+
   loadEnvFile(path.join(process.cwd(), '.env.local'))
 
   const supabaseHealth = await checkSupabaseHealth()
@@ -435,6 +744,11 @@ async function main() {
     supabaseHealth,
     r2Config,
     auditRun,
+    auditSummary,
+  })
+  const summary = buildSummary({
+    supabaseHealth,
+    r2Config,
     auditSummary,
   })
   const usageQuota = {
@@ -457,15 +771,38 @@ async function main() {
     supabaseHealth,
     r2Config,
     auditRun,
+    summary,
     audit: auditSummary,
     usageQuota,
-    emailAlert: getEmailAlertStatus(severity),
+    emailAlert: {
+      configured: false,
+      attempted: false,
+      sent: false,
+      reason: 'Avaliacao de e-mail ainda nao concluida.',
+    },
     alerts,
     reports: {
       json: path.relative(process.cwd(), JSON_REPORT_PATH),
       markdown: path.relative(process.cwd(), MARKDOWN_REPORT_PATH),
       extendedAudit: path.relative(process.cwd(), EXTENDED_AUDIT_REPORT_PATH),
+      alertState: path.relative(process.cwd(), ALERT_STATE_PATH),
     },
+  }
+
+  try {
+    report.emailAlert = await getEmailAlertStatus(report, { testEmail })
+  } catch (emailError) {
+    const config = getEmailAlertConfig()
+    report.emailAlert = {
+      configured: config.configured,
+      attempted: false,
+      sent: false,
+      provider: 'resend',
+      testEmail,
+      cooldownHours: config.cooldownHours,
+      reason: 'Falha ao avaliar envio de alerta.',
+      error: sanitizeMessage(emailError instanceof Error ? emailError.message : 'Erro inesperado no alerta.'),
+    }
   }
 
   writeReports(report)
@@ -478,7 +815,19 @@ async function main() {
   }
 }
 
-main().catch((error) => {
+main().catch(async (error) => {
+  const testEmail = isTestEmailMode()
+
+  loadEnvFile(path.join(process.cwd(), '.env.local'))
+
+  const supabaseHealth = {
+    status: 'error',
+    httpStatus: null,
+    message: sanitizeMessage(error instanceof Error ? error.message : 'Falha inesperada no watchdog.'),
+  }
+  const r2Config = getR2ConfigPresence()
+  const auditSummary = extractAuditSummary({ error: 'Watchdog falhou antes de concluir auditoria.' })
+
   const report = {
     generatedAt: new Date().toISOString(),
     status: 'critical',
@@ -488,14 +837,15 @@ main().catch((error) => {
       deletesFiles: false,
       printsSecrets: false,
     },
-    supabaseHealth: {
-      status: 'error',
-      httpStatus: null,
-      message: sanitizeMessage(error instanceof Error ? error.message : 'Falha inesperada no watchdog.'),
-    },
-    r2Config: getR2ConfigPresence(),
+    supabaseHealth,
+    r2Config,
     auditRun: null,
-    audit: extractAuditSummary({ error: 'Watchdog falhou antes de concluir auditoria.' }),
+    summary: buildSummary({
+      supabaseHealth,
+      r2Config,
+      auditSummary,
+    }),
+    audit: auditSummary,
     usageQuota: {
       available: false,
       reason: 'Uso real de quota Supabase ainda nao integrado neste pacote',
@@ -507,8 +857,7 @@ main().catch((error) => {
       configured: false,
       attempted: false,
       sent: false,
-      reason: 'Watchdog falhou antes de avaliar envio.',
-      wouldSend: false,
+      reason: 'Avaliacao de e-mail ainda nao concluida.',
     },
     alerts: [
       {
@@ -522,7 +871,24 @@ main().catch((error) => {
       json: path.relative(process.cwd(), JSON_REPORT_PATH),
       markdown: path.relative(process.cwd(), MARKDOWN_REPORT_PATH),
       extendedAudit: path.relative(process.cwd(), EXTENDED_AUDIT_REPORT_PATH),
+      alertState: path.relative(process.cwd(), ALERT_STATE_PATH),
     },
+  }
+
+  try {
+    report.emailAlert = await getEmailAlertStatus(report, { testEmail })
+  } catch (emailError) {
+    const config = getEmailAlertConfig()
+    report.emailAlert = {
+      configured: config.configured,
+      attempted: false,
+      sent: false,
+      provider: 'resend',
+      testEmail,
+      cooldownHours: config.cooldownHours,
+      reason: 'Falha ao avaliar envio de alerta.',
+      error: sanitizeMessage(emailError instanceof Error ? emailError.message : 'Erro inesperado no alerta.'),
+    }
   }
 
   writeReports(report)
