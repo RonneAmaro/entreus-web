@@ -11,6 +11,8 @@
     "profile-media:migrate:dry-run": "node scripts/migrate-profile-media-to-r2.js --dry-run",
     "profile-media:migrate:execute": "node scripts/migrate-profile-media-to-r2.js --execute",
     "profile-media:migrate:repair-db": "node scripts/migrate-profile-media-to-r2.js --repair-db",
+    "public-post-media:migrate:dry-run": "node scripts/migrate-public-post-media-to-r2.js --dry-run",
+    "public-post-media:migrate:execute": "node scripts/migrate-public-post-media-to-r2.js --execute",
     "watchdog:supabase-r2": "node scripts/watchdog-supabase-r2.js",
     "env:audit": "node scripts/env-local-maintenance.js --audit",
     "env:normalize:dry-run": "node scripts/env-local-maintenance.js --normalize --dry-run",
