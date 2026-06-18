@@ -11,6 +11,7 @@
     "profile-media:migrate:dry-run": "node scripts/migrate-profile-media-to-r2.js --dry-run",
     "profile-media:migrate:execute": "node scripts/migrate-profile-media-to-r2.js --execute",
     "profile-media:migrate:repair-db": "node scripts/migrate-profile-media-to-r2.js --repair-db",
+    "watchdog:supabase-r2": "node scripts/watchdog-supabase-r2.js",
     "lint": "eslint"
   },
   "dependencies": {
