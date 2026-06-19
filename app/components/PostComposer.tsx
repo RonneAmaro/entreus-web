@@ -31,6 +31,7 @@ import {
   POST_VIDEO_MAX_DURATION_SECONDS,
   VIDEO_UPLOAD_MAX_SIZE_BYTES,
   formatUploadBytes,
+  formatUploadLimitMegabytes,
   getAllowedUploadContentType,
   isAllowedImageMimeType,
   isAllowedVideoMimeType,
@@ -59,9 +60,15 @@ type VideoOptimizationInfo = {
   message: string
 }
 
+type PendingVideoCompression = {
+  file: File
+  replacementMediaId: string | null
+}
+
 type PostComposerProps = {
   userName: string
   userAvatarUrl?: string | null
+  videoUploadLimitBytes?: number
   submitting?: boolean
   onSubmit: (data: {
     content: string
@@ -190,8 +197,8 @@ function isGif(file: File) {
   return getEffectiveContentType(file) === 'image/gif'
 }
 
-function getVideoSizeError() {
-  return 'Este video esta muito pesado. Envie um video menor ou comprimido.'
+function getVideoSizeError(videoUploadLimitBytes: number) {
+  return `Seu limite atual e ${formatUploadLimitMegabytes(videoUploadLimitBytes)}. Tente comprimir o video antes de publicar. VIP/Anciao tem limites maiores.`
 }
 
 function getVideoOptimizationMessage(originalSize: number, compressedSize: number) {
@@ -249,6 +256,7 @@ function getMediaFeedbackClassName(type: MediaFeedback['type']) {
 export default function PostComposer({
   userName,
   userAvatarUrl,
+  videoUploadLimitBytes = VIDEO_UPLOAD_MAX_SIZE_BYTES,
   submitting = false,
   onSubmit,
 }: PostComposerProps) {
@@ -273,6 +281,7 @@ export default function PostComposer({
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [portalElement, setPortalElement] = useState<HTMLElement | null>(null)
   const [isOptimizingVideo, setIsOptimizingVideo] = useState(false)
+  const [pendingVideoCompression, setPendingVideoCompression] = useState<PendingVideoCompression | null>(null)
 
   const selectedCategory = useMemo(() => {
     return CATEGORY_OPTIONS.find((item) => item.value === category)
@@ -349,6 +358,7 @@ export default function PostComposer({
 
     setError('')
     setMediaFeedback(null)
+    setPendingVideoCompression(null)
     setShowMediaMenu(false)
 
     const currentMedia = [...media]
@@ -369,8 +379,7 @@ export default function PostComposer({
     const newMedia: MediaPreview[] = []
 
     for (const file of selectedFiles) {
-      let fileToAttach = file
-      let videoOptimization: VideoOptimizationInfo | undefined
+      const fileToAttach = file
       const contentType = getEffectiveContentType(file)
       const fileIsImage = Boolean(contentType && isAllowedImageMimeType(contentType))
       const fileIsVideo = Boolean(contentType && isAllowedVideoMimeType(contentType))
@@ -389,11 +398,6 @@ export default function PostComposer({
         continue
       }
 
-      if (fileIsVideo && file.size > VIDEO_UPLOAD_MAX_SIZE_BYTES) {
-        setError(getVideoSizeError())
-        continue
-      }
-
       if (fileIsVideo) {
         const duration = await readVideoDurationSeconds(file)
 
@@ -403,6 +407,24 @@ export default function PostComposer({
         }
       }
 
+      if (fileIsVideo && file.size > videoUploadLimitBytes) {
+        const sizeError = getVideoSizeError(videoUploadLimitBytes)
+        setError(sizeError)
+        setMediaFeedback({
+          type: 'warning',
+          message: sizeError,
+        })
+
+        if (canAttemptVideoCompression(file)) {
+          setPendingVideoCompression({
+            file,
+            replacementMediaId: replacementMedia?.id || null,
+          })
+        }
+
+        break
+      }
+
       if (fileIsVideo && file.size > HEAVY_VIDEO_WARNING_SIZE_BYTES) {
         setMediaFeedback({
           type: 'warning',
@@ -410,18 +432,11 @@ export default function PostComposer({
         })
       }
 
-      if (fileIsVideo) {
-        const optimizedVideo = await optimizeVideoForComposer(file)
-        fileToAttach = optimizedVideo.file
-        videoOptimization = optimizedVideo.videoOptimization
-      }
-
       newMedia.push({
         id: `${fileToAttach.name}-${fileToAttach.size}-${Date.now()}-${Math.random()}`,
         file: fileToAttach,
         url: URL.createObjectURL(fileToAttach),
         type: fileIsImage ? 'image' : 'video',
-        videoOptimization,
       })
     }
 
@@ -472,29 +487,36 @@ export default function PostComposer({
     })
   }
 
-  async function optimizeVideoForComposer(file: File): Promise<{
-    file: File
-    videoOptimization?: VideoOptimizationInfo
-  }> {
+  async function compressVideoForComposer(file: File) {
     if (!canAttemptVideoCompression(file)) {
       setMediaFeedback({
         type: 'warning',
-        message: 'Seu navegador nao permitiu otimizar o video automaticamente.',
+        message: 'Nao foi possivel comprimir neste dispositivo. Tente um video menor.',
       })
-      return { file }
+      return null
     }
 
     setIsOptimizingVideo(true)
     setMediaFeedback({
       type: 'info',
-      message: 'Otimizando video...',
+      message: 'Preparando video...',
     })
 
     try {
-      const result = await compressVideoForPost(file)
+      const result = await compressVideoForPost(file, {
+        targetMaxSizeBytes: videoUploadLimitBytes,
+        onStage: (stage) => {
+          setMediaFeedback({
+            type: 'info',
+            message:
+              stage === 'preparing'
+                ? 'Preparando video...'
+                : 'Comprimindo video...',
+          })
+        },
+      })
 
       if (result.ok) {
-        setMediaFeedback(null)
         return {
           file: result.file,
           videoOptimization: {
@@ -509,21 +531,115 @@ export default function PostComposer({
 
       setMediaFeedback({
         type: 'warning',
-        message:
-          result.reason === 'unsupported'
-            ? 'Seu navegador nao permitiu otimizar o video automaticamente.'
-            : 'Nao foi possivel otimizar o video, mas ele ainda pode ser enviado se estiver dentro dos limites.',
+        message: 'Nao foi possivel comprimir neste dispositivo. Tente um video menor.',
       })
-      return { file }
+      return null
     } catch {
       setMediaFeedback({
         type: 'warning',
-        message: 'Nao foi possivel otimizar o video, mas ele ainda pode ser enviado se estiver dentro dos limites.',
+        message: 'Nao foi possivel comprimir neste dispositivo. Tente um video menor.',
       })
-      return { file }
+      return null
     } finally {
       setIsOptimizingVideo(false)
     }
+  }
+
+  function createVideoPreview(file: File, videoOptimization?: VideoOptimizationInfo): MediaPreview {
+    return {
+      id: `${file.name}-${file.size}-${Date.now()}-${Math.random()}`,
+      file,
+      url: URL.createObjectURL(file),
+      type: 'video',
+      videoOptimization,
+    }
+  }
+
+  function attachCompressedVideo(
+    file: File,
+    videoOptimization: VideoOptimizationInfo,
+    replacementMediaId: string | null,
+  ) {
+    const replacementItem = createVideoPreview(file, videoOptimization)
+
+    setMedia((current) => {
+      if (!replacementMediaId) {
+        if (current.length >= MAX_MEDIA_FILES) {
+          URL.revokeObjectURL(replacementItem.url)
+          return current
+        }
+
+        return [...current, replacementItem]
+      }
+
+      let replaced = false
+      const nextMedia = current.map((item) => {
+        if (item.id !== replacementMediaId) return item
+
+        replaced = true
+        URL.revokeObjectURL(item.url)
+        return replacementItem
+      })
+
+      if (!replaced) {
+        URL.revokeObjectURL(replacementItem.url)
+        return current
+      }
+
+      return nextMedia
+    })
+  }
+
+  async function handlePendingVideoCompression() {
+    if (!pendingVideoCompression || isOptimizingVideo) return
+
+    const pending = pendingVideoCompression
+    const result = await compressVideoForComposer(pending.file)
+
+    if (!result) return
+
+    if (result.file.size > videoUploadLimitBytes) {
+      const sizeError = getVideoSizeError(videoUploadLimitBytes)
+      setError(sizeError)
+      setMediaFeedback({
+        type: 'warning',
+        message: sizeError,
+      })
+      return
+    }
+
+    setError('')
+    setPendingVideoCompression(null)
+    attachCompressedVideo(result.file, result.videoOptimization, pending.replacementMediaId)
+    setMediaFeedback({
+      type: 'success',
+      message: 'Video comprimido e pronto para publicar.',
+    })
+  }
+
+  async function handleAttachedVideoCompression(item: MediaPreview) {
+    if (item.type !== 'video' || isOptimizingVideo) return
+
+    const result = await compressVideoForComposer(item.file)
+    if (!result) return
+
+    setMedia((current) =>
+      current.map((currentItem) => {
+        if (currentItem.id !== item.id) return currentItem
+
+        URL.revokeObjectURL(currentItem.url)
+        return {
+          ...currentItem,
+          file: result.file,
+          url: URL.createObjectURL(result.file),
+          videoOptimization: result.videoOptimization,
+        }
+      }),
+    )
+    setMediaFeedback({
+      type: 'success',
+      message: 'Video comprimido e pronto para publicar.',
+    })
   }
 
   function handleContentChange(value: string) {
@@ -906,6 +1022,23 @@ export default function PostComposer({
                     >
                       <Scissors className="h-4 w-4" />
                     </Link>
+
+                    {item.type === 'video' && portalElement && canAttemptVideoCompression(item.file) && (
+                      <button
+                        type="button"
+                        onClick={() => handleAttachedVideoCompression(item)}
+                        disabled={isOptimizingVideo}
+                        className="flex h-8 w-8 items-center justify-center rounded-full bg-black/70 text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-50"
+                        title="Comprimir video"
+                        aria-label="Comprimir video"
+                      >
+                        {isOptimizingVideo ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Scissors className="h-4 w-4" />
+                        )}
+                      </button>
+                    )}
                   </div>
 
                   <div className="absolute bottom-2 left-2 rounded-full bg-black/70 px-2 py-1 text-[11px] font-medium text-white">
@@ -933,6 +1066,39 @@ export default function PostComposer({
                   </span>
                 </div>
               ))}
+            </div>
+          )}
+
+          {pendingVideoCompression && (
+            <div className="mt-3 flex flex-col gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100 sm:flex-row sm:items-center sm:justify-between">
+              <p className="min-w-0">
+                O video selecionado excede seu limite. Tente comprimir antes de publicar.
+              </p>
+
+              <div className="flex shrink-0 gap-2">
+                <button
+                  type="button"
+                  onClick={handlePendingVideoCompression}
+                  disabled={isOptimizingVideo}
+                  className="inline-flex h-9 items-center gap-2 rounded-full bg-amber-700 px-3 text-xs font-bold text-white transition hover:bg-amber-800 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isOptimizingVideo ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Scissors className="h-4 w-4" />
+                  )}
+                  Comprimir
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setPendingVideoCompression(null)}
+                  disabled={isOptimizingVideo}
+                  className="inline-flex h-9 items-center rounded-full border border-amber-300 px-3 text-xs font-bold text-amber-900 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-amber-800 dark:text-amber-100 dark:hover:bg-amber-950/60"
+                >
+                  Cancelar
+                </button>
+              </div>
             </div>
           )}
 
@@ -968,6 +1134,10 @@ export default function PostComposer({
           )}
 
           <div className="mt-4 border-t border-zinc-200 pt-3 dark:border-zinc-800">
+            <p className="mb-3 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs leading-5 text-blue-800 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-100">
+              Seu limite atual e {formatUploadLimitMegabytes(videoUploadLimitBytes)} por video. Tente comprimir o video antes de publicar quando necessario. VIP/Anciao tem limites maiores.
+            </p>
+
             <div className="flex flex-col gap-3">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">

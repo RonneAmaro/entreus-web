@@ -1,7 +1,7 @@
 import type { FFmpeg } from '@ffmpeg/ffmpeg'
 import {
+  BYTES_PER_MEGABYTE,
   UPLOAD_EXTENSION_BY_MIME_TYPE,
-  VIDEO_UPLOAD_MAX_SIZE_BYTES,
   getAllowedUploadContentType,
   getUploadFileExtension,
   isAllowedVideoMimeType,
@@ -30,6 +30,13 @@ export type VideoCompressionSavings = {
   savedPercent: number
 }
 
+export type VideoCompressionStage = 'preparing' | 'compressing' | 'fallback'
+
+export type VideoCompressionOptions = {
+  targetMaxSizeBytes?: number
+  onStage?: (stage: VideoCompressionStage) => void
+}
+
 type FfmpegRuntime = {
   ffmpeg: FFmpeg
   fetchFile: typeof import('@ffmpeg/util').fetchFile
@@ -41,6 +48,11 @@ const OUTPUT_MIME_TYPE = 'video/mp4'
 const MAX_OUTPUT_DIMENSION = 720
 const VIDEO_BITRATE = '1400k'
 const AUDIO_BITRATE = '96k'
+const FALLBACK_MAX_OUTPUT_DIMENSION = 480
+const FALLBACK_VIDEO_BITRATE = '850k'
+const FALLBACK_AUDIO_BITRATE = '80k'
+const DESKTOP_COMPRESSION_MAX_INPUT_BYTES = 120 * BYTES_PER_MEGABYTE
+const MOBILE_COMPRESSION_MAX_INPUT_BYTES = 80 * BYTES_PER_MEGABYTE
 
 let ffmpegRuntimePromise: Promise<FfmpegRuntime> | null = null
 let compressionQueue = Promise.resolve()
@@ -52,11 +64,22 @@ export function canAttemptVideoCompression(file: File): boolean {
   if (typeof Worker === 'undefined') return false
   if (typeof Blob === 'undefined') return false
   if (typeof URL === 'undefined') return false
-  if (file.size <= 0 || file.size > VIDEO_UPLOAD_MAX_SIZE_BYTES) return false
+  if (file.size <= 0 || file.size > getVideoCompressionInputLimitBytes()) return false
 
   const contentType = getAllowedUploadContentType(file.type, file.name)
 
   return Boolean(contentType && isAllowedVideoMimeType(contentType))
+}
+
+export function getVideoCompressionInputLimitBytes() {
+  if (typeof navigator === 'undefined') return DESKTOP_COMPRESSION_MAX_INPUT_BYTES
+
+  const userAgent = navigator.userAgent || ''
+  const isMobileBrowser = /Android|iPhone|iPad|iPod|Mobile/i.test(userAgent)
+
+  return isMobileBrowser
+    ? MOBILE_COMPRESSION_MAX_INPUT_BYTES
+    : DESKTOP_COMPRESSION_MAX_INPUT_BYTES
 }
 
 export function getVideoCompressionSavings(
@@ -85,7 +108,10 @@ export function getVideoCompressionSavings(
   }
 }
 
-export async function compressVideoForPost(file: File): Promise<VideoCompressionResult> {
+export async function compressVideoForPost(
+  file: File,
+  options: VideoCompressionOptions = {},
+): Promise<VideoCompressionResult> {
   if (!canAttemptVideoCompression(file)) {
     return {
       ok: false,
@@ -94,7 +120,8 @@ export async function compressVideoForPost(file: File): Promise<VideoCompression
     }
   }
 
-  return enqueueCompression(() => runFfmpegCompression(file))
+  reportCompressionStage(options, 'preparing')
+  return enqueueCompression(() => runFfmpegCompression(file, options))
 }
 
 function enqueueCompression<T>(task: () => Promise<T>) {
@@ -138,33 +165,47 @@ async function loadFfmpegRuntime(): Promise<FfmpegRuntime> {
   return { ffmpeg, fetchFile }
 }
 
-async function runFfmpegCompression(file: File): Promise<VideoCompressionResult> {
+async function runFfmpegCompression(
+  file: File,
+  options: VideoCompressionOptions,
+): Promise<VideoCompressionResult> {
   const { ffmpeg, fetchFile } = await getFfmpegRuntime()
   const inputName = `post-input-${Date.now()}-${Math.random().toString(36).slice(2)}.${getInputExtension(file)}`
   const outputName = `post-output-${Date.now()}-${Math.random().toString(36).slice(2)}.mp4`
+  const fallbackOutputName = `post-output-fallback-${Date.now()}-${Math.random().toString(36).slice(2)}.mp4`
 
   try {
-    await cleanupFfmpegFiles(ffmpeg, [inputName, outputName])
+    await cleanupFfmpegFiles(ffmpeg, [inputName, outputName, fallbackOutputName])
     await ffmpeg.writeFile(inputName, await fetchFile(file))
 
-    const exitCode = await ffmpeg.exec(buildCompressionArgs(inputName, outputName))
+    reportCompressionStage(options, 'compressing')
+    const exitCode = await ffmpeg.exec(buildCompressionArgs(inputName, outputName, 'balanced'))
 
     if (exitCode !== 0) {
       throw new Error('FFmpeg retornou erro ao otimizar o video.')
     }
 
-    const compressedData = await ffmpeg.readFile(outputName)
-    const compressedBytes = readFfmpegBytes(compressedData)
+    let compressedFile = await readCompressedFile(ffmpeg, outputName, file.name)
+    const targetMaxSizeBytes = normalizeTargetMaxSize(options.targetMaxSizeBytes)
 
-    if (compressedBytes.byteLength <= 0) {
-      throw new Error('FFmpeg gerou um video vazio.')
+    if (targetMaxSizeBytes && compressedFile.size > targetMaxSizeBytes) {
+      reportCompressionStage(options, 'fallback')
+      const fallbackExitCode = await ffmpeg.exec(
+        buildCompressionArgs(inputName, fallbackOutputName, 'fallback'),
+      )
+
+      if (fallbackExitCode === 0) {
+        try {
+          const fallbackFile = await readCompressedFile(ffmpeg, fallbackOutputName, file.name)
+
+          if (fallbackFile.size < compressedFile.size) {
+            compressedFile = fallbackFile
+          }
+        } catch {
+          // The usable 720p output remains available if the fallback cannot be read.
+        }
+      }
     }
-
-    const compressedBlob = new Blob([compressedBytes as BlobPart], { type: OUTPUT_MIME_TYPE })
-    const compressedFile = new File([compressedBlob], getOptimizedFileName(file.name), {
-      type: OUTPUT_MIME_TYPE,
-      lastModified: Date.now(),
-    })
     const savings = getVideoCompressionSavings(file.size, compressedFile.size)
 
     if (!savings) {
@@ -184,13 +225,8 @@ async function runFfmpegCompression(file: File): Promise<VideoCompressionResult>
       savedPercent: savings.savedPercent,
       message: 'Video otimizado para publicar mais rapido.',
     }
-  } catch (error) {
-    console.warn('[PostVideoCompression] Falha ao otimizar video:', {
-      error,
-      name: file.name,
-      type: file.type,
-      size: file.size,
-    })
+  } catch {
+    console.warn('[PostVideoCompression] Falha ao otimizar video.')
 
     return {
       ok: false,
@@ -198,16 +234,38 @@ async function runFfmpegCompression(file: File): Promise<VideoCompressionResult>
       message: 'Nao foi possivel otimizar o video, mas ele ainda pode ser enviado se estiver dentro dos limites.',
     }
   } finally {
-    await cleanupFfmpegFiles(ffmpeg, [inputName, outputName])
+    await cleanupFfmpegFiles(ffmpeg, [inputName, outputName, fallbackOutputName])
   }
 }
 
-function buildCompressionArgs(inputName: string, outputName: string) {
+async function readCompressedFile(ffmpeg: FFmpeg, outputName: string, originalFileName: string) {
+  const compressedData = await ffmpeg.readFile(outputName)
+  const compressedBytes = readFfmpegBytes(compressedData)
+
+  if (compressedBytes.byteLength <= 0) {
+    throw new Error('FFmpeg gerou um video vazio.')
+  }
+
+  const compressedBlob = new Blob([compressedBytes as BlobPart], { type: OUTPUT_MIME_TYPE })
+  return new File([compressedBlob], getOptimizedFileName(originalFileName), {
+    type: OUTPUT_MIME_TYPE,
+    lastModified: Date.now(),
+  })
+}
+
+function buildCompressionArgs(
+  inputName: string,
+  outputName: string,
+  preset: 'balanced' | 'fallback',
+) {
+  const maxDimension = preset === 'fallback' ? FALLBACK_MAX_OUTPUT_DIMENSION : MAX_OUTPUT_DIMENSION
+  const videoBitrate = preset === 'fallback' ? FALLBACK_VIDEO_BITRATE : VIDEO_BITRATE
+  const audioBitrate = preset === 'fallback' ? FALLBACK_AUDIO_BITRATE : AUDIO_BITRATE
   const scaleFilter = [
     'scale=',
-    `'if(gt(iw,ih),min(iw,${MAX_OUTPUT_DIMENSION}),-2)'`,
+    `'if(gt(iw,ih),min(iw,${maxDimension}),-2)'`,
     ':',
-    `'if(gt(iw,ih),-2,min(ih,${MAX_OUTPUT_DIMENSION}))'`,
+    `'if(gt(iw,ih),-2,min(ih,${maxDimension}))'`,
   ].join('')
 
   return [
@@ -225,23 +283,36 @@ function buildCompressionArgs(inputName: string, outputName: string) {
     '-preset',
     'veryfast',
     '-crf',
-    '28',
+    preset === 'fallback' ? '30' : '28',
     '-maxrate',
-    VIDEO_BITRATE,
+    videoBitrate,
     '-bufsize',
-    `${Number.parseInt(VIDEO_BITRATE, 10) * 2}k`,
+    `${Number.parseInt(videoBitrate, 10) * 2}k`,
     '-pix_fmt',
     'yuv420p',
     '-c:a',
     'aac',
     '-b:a',
-    AUDIO_BITRATE,
+    audioBitrate,
     '-movflags',
     '+faststart',
     '-f',
     'mp4',
     outputName,
   ]
+}
+
+function normalizeTargetMaxSize(value: number | undefined) {
+  if (!Number.isFinite(value) || !value || value <= 0) return null
+  return Math.round(value)
+}
+
+function reportCompressionStage(options: VideoCompressionOptions, stage: VideoCompressionStage) {
+  try {
+    options.onStage?.(stage)
+  } catch {
+    // UI callbacks must not interrupt the compression task.
+  }
 }
 
 function readFfmpegBytes(outputData: Awaited<ReturnType<FFmpeg['readFile']>>) {

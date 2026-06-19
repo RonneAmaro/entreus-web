@@ -4,10 +4,14 @@ import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import {
   UPLOAD_EXTENSION_BY_MIME_TYPE,
+  formatUploadLimitMegabytes,
   getAllowedUploadContentType,
   getUploadMaxSizeBytes,
   isAllowedVideoMimeType,
   looksLikeVideoUpload,
+  resolveVideoUploadLimit,
+  type VideoUploadEntitlement,
+  type VideoUploadLimit,
 } from '@/lib/media/upload-limits'
 
 export const runtime = 'nodejs'
@@ -38,6 +42,10 @@ type PresignBody = {
 type RateLimitEntry = {
   count: number
   resetAt: number
+}
+
+type UserBadgeRow = {
+  badges: { slug?: string | null } | { slug?: string | null }[] | null
 }
 
 const rateLimitStore = new Map<string, RateLimitEntry>()
@@ -82,6 +90,20 @@ function getFolder(value: unknown) {
   return ACCEPTED_FOLDERS.has(folder as R2UploadFolder) ? (folder as R2UploadFolder) : null
 }
 
+function getSupabaseAdminForUploadLimits() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!supabaseUrl || !serviceRoleKey) return null
+
+  return createClient(supabaseUrl, serviceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  })
+}
+
 function buildObjectKey(folder: R2UploadFolder, userId: string, contentType: string) {
   const timestamp = Date.now()
   const extension = UPLOAD_EXTENSION_BY_MIME_TYPE[contentType] || 'bin'
@@ -93,20 +115,60 @@ function isProfileMediaFolder(folder: R2UploadFolder) {
   return folder === 'profiles/avatars' || folder === 'profiles/banners'
 }
 
-function getMaxFileSize(folder: R2UploadFolder, contentType: string) {
+function getMaxFileSize(folder: R2UploadFolder, contentType: string, entitlement?: VideoUploadEntitlement) {
   if (folder === 'profiles/avatars') return PROFILE_AVATAR_MAX_SIZE_BYTES
   if (folder === 'profiles/banners') return PROFILE_BANNER_MAX_SIZE_BYTES
-  return getUploadMaxSizeBytes(contentType)
+  return getUploadMaxSizeBytes(contentType, entitlement)
 }
 
-function getFileTooLargeMessage(folder: R2UploadFolder, contentType: string) {
+function getFileTooLargeMessage(folder: R2UploadFolder, contentType: string, maxFileSize: number | null) {
   if (folder === 'profiles/avatars') return 'Avatar muito grande. O limite atual e 5 MB.'
   if (folder === 'profiles/banners') return 'Banner muito grande. O limite atual e 10 MB.'
   return isAllowedVideoMimeType(contentType)
-    ? 'Este video esta muito pesado. Envie um video menor ou comprimido.'
+    ? `Seu limite atual e ${formatUploadLimitMegabytes(maxFileSize || 0)}. Tente comprimir o video antes de publicar. VIP/Anciao tem limites maiores.`
     : contentType === 'image/gif'
       ? 'GIF muito grande. O limite atual e 5 MB.'
-    : 'Imagem muito grande. O limite atual e 5 MB.'
+      : 'Imagem muito grande. O limite atual e 5 MB.'
+}
+
+async function getVideoUploadEntitlement(userId: string): Promise<VideoUploadEntitlement> {
+  const supabase = getSupabaseAdminForUploadLimits()
+
+  if (!supabase) {
+    console.warn('[R2Presign] Upload entitlement lookup unavailable; using the standard video limit.')
+    return {}
+  }
+
+  const [profileResult, badgeResult] = await Promise.all([
+    supabase
+      .from('profiles')
+      .select('vip_status, vip_expires_at')
+      .eq('id', userId)
+      .maybeSingle(),
+    supabase
+      .from('user_badges')
+      .select('badges ( slug )')
+      .eq('user_id', userId),
+  ])
+
+  if (profileResult.error || badgeResult.error) {
+    console.warn('[R2Presign] Upload entitlement lookup failed; using available entitlement data.')
+  }
+
+  const profile = profileResult.data as {
+    vip_status?: string | null
+    vip_expires_at?: string | null
+  } | null
+  const badgeSlugs = ((badgeResult.data || []) as UserBadgeRow[])
+    .flatMap((row) => (Array.isArray(row.badges) ? row.badges : [row.badges]))
+    .map((badge) => badge?.slug || '')
+    .filter(Boolean)
+
+  return {
+    vipStatus: profile?.vip_status,
+    vipExpiresAt: profile?.vip_expires_at,
+    badgeSlugs,
+  }
 }
 
 function normalizeContentType(contentType: unknown, fileName: string) {
@@ -271,14 +333,24 @@ export async function POST(request: Request) {
     )
   }
 
-  const maxFileSize = getMaxFileSize(folder, contentType)
+  let videoUploadLimit: VideoUploadLimit | null = null
+  let uploadEntitlement: VideoUploadEntitlement | undefined
+
+  if (folder === 'posts' && isAllowedVideoMimeType(contentType)) {
+    uploadEntitlement = await getVideoUploadEntitlement(user.id)
+    videoUploadLimit = resolveVideoUploadLimit(uploadEntitlement)
+  }
+
+  const maxFileSize = getMaxFileSize(folder, contentType, uploadEntitlement)
 
   if (!maxFileSize || body.fileSize > maxFileSize) {
     return NextResponse.json(
       {
         ok: false,
         error: 'FILE_TOO_LARGE',
-        message: getFileTooLargeMessage(folder, contentType),
+        message: getFileTooLargeMessage(folder, contentType, maxFileSize),
+        maxFileSize,
+        maxFileSizeMb: formatUploadLimitMegabytes(maxFileSize || 0),
       },
       { status: 413 },
     )
@@ -305,6 +377,7 @@ export async function POST(request: Request) {
       Bucket: bucketName,
       Key: key,
       ContentType: contentType,
+      ContentLength: body.fileSize,
     })
     const uploadUrl = await getSignedUrl(client, command, {
       expiresIn: PRESIGNED_URL_EXPIRES_IN_SECONDS,
@@ -329,6 +402,8 @@ export async function POST(request: Request) {
       publicUrl,
       key,
       contentType,
+      maxFileSize,
+      videoUploadTier: videoUploadLimit?.tier || null,
       expiresIn: PRESIGNED_URL_EXPIRES_IN_SECONDS,
     })
   } catch (error) {

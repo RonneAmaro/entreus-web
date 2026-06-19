@@ -48,10 +48,12 @@ import {
 import {
   IMAGE_UPLOAD_MAX_SIZE_BYTES,
   VIDEO_UPLOAD_MAX_SIZE_BYTES,
+  formatUploadLimitMegabytes,
   getAllowedUploadContentType,
   isAllowedImageMimeType,
   isAllowedVideoMimeType,
   looksLikeVideoUpload,
+  resolveVideoUploadLimit,
 } from '@/lib/media/upload-limits'
 
 type VisibilityType = 'public' | 'followers' | 'private'
@@ -71,6 +73,13 @@ type CurrentProfile = {
   show_sensitive_content: boolean
   wants_18_plus?: boolean | null
   age_verification_status?: string | null
+  vip_status?: string | null
+  vip_expires_at?: string | null
+  badge_slugs?: string[]
+}
+
+type UserBadgeRow = {
+  badges: { slug?: string | null } | { slug?: string | null }[] | null
 }
 
 type ProfileSummary = {
@@ -211,7 +220,6 @@ const FEED_INITIAL_REACTION_LIMIT = 500
 const FEED_INITIAL_REPOST_LIMIT = 120
 const ACCEPTED_MEDIA_FORMATS_MESSAGE = 'Formato nao permitido. Use JPG, PNG, WEBP, GIF, MP4, WebM ou MOV.'
 const VIDEO_FORMAT_NOT_ACCEPTED_MESSAGE = 'Formato nao aceito. Use MP4, WebM ou MOV para videos.'
-const VIDEO_TOO_LARGE_UPLOAD_MESSAGE = 'Este video esta muito pesado. Envie um video menor ou comprimido.'
 const PRESIGN_UPLOAD_FAILURE_MESSAGE = 'Nao foi possivel preparar o upload agora. Tente novamente em instantes.'
 const R2_UPLOAD_FAILURE_MESSAGE = 'Nao foi possivel enviar a midia agora. Verifique sua conexao e tente novamente.'
 const PUBLISH_LOGIN_MESSAGE = 'Faca login novamente para publicar.'
@@ -763,6 +771,16 @@ function FeedContent() {
   const [email, setEmail] = useState('')
   const [currentProfile, setCurrentProfile] = useState<CurrentProfile | null>(null)
 
+  const videoUploadLimit = useMemo(
+    () =>
+      resolveVideoUploadLimit({
+        vipStatus: currentProfile?.vip_status,
+        vipExpiresAt: currentProfile?.vip_expires_at,
+        badgeSlugs: currentProfile?.badge_slugs,
+      }),
+    [currentProfile],
+  )
+
   const [uploadingPostImage, setUploadingPostImage] = useState(false)
   const [uploadingPostVideo, setUploadingPostVideo] = useState(false)
 
@@ -841,11 +859,22 @@ function FeedContent() {
       setUserId(user.id)
       setEmail(user.email || '')
 
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('username, display_name, avatar_url, show_sensitive_content, wants_18_plus, age_verification_status')
-        .eq('id', user.id)
-        .single()
+      const [profileResult, badgesResult] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('username, display_name, avatar_url, show_sensitive_content, wants_18_plus, age_verification_status, vip_status, vip_expires_at')
+          .eq('id', user.id)
+          .single(),
+        supabase
+          .from('user_badges')
+          .select('badges ( slug )')
+          .eq('user_id', user.id),
+      ])
+      const { data: profileData, error: profileError } = profileResult
+      const badgeSlugs = ((badgesResult.data || []) as UserBadgeRow[])
+        .flatMap((row) => (Array.isArray(row.badges) ? row.badges : [row.badges]))
+        .map((badge) => badge?.slug || '')
+        .filter(Boolean)
 
       const loadedCurrentProfile: CurrentProfile | null =
         !profileError && profileData
@@ -855,6 +884,9 @@ function FeedContent() {
             avatar_url: profileData.avatar_url,
             wants_18_plus: profileData.wants_18_plus || false,
             age_verification_status: profileData.age_verification_status || 'not_started',
+            vip_status: profileData.vip_status,
+            vip_expires_at: profileData.vip_expires_at,
+            badge_slugs: badgeSlugs,
             show_sensitive_content:
               Boolean(profileData.wants_18_plus && profileData.age_verification_status === 'approved'),
           }
@@ -1778,8 +1810,8 @@ function FeedContent() {
     return getEffectiveImageContentType(file) === 'image/gif'
   }
 
-  function getVideoTooLargeMessage() {
-    return VIDEO_TOO_LARGE_UPLOAD_MESSAGE
+  function getVideoTooLargeMessage(maxSizeBytes = videoUploadLimit.maxSizeBytes) {
+    return `Seu limite atual e ${formatUploadLimitMegabytes(maxSizeBytes)}. Tente comprimir o video antes de publicar. VIP/Anciao tem limites maiores.`
   }
 
   function getVideoUploadFailureMessage() {
@@ -1805,7 +1837,7 @@ function FeedContent() {
     }
 
     if (status === 413 || error === 'FILE_TOO_LARGE') {
-      return message || VIDEO_TOO_LARGE_UPLOAD_MESSAGE
+      return message || getVideoTooLargeMessage()
     }
 
     if (status === 415 || error === 'INVALID_FILE_TYPE') {
@@ -1928,7 +1960,7 @@ function FeedContent() {
     }
 
     if (mediaType === 'video') {
-      if (file.size > VIDEO_UPLOAD_MAX_SIZE_BYTES) {
+      if (file.size > videoUploadLimit.maxSizeBytes) {
         setMessage(getVideoTooLargeMessage())
         return null
       }
@@ -1952,7 +1984,7 @@ function FeedContent() {
       setUploadingPostImage(true)
     } else {
       setUploadingPostVideo(true)
-      setMessage('Enviando video direto para o storage. Mantenha esta aba aberta ate concluir.')
+      setMessage('Enviando video... Mantenha esta aba aberta ate concluir.')
     }
 
     let uploadStep = 'presign-request'
@@ -2168,7 +2200,7 @@ function FeedContent() {
     const maxSizeInBytes = mediaType === 'video' ? VIDEO_UPLOAD_MAX_SIZE_BYTES : IMAGE_UPLOAD_MAX_SIZE_BYTES
 
     if (file.size > maxSizeInBytes) {
-      setMessage(mediaType === 'video' ? getVideoTooLargeMessage() : mediaType === 'gif' ? 'GIF muito grande. O limite atual e 5 MB.' : t('feed.messages.imageTooLarge'))
+      setMessage(mediaType === 'video' ? getVideoTooLargeMessage(VIDEO_UPLOAD_MAX_SIZE_BYTES) : mediaType === 'gif' ? 'GIF muito grande. O limite atual e 5 MB.' : t('feed.messages.imageTooLarge'))
       return null
     }
 
@@ -3557,6 +3589,7 @@ function FeedContent() {
               <PostComposer
                 userName={currentProfile?.display_name || currentProfile?.username || email || t('common.user')}
                 userAvatarUrl={currentProfile?.avatar_url || null}
+                videoUploadLimitBytes={videoUploadLimit.maxSizeBytes}
                 submitting={uploadingPostImage || uploadingPostVideo}
                 onSubmit={handleCreatePost}
               />
