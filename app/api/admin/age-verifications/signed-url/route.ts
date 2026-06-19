@@ -1,3 +1,5 @@
+import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3'
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { isAdminRole } from '@/lib/admin'
@@ -15,6 +17,8 @@ type AgeVerificationDocumentPaths = {
 
 const SIGNED_URL_EXPIRES_IN_SECONDS = 5 * 60
 const DOCUMENT_KINDS: DocumentKind[] = ['front', 'back', 'selfie']
+const SUPABASE_BUCKET_NAME = 'age-verifications'
+const R2_PRIVATE_PREFIX = 'private/age-verifications/'
 
 function getSupabaseForRequest(request: Request) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -46,8 +50,92 @@ function getPathForKind(paths: AgeVerificationDocumentPaths, kind: DocumentKind)
   return paths.selfie_path
 }
 
-function getFileType(path: string) {
-  return path.toLowerCase().endsWith('.pdf') ? 'pdf' : 'image'
+function isSafeObjectPath(value: string) {
+  return Boolean(
+    value &&
+      !value.startsWith('/') &&
+      !value.includes('..') &&
+      !value.includes('\\') &&
+      !value.includes('\0') &&
+      !value.includes('?') &&
+      !value.includes('#'),
+  )
+}
+
+function getR2PrivateKey(value: string) {
+  const trimmed = value.trim()
+  const key = trimmed.startsWith('r2://')
+    ? trimmed.slice('r2://'.length).replace(/^\/+/, '')
+    : trimmed.replace(/^\/+/, '')
+
+  if (!key.startsWith(R2_PRIVATE_PREFIX)) return null
+  if (!isSafeObjectPath(key)) return null
+
+  return key
+}
+
+function getSupabaseStoragePath(value: string) {
+  const raw = value.trim()
+
+  try {
+    const parsed = new URL(raw)
+    const pathname = decodeURIComponent(parsed.pathname)
+    const marker = '/storage/v1/object/'
+    const markerIndex = pathname.indexOf(marker)
+
+    if (markerIndex === -1) return null
+
+    const segments = pathname
+      .slice(markerIndex + marker.length)
+      .split('/')
+      .filter(Boolean)
+
+    if (segments.length < 3) return null
+
+    segments.shift()
+    const bucket = segments.shift()
+    const objectPath = segments.join('/')
+
+    if (bucket !== SUPABASE_BUCKET_NAME || !isSafeObjectPath(objectPath)) return null
+    return objectPath
+  } catch {
+    const objectPath = raw.replace(/^\/+/, '')
+    if (!isSafeObjectPath(objectPath)) return null
+    return objectPath
+  }
+}
+
+function getFileType(reference: string) {
+  return reference.toLowerCase().endsWith('.pdf') ? 'pdf' : 'image'
+}
+
+function getR2BucketName() {
+  return (
+    process.env.R2_AGE_VERIFICATION_BUCKET_NAME ||
+    process.env.R2_PRIVATE_BUCKET_NAME ||
+    process.env.R2_BUCKET_NAME ||
+    ''
+  )
+}
+
+function hasR2Config() {
+  return Boolean(
+    process.env.R2_ACCOUNT_ID &&
+      process.env.R2_ACCESS_KEY_ID &&
+      process.env.R2_SECRET_ACCESS_KEY &&
+      getR2BucketName(),
+  )
+}
+
+function getR2Client() {
+  return new S3Client({
+    region: 'auto',
+    endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+    credentials: {
+      accessKeyId: process.env.R2_ACCESS_KEY_ID as string,
+      secretAccessKey: process.env.R2_SECRET_ACCESS_KEY as string,
+    },
+  })
 }
 
 async function validateAdmin(request: Request) {
@@ -111,9 +199,40 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: 'DOCUMENT_NOT_AVAILABLE' }, { status: 404 })
     }
 
+    const r2Key = getR2PrivateKey(path)
+
+    if (r2Key) {
+      if (!hasR2Config()) {
+        return NextResponse.json({ ok: false, error: 'SIGNED_URL_FAILED' }, { status: 500 })
+      }
+
+      const signedUrl = await getSignedUrl(
+        getR2Client(),
+        new GetObjectCommand({
+          Bucket: getR2BucketName(),
+          Key: r2Key,
+          ResponseContentDisposition: 'inline',
+        }),
+        { expiresIn: SIGNED_URL_EXPIRES_IN_SECONDS },
+      )
+
+      return NextResponse.json({
+        ok: true,
+        signedUrl,
+        expiresIn: SIGNED_URL_EXPIRES_IN_SECONDS,
+        fileType: getFileType(r2Key),
+      })
+    }
+
+    const storagePath = getSupabaseStoragePath(path)
+
+    if (!storagePath) {
+      return NextResponse.json({ ok: false, error: 'DOCUMENT_NOT_AVAILABLE' }, { status: 404 })
+    }
+
     const { data, error } = await admin.supabase.storage
-      .from('age-verifications')
-      .createSignedUrl(path, SIGNED_URL_EXPIRES_IN_SECONDS)
+      .from(SUPABASE_BUCKET_NAME)
+      .createSignedUrl(storagePath, SIGNED_URL_EXPIRES_IN_SECONDS)
 
     if (error || !data?.signedUrl) {
       return NextResponse.json({ ok: false, error: 'SIGNED_URL_FAILED' }, { status: 500 })
@@ -123,7 +242,7 @@ export async function POST(request: Request) {
       ok: true,
       signedUrl: data.signedUrl,
       expiresIn: SIGNED_URL_EXPIRES_IN_SECONDS,
-      fileType: getFileType(path),
+      fileType: getFileType(storagePath),
     })
   } catch {
     return NextResponse.json({ ok: false, error: 'INTERNAL_ERROR' }, { status: 500 })
