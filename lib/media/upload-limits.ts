@@ -1,3 +1,5 @@
+import { resolveUserTier, type UserTier, type UserTierEntitlement } from '@/lib/user-tiers'
+
 export const BYTES_PER_MEGABYTE = 1024 * 1024
 
 export const IMAGE_UPLOAD_MAX_SIZE_BYTES = 5 * BYTES_PER_MEGABYTE
@@ -10,21 +12,13 @@ export const VIDEO_UPLOAD_MAX_SIZE_BYTES = VIDEO_UPLOAD_STANDARD_MAX_SIZE_BYTES
 export const POST_VIDEO_MAX_DURATION_SECONDS = 60
 export const HEAVY_VIDEO_WARNING_SIZE_BYTES = 40 * BYTES_PER_MEGABYTE
 
-export type VideoUploadTier = 'standard' | 'vip' | 'elder'
-
-export type VideoUploadEntitlement = {
-  vipStatus?: string | null
-  vipExpiresAt?: string | null
-  badgeSlugs?: readonly string[] | null
-}
+export type VideoUploadTier = UserTier
+export type VideoUploadEntitlement = UserTierEntitlement
 
 export type VideoUploadLimit = {
   tier: VideoUploadTier
   maxSizeBytes: number
 }
-
-const VIP_BADGE_SLUGS = new Set(['vip', 'vip_premium', 'vip-plus', 'vip_plus'])
-const ELDER_BADGE_SLUGS = new Set(['elder', 'anciao'])
 
 export const ALLOWED_IMAGE_MIME_TYPES = [
   'image/jpeg',
@@ -105,20 +99,18 @@ export function resolveVideoUploadLimit(
   entitlement: VideoUploadEntitlement = {},
   now = Date.now(),
 ): VideoUploadLimit {
-  const badgeSlugs = new Set(
-    (entitlement.badgeSlugs || []).map((badgeSlug) => normalizeBadgeSlug(badgeSlug)),
-  )
+  const tier = resolveUserTier(entitlement, now)
 
-  if (hasAnyBadge(badgeSlugs, ELDER_BADGE_SLUGS)) {
+  if (tier === 'elder') {
     return {
       tier: 'elder',
       maxSizeBytes: VIDEO_UPLOAD_ELDER_MAX_SIZE_BYTES,
     }
   }
 
-  if (isActiveVip(entitlement, now) || hasAnyBadge(badgeSlugs, VIP_BADGE_SLUGS)) {
+  if (tier === 'vip' || tier === 'vip_premium') {
     return {
-      tier: 'vip',
+      tier,
       maxSizeBytes: VIDEO_UPLOAD_VIP_MAX_SIZE_BYTES,
     }
   }
@@ -127,30 +119,6 @@ export function resolveVideoUploadLimit(
     tier: 'standard',
     maxSizeBytes: VIDEO_UPLOAD_STANDARD_MAX_SIZE_BYTES,
   }
-}
-
-function isActiveVip(entitlement: VideoUploadEntitlement, now: number) {
-  if (entitlement.vipStatus?.trim().toLowerCase() !== 'active') return false
-  if (!entitlement.vipExpiresAt) return false
-
-  const expiresAt = Date.parse(entitlement.vipExpiresAt)
-  return Number.isFinite(expiresAt) && expiresAt > now
-}
-
-function hasAnyBadge(userBadges: Set<string>, allowedBadges: Set<string>) {
-  for (const badgeSlug of allowedBadges) {
-    if (userBadges.has(badgeSlug)) return true
-  }
-
-  return false
-}
-
-function normalizeBadgeSlug(value: string) {
-  return value
-    .trim()
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
 }
 
 function formatUploadSizeValue(value: number) {

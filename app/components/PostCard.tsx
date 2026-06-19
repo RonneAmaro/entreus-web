@@ -11,9 +11,12 @@ import LinkPreview, { LinkedPostText } from './LinkPreview'
 import SensitiveContent from './SensitiveContent'
 import PostMoreMenu from './PostMoreMenu'
 import UserBadges from './UserBadges'
+import UserTierBadge from './UserTierBadge'
+import UserTierFrame, { getUserTierSurfaceClassName } from './UserTierFrame'
 import TranslatePostButton from './TranslatePostButton'
 import { useLanguage } from './LanguageProvider'
 import { isModeratedHidden, type ModeratedPostFields } from '@/lib/post-moderation'
+import type { UserTier } from '@/lib/user-tiers'
 
 export type VisibilityType = 'public' | 'followers' | 'private'
 
@@ -83,6 +86,7 @@ type PostCardProps = {
   onEdit?: () => void
   onDelete?: () => void
   onReport?: () => void
+  authorTier?: UserTier
 }
 
 function getVisibilityLabel(value: VisibilityType, t: (key: string) => string) {
@@ -310,6 +314,7 @@ export default function PostCard({
   onEdit,
   onDelete,
   onReport,
+  authorTier = 'standard',
 }: PostCardProps) {
   const { t, language } = useLanguage()
   const [giftModalOpen, setGiftModalOpen] = useState(false)
@@ -343,7 +348,7 @@ export default function PostCard({
       className={`group/post relative overflow-hidden rounded-[1.65rem] border bg-white/95 p-4 shadow-sm shadow-black/5 ring-1 ring-black/5 backdrop-blur-xl transition-all duration-300 before:pointer-events-none before:absolute before:inset-0 before:bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.12),transparent_44%)] before:opacity-0 before:transition-opacity hover:border-blue-400/45 hover:shadow-xl hover:shadow-blue-500/10 hover:before:opacity-100 dark:bg-slate-950/85 dark:ring-white/10 sm:rounded-[2rem] sm:p-6 ${highlighted
           ? 'border-blue-400 ring-2 ring-blue-200 dark:border-blue-300 dark:ring-blue-900/70'
           : 'border-zinc-200/70 dark:border-zinc-800/70'
-        }`}
+        } ${getUserTierSurfaceClassName(authorTier)}`}
     >
       {repostInfo && (
         <Link
@@ -381,21 +386,24 @@ export default function PostCard({
           href={`/u/${authorUsername}`}
           className="flex min-w-0 items-center gap-3 transition hover:opacity-80"
         >
-          {authorAvatar ? (
-            <img
-              src={authorAvatar}
-              alt={authorName}
-              className="h-12 w-12 shrink-0 rounded-full border border-zinc-300 object-cover dark:border-zinc-700"
-            />
-          ) : (
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-zinc-300 bg-zinc-100 text-sm font-semibold text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
-              {getInitial(authorName)}
-            </div>
-          )}
+          <UserTierFrame tier={authorTier} className="h-12 w-12">
+            {authorAvatar ? (
+              <img
+                src={authorAvatar}
+                alt={authorName}
+                className="h-full w-full rounded-full border border-zinc-300 object-cover dark:border-zinc-700"
+              />
+            ) : (
+              <span className="flex h-full w-full items-center justify-center rounded-full border border-zinc-300 bg-zinc-100 text-sm font-semibold text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                {getInitial(authorName)}
+              </span>
+            )}
+          </UserTierFrame>
 
           <div className="min-w-0">
             <p className="inline-flex max-w-full items-center gap-1 break-words font-semibold text-black dark:text-white">
-              <UserBadges userId={post.user_id} size="sm" max={1} />
+              <UserTierBadge tier={authorTier} />
+              <UserBadges userId={post.user_id} size="sm" max={1} excludeTierBadges={authorTier !== 'standard'} />
 
               <span className="min-w-0 break-words">
                 {authorName}

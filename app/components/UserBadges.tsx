@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { isTierBadgeSlug } from '@/lib/user-tiers'
 
 type Badge = {
   id: string
@@ -21,6 +22,7 @@ type UserBadgesProps = {
   userId: string
   size?: 'sm' | 'md'
   max?: number
+  excludeTierBadges?: boolean
 }
 
 function getBadgeRingClass(slug: string) {
@@ -35,6 +37,7 @@ export default function UserBadges({
   userId,
   size = 'sm',
   max = 3,
+  excludeTierBadges = false,
 }: UserBadgesProps) {
   const [badges, setBadges] = useState<Badge[]>([])
 
@@ -72,13 +75,14 @@ export default function UserBadges({
           return row.badges
         })
         .filter((badge): badge is Badge => !!badge)
+        .filter((badge) => !excludeTierBadges || !isTierBadgeSlug(badge.slug))
         .slice(0, max)
 
       setBadges(normalizedBadges)
     }
 
     loadBadges()
-  }, [userId, max])
+  }, [userId, max, excludeTierBadges])
 
   if (badges.length === 0) return null
 

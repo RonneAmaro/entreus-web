@@ -11,6 +11,8 @@ import TipModal from '../components/TipModal'
 import LinkPreview, { LinkedPostText } from '../components/LinkPreview'
 import SensitiveContent from '../components/SensitiveContent'
 import UserBadges from '../components/UserBadges'
+import UserTierBadge from '../components/UserTierBadge'
+import UserTierFrame, { getUserTierSurfaceClassName } from '../components/UserTierFrame'
 import TranslatePostButton from '../components/TranslatePostButton'
 import Link from 'next/link'
 import {
@@ -55,6 +57,7 @@ import {
   looksLikeVideoUpload,
   resolveVideoUploadLimit,
 } from '@/lib/media/upload-limits'
+import { resolveUserTier } from '@/lib/user-tiers'
 
 type VisibilityType = 'public' | 'followers' | 'private'
 type ComposerSubmitData = {
@@ -86,6 +89,12 @@ type ProfileSummary = {
   username: string
   display_name: string | null
   avatar_url: string | null
+  vip_status?: string | null
+  vip_expires_at?: string | null
+}
+
+type UserTierBadgeRow = UserBadgeRow & {
+  user_id: string
 }
 
 type PostMedia = {
@@ -790,6 +799,7 @@ function FeedContent() {
   const [commentLikes, setCommentLikes] = useState<CommentLike[]>([])
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([])
   const [reposts, setReposts] = useState<Repost[]>([])
+  const [tierBadgeSlugsByUserId, setTierBadgeSlugsByUserId] = useState<Record<string, string[]>>({})
   const [feedHighlights, setFeedHighlights] = useState<FeedHighlight[]>([])
   const [feedSearch, setFeedSearch] = useState('')
 
@@ -1159,7 +1169,9 @@ function FeedContent() {
         profiles (
           username,
           display_name,
-          avatar_url
+          avatar_url,
+          vip_status,
+          vip_expires_at
         )
       `
     const postSelectFallback = `
@@ -1175,7 +1187,9 @@ function FeedContent() {
         profiles (
           username,
           display_name,
-          avatar_url
+          avatar_url,
+          vip_status,
+          vip_expires_at
         )
       `
 
@@ -1240,6 +1254,8 @@ function FeedContent() {
 
     const postIds = rawPosts.map((post) => post.id)
 
+    await loadTierBadgeSlugs(rawPosts.map((post) => post.user_id))
+
     let mediaByPost: Record<string, PostMedia[]> = {}
 
     if (postIds.length > 0) {
@@ -1278,6 +1294,41 @@ function FeedContent() {
       setPosts(normalizedPosts)
     }
     return normalizedPosts
+  }
+
+  async function loadTierBadgeSlugs(userIds: string[]) {
+    const uniqueUserIds = Array.from(new Set(userIds.filter(Boolean)))
+    if (uniqueUserIds.length === 0) return
+
+    const { data, error } = await supabase
+      .from('user_badges')
+      .select('user_id, badges ( slug )')
+      .in('user_id', uniqueUserIds)
+
+    if (error) {
+      console.warn('Nao foi possivel carregar os selos de destaque do feed.')
+      return
+    }
+
+    const nextBadgeSlugsByUserId = uniqueUserIds.reduce<Record<string, string[]>>(
+      (acc, currentUserId) => {
+        acc[currentUserId] = []
+        return acc
+      },
+      {},
+    )
+
+    for (const row of (data || []) as UserTierBadgeRow[]) {
+      const badges = Array.isArray(row.badges) ? row.badges : [row.badges]
+      nextBadgeSlugsByUserId[row.user_id] = badges
+        .map((badge) => badge?.slug || '')
+        .filter(Boolean)
+    }
+
+    setTierBadgeSlugsByUserId((current) => ({
+      ...current,
+      ...nextBadgeSlugsByUserId,
+    }))
   }
 
   async function loadComments(
@@ -3590,6 +3641,7 @@ function FeedContent() {
                 userName={currentProfile?.display_name || currentProfile?.username || email || t('common.user')}
                 userAvatarUrl={currentProfile?.avatar_url || null}
                 videoUploadLimitBytes={videoUploadLimit.maxSizeBytes}
+                userTier={videoUploadLimit.tier}
                 submitting={uploadingPostImage || uploadingPostVideo}
                 onSubmit={handleCreatePost}
               />
@@ -3630,6 +3682,11 @@ function FeedContent() {
 
                 const authorUsername = post.profiles?.username || t('common.username')
                 const authorAvatar = post.profiles?.avatar_url || ''
+                const authorTier = resolveUserTier({
+                  vipStatus: post.profiles?.vip_status,
+                  vipExpiresAt: post.profiles?.vip_expires_at,
+                  badgeSlugs: tierBadgeSlugsByUserId[post.user_id],
+                })
                 const isOwnPost = post.user_id === userId
                 const isBlockedRelation = blockedUserIds.includes(post.user_id)
                 const isFollowingAuthor = followStateMap.get(post.user_id) || false
@@ -3668,7 +3725,7 @@ function FeedContent() {
                     className={`group relative overflow-hidden rounded-[1.65rem] border bg-white/95 p-3.5 shadow-sm shadow-black/5 ring-1 ring-black/5 backdrop-blur-xl transition-all duration-300 before:pointer-events-none before:absolute before:inset-0 before:bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.12),transparent_42%)] before:opacity-0 before:transition-opacity before:duration-300 hover:border-blue-400/50 hover:shadow-2xl hover:shadow-blue-500/10 hover:before:opacity-100 dark:bg-slate-950/85 dark:ring-white/10 sm:rounded-[2rem] sm:p-6 md:hover:-translate-y-1 ${isHighlighted
                         ? 'border-blue-500 ring-2 ring-blue-200 dark:border-blue-400 dark:ring-blue-900'
                         : 'border-zinc-200/70 dark:border-zinc-800/70'
-                      }`}
+                      } ${getUserTierSurfaceClassName(authorTier)}`}
                   >
                     {item.type === 'repost' && (
                       <Link
@@ -3706,21 +3763,24 @@ function FeedContent() {
                         href={`/u/${authorUsername}`}
                         className="flex min-w-0 items-center gap-3 transition hover:opacity-80"
                       >
-                        {authorAvatar ? (
-                          <img
-                            src={authorAvatar}
-                            alt={authorName}
-                            className="h-12 w-12 shrink-0 rounded-full border border-zinc-300 object-cover dark:border-zinc-700"
-                          />
-                        ) : (
-                          <div className="flex h-12 w-12 items-center justify-center rounded-full border border-zinc-300 bg-zinc-100 text-sm font-semibold text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
-                            {authorName.charAt(0).toUpperCase()}
-                          </div>
-                        )}
+                        <UserTierFrame tier={authorTier} className="h-12 w-12">
+                          {authorAvatar ? (
+                            <img
+                              src={authorAvatar}
+                              alt={authorName}
+                              className="h-full w-full rounded-full border border-zinc-300 object-cover dark:border-zinc-700"
+                            />
+                          ) : (
+                            <span className="flex h-full w-full items-center justify-center rounded-full border border-zinc-300 bg-zinc-100 text-sm font-semibold text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                              {authorName.charAt(0).toUpperCase()}
+                            </span>
+                          )}
+                        </UserTierFrame>
 
                         <div className="min-w-0">
                           <p className="inline-flex max-w-full items-center gap-1 font-semibold text-black dark:text-white">
-                            <UserBadges userId={post.user_id} size="sm" max={1} />
+                            <UserTierBadge tier={authorTier} />
+                            <UserBadges userId={post.user_id} size="sm" max={1} excludeTierBadges={authorTier !== 'standard'} />
 
                             <span className="min-w-0 break-words">
                               {authorName}

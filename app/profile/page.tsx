@@ -12,12 +12,15 @@ import { supabase } from '@/lib/supabase'
 import PostCard from '../components/PostCard'
 import UserBadges from '../components/UserBadges'
 import UserBadgesPanel from '../components/UserBadgesPanel'
+import UserTierBadge from '../components/UserTierBadge'
+import UserTierFrame, { getUserTierSurfaceClassName } from '../components/UserTierFrame'
 import { useLanguage } from '../components/LanguageProvider'
 import {
   isMissingPostModerationColumnError,
   isModeratedHidden,
   type ModeratedPostFields,
 } from '@/lib/post-moderation'
+import { resolveUserTier } from '@/lib/user-tiers'
 
 type VisibilityType = 'public' | 'followers' | 'private'
 
@@ -40,6 +43,12 @@ type Profile = {
   wants_18_plus: boolean
   age_verification_status: string
   age_verified_at: string | null
+  vip_status?: string | null
+  vip_expires_at?: string | null
+}
+
+type UserBadgeRow = {
+  badges: { slug?: string | null } | { slug?: string | null }[] | null
 }
 
 type ProfileSummary = {
@@ -201,6 +210,7 @@ export default function ProfilePage() {
   const [userId, setUserId] = useState('')
   const [email, setEmail] = useState('')
   const [profile, setProfile] = useState<Profile | null>(null)
+  const [profileBadgeSlugs, setProfileBadgeSlugs] = useState<string[]>([])
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0)
 
   const [username, setUsername] = useState('')
@@ -237,6 +247,15 @@ export default function ProfilePage() {
   const [showAvatarModal, setShowAvatarModal] = useState(false)
   const [showBannerModal, setShowBannerModal] = useState(false)
 
+  const profileTier = useMemo(
+    () => resolveUserTier({
+      vipStatus: profile?.vip_status,
+      vipExpiresAt: profile?.vip_expires_at,
+      badgeSlugs: profileBadgeSlugs,
+    }),
+    [profile, profileBadgeSlugs],
+  )
+
   useEffect(() => {
     setMounted(true)
   }, [])
@@ -258,7 +277,7 @@ export default function ProfilePage() {
       const { data, error } = await supabase
         .from('profiles')
         .select(
-          'id, username, display_name, bio, avatar_url, banner_url, country, city, state, website_url, website_title, birth_date, show_sensitive_content, is_minor, parental_consent_status, wants_18_plus, age_verification_status, age_verified_at'
+          'id, username, display_name, bio, avatar_url, banner_url, country, city, state, website_url, website_title, birth_date, show_sensitive_content, is_minor, parental_consent_status, wants_18_plus, age_verification_status, age_verified_at, vip_status, vip_expires_at'
         )
         .eq('id', user.id)
         .maybeSingle()
@@ -291,6 +310,17 @@ export default function ProfilePage() {
       }
 
       setProfile(loadedProfile)
+      const { data: profileBadgesData } = await supabase
+        .from('user_badges')
+        .select('badges ( slug )')
+        .eq('user_id', user.id)
+
+      setProfileBadgeSlugs(
+        ((profileBadgesData || []) as UserBadgeRow[])
+          .flatMap((row) => Array.isArray(row.badges) ? row.badges : [row.badges])
+          .map((badge) => badge?.slug || '')
+          .filter(Boolean),
+      )
       setUsername(loadedProfile.username || '')
       setDisplayName(loadedProfile.display_name || '')
       setBio(loadedProfile.bio || '')
@@ -1421,7 +1451,7 @@ export default function ProfilePage() {
 
         <form
           onSubmit={handleSaveProfile}
-          className="mt-5 overflow-hidden rounded-[2rem] border border-zinc-200/70 bg-white/95 shadow-sm ring-1 ring-black/5 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-black/80 dark:ring-white/10"
+          className={`mt-5 overflow-hidden rounded-[2rem] border border-zinc-200/70 bg-white/95 shadow-sm ring-1 ring-black/5 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-black/80 dark:ring-white/10 ${getUserTierSurfaceClassName(profileTier, 'profile')}`}
         >
           <div className="flex flex-col">
             <div className="relative">
@@ -1486,12 +1516,12 @@ export default function ProfilePage() {
               <div className="relative z-10 -mt-16 flex flex-col gap-5 sm:-mt-20 sm:flex-row">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
                   <div className="flex flex-col items-center gap-3 sm:items-start">
-                    <div className="relative">
+                    <UserTierFrame tier={profileTier} className="relative h-32 w-32 sm:h-40 sm:w-40">
                       <button
                         type="button"
                         onClick={() => avatarPreview && setShowAvatarModal(true)}
                         disabled={!avatarPreview}
-                        className="group relative h-32 w-32 overflow-hidden rounded-full border-4 border-white bg-zinc-100 text-zinc-700 shadow-xl ring-1 ring-black/10 transition hover:opacity-95 disabled:cursor-default dark:border-black dark:bg-zinc-800 dark:text-zinc-300 dark:ring-white/10 sm:h-40 sm:w-40"
+                        className="group relative h-full w-full overflow-hidden rounded-full border-4 border-white bg-zinc-100 text-zinc-700 shadow-xl ring-1 ring-black/10 transition hover:opacity-95 disabled:cursor-default dark:border-black dark:bg-zinc-800 dark:text-zinc-300 dark:ring-white/10"
                         title={avatarPreview ? t('profile.avatar.viewTitle') : t('profile.avatar.fallbackTitle')}
                         aria-label={avatarPreview ? t('profile.avatar.viewTitle') : t('profile.avatar.fallbackTitle')}
                       >
@@ -1528,19 +1558,26 @@ export default function ProfilePage() {
                           className="sr-only"
                         />
                       </label>
-                    </div>
+                    </UserTierFrame>
                   </div>
 
                   <div className="min-w-0 max-w-full pt-3 text-center sm:pt-16 sm:text-left">
                     <h2 className="flex max-w-full flex-wrap items-center justify-center gap-2 text-2xl font-black leading-tight tracking-tight text-black dark:text-white sm:justify-start sm:text-4xl">
+                      <UserTierBadge tier={profileTier} size="md" />
                       <span className="shrink-0">
-                        <UserBadges userId={userId} size="md" max={1} />
+                        <UserBadges userId={userId} size="md" max={1} excludeTierBadges={profileTier !== 'standard'} />
                       </span>
 
                       <span className="min-w-0 max-w-full break-words leading-tight [overflow-wrap:anywhere]">
                         {profileName}
                       </span>
                     </h2>
+
+                    {profileTier !== 'standard' && (
+                      <p className="mt-2 text-sm font-semibold text-zinc-600 dark:text-zinc-300">
+                        {profileTier === 'elder' ? 'Membro Anciao da comunidade EntreUS.' : 'Beneficios visuais e limite ampliado de video ativos.'}
+                      </p>
+                    )}
 
                     <p className="mt-1 break-all text-sm font-medium text-zinc-500 dark:text-zinc-400 sm:text-base">
                       @{username || t('profile.edit.usernamePlaceholder')}
@@ -2024,6 +2061,7 @@ export default function ProfilePage() {
                   onEdit={() => router.push(`/post/${post.id}`)}
                   onDelete={() => handleDeletePost(post.id)}
                   onReport={() => handleReportPost(post.id, post.user_id)}
+                  authorTier={post.user_id === userId ? profileTier : 'standard'}
                 />
               )
             })}

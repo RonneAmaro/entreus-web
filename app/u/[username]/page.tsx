@@ -11,6 +11,8 @@ import BrandHeader from "../../components/BrandHeader";
 import PostCard from "../../components/PostCard";
 import UserBadges from "../../components/UserBadges";
 import UserBadgesPanel from "../../components/UserBadgesPanel";
+import UserTierBadge from "../../components/UserTierBadge";
+import UserTierFrame, { getUserTierSurfaceClassName } from "../../components/UserTierFrame";
 import StartConversationButton from "../../components/StartConversationButton";
 import GiftModal from "../../components/GiftModal";
 import TipModal from "../../components/TipModal";
@@ -21,6 +23,7 @@ import {
   isModeratedHidden,
   type ModeratedPostFields,
 } from "@/lib/post-moderation";
+import { resolveUserTier } from "@/lib/user-tiers";
 
 type VisibilityType = "public" | "followers" | "private";
 type ProfileTab = "posts" | "replies" | "media";
@@ -40,6 +43,12 @@ type Profile = {
   show_sensitive_content?: boolean | null;
   wants_18_plus?: boolean | null;
   age_verification_status?: string | null;
+  vip_status?: string | null;
+  vip_expires_at?: string | null;
+};
+
+type UserBadgeRow = {
+  badges: { slug?: string | null } | { slug?: string | null }[] | null;
 };
 
 type ProfileSummary = {
@@ -132,6 +141,7 @@ export default function PublicProfilePage() {
   const [email, setEmail] = useState("");
   const [loggedProfile, setLoggedProfile] = useState<Profile | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [profileBadgeSlugs, setProfileBadgeSlugs] = useState<string[]>([]);
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
 
   const [posts, setPosts] = useState<Post[]>([]);
@@ -175,6 +185,15 @@ export default function PublicProfilePage() {
   const [shareGiftText, setShareGiftText] = useState("");
   const [shareGiftMediaFailed, setShareGiftMediaFailed] = useState(false);
 
+  const profileTier = useMemo(
+    () => resolveUserTier({
+      vipStatus: profile?.vip_status,
+      vipExpiresAt: profile?.vip_expires_at,
+      badgeSlugs: profileBadgeSlugs,
+    }),
+    [profile, profileBadgeSlugs],
+  );
+
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -199,7 +218,7 @@ export default function PublicProfilePage() {
       const { data: loggedProfileData } = await supabase
         .from("profiles")
         .select(
-          "id, username, display_name, bio, avatar_url, banner_url, country, city, state, website_url, website_title, show_sensitive_content, wants_18_plus, age_verification_status",
+          "id, username, display_name, bio, avatar_url, banner_url, country, city, state, website_url, website_title, show_sensitive_content, wants_18_plus, age_verification_status, vip_status, vip_expires_at",
         )
         .eq("id", user.id)
         .maybeSingle();
@@ -225,7 +244,7 @@ export default function PublicProfilePage() {
       const { data: profileData, error: profileError } = await supabase
         .from("profiles")
         .select(
-          "id, username, display_name, bio, avatar_url, banner_url, country, city, state, website_url, website_title, show_sensitive_content, wants_18_plus, age_verification_status",
+          "id, username, display_name, bio, avatar_url, banner_url, country, city, state, website_url, website_title, show_sensitive_content, wants_18_plus, age_verification_status, vip_status, vip_expires_at",
         )
         .eq("username", username)
         .maybeSingle();
@@ -243,6 +262,17 @@ export default function PublicProfilePage() {
       }
 
       setProfile(profileData);
+
+      const { data: profileBadgesData } = await supabase
+        .from("user_badges")
+        .select("badges ( slug )")
+        .eq("user_id", profileData.id);
+
+      const badgeSlugs = ((profileBadgesData || []) as UserBadgeRow[])
+        .flatMap((row) => Array.isArray(row.badges) ? row.badges : [row.badges])
+        .map((badge) => badge?.slug || "")
+        .filter(Boolean);
+      setProfileBadgeSlugs(badgeSlugs);
 
       const isOwn = user.id === profileData.id;
 
@@ -1701,6 +1731,7 @@ export default function PublicProfilePage() {
         onEdit={() => router.push(`/post/${post.id}`)}
         onDelete={() => router.push(`/post/${post.id}`)}
         onReport={() => handleReportPost(post.id, post.user_id)}
+        authorTier={post.user_id === profile?.id ? profileTier : 'standard'}
       />
     );
   }
@@ -1881,7 +1912,7 @@ export default function PublicProfilePage() {
 
         <div className="mx-auto grid w-full grid-cols-1 gap-4 sm:gap-6 xl:grid-cols-[minmax(0,40rem)_20rem]">
           <div className="min-w-0">
-        <div className="mb-6 overflow-hidden rounded-[2rem] border border-zinc-200/70 bg-white/95 shadow-sm ring-1 ring-black/5 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-black/80 dark:ring-white/10">
+        <div className={`mb-6 overflow-hidden rounded-[2rem] border border-zinc-200/70 bg-white/95 shadow-sm ring-1 ring-black/5 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-black/80 dark:ring-white/10 ${getUserTierSurfaceClassName(profileTier, 'profile')}`}>
           <button
             type="button"
             onClick={() => profile.banner_url && setSelectedAvatarUrl(profile.banner_url)}
@@ -1920,38 +1951,47 @@ export default function PublicProfilePage() {
             <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
               <div className="flex min-w-0 flex-1 flex-col gap-4 sm:flex-row sm:items-end">
                 <div className="-mt-14 shrink-0 sm:-mt-16">
-                  {profile.avatar_url ? (
-                    <button
-                      type="button"
-                      onClick={() => setSelectedAvatarUrl(profile.avatar_url)}
-                      className="group relative h-28 w-28 overflow-hidden rounded-full border-4 border-white bg-zinc-100 shadow-xl ring-1 ring-black/10 transition hover:scale-[1.02] dark:border-zinc-950 dark:bg-zinc-800 dark:ring-white/10 sm:h-36 sm:w-36"
-                      title="Abrir foto de perfil"
-                      aria-label="Abrir foto de perfil"
-                    >
-                      <img
-                        src={profile.avatar_url}
-                        alt={displayName}
-                        className="h-full w-full object-cover"
-                      />
+                  <UserTierFrame tier={profileTier} className="h-28 w-28 sm:h-36 sm:w-36">
+                    {profile.avatar_url ? (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedAvatarUrl(profile.avatar_url)}
+                        className="group relative h-full w-full overflow-hidden rounded-full border-4 border-white bg-zinc-100 shadow-xl ring-1 ring-black/10 transition hover:scale-[1.02] dark:border-zinc-950 dark:bg-zinc-800 dark:ring-white/10"
+                        title="Abrir foto de perfil"
+                        aria-label="Abrir foto de perfil"
+                      >
+                        <img
+                          src={profile.avatar_url}
+                          alt={displayName}
+                          className="h-full w-full object-cover"
+                        />
 
-                      <span className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition group-hover:bg-black/40 group-hover:opacity-100">
-                        <Maximize2 className="h-6 w-6 text-white" />
-                      </span>
-                    </button>
-                  ) : (
-                    <div className="flex h-28 w-28 items-center justify-center rounded-full border-4 border-white bg-zinc-100 text-4xl font-black text-zinc-700 shadow-xl ring-1 ring-black/10 dark:border-zinc-950 dark:bg-zinc-800 dark:text-zinc-300 dark:ring-white/10 sm:h-36 sm:w-36">
-                      {displayName.charAt(0).toUpperCase()}
-                    </div>
-                  )}
+                        <span className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition group-hover:bg-black/40 group-hover:opacity-100">
+                          <Maximize2 className="h-6 w-6 text-white" />
+                        </span>
+                      </button>
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center rounded-full border-4 border-white bg-zinc-100 text-4xl font-black text-zinc-700 shadow-xl ring-1 ring-black/10 dark:border-zinc-950 dark:bg-zinc-800 dark:text-zinc-300 dark:ring-white/10">
+                        {displayName.charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                  </UserTierFrame>
                 </div>
 
                 <div className="min-w-0 flex-1 pb-1">
                   <h2 className="flex max-w-full items-center gap-2 text-2xl font-black leading-tight tracking-tight text-black dark:text-white sm:text-4xl">
-                    <UserBadges userId={profile.id} size="md" max={1} />
+                    <UserTierBadge tier={profileTier} size="md" />
+                    <UserBadges userId={profile.id} size="md" max={1} excludeTierBadges={profileTier !== 'standard'} />
                     <span className="min-w-0 truncate" title={displayName}>
                       {displayName}
                     </span>
                   </h2>
+
+                  {profileTier !== 'standard' && (
+                    <p className="mt-2 text-sm font-semibold text-zinc-600 dark:text-zinc-300">
+                      {profileTier === 'elder' ? 'Membro Anciao da comunidade EntreUS.' : 'Beneficios visuais e limite ampliado de video ativos.'}
+                    </p>
+                  )}
 
                   <p className="mt-1 break-all text-sm font-medium text-zinc-500 dark:text-zinc-400 sm:text-base">
                     @{profile.username}

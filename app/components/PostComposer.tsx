@@ -24,7 +24,9 @@ import {
 } from 'lucide-react'
 import { useLanguage } from './LanguageProvider'
 import { supabase } from '@/lib/supabase'
+import UserTierBadge from './UserTierBadge'
 import type { AiAssistMode } from '@/lib/ai/types'
+import type { UserTier } from '@/lib/user-tiers'
 import {
   HEAVY_VIDEO_WARNING_SIZE_BYTES,
   IMAGE_UPLOAD_MAX_SIZE_BYTES,
@@ -69,6 +71,7 @@ type PostComposerProps = {
   userName: string
   userAvatarUrl?: string | null
   videoUploadLimitBytes?: number
+  userTier?: UserTier
   submitting?: boolean
   onSubmit: (data: {
     content: string
@@ -201,6 +204,12 @@ function getVideoSizeError(videoUploadLimitBytes: number) {
   return `Seu limite atual e ${formatUploadLimitMegabytes(videoUploadLimitBytes)}. Tente comprimir o video antes de publicar. VIP/Anciao tem limites maiores.`
 }
 
+function getVideoTierBenefitMessage(tier: UserTier, videoUploadLimitBytes: number) {
+  if (tier === 'elder') return `Voce tem limite Anciao de ${formatUploadLimitMegabytes(videoUploadLimitBytes)}.`
+  if (tier === 'vip' || tier === 'vip_premium') return `Voce tem limite VIP de ${formatUploadLimitMegabytes(videoUploadLimitBytes)}.`
+  return `Seu limite atual de video e ${formatUploadLimitMegabytes(videoUploadLimitBytes)}.`
+}
+
 function getVideoOptimizationMessage(originalSize: number, compressedSize: number) {
   return `Video otimizado: ${formatUploadBytes(originalSize)} -> ${formatUploadBytes(compressedSize)}`
 }
@@ -257,6 +266,7 @@ export default function PostComposer({
   userName,
   userAvatarUrl,
   videoUploadLimitBytes = VIDEO_UPLOAD_MAX_SIZE_BYTES,
+  userTier = 'standard',
   submitting = false,
   onSubmit,
 }: PostComposerProps) {
@@ -1134,9 +1144,24 @@ export default function PostComposer({
           )}
 
           <div className="mt-4 border-t border-zinc-200 pt-3 dark:border-zinc-800">
-            <p className="mb-3 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs leading-5 text-blue-800 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-100">
-              Seu limite atual e {formatUploadLimitMegabytes(videoUploadLimitBytes)} por video. Tente comprimir o video antes de publicar quando necessario. VIP/Anciao tem limites maiores.
-            </p>
+            <div className={`mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border px-3 py-2 text-xs leading-5 ${userTier === 'elder'
+              ? 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100'
+              : userTier === 'vip' || userTier === 'vip_premium'
+                ? 'border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-100'
+                : 'border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-100'
+              }`}
+            >
+              <UserTierBadge tier={userTier} />
+              <span>{getVideoTierBenefitMessage(userTier, videoUploadLimitBytes)}</span>
+              {userTier === 'standard' && (
+                <>
+                  <span>VIP libera videos maiores e destaque visual.</span>
+                  <Link href="/vip-plus" className="font-black underline underline-offset-2">
+                    Conhecer VIP
+                  </Link>
+                </>
+              )}
+            </div>
 
             <div className="flex flex-col gap-3">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
