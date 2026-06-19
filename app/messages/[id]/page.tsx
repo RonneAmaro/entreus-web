@@ -312,6 +312,24 @@ function makeFileNameSafe(name: string) {
     .replace(/[^a-z0-9._-]/g, '-')
 }
 
+function isPrivateMessageAttachmentR2Path(value: string | null | undefined) {
+  if (!value) return false
+
+  const trimmed = value.trim()
+  const key = trimmed.startsWith('r2://')
+    ? trimmed.slice('r2://'.length).replace(/^\/+/, '')
+    : trimmed.replace(/^\/+/, '')
+
+  return (
+    key.startsWith('private/messages/') &&
+    !key.includes('..') &&
+    !key.includes('\\') &&
+    !key.includes('\0') &&
+    !key.includes('?') &&
+    !key.includes('#')
+  )
+}
+
 function getAudioMimeType() {
   if (typeof window === 'undefined') return 'audio/webm'
 
@@ -1710,19 +1728,51 @@ export default function ConversationPage() {
     await markIncomingMessagesAsRead(currentUserId)
   }
 
-  async function attachSignedUrl(attachment: MessageAttachment) {
-    const { data, error } = await supabase.storage
-      .from('message-media')
-      .createSignedUrl(attachment.storage_path, 60 * 60)
+  async function getMessageAttachmentAuthHeaders() {
+    const {
+      data: { session },
+      error,
+    } = await supabase.auth.getSession()
 
-    if (error) {
-      console.error('Erro ao gerar URL privada da mídia:', error.message)
-      return attachment
-    }
+    if (error || !session?.access_token) return null
 
     return {
-      ...attachment,
-      signed_url: data.signedUrl,
+      Authorization: `Bearer ${session.access_token}`,
+    }
+  }
+
+  async function attachSignedUrl(attachment: MessageAttachment) {
+    const headers = await getMessageAttachmentAuthHeaders()
+
+    if (!headers) return attachment
+
+    try {
+      const response = await fetch(
+        `/api/messages/attachments/download?attachmentId=${encodeURIComponent(attachment.id)}`,
+        {
+          headers,
+          cache: 'no-store',
+        }
+      )
+
+      if (!response.ok) {
+        console.error('Erro ao gerar acesso privado da midia:', response.status)
+        return attachment
+      }
+
+      const data = (await response.json()) as { url?: unknown }
+      if (typeof data.url !== 'string' || !data.url) return attachment
+
+      return {
+        ...attachment,
+        signed_url: data.url,
+      }
+    } catch (error) {
+      console.error(
+        'Erro ao gerar acesso privado da midia:',
+        error instanceof Error ? error.message : 'Erro inesperado.'
+      )
+      return attachment
     }
   }
 
@@ -2780,12 +2830,14 @@ export default function ConversationPage() {
 
     setMessage('')
 
-    const { error: storageError } = await supabase.storage
-      .from('message-media')
-      .remove([attachment.storage_path])
+    if (!isPrivateMessageAttachmentR2Path(attachment.storage_path)) {
+      const { error: storageError } = await supabase.storage
+        .from('message-media')
+        .remove([attachment.storage_path])
 
-    if (storageError) {
-      console.error('Erro ao remover arquivo do storage:', storageError.message)
+      if (storageError) {
+        console.error('Erro ao remover arquivo do storage:', storageError.message)
+      }
     }
 
     const { error: deleteError } = await supabase

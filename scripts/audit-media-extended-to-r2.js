@@ -15,6 +15,7 @@ const { createClient } = require('@supabase/supabase-js')
 const DEFAULT_PAGE_SIZE = 500
 const DEFAULT_MAX_ROWS_PER_SOURCE = 5000
 const REPORT_PATH = path.join(process.cwd(), 'reports', 'media-migration-extended-dry-run.json')
+const PRIVATE_MESSAGE_R2_PREFIX = 'private/messages/'
 
 const CLASSIFICATIONS = [
   'supabase-storage',
@@ -301,6 +302,23 @@ function isSupabaseStorageReference(lower, config) {
   )
 }
 
+function isPrivateMessageR2Reference(raw, source) {
+  if (source.area !== 'private-message-attachments') return false
+
+  const key = raw.startsWith('r2://')
+    ? raw.slice('r2://'.length).replace(/^\/+/, '')
+    : raw.replace(/^\/+/, '')
+
+  return Boolean(
+    key.startsWith(PRIVATE_MESSAGE_R2_PREFIX) &&
+      !key.includes('..') &&
+      !key.includes('\\') &&
+      !key.includes('\0') &&
+      !key.includes('?') &&
+      !key.includes('#'),
+  )
+}
+
 function isR2Reference(raw, lower, config) {
   if (lower.includes('r2.dev')) return true
   if (!config.r2PublicHost) return false
@@ -322,6 +340,10 @@ function classifyReference(value, source, config) {
 
   const raw = String(value).trim()
   const lower = raw.toLowerCase()
+
+  if (isPrivateMessageR2Reference(raw, source)) {
+    return 'cloudflare-r2'
+  }
 
   if (isSupabaseStorageReference(lower, config)) {
     return 'supabase-storage'
@@ -370,14 +392,17 @@ function sanitizePublicReference(value) {
   }
 }
 
-function maskExample(provider) {
+function maskExample(provider, source) {
   if (provider === 'empty/null') return null
+  if (provider === 'cloudflare-r2' && source.area === 'private-message-attachments') {
+    return 'r2://private/messages/[redacted]'
+  }
   if (provider === 'cloudflare-r2') return 'r2://[redacted]'
   return `${provider}://[redacted]`
 }
 
 function getExampleValue(source, provider, value) {
-  if (source.privacy !== 'public') return maskExample(provider)
+  if (source.privacy !== 'public') return maskExample(provider, source)
   return sanitizePublicReference(value)
 }
 
