@@ -50,6 +50,7 @@ type ItaCashPurchaseRequest = {
   admin_notes: string | null
   rejection_reason: string | null
   proof_path: string | null
+  proof_url: string | null
   proof_uploaded_at: string | null
   pix_total_brl_cents: number | null
   created_at: string
@@ -93,6 +94,10 @@ function paymentMethodLabel(method: string) {
   if (method === 'mercadopago_auto') return 'Mercado Pago automatico'
   if (method === 'mercadopago_pix') return 'Mercado Pago Pix'
   return 'Pix manual'
+}
+
+function hasPaymentProof(request: ItaCashPurchaseRequest) {
+  return Boolean(request.proof_path || request.proof_url)
 }
 
 export default function AdminItaCashPurchasesPage() {
@@ -204,6 +209,7 @@ export default function AdminItaCashPurchasesPage() {
         admin_notes,
         rejection_reason,
         proof_path,
+        proof_url,
         proof_uploaded_at,
         pix_total_brl_cents,
         created_at
@@ -299,7 +305,7 @@ export default function AdminItaCashPurchasesPage() {
   }
 
   async function openProof(request: ItaCashPurchaseRequest) {
-    if (!request.proof_path) {
+    if (!hasPaymentProof(request)) {
       setMessage('Esta solicitacao nao possui comprovante enviado.')
       return
     }
@@ -307,14 +313,34 @@ export default function AdminItaCashPurchasesPage() {
     setProofLoadingId(request.id)
     setMessage('')
 
-    const { data, error } = await supabase.storage
-      .from('payment-proofs')
-      .createSignedUrl(request.proof_path, 300)
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+
+    if (!session?.access_token) {
+      setProofLoadingId(null)
+      setMessage('Sessao expirada. Entre novamente para abrir o comprovante.')
+      return
+    }
+
+    const response = await fetch('/api/admin/itacash-purchases/payment-proof/signed-url', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ requestId: request.id }),
+    })
+
+    const data = (await response.json().catch(() => null)) as {
+      ok?: boolean
+      signedUrl?: string
+    } | null
 
     setProofLoadingId(null)
 
-    if (error || !data?.signedUrl) {
-      setMessage('Nao foi possivel abrir comprovante: ' + (error?.message || 'tente novamente.'))
+    if (!response.ok || !data?.ok || !data.signedUrl) {
+      setMessage('Nao foi possivel abrir comprovante. Tente novamente.')
       return
     }
 
@@ -538,7 +564,7 @@ export default function AdminItaCashPurchasesPage() {
 
                       {isPending && (
                         <div className="flex gap-2">
-                          {request.proof_path && (
+                          {hasPaymentProof(request) && (
                             <button
                               type="button"
                               onClick={() => openProof(request)}
@@ -574,12 +600,12 @@ export default function AdminItaCashPurchasesPage() {
                     </div>
                   </div>
 
-                  {(request.user_note || request.rejection_reason || request.admin_notes || request.proof_path) && (
+                  {(request.user_note || request.rejection_reason || request.admin_notes || hasPaymentProof(request)) && (
                     <div className="mt-4 grid gap-3 border-t border-white/10 pt-4 text-sm text-zinc-300 md:grid-cols-4">
                       <p><span className="font-black text-zinc-100">Observacao:</span> {request.user_note || 'Sem observacao.'}</p>
                       <p>
                         <span className="font-black text-zinc-100">Comprovante:</span>{' '}
-                        {request.proof_path ? (
+                        {hasPaymentProof(request) ? (
                           <button
                             type="button"
                             onClick={() => openProof(request)}

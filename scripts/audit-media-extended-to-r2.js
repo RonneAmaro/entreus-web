@@ -17,6 +17,7 @@ const DEFAULT_MAX_ROWS_PER_SOURCE = 5000
 const REPORT_PATH = path.join(process.cwd(), 'reports', 'media-migration-extended-dry-run.json')
 const PRIVATE_MESSAGE_R2_PREFIX = 'private/messages/'
 const AGE_VERIFICATION_R2_PREFIX = 'private/age-verifications/'
+const PAYMENT_PROOF_R2_PREFIX = 'private/payment-proofs/'
 
 const CLASSIFICATIONS = [
   'supabase-storage',
@@ -337,6 +338,23 @@ function isAgeVerificationR2Reference(raw, source) {
   )
 }
 
+function isPaymentProofR2Reference(raw, source) {
+  if (source.area !== 'sensitive-payment-proofs') return false
+
+  const key = raw.startsWith('r2://')
+    ? raw.slice('r2://'.length).replace(/^\/+/, '')
+    : raw.replace(/^\/+/, '')
+
+  return Boolean(
+    key.startsWith(PAYMENT_PROOF_R2_PREFIX) &&
+      !key.includes('..') &&
+      !key.includes('\\') &&
+      !key.includes('\0') &&
+      !key.includes('?') &&
+      !key.includes('#'),
+  )
+}
+
 function isR2Reference(raw, lower, config) {
   if (lower.includes('r2.dev')) return true
   if (!config.r2PublicHost) return false
@@ -359,7 +377,11 @@ function classifyReference(value, source, config) {
   const raw = String(value).trim()
   const lower = raw.toLowerCase()
 
-  if (isPrivateMessageR2Reference(raw, source) || isAgeVerificationR2Reference(raw, source)) {
+  if (
+    isPrivateMessageR2Reference(raw, source) ||
+    isAgeVerificationR2Reference(raw, source) ||
+    isPaymentProofR2Reference(raw, source)
+  ) {
     return 'cloudflare-r2'
   }
 
@@ -417,6 +439,9 @@ function maskExample(provider, source) {
   }
   if (provider === 'cloudflare-r2' && source.area === 'sensitive-age-verification') {
     return 'r2://private/age-verifications/[redacted]'
+  }
+  if (provider === 'cloudflare-r2' && source.area === 'sensitive-payment-proofs') {
+    return 'r2://private/payment-proofs/[redacted]'
   }
   if (provider === 'cloudflare-r2') return 'r2://[redacted]'
   return `${provider}://[redacted]`
