@@ -24,6 +24,10 @@ import {
   type ModeratedPostFields,
 } from "@/lib/post-moderation";
 import { resolveUserTier } from "@/lib/user-tiers";
+import {
+  getEffectiveProfileThemeKey,
+  getProfileTheme,
+} from "@/lib/profile-themes";
 
 type VisibilityType = "public" | "followers" | "private";
 type ProfileTab = "posts" | "replies" | "media";
@@ -45,6 +49,7 @@ type Profile = {
   age_verification_status?: string | null;
   vip_status?: string | null;
   vip_expires_at?: string | null;
+  profile_theme?: string | null;
 };
 
 type UserBadgeRow = {
@@ -130,6 +135,15 @@ type FeedItem =
     repost: Repost;
   };
 
+const PROFILE_SELECT_WITH_THEME =
+  "id, username, display_name, bio, avatar_url, banner_url, country, city, state, website_url, website_title, show_sensitive_content, wants_18_plus, age_verification_status, vip_status, vip_expires_at, profile_theme";
+const PROFILE_SELECT_FALLBACK =
+  "id, username, display_name, bio, avatar_url, banner_url, country, city, state, website_url, website_title, show_sensitive_content, wants_18_plus, age_verification_status, vip_status, vip_expires_at";
+
+function isMissingProfileThemeColumnError(error: { message?: string } | null) {
+  return Boolean(error?.message && /profile_theme/i.test(error.message));
+}
+
 export default function PublicProfilePage() {
   const params = useParams();
   const router = useRouter();
@@ -193,6 +207,14 @@ export default function PublicProfilePage() {
     }),
     [profile, profileBadgeSlugs],
   );
+  const effectiveProfileThemeKey = useMemo(
+    () => getEffectiveProfileThemeKey(profile?.profile_theme, profileTier),
+    [profile?.profile_theme, profileTier],
+  );
+  const effectiveProfileTheme = useMemo(
+    () => getProfileTheme(effectiveProfileThemeKey),
+    [effectiveProfileThemeKey],
+  );
 
   useEffect(() => {
     setMounted(true);
@@ -215,13 +237,24 @@ export default function PublicProfilePage() {
       setLoggedUserId(user.id);
       setEmail(user.email || "");
 
-      const { data: loggedProfileData } = await supabase
+      let { data: loggedProfileData, error: loggedProfileError } = await supabase
         .from("profiles")
-        .select(
-          "id, username, display_name, bio, avatar_url, banner_url, country, city, state, website_url, website_title, show_sensitive_content, wants_18_plus, age_verification_status, vip_status, vip_expires_at",
-        )
+        .select(PROFILE_SELECT_WITH_THEME)
         .eq("id", user.id)
         .maybeSingle();
+
+      if (isMissingProfileThemeColumnError(loggedProfileError)) {
+        const fallbackResult = await supabase
+          .from("profiles")
+          .select(PROFILE_SELECT_FALLBACK)
+          .eq("id", user.id)
+          .maybeSingle();
+
+        loggedProfileData = fallbackResult.data
+          ? { ...fallbackResult.data, profile_theme: "default" }
+          : null;
+        loggedProfileError = fallbackResult.error;
+      }
 
       const normalizedLoggedProfile = loggedProfileData
         ? {
@@ -241,13 +274,24 @@ export default function PublicProfilePage() {
         return;
       }
 
-      const { data: profileData, error: profileError } = await supabase
+      let { data: profileData, error: profileError } = await supabase
         .from("profiles")
-        .select(
-          "id, username, display_name, bio, avatar_url, banner_url, country, city, state, website_url, website_title, show_sensitive_content, wants_18_plus, age_verification_status, vip_status, vip_expires_at",
-        )
+        .select(PROFILE_SELECT_WITH_THEME)
         .eq("username", username)
         .maybeSingle();
+
+      if (isMissingProfileThemeColumnError(profileError)) {
+        const fallbackResult = await supabase
+          .from("profiles")
+          .select(PROFILE_SELECT_FALLBACK)
+          .eq("username", username)
+          .maybeSingle();
+
+        profileData = fallbackResult.data
+          ? { ...fallbackResult.data, profile_theme: "default" }
+          : null;
+        profileError = fallbackResult.error;
+      }
 
       if (profileError) {
         setMessage("Erro ao carregar perfil: " + profileError.message);
@@ -1912,12 +1956,12 @@ export default function PublicProfilePage() {
 
         <div className="mx-auto grid w-full grid-cols-1 gap-4 sm:gap-6 xl:grid-cols-[minmax(0,40rem)_20rem]">
           <div className="min-w-0">
-        <div className={`mb-6 overflow-hidden rounded-[2rem] border border-zinc-200/70 bg-white/95 shadow-sm ring-1 ring-black/5 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-black/80 dark:ring-white/10 ${getUserTierSurfaceClassName(profileTier, 'profile')}`}>
+        <div className={`mb-6 overflow-hidden rounded-[2rem] border border-zinc-200/70 bg-white/95 shadow-sm ring-1 ring-black/5 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-black/80 dark:ring-white/10 ${getUserTierSurfaceClassName(profileTier, 'profile')} ${effectiveProfileTheme.cardClassName}`}>
           <button
             type="button"
             onClick={() => profile.banner_url && setSelectedAvatarUrl(profile.banner_url)}
             disabled={!profile.banner_url}
-            className="group relative flex h-44 w-full items-center justify-center overflow-hidden bg-gradient-to-br from-zinc-100 via-zinc-200 to-zinc-100 text-zinc-500 transition hover:opacity-95 disabled:cursor-default dark:from-zinc-900 dark:via-zinc-800 dark:to-black dark:text-zinc-400 sm:h-60"
+            className={`group relative flex h-44 w-full items-center justify-center overflow-hidden bg-gradient-to-br from-zinc-100 via-zinc-200 to-zinc-100 text-zinc-500 transition hover:opacity-95 disabled:cursor-default dark:from-zinc-900 dark:via-zinc-800 dark:to-black dark:text-zinc-400 sm:h-60 ${effectiveProfileTheme.bannerClassName}`}
             title={profile.banner_url ? "Abrir capa do perfil" : "Capa do perfil"}
             aria-label={profile.banner_url ? "Abrir capa do perfil" : "Capa do perfil"}
           >
@@ -1951,7 +1995,7 @@ export default function PublicProfilePage() {
             <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
               <div className="flex min-w-0 flex-1 flex-col gap-4 sm:flex-row sm:items-end">
                 <div className="-mt-14 shrink-0 sm:-mt-16">
-                  <UserTierFrame tier={profileTier} className="h-28 w-28 sm:h-36 sm:w-36">
+                  <UserTierFrame tier={profileTier} className={`h-28 w-28 sm:h-36 sm:w-36 ${effectiveProfileTheme.avatarFrameClassName}`}>
                     {profile.avatar_url ? (
                       <button
                         type="button"

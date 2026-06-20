@@ -14,6 +14,7 @@ import UserBadges from '../components/UserBadges'
 import UserBadgesPanel from '../components/UserBadgesPanel'
 import UserTierBadge from '../components/UserTierBadge'
 import UserTierFrame, { getUserTierSurfaceClassName } from '../components/UserTierFrame'
+import ProfileThemeSelector from '../components/ProfileThemeSelector'
 import { useLanguage } from '../components/LanguageProvider'
 import {
   isMissingPostModerationColumnError,
@@ -21,6 +22,11 @@ import {
   type ModeratedPostFields,
 } from '@/lib/post-moderation'
 import { resolveUserTier } from '@/lib/user-tiers'
+import {
+  getEffectiveProfileThemeKey,
+  getProfileTheme,
+  type ProfileThemeKey,
+} from '@/lib/profile-themes'
 
 type VisibilityType = 'public' | 'followers' | 'private'
 
@@ -45,6 +51,7 @@ type Profile = {
   age_verified_at: string | null
   vip_status?: string | null
   vip_expires_at?: string | null
+  profile_theme?: string | null
 }
 
 type UserBadgeRow = {
@@ -136,6 +143,14 @@ const PROFILE_MEDIA_FOLDERS: Record<ProfileMediaKind, string> = {
   banner: 'profiles/banners',
 }
 
+const PROFILE_SELECT_WITH_THEME =
+  'id, username, display_name, bio, avatar_url, banner_url, country, city, state, website_url, website_title, birth_date, show_sensitive_content, is_minor, parental_consent_status, wants_18_plus, age_verification_status, age_verified_at, vip_status, vip_expires_at, profile_theme'
+const PROFILE_SELECT_FALLBACK =
+  'id, username, display_name, bio, avatar_url, banner_url, country, city, state, website_url, website_title, birth_date, show_sensitive_content, is_minor, parental_consent_status, wants_18_plus, age_verification_status, age_verified_at, vip_status, vip_expires_at'
+
+function isMissingProfileThemeColumnError(error: { message?: string } | null) {
+  return Boolean(error?.message && /profile_theme/i.test(error.message))
+}
 
 function getDateLocale(language: string) {
   const locales: Record<string, string> = {
@@ -203,6 +218,7 @@ export default function ProfilePage() {
   const [mounted, setMounted] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [savingProfileTheme, setSavingProfileTheme] = useState(false)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
   const [uploadingBanner, setUploadingBanner] = useState(false)
   const [message, setMessage] = useState('')
@@ -235,6 +251,8 @@ export default function ProfilePage() {
   const [bannerUrl, setBannerUrl] = useState('')
   const [bannerPreview, setBannerPreview] = useState('')
   const [showSensitiveContent, setShowSensitiveContent] = useState(false)
+  const [selectedProfileTheme, setSelectedProfileTheme] = useState<ProfileThemeKey>('default')
+  const [savedProfileTheme, setSavedProfileTheme] = useState<ProfileThemeKey>('default')
 
   const [posts, setPosts] = useState<Post[]>([])
   const [likes, setLikes] = useState<Like[]>([])
@@ -255,6 +273,14 @@ export default function ProfilePage() {
     }),
     [profile, profileBadgeSlugs],
   )
+  const effectiveProfileThemeKey = useMemo(
+    () => getEffectiveProfileThemeKey(selectedProfileTheme, profileTier),
+    [selectedProfileTheme, profileTier],
+  )
+  const effectiveProfileTheme = useMemo(
+    () => getProfileTheme(effectiveProfileThemeKey),
+    [effectiveProfileThemeKey],
+  )
 
   useEffect(() => {
     setMounted(true)
@@ -274,13 +300,24 @@ export default function ProfilePage() {
       setUserId(user.id)
       setEmail(user.email || '')
 
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from('profiles')
-        .select(
-          'id, username, display_name, bio, avatar_url, banner_url, country, city, state, website_url, website_title, birth_date, show_sensitive_content, is_minor, parental_consent_status, wants_18_plus, age_verification_status, age_verified_at, vip_status, vip_expires_at'
-        )
+        .select(PROFILE_SELECT_WITH_THEME)
         .eq('id', user.id)
         .maybeSingle()
+
+      if (isMissingProfileThemeColumnError(error)) {
+        const fallbackResult = await supabase
+          .from('profiles')
+          .select(PROFILE_SELECT_FALLBACK)
+          .eq('id', user.id)
+          .maybeSingle()
+
+        data = fallbackResult.data
+          ? { ...fallbackResult.data, profile_theme: 'default' }
+          : null
+        error = fallbackResult.error
+      }
 
       if (error) {
         setMessage(t('profile.messages.loadProfileError') + error.message)
@@ -307,6 +344,7 @@ export default function ProfilePage() {
         wants_18_plus: false,
         age_verification_status: 'not_started',
         age_verified_at: null,
+        profile_theme: 'default',
       }
 
       setProfile(loadedProfile)
@@ -315,12 +353,12 @@ export default function ProfilePage() {
         .select('badges ( slug )')
         .eq('user_id', user.id)
 
-      setProfileBadgeSlugs(
-        ((profileBadgesData || []) as UserBadgeRow[])
-          .flatMap((row) => Array.isArray(row.badges) ? row.badges : [row.badges])
-          .map((badge) => badge?.slug || '')
-          .filter(Boolean),
-      )
+      const loadedBadgeSlugs = ((profileBadgesData || []) as UserBadgeRow[])
+        .flatMap((row) => Array.isArray(row.badges) ? row.badges : [row.badges])
+        .map((badge) => badge?.slug || '')
+        .filter(Boolean)
+
+      setProfileBadgeSlugs(loadedBadgeSlugs)
       setUsername(loadedProfile.username || '')
       setDisplayName(loadedProfile.display_name || '')
       setBio(loadedProfile.bio || '')
@@ -341,6 +379,16 @@ export default function ProfilePage() {
       setShowSensitiveContent(
         Boolean(loadedProfile.wants_18_plus && loadedProfile.age_verification_status === 'approved')
       )
+      const loadedTheme = getEffectiveProfileThemeKey(
+        loadedProfile.profile_theme,
+        resolveUserTier({
+          vipStatus: loadedProfile.vip_status,
+          vipExpiresAt: loadedProfile.vip_expires_at,
+          badgeSlugs: loadedBadgeSlugs,
+        }),
+      )
+      setSelectedProfileTheme(loadedTheme)
+      setSavedProfileTheme(loadedTheme)
 
       if (loadedProfile.is_minor) {
         await loadLatestParentalConsentRequest(user.id)
@@ -1020,6 +1068,9 @@ export default function ProfilePage() {
       age_verification_status: nextAgeVerificationStatus,
       age_verified_at: profile?.age_verified_at || null,
       show_sensitive_content: nextShowSensitiveContent,
+      vip_status: profile?.vip_status,
+      vip_expires_at: profile?.vip_expires_at,
+      profile_theme: savedProfileTheme,
     }
 
     setUsername(normalizedUsername)
@@ -1035,6 +1086,49 @@ export default function ProfilePage() {
 
     await loadProfileActivity(userId, updatedProfile)
     await loadReposts(updatedProfile)
+  }
+
+  async function handleSaveProfileTheme() {
+    if (!userId) return
+
+    setSavingProfileTheme(true)
+    setMessage('')
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+
+    if (!session?.access_token) {
+      setSavingProfileTheme(false)
+      setMessage('Entre novamente para salvar o tema do perfil.')
+      return
+    }
+
+    const response = await fetch('/api/profile/theme', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ theme: selectedProfileTheme }),
+    })
+    const result = (await response.json().catch(() => null)) as {
+      ok?: boolean
+      theme?: ProfileThemeKey
+      error?: string
+    } | null
+
+    if (!response.ok || !result?.ok || !result.theme) {
+      setSavingProfileTheme(false)
+      setMessage(result?.error || 'Nao foi possivel salvar o tema do perfil.')
+      return
+    }
+
+    setSavedProfileTheme(result.theme)
+    setSelectedProfileTheme(result.theme)
+    setProfile((current) => current ? { ...current, profile_theme: result.theme } : current)
+    setSavingProfileTheme(false)
+    setMessage('Tema do perfil salvo com sucesso.')
   }
 
   async function handleToggleBookmark(postId: string) {
@@ -1451,7 +1545,7 @@ export default function ProfilePage() {
 
         <form
           onSubmit={handleSaveProfile}
-          className={`mt-5 overflow-hidden rounded-[2rem] border border-zinc-200/70 bg-white/95 shadow-sm ring-1 ring-black/5 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-black/80 dark:ring-white/10 ${getUserTierSurfaceClassName(profileTier, 'profile')}`}
+          className={`mt-5 overflow-hidden rounded-[2rem] border border-zinc-200/70 bg-white/95 shadow-sm ring-1 ring-black/5 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-black/80 dark:ring-white/10 ${getUserTierSurfaceClassName(profileTier, 'profile')} ${effectiveProfileTheme.cardClassName}`}
         >
           <div className="flex flex-col">
             <div className="relative">
@@ -1459,7 +1553,7 @@ export default function ProfilePage() {
                 type="button"
                 onClick={() => bannerPreview && setShowBannerModal(true)}
                 disabled={!bannerPreview}
-                className="group relative flex h-44 w-full items-center justify-center overflow-hidden bg-gradient-to-br from-zinc-100 via-zinc-200 to-zinc-300 text-zinc-500 transition hover:opacity-95 disabled:cursor-default dark:from-zinc-900 dark:via-zinc-800 dark:to-black dark:text-zinc-400 sm:h-64"
+                className={`group relative flex h-44 w-full items-center justify-center overflow-hidden bg-gradient-to-br from-zinc-100 via-zinc-200 to-zinc-300 text-zinc-500 transition hover:opacity-95 disabled:cursor-default dark:from-zinc-900 dark:via-zinc-800 dark:to-black dark:text-zinc-400 sm:h-64 ${effectiveProfileTheme.bannerClassName}`}
                 title={bannerPreview ? t('profile.banner.viewTitle') : t('profile.banner.fallbackTitle')}
                 aria-label={bannerPreview ? t('profile.banner.viewTitle') : t('profile.banner.fallbackTitle')}
               >
@@ -1516,7 +1610,7 @@ export default function ProfilePage() {
               <div className="relative z-10 -mt-16 flex flex-col gap-5 sm:-mt-20 sm:flex-row">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
                   <div className="flex flex-col items-center gap-3 sm:items-start">
-                    <UserTierFrame tier={profileTier} className="relative h-32 w-32 sm:h-40 sm:w-40">
+                    <UserTierFrame tier={profileTier} className={`relative h-32 w-32 sm:h-40 sm:w-40 ${effectiveProfileTheme.avatarFrameClassName}`}>
                       <button
                         type="button"
                         onClick={() => avatarPreview && setShowAvatarModal(true)}
@@ -1646,6 +1740,15 @@ export default function ProfilePage() {
                   {uploadingBanner && <p>{t('profile.actions.uploadingBanner')}</p>}
                 </div>
               )}
+
+              <ProfileThemeSelector
+                tier={profileTier}
+                selectedTheme={selectedProfileTheme}
+                savedTheme={savedProfileTheme}
+                saving={savingProfileTheme}
+                onChange={setSelectedProfileTheme}
+                onSave={handleSaveProfileTheme}
+              />
 
               <div className="mt-6 border-t border-zinc-200/70 pt-5 dark:border-zinc-800/70">
                 <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
