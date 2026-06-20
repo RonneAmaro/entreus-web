@@ -175,7 +175,7 @@ export function getYouTubeVideoId(url: string): string | null {
 }
 
 export function getYouTubeEmbedUrl(videoId: string): string {
-  return `https://www.youtube.com/embed/${videoId}`
+  return `https://www.youtube-nocookie.com/embed/${videoId}`
 }
 
 export function getTikTokVideoId(url: string): string | null {
