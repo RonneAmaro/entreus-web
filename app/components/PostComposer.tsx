@@ -44,13 +44,13 @@ import {
   compressVideoForPost,
 } from '@/lib/media/video-compression'
 import {
-  COMMUNITIES,
-  CONTENT_RATINGS,
-  getCommunityDefinition,
-  resolveContentRating,
-  type CommunityType,
-  type ContentRating,
-} from '@/lib/communities'
+  POST_COMMUNITIES as COMMUNITIES,
+  POST_CONTENT_RATINGS as CONTENT_RATINGS,
+  getPostCommunityDefinition as getCommunityDefinition,
+  resolvePostContentRating as resolveContentRating,
+  type PostCommunityType as CommunityType,
+  type PostContentRating as ContentRating,
+} from '@/lib/post-classification'
 
 type VisibilityType = 'public' | 'followers' | 'private'
 
@@ -705,6 +705,12 @@ export default function PostComposer({
     }
 
     setError('')
+    if (nextRating === 'adult_18plus') {
+      setCommunityType('adult_18plus')
+      setContentRating('adult_18plus')
+      return
+    }
+
     setContentRating(resolveContentRating(communityType, nextRating))
   }
 

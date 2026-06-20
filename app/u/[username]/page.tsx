@@ -29,11 +29,11 @@ import {
   getProfileTheme,
 } from "@/lib/profile-themes";
 import {
-  canViewCommunity,
-  isAdultCommunityOrRating,
-  normalizeCommunity,
-  normalizeContentRating,
-} from "@/lib/communities";
+  canViewerSeePostClassification as canViewCommunity,
+  getSafePostCommunity as normalizeCommunity,
+  getSafePostContentRating as normalizeContentRating,
+  isAdultPostClassification as isAdultCommunityOrRating,
+} from "@/lib/post-classification";
 
 type VisibilityType = "public" | "followers" | "private";
 type ProfileTab = "posts" | "replies" | "media";

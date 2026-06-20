@@ -18,11 +18,11 @@ import { useLanguage } from './LanguageProvider'
 import { isModeratedHidden, type ModeratedPostFields } from '@/lib/post-moderation'
 import type { UserTier } from '@/lib/user-tiers'
 import {
-  getCommunityLabel,
-  getContentRatingLabel,
-  isAdultCommunityOrRating,
-  normalizeContentRating,
-} from '@/lib/communities'
+  getPostCommunityLabel as getCommunityLabel,
+  getPostContentRatingLabel as getContentRatingLabel,
+  getSafePostContentRating as normalizeContentRating,
+  isAdultPostClassification as isAdultCommunityOrRating,
+} from '@/lib/post-classification'
 
 export type VisibilityType = 'public' | 'followers' | 'private'
 

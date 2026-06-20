@@ -13,11 +13,11 @@ import {
   type ModeratedPostFields,
 } from '@/lib/post-moderation'
 import {
-  canViewCommunity,
-  isAdultCommunityOrRating,
-  normalizeCommunity,
-  normalizeContentRating,
-} from '@/lib/communities'
+  canViewerSeePostClassification as canViewCommunity,
+  getSafePostCommunity as normalizeCommunity,
+  getSafePostContentRating as normalizeContentRating,
+  isAdultPostClassification as isAdultCommunityOrRating,
+} from '@/lib/post-classification'
 
 type VisibilityType = 'public' | 'followers' | 'private'
 
@@ -293,7 +293,7 @@ export default function PostPage() {
       ) {
         setPost(normalizedPost)
         setPermissionDenied(true)
-        setMessage('Conteudo adulto 18+ exige verificacao de idade aprovada.')
+        setMessage('Este conteudo nao esta disponivel para sua conta.')
         setLoading(false)
         return
       }

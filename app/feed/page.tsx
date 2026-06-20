@@ -59,17 +59,17 @@ import {
 } from '@/lib/media/upload-limits'
 import { resolveUserTier } from '@/lib/user-tiers'
 import {
-  canViewAdult18Plus,
-  canViewCommunity,
-  getAllowedCommunityFilters,
-  getCommunityLabel,
-  isAdultCommunityOrRating,
-  normalizeCommunity,
-  normalizeContentRating,
-  type CommunityFilter,
-  type CommunityType,
-  type ContentRating,
-} from '@/lib/communities'
+  canViewAdultPostContent as canViewAdult18Plus,
+  canViewerSeePostClassification as canViewCommunity,
+  getAllowedPostCommunityFilters as getAllowedCommunityFilters,
+  getPostCommunityLabel as getCommunityLabel,
+  getSafePostCommunity as normalizeCommunity,
+  getSafePostContentRating as normalizeContentRating,
+  isAdultPostClassification as isAdultCommunityOrRating,
+  type PostCommunityFilter as CommunityFilter,
+  type PostCommunityType as CommunityType,
+  type PostContentRating as ContentRating,
+} from '@/lib/post-classification'
 
 type VisibilityType = 'public' | 'followers' | 'private'
 type ComposerSubmitData = {
@@ -874,7 +874,7 @@ function FeedContent() {
   const [hasMorePosts, setHasMorePosts] = useState(true)
   const [feedCursor, setFeedCursor] = useState<FeedCursor | null>(null)
   const [loadMoreError, setLoadMoreError] = useState('')
-  const [communityFilter, setCommunityFilter] = useState<CommunityFilter>('all')
+  const [communityFilter, setCommunityFilter] = useState<CommunityFilter>('general')
   const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null)
   const loadingMoreRef = useRef(false)
   const canAccessAdult18Plus = useMemo(
@@ -1255,12 +1255,12 @@ function FeedContent() {
         )
       }
 
-      if (useCommunityColumns && communityFilter === 'all') {
-        postsQuery = postsQuery
-          .neq('community_type', 'adult_18plus')
-          .neq('content_rating', 'adult_18plus')
-      } else if (useCommunityColumns) {
+      if (useCommunityColumns) {
         postsQuery = postsQuery.eq('community_type', communityFilter)
+
+        if (communityFilter === 'general') {
+          postsQuery = postsQuery.eq('content_rating', 'safe')
+        }
       }
 
       return postsQuery
@@ -1366,11 +1366,8 @@ function FeedContent() {
         post.community_type,
         post.content_rating,
       ))
-      .filter((post) => (
-        communityFilter === 'all'
-          ? !isAdultCommunityOrRating(post.community_type, post.content_rating)
-          : normalizeCommunity(post.community_type) === communityFilter
-      ))
+      .filter((post) => normalizeCommunity(post.community_type) === communityFilter)
+      .filter((post) => communityFilter !== 'general' || normalizeContentRating(post.content_rating) === 'safe')
       .filter((post) => canSeePost(post, currentUserId, currentFollows))
 
     if (options.append) {
@@ -3783,14 +3780,14 @@ function FeedContent() {
                   Comunidades
                 </p>
                 <p className="text-xs leading-5 text-zinc-500 dark:text-zinc-400">
-                  Todos nao mistura conteudo adulto. Escolha uma comunidade para filtrar o feed.
+                  Geral mostra apenas posts seguros. Escolha uma comunidade para mudar de ambiente.
                 </p>
               </div>
 
               <div className="flex gap-2 overflow-x-auto pb-1">
                 {allowedCommunityFilters.map((filter) => {
                   const active = communityFilter === filter
-                  const label = filter === 'all' ? 'Todos' : getCommunityLabel(filter)
+                  const label = getCommunityLabel(filter)
 
                   return (
                     <button

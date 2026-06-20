@@ -16,11 +16,11 @@ import {
   type ModeratedPostFields,
 } from '@/lib/post-moderation'
 import {
-  canViewCommunity,
-  isAdultCommunityOrRating,
-  normalizeCommunity,
-  normalizeContentRating,
-} from '@/lib/communities'
+  canViewerSeePostClassification as canViewCommunity,
+  getSafePostCommunity as normalizeCommunity,
+  getSafePostContentRating as normalizeContentRating,
+  isAdultPostClassification as isAdultCommunityOrRating,
+} from '@/lib/post-classification'
 
 
 function getDateLocale(language: string) {
