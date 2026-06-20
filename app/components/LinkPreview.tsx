@@ -1,6 +1,6 @@
 'use client'
 
-import { type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Camera, ExternalLink, Link2, Play } from 'lucide-react'
 import { detectExternalEmbed, type ExternalEmbed } from '@/lib/external-embeds'
 
@@ -17,6 +17,16 @@ type YouTubeExternalEmbed = Extract<ExternalEmbed, { provider: 'youtube' }>
 type XExternalEmbed = Extract<ExternalEmbed, { provider: 'x' }>
 type InstagramExternalEmbed = Extract<ExternalEmbed, { provider: 'instagram' }>
 type FacebookExternalEmbed = Extract<ExternalEmbed, { provider: 'facebook' }>
+
+declare global {
+  interface Window {
+    instgrm?: {
+      Embeds?: {
+        process: (container?: HTMLElement) => void
+      }
+    }
+  }
+}
 
 type EmbedDisplay = {
   providerLabel: string
@@ -284,6 +294,8 @@ function getFacebookContentLabel(contentType: FacebookExternalEmbed['contentType
 
 function FacebookPreview({ embed }: { embed: FacebookExternalEmbed }) {
   const contentLabel = getFacebookContentLabel(embed.contentType)
+  const isVerticalVideo =
+    embed.contentType === 'reel' || embed.contentType === 'watch'
 
   return (
     <EmbedShell
@@ -298,27 +310,22 @@ function FacebookPreview({ embed }: { embed: FacebookExternalEmbed }) {
       actionClassName="border-blue-200 bg-white text-blue-700 hover:border-blue-300 hover:bg-blue-50 dark:border-blue-900/70 dark:bg-zinc-900 dark:text-blue-200 dark:hover:border-blue-700 dark:hover:bg-blue-950/40"
     >
       <div className="bg-zinc-50/60 p-3.5 dark:bg-zinc-950/60 sm:p-4">
-        <div className="rounded-[1.1rem] border border-blue-100 bg-white p-4 dark:border-blue-950/70 dark:bg-zinc-900/40">
-          <p className="text-sm font-semibold text-zinc-950 dark:text-white">
-            Conteudo publico no Facebook
-          </p>
-
-          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
-            <span className="rounded-full border border-blue-100 bg-blue-50 px-2.5 py-1 font-semibold text-blue-700 dark:border-blue-950/70 dark:bg-blue-950/30 dark:text-blue-200">
-              Tipo {contentLabel}
-            </span>
-
-            {embed.username && (
-              <span className="rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 font-semibold dark:border-zinc-800 dark:bg-zinc-950">
-                @{embed.username}
-              </span>
-            )}
-
-            {embed.postId && (
-              <span className="max-w-full truncate rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 dark:border-zinc-800 dark:bg-zinc-950">
-                ID {embed.postId}
-              </span>
-            )}
+        <div className="flex justify-center">
+          <div
+            className={`relative w-full max-w-[31.25rem] overflow-hidden rounded-[1.1rem] border border-blue-100 bg-white shadow-sm dark:border-blue-950/70 dark:bg-zinc-900/40 ${
+              isVerticalVideo ? 'aspect-[9/16]' : 'aspect-video'
+            }`}
+          >
+            <iframe
+              src={embed.embedUrl}
+              title={`${contentLabel} do Facebook incorporado`}
+              loading="lazy"
+              allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
+              allowFullScreen
+              sandbox="allow-scripts allow-same-origin allow-presentation allow-popups allow-popups-to-escape-sandbox"
+              referrerPolicy="strict-origin-when-cross-origin"
+              className="absolute inset-0 h-full w-full border-0"
+            />
           </div>
         </div>
       </div>
@@ -335,6 +342,54 @@ function getInstagramContentLabel(contentType: InstagramExternalEmbed['contentTy
 
 function InstagramPreview({ embed }: { embed: InstagramExternalEmbed }) {
   const contentLabel = getInstagramContentLabel(embed.contentType)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [embedState, setEmbedState] = useState<'loading' | 'ready' | 'blocked'>(
+    'loading'
+  )
+
+  useEffect(() => {
+    let cancelled = false
+    let fallbackTimer: number | null = null
+
+    const processEmbed = () => {
+      if (cancelled) return
+
+      window.instgrm?.Embeds?.process(containerRef.current || undefined)
+
+      fallbackTimer = window.setTimeout(() => {
+        if (cancelled) return
+
+        const hasIframe = Boolean(containerRef.current?.querySelector('iframe'))
+        setEmbedState(hasIframe ? 'ready' : 'blocked')
+      }, 3000)
+    }
+
+    const existingScript = document.querySelector<HTMLScriptElement>(
+      'script[src="https://www.instagram.com/embed.js"]'
+    )
+
+    if (window.instgrm?.Embeds?.process) {
+      processEmbed()
+    } else if (existingScript) {
+      existingScript.addEventListener('load', processEmbed, { once: true })
+      existingScript.addEventListener('error', () => setEmbedState('blocked'), {
+        once: true,
+      })
+    } else {
+      const script = document.createElement('script')
+      script.src = 'https://www.instagram.com/embed.js'
+      script.async = true
+      script.onload = processEmbed
+      script.onerror = () => setEmbedState('blocked')
+      document.body.appendChild(script)
+    }
+
+    return () => {
+      cancelled = true
+      if (fallbackTimer) window.clearTimeout(fallbackTimer)
+      existingScript?.removeEventListener('load', processEmbed)
+    }
+  }, [embed.originalUrl])
 
   return (
     <EmbedShell
@@ -348,24 +403,48 @@ function InstagramPreview({ embed }: { embed: InstagramExternalEmbed }) {
       markClassName="bg-pink-600 text-white"
       actionClassName="border-pink-200 bg-white text-pink-700 hover:border-pink-300 hover:bg-pink-50 dark:border-pink-900/70 dark:bg-zinc-900 dark:text-pink-200 dark:hover:border-pink-700 dark:hover:bg-pink-950/40"
     >
-      <div className="bg-zinc-50/60 p-3.5 dark:bg-zinc-950/60 sm:p-4">
-        <div className="rounded-[1.1rem] border border-pink-100 bg-white p-4 dark:border-pink-950/70 dark:bg-zinc-900/40">
-          <p className="text-sm font-semibold text-zinc-950 dark:text-white">
-            {contentLabel} no Instagram
-          </p>
+      <div
+        ref={containerRef}
+        className="bg-zinc-50/60 p-3.5 dark:bg-zinc-950/60 sm:p-4"
+      >
+        {embedState !== 'blocked' && (
+          <blockquote
+            className="instagram-media mx-auto w-full min-w-0 max-w-[33.75rem] overflow-hidden rounded-[1.1rem] border border-pink-100 bg-white shadow-sm dark:border-pink-950/70"
+            data-instgrm-captioned
+            data-instgrm-permalink={embed.originalUrl}
+            data-instgrm-version="14"
+          >
+            <a
+              href={embed.originalUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block p-4 text-sm font-semibold text-pink-700 dark:text-pink-200"
+            >
+              {contentLabel} no Instagram
+            </a>
+          </blockquote>
+        )}
 
-          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
-            {embed.username && (
-              <span className="rounded-full border border-pink-100 bg-pink-50 px-2.5 py-1 font-semibold text-pink-700 dark:border-pink-950/70 dark:bg-pink-950/30 dark:text-pink-200">
-                @{embed.username}
-              </span>
-            )}
-
-            <span className="max-w-full truncate rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 dark:border-zinc-800 dark:bg-zinc-950">
-              Codigo {embed.postId}
-            </span>
+        {embedState === 'loading' && (
+          <div className="mx-auto mt-3 w-full max-w-[33.75rem] rounded-[1.1rem] border border-pink-100 bg-white p-4 dark:border-pink-950/70 dark:bg-zinc-900/40">
+            <div className="h-3 w-28 rounded-full bg-pink-100 dark:bg-pink-950/50" />
+            <div className="mt-3 h-3 w-3/4 rounded-full bg-zinc-100 dark:bg-zinc-800" />
+            <div className="mt-2 h-3 w-1/2 rounded-full bg-zinc-100 dark:bg-zinc-800" />
           </div>
-        </div>
+        )}
+
+        {embedState === 'blocked' && (
+          <div className="mx-auto w-full max-w-[33.75rem] rounded-[1.1rem] border border-pink-100 bg-white p-4 dark:border-pink-950/70 dark:bg-zinc-900/40">
+            <p className="text-sm font-semibold text-zinc-950 dark:text-white">
+              {contentLabel} no Instagram
+            </p>
+
+            <p className="mt-2 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+              O Instagram nao liberou o embed aqui. Use o botao acima para abrir
+              o conteudo original.
+            </p>
+          </div>
+        )}
       </div>
     </EmbedShell>
   )

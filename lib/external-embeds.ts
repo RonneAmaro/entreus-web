@@ -37,6 +37,7 @@ type FacebookExternalEmbed = {
   postId?: string
   username?: string
   contentType: FacebookContentType
+  embedUrl: string
   originalUrl: string
 }
 
@@ -88,6 +89,7 @@ const SAFE_INSTAGRAM_STORY_ID = /^\d{6,32}$/
 const SAFE_FACEBOOK_PATH_PART = /^[A-Za-z0-9._-]{1,128}$/
 const SAFE_FACEBOOK_CONTENT_ID = /^[A-Za-z0-9._-]{1,128}$/
 const MAX_FACEBOOK_PATH_PARTS = 8
+const FACEBOOK_EMBED_WIDTH = 500
 
 function isSafeYouTubeVideoId(value: string | null) {
   return Boolean(value && SAFE_YOUTUBE_VIDEO_ID.test(value))
@@ -495,6 +497,20 @@ export function getInstagramOriginalUrl(
   return `https://www.instagram.com/${path}/${postId}/`
 }
 
+export function getFacebookEmbedUrl(
+  contentType: FacebookContentType,
+  originalUrl: string
+): string {
+  const pluginPath =
+    contentType === 'video' || contentType === 'reel' || contentType === 'watch'
+      ? 'video.php'
+      : 'post.php'
+  const showText = pluginPath === 'video.php' ? 'false' : 'true'
+  const href = encodeURIComponent(originalUrl)
+
+  return `https://www.facebook.com/plugins/${pluginPath}?href=${href}&show_text=${showText}&width=${FACEBOOK_EMBED_WIDTH}`
+}
+
 export function detectExternalEmbed(url: string): ExternalEmbed | null {
   const youtubeVideoId = getYouTubeVideoId(url)
 
@@ -566,6 +582,10 @@ export function detectExternalEmbed(url: string): ExternalEmbed | null {
       username: facebookDetails.username,
       postId: facebookDetails.postId,
       contentType: facebookDetails.contentType,
+      embedUrl: getFacebookEmbedUrl(
+        facebookDetails.contentType,
+        facebookDetails.originalUrl
+      ),
       originalUrl: facebookDetails.originalUrl,
     }
   }
