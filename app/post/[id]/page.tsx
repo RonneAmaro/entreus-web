@@ -12,6 +12,12 @@ import {
   isModeratedHidden,
   type ModeratedPostFields,
 } from '@/lib/post-moderation'
+import {
+  canViewCommunity,
+  isAdultCommunityOrRating,
+  normalizeCommunity,
+  normalizeContentRating,
+} from '@/lib/communities'
 
 type VisibilityType = 'public' | 'followers' | 'private'
 
@@ -27,6 +33,7 @@ type CurrentProfile = {
   avatar_url: string | null
   role?: string | null
   show_sensitive_content: boolean
+  is_minor?: boolean | null
   wants_18_plus?: boolean | null
   age_verification_status?: string | null
 }
@@ -51,6 +58,8 @@ type Post = ModeratedPostFields & {
   video_url: string | null
   visibility: VisibilityType
   is_sensitive: boolean | null
+  community_type?: string | null
+  content_rating?: string | null
   profiles: Profile | null
   media?: PostMedia[]
 }
@@ -82,6 +91,16 @@ type Repost = {
   post_id: string
   user_id: string
   created_at: string
+}
+
+const POST_SELECT_COMMUNITY_FIELDS = `
+          community_type,
+          content_rating,
+`
+
+function isMissingCommunityColumnError(error: { message?: string } | null | undefined) {
+  const message = (error?.message || '').toLowerCase()
+  return message.includes('community_type') || message.includes('content_rating')
 }
 
 export default function PostPage() {
@@ -129,21 +148,32 @@ export default function PostPage() {
       setCanInteract(!!currentUserId)
 
       let currentUserIsAdmin = false
+      let adultViewer = {
+        isMinor: true,
+        wants18Plus: false,
+        ageVerificationStatus: 'not_started',
+      }
 
       if (currentUserId) {
         const { data: profileData } = await supabase
           .from('profiles')
-          .select('username, display_name, avatar_url, role, show_sensitive_content, wants_18_plus, age_verification_status')
+          .select('username, display_name, avatar_url, role, show_sensitive_content, is_minor, wants_18_plus, age_verification_status')
           .eq('id', currentUserId)
           .maybeSingle()
 
         if (profileData) {
           currentUserIsAdmin = isAdminRole(profileData.role)
+          adultViewer = {
+            isMinor: profileData.is_minor || false,
+            wants18Plus: profileData.wants_18_plus || false,
+            ageVerificationStatus: profileData.age_verification_status || 'not_started',
+          }
           setCurrentProfile({
             username: profileData.username,
             display_name: profileData.display_name,
             avatar_url: profileData.avatar_url,
             role: profileData.role || 'user',
+            is_minor: profileData.is_minor || false,
             wants_18_plus: profileData.wants_18_plus || false,
             age_verification_status: profileData.age_verification_status || 'not_started',
             show_sensitive_content:
@@ -162,6 +192,7 @@ export default function PostPage() {
           video_url,
           visibility,
           is_sensitive,
+          ${POST_SELECT_COMMUNITY_FIELDS}
           moderation_status,
           moderated_at,
           moderated_by,
@@ -182,6 +213,7 @@ export default function PostPage() {
           video_url,
           visibility,
           is_sensitive,
+          ${POST_SELECT_COMMUNITY_FIELDS}
           profiles (
             username,
             display_name,
@@ -206,6 +238,17 @@ export default function PostPage() {
         postError = fallback.error
       }
 
+      if (postError && isMissingCommunityColumnError(postError)) {
+        const fallback = await supabase
+          .from('posts')
+          .select(postSelectWithModeration.replace(POST_SELECT_COMMUNITY_FIELDS, ''))
+          .eq('id', postId)
+          .maybeSingle()
+
+        postData = fallback.data as typeof postData
+        postError = fallback.error
+      }
+
       if (postError) {
         setMessage('Erro ao carregar publicação: ' + postError.message)
         setLoading(false)
@@ -222,6 +265,8 @@ export default function PostPage() {
         ...postData,
         visibility: (postData.visibility || 'public') as VisibilityType,
         is_sensitive: postData.is_sensitive || false,
+        community_type: normalizeCommunity(postData.community_type),
+        content_rating: normalizeContentRating(postData.content_rating),
         profiles: Array.isArray(postData.profiles)
           ? postData.profiles[0] || null
           : postData.profiles,
@@ -234,6 +279,21 @@ export default function PostPage() {
         setPermissionDenied(true)
         setModerationHiddenDenied(true)
         setMessage('Este conteudo foi ocultado pela moderacao.')
+        setLoading(false)
+        return
+      }
+
+      if (
+        isAdultCommunityOrRating(normalizedPost.community_type, normalizedPost.content_rating) &&
+        !canViewCommunity(
+          adultViewer,
+          normalizedPost.community_type,
+          normalizedPost.content_rating,
+        )
+      ) {
+        setPost(normalizedPost)
+        setPermissionDenied(true)
+        setMessage('Conteudo adulto 18+ exige verificacao de idade aprovada.')
         setLoading(false)
         return
       }

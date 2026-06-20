@@ -15,6 +15,12 @@ import {
   isModeratedHidden,
   type ModeratedPostFields,
 } from '@/lib/post-moderation'
+import {
+  canViewCommunity,
+  isAdultCommunityOrRating,
+  normalizeCommunity,
+  normalizeContentRating,
+} from '@/lib/communities'
 
 
 function getDateLocale(language: string) {
@@ -37,6 +43,7 @@ type CurrentProfile = {
   display_name: string | null
   avatar_url: string | null
   show_sensitive_content: boolean
+  is_minor?: boolean | null
   wants_18_plus?: boolean | null
   age_verification_status?: string | null
 }
@@ -67,6 +74,8 @@ type Post = ModeratedPostFields & {
   video_url: string | null
   visibility: VisibilityType
   is_sensitive: boolean | null
+  community_type?: string | null
+  content_rating?: string | null
   profiles: ProfileSummary | null
   media?: PostMedia[]
 }
@@ -103,6 +112,16 @@ type Repost = {
   post_id: string
   user_id: string
   created_at: string
+}
+
+const POST_SELECT_COMMUNITY_FIELDS = `
+        community_type,
+        content_rating,
+`
+
+function isMissingCommunityColumnError(error: { message?: string } | null | undefined) {
+  const message = (error?.message || '').toLowerCase()
+  return message.includes('community_type') || message.includes('content_rating')
 }
 
 export default function SavedPage() {
@@ -151,7 +170,7 @@ export default function SavedPage() {
 
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select('username, display_name, avatar_url, show_sensitive_content, wants_18_plus, age_verification_status')
+        .select('username, display_name, avatar_url, show_sensitive_content, is_minor, wants_18_plus, age_verification_status')
         .eq('id', user.id)
         .single()
 
@@ -161,6 +180,7 @@ export default function SavedPage() {
               username: profileData.username,
               display_name: profileData.display_name,
               avatar_url: profileData.avatar_url,
+              is_minor: profileData.is_minor || false,
               wants_18_plus: profileData.wants_18_plus || false,
               age_verification_status: profileData.age_verification_status || 'not_started',
               show_sensitive_content:
@@ -185,7 +205,7 @@ export default function SavedPage() {
           bookmarksData,
           blockedIds,
           followsData,
-          loadedProfile?.show_sensitive_content || false
+          loadedProfile
         ),
         loadLikes(),
         loadComments(blockedIds),
@@ -341,6 +361,8 @@ export default function SavedPage() {
   function isSensitivePost(post: Post) {
     return (
       post.is_sensitive ||
+      normalizeContentRating(post.content_rating) !== 'safe' ||
+      isAdultCommunityOrRating(post.community_type, post.content_rating) ||
       post.category === 'adulto' ||
       post.category === 'sensual' ||
       post.category === '18plus'
@@ -352,7 +374,7 @@ export default function SavedPage() {
     currentBookmarks: SavedBookmark[],
     currentBlockedIds: string[],
     currentFollows: Follow[],
-    allowSensitiveContent: boolean
+    viewerProfile: CurrentProfile | null = currentProfile
   ) {
     const postIds = currentBookmarks.map((bookmark) => bookmark.post_id)
 
@@ -371,6 +393,7 @@ export default function SavedPage() {
         video_url,
         visibility,
         is_sensitive,
+        ${POST_SELECT_COMMUNITY_FIELDS}
         moderation_status,
         moderated_at,
         moderated_by,
@@ -391,6 +414,7 @@ export default function SavedPage() {
         video_url,
         visibility,
         is_sensitive,
+        ${POST_SELECT_COMMUNITY_FIELDS}
         profiles (
           username,
           display_name,
@@ -413,6 +437,16 @@ export default function SavedPage() {
       error = fallback.error
     }
 
+    if (error && isMissingCommunityColumnError(error)) {
+      const fallback = await supabase
+        .from('posts')
+        .select(selectWithModeration.replace(POST_SELECT_COMMUNITY_FIELDS, ''))
+        .in('id', postIds)
+
+      data = fallback.data as typeof data
+      error = fallback.error
+    }
+
     if (error) {
       setMessage(t('saved.messages.loadBookmarksError') + error.message)
       return
@@ -422,6 +456,8 @@ export default function SavedPage() {
       ...post,
       visibility: (post.visibility || 'public') as VisibilityType,
       is_sensitive: post.is_sensitive || false,
+      community_type: normalizeCommunity(post.community_type),
+      content_rating: normalizeContentRating(post.content_rating),
       profiles: Array.isArray(post.profiles)
         ? post.profiles[0] || null
         : post.profiles,
@@ -463,6 +499,15 @@ export default function SavedPage() {
       }))
       .filter((post) => !currentBlockedIds.includes(post.user_id))
       .filter((post) => !isModeratedHidden(post))
+      .filter((post) => canViewCommunity(
+        {
+          isMinor: viewerProfile?.is_minor,
+          wants18Plus: viewerProfile?.wants_18_plus,
+          ageVerificationStatus: viewerProfile?.age_verification_status,
+        },
+        post.community_type,
+        post.content_rating,
+      ))
       .filter((post) => canSeePost(post, currentUserId, currentFollows))
       .sort((a, b) => {
         const orderA = bookmarkOrder.get(a.id) ?? 999999
@@ -484,7 +529,7 @@ export default function SavedPage() {
       freshBookmarks,
       blockedUserIds,
       follows,
-      currentProfile?.show_sensitive_content || false
+      currentProfile
     )
   }
 

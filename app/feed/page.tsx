@@ -58,11 +58,25 @@ import {
   resolveVideoUploadLimit,
 } from '@/lib/media/upload-limits'
 import { resolveUserTier } from '@/lib/user-tiers'
+import {
+  canViewAdult18Plus,
+  canViewCommunity,
+  getAllowedCommunityFilters,
+  getCommunityLabel,
+  isAdultCommunityOrRating,
+  normalizeCommunity,
+  normalizeContentRating,
+  type CommunityFilter,
+  type CommunityType,
+  type ContentRating,
+} from '@/lib/communities'
 
 type VisibilityType = 'public' | 'followers' | 'private'
 type ComposerSubmitData = {
   content: string
   category: string
+  communityType: CommunityType
+  contentRating: ContentRating
   visibility: VisibilityType
   imageFile: File | null
   videoFile: File | null
@@ -74,6 +88,7 @@ type CurrentProfile = {
   display_name: string | null
   avatar_url: string | null
   show_sensitive_content: boolean
+  is_minor?: boolean | null
   wants_18_plus?: boolean | null
   age_verification_status?: string | null
   vip_status?: string | null
@@ -117,6 +132,8 @@ type Post = ModeratedPostFields & {
   video_url: string | null
   visibility: VisibilityType
   is_sensitive: boolean | null
+  community_type?: string | null
+  content_rating?: string | null
   profiles: ProfileSummary | null
   media?: PostMedia[]
 }
@@ -156,6 +173,11 @@ function normalizeFeedHighlight(highlight: FeedHighlightResponse): FeedHighlight
       ? highlight.community_challenges[0] || null
       : highlight.community_challenges || null,
   }
+}
+
+function isMissingCommunityColumnError(error: { message?: string } | null | undefined) {
+  const message = (error?.message || '').toLowerCase()
+  return message.includes('community_type') || message.includes('content_rating')
 }
 
 type Comment = {
@@ -237,6 +259,10 @@ const PARTIAL_MEDIA_SAVE_FAILURE_MESSAGE = 'Post criado, mas nao foi possivel co
 const FEED_ITEM_ACTIVE_ROOT_MARGIN = '1800px 0px 2200px 0px'
 const FEED_MEDIA_PLACEHOLDER_HEIGHT = 360
 const FEED_COMMENTS_PLACEHOLDER_HEIGHT = 180
+const POST_SELECT_COMMUNITY_FIELDS = `
+        community_type,
+        content_rating,
+`
 
 type FeedTexts = {
   tabs: {
@@ -848,8 +874,25 @@ function FeedContent() {
   const [hasMorePosts, setHasMorePosts] = useState(true)
   const [feedCursor, setFeedCursor] = useState<FeedCursor | null>(null)
   const [loadMoreError, setLoadMoreError] = useState('')
+  const [communityFilter, setCommunityFilter] = useState<CommunityFilter>('all')
   const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null)
   const loadingMoreRef = useRef(false)
+  const canAccessAdult18Plus = useMemo(
+    () => canViewAdult18Plus({
+      isMinor: currentProfile?.is_minor,
+      wants18Plus: currentProfile?.wants_18_plus,
+      ageVerificationStatus: currentProfile?.age_verification_status,
+    }),
+    [currentProfile],
+  )
+  const allowedCommunityFilters = useMemo(
+    () => getAllowedCommunityFilters({
+      isMinor: currentProfile?.is_minor,
+      wants18Plus: currentProfile?.wants_18_plus,
+      ageVerificationStatus: currentProfile?.age_verification_status,
+    }),
+    [currentProfile],
+  )
 
   useEffect(() => {
     setMounted(true)
@@ -872,7 +915,7 @@ function FeedContent() {
       const [profileResult, badgesResult] = await Promise.all([
         supabase
           .from('profiles')
-          .select('username, display_name, avatar_url, show_sensitive_content, wants_18_plus, age_verification_status, vip_status, vip_expires_at')
+          .select('username, display_name, avatar_url, show_sensitive_content, is_minor, wants_18_plus, age_verification_status, vip_status, vip_expires_at')
           .eq('id', user.id)
           .single(),
         supabase
@@ -892,6 +935,7 @@ function FeedContent() {
             username: profileData.username,
             display_name: profileData.display_name,
             avatar_url: profileData.avatar_url,
+            is_minor: profileData.is_minor || false,
             wants_18_plus: profileData.wants_18_plus || false,
             age_verification_status: profileData.age_verification_status || 'not_started',
             vip_status: profileData.vip_status,
@@ -1137,6 +1181,8 @@ function FeedContent() {
   function isSensitivePost(post: Post) {
     return (
       post.is_sensitive ||
+      normalizeContentRating(post.content_rating) !== 'safe' ||
+      isAdultCommunityOrRating(post.community_type, post.content_rating) ||
       post.category === 'adulto' ||
       post.category === 'sensual' ||
       post.category === '18plus'
@@ -1162,6 +1208,7 @@ function FeedContent() {
         video_url,
         visibility,
         is_sensitive,
+        ${POST_SELECT_COMMUNITY_FIELDS}
         moderation_status,
         moderated_at,
         moderated_by,
@@ -1184,6 +1231,7 @@ function FeedContent() {
         video_url,
         visibility,
         is_sensitive,
+        ${POST_SELECT_COMMUNITY_FIELDS}
         profiles (
           username,
           display_name,
@@ -1193,7 +1241,7 @@ function FeedContent() {
         )
       `
 
-    const buildPostsQuery = (selectFields: string) => {
+    const buildPostsQuery = (selectFields: string, useCommunityColumns = true) => {
       let postsQuery = supabase
       .from('posts')
       .select(selectFields)
@@ -1207,6 +1255,14 @@ function FeedContent() {
         )
       }
 
+      if (useCommunityColumns && communityFilter === 'all') {
+        postsQuery = postsQuery
+          .neq('community_type', 'adult_18plus')
+          .neq('content_rating', 'adult_18plus')
+      } else if (useCommunityColumns) {
+        postsQuery = postsQuery.eq('community_type', communityFilter)
+      }
+
       return postsQuery
     }
 
@@ -1214,6 +1270,19 @@ function FeedContent() {
 
     if (error && isMissingPostModerationColumnError(error)) {
       const fallback = await buildPostsQuery(postSelectFallback)
+      data = fallback.data as typeof data
+      error = fallback.error
+    }
+
+    if (error && isMissingCommunityColumnError(error)) {
+      const fallbackSelectWithModeration = postSelectWithModeration.replace(POST_SELECT_COMMUNITY_FIELDS, '')
+      const fallbackSelect = postSelectFallback.replace(POST_SELECT_COMMUNITY_FIELDS, '')
+      const fallback = await buildPostsQuery(
+        isMissingPostModerationColumnError(error)
+          ? fallbackSelect
+          : fallbackSelectWithModeration,
+        false,
+      )
       data = fallback.data as typeof data
       error = fallback.error
     }
@@ -1247,6 +1316,8 @@ function FeedContent() {
       ...post,
       visibility: (post.visibility || 'public') as VisibilityType,
       is_sensitive: post.is_sensitive || false,
+      community_type: normalizeCommunity(post.community_type),
+      content_rating: normalizeContentRating(post.content_rating),
       profiles: Array.isArray(post.profiles)
         ? post.profiles[0] || null
         : post.profiles,
@@ -1286,6 +1357,20 @@ function FeedContent() {
       }))
       .filter((post) => !currentBlockedIds.includes(post.user_id))
       .filter((post) => !isModeratedHidden(post))
+      .filter((post) => canViewCommunity(
+        {
+          isMinor: currentProfile?.is_minor,
+          wants18Plus: currentProfile?.wants_18_plus,
+          ageVerificationStatus: currentProfile?.age_verification_status,
+        },
+        post.community_type,
+        post.content_rating,
+      ))
+      .filter((post) => (
+        communityFilter === 'all'
+          ? !isAdultCommunityOrRating(post.community_type, post.content_rating)
+          : normalizeCommunity(post.community_type) === communityFilter
+      ))
       .filter((post) => canSeePost(post, currentUserId, currentFollows))
 
     if (options.append) {
@@ -1575,6 +1660,12 @@ function FeedContent() {
       observer.disconnect()
     }
   }, [loadMorePosts])
+
+  useEffect(() => {
+    if (!userId || loading) return
+
+    void reloadInitialFeed()
+  }, [communityFilter])
 
   async function refreshAfterFollowChange() {
     const freshFollows = await loadFollows()
@@ -2416,6 +2507,8 @@ function FeedContent() {
   async function handleCreatePost({
     content,
     category,
+    communityType,
+    contentRating,
     visibility,
     imageFile,
     videoFile,
@@ -2433,6 +2526,17 @@ function FeedContent() {
 
     if (finalMediaFiles.length > 5) {
       setMessage(t('feed.messages.maxMediaPost'))
+      return false
+    }
+
+    const normalizedCommunity = normalizeCommunity(communityType)
+    const normalizedRating = normalizeContentRating(contentRating)
+
+    if (
+      isAdultCommunityOrRating(normalizedCommunity, normalizedRating) &&
+      !canAccessAdult18Plus
+    ) {
+      setMessage('Area 18+ exige verificacao de idade aprovada.')
       return false
     }
 
@@ -2464,19 +2568,35 @@ function FeedContent() {
       step: 'database-post-save',
     })
 
-    const { data: insertedPost, error } = await supabase
+    const postPayload = {
+      user_id: userId,
+      content: content.trim() || null,
+      category,
+      community_type: normalizedCommunity,
+      content_rating: normalizedCommunity === 'adult_18plus' ? 'adult_18plus' : normalizedRating,
+      image_url: firstImage,
+      video_url: firstVideo,
+      visibility,
+      is_sensitive: category === '18plus' || normalizedRating !== 'safe',
+    }
+
+    let { data: insertedPost, error } = await supabase
       .from('posts')
-      .insert({
-        user_id: userId,
-        content: content.trim() || null,
-        category,
-        image_url: firstImage,
-        video_url: firstVideo,
-        visibility,
-        is_sensitive: category === '18plus',
-      })
+      .insert(postPayload)
       .select('id')
       .single()
+
+    if (error && isMissingCommunityColumnError(error)) {
+      const { community_type, content_rating, ...legacyPayload } = postPayload
+      const legacyResult = await supabase
+        .from('posts')
+        .insert(legacyPayload)
+        .select('id')
+        .single()
+
+      insertedPost = legacyResult.data
+      error = legacyResult.error
+    }
 
     if (error) {
       console.error('[FeedUpload] Falha ao salvar post apos upload:', {
@@ -3106,6 +3226,7 @@ function FeedContent() {
     const haystack = [
       post.content || '',
       post.category || '',
+      getCommunityLabel(post.community_type),
       post.profiles?.display_name || '',
       post.profiles?.username || '',
     ]
@@ -3642,6 +3763,7 @@ function FeedContent() {
                 userAvatarUrl={currentProfile?.avatar_url || null}
                 videoUploadLimitBytes={videoUploadLimit.maxSizeBytes}
                 userTier={videoUploadLimit.tier}
+                canAccessAdult18Plus={canAccessAdult18Plus}
                 submitting={uploadingPostImage || uploadingPostVideo}
                 onSubmit={handleCreatePost}
               />
@@ -3654,6 +3776,45 @@ function FeedContent() {
             </div>
 
             <FeedInstallAppCard />
+
+            <div className="mb-4 rounded-[1.5rem] border border-zinc-200/70 bg-white/90 p-3 shadow-sm ring-1 ring-black/5 backdrop-blur dark:border-zinc-800/70 dark:bg-zinc-950/80 dark:ring-white/10">
+              <div className="mb-3 flex flex-col gap-1 px-1">
+                <p className="text-sm font-black text-zinc-950 dark:text-white">
+                  Comunidades
+                </p>
+                <p className="text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+                  Todos nao mistura conteudo adulto. Escolha uma comunidade para filtrar o feed.
+                </p>
+              </div>
+
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {allowedCommunityFilters.map((filter) => {
+                  const active = communityFilter === filter
+                  const label = filter === 'all' ? 'Todos' : getCommunityLabel(filter)
+
+                  return (
+                    <button
+                      key={filter}
+                      type="button"
+                      onClick={() => setCommunityFilter(filter as CommunityFilter)}
+                      className={`h-9 shrink-0 rounded-full border px-3 text-xs font-black transition ${
+                        active
+                          ? 'border-zinc-950 bg-zinc-950 text-white dark:border-white dark:bg-white dark:text-black'
+                          : 'border-zinc-200 bg-white text-zinc-600 hover:border-blue-300 hover:text-blue-700 dark:border-zinc-800 dark:bg-black dark:text-zinc-300 dark:hover:border-blue-800 dark:hover:text-blue-200'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  )
+                })}
+              </div>
+
+              {!canAccessAdult18Plus && (
+                <p className="mt-2 px-1 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+                  Area 18+ exige verificacao de idade e nao aparece no feed geral.
+                </p>
+              )}
+            </div>
 
             <div className="space-y-3.5 sm:space-y-5">
               {visibleFeedItems.length === 0 && (
@@ -3839,9 +4000,13 @@ function FeedContent() {
                         {getVisibilityLabel(post.visibility)}
                       </span>
 
+                      <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700 ring-1 ring-blue-200/80 dark:bg-blue-950/30 dark:text-blue-200 dark:ring-blue-900/60">
+                        {getCommunityLabel(post.community_type)}
+                      </span>
+
                       {isSensitivePostItem && (
                         <span className="rounded-full bg-yellow-50 px-2.5 py-1 text-xs font-bold text-yellow-700 ring-1 ring-yellow-200/80 dark:bg-yellow-950/30 dark:text-yellow-300 dark:ring-yellow-900/60">
-                          18+
+                          {normalizeContentRating(post.content_rating) === 'adult_18plus' ? '18+' : 'Sensivel'}
                         </span>
                       )}
 

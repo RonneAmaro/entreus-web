@@ -43,6 +43,14 @@ import {
   canAttemptVideoCompression,
   compressVideoForPost,
 } from '@/lib/media/video-compression'
+import {
+  COMMUNITIES,
+  CONTENT_RATINGS,
+  getCommunityDefinition,
+  resolveContentRating,
+  type CommunityType,
+  type ContentRating,
+} from '@/lib/communities'
 
 type VisibilityType = 'public' | 'followers' | 'private'
 
@@ -72,10 +80,13 @@ type PostComposerProps = {
   userAvatarUrl?: string | null
   videoUploadLimitBytes?: number
   userTier?: UserTier
+  canAccessAdult18Plus?: boolean
   submitting?: boolean
   onSubmit: (data: {
     content: string
     category: string
+    communityType: CommunityType
+    contentRating: ContentRating
     visibility: VisibilityType
     imageFile: File | null
     videoFile: File | null
@@ -267,6 +278,7 @@ export default function PostComposer({
   userAvatarUrl,
   videoUploadLimitBytes = VIDEO_UPLOAD_MAX_SIZE_BYTES,
   userTier = 'standard',
+  canAccessAdult18Plus = false,
   submitting = false,
   onSubmit,
 }: PostComposerProps) {
@@ -280,6 +292,8 @@ export default function PostComposer({
 
   const [content, setContent] = useState('')
   const [category, setCategory] = useState('cotidiano')
+  const [communityType, setCommunityType] = useState<CommunityType>('general')
+  const [contentRating, setContentRating] = useState<ContentRating>('safe')
   const [visibility, setVisibility] = useState<VisibilityType>('public')
   const [media, setMedia] = useState<MediaPreview[]>([])
   const [error, setError] = useState('')
@@ -296,6 +310,10 @@ export default function PostComposer({
   const selectedCategory = useMemo(() => {
     return CATEGORY_OPTIONS.find((item) => item.value === category)
   }, [category])
+
+  const selectedCommunity = useMemo(() => {
+    return getCommunityDefinition(communityType)
+  }, [communityType])
 
   const selectedVisibility = useMemo(() => {
     return VISIBILITY_OPTIONS.find((item) => item.value === visibility)
@@ -657,6 +675,39 @@ export default function PostComposer({
     setAiFeedback(null)
   }
 
+  function handleCommunityChange(value: string) {
+    const nextCommunity = COMMUNITIES.some((item) => item.key === value)
+      ? (value as CommunityType)
+      : 'general'
+
+    if (nextCommunity === 'adult_18plus' && !canAccessAdult18Plus) {
+      setError('Area 18+ exige verificacao de idade aprovada.')
+      setCommunityType('general')
+      setContentRating('safe')
+      return
+    }
+
+    const nextRating = resolveContentRating(nextCommunity, contentRating)
+    setError('')
+    setCommunityType(nextCommunity)
+    setContentRating(nextRating)
+  }
+
+  function handleContentRatingChange(value: string) {
+    const nextRating = CONTENT_RATINGS.some((item) => item.key === value)
+      ? (value as ContentRating)
+      : 'safe'
+
+    if (nextRating === 'adult_18plus' && !canAccessAdult18Plus) {
+      setError('Area 18+ exige verificacao de idade aprovada.')
+      setContentRating(resolveContentRating(communityType, 'safe'))
+      return
+    }
+
+    setError('')
+    setContentRating(resolveContentRating(communityType, nextRating))
+  }
+
   function insertEmoji(emoji: string) {
     const textarea = textareaRef.current
 
@@ -810,10 +861,18 @@ export default function PostComposer({
     const imageFile = media.find((item) => item.type === 'image')?.file || null
     const videoFile = media.find((item) => item.type === 'video')?.file || null
     const mediaFiles = media.map((item) => item.file)
+    const resolvedRating = resolveContentRating(communityType, contentRating)
+
+    if (resolvedRating === 'adult_18plus' && !canAccessAdult18Plus) {
+      setError('Area 18+ exige verificacao de idade aprovada.')
+      return
+    }
 
     const result = await onSubmit({
       content: trimmedContent,
       category,
+      communityType,
+      contentRating: resolvedRating,
       visibility,
       imageFile,
       videoFile,
@@ -823,6 +882,8 @@ export default function PostComposer({
     if (result === false) return
 
     setContent('')
+    setCommunityType('general')
+    setContentRating('safe')
     setShowEmojiPicker(false)
     setShowMediaMenu(false)
     setMediaFeedback(null)
@@ -1163,6 +1224,78 @@ export default function PostComposer({
               )}
             </div>
 
+            <div className="mb-3 rounded-2xl border border-zinc-200 bg-zinc-50/80 p-3 dark:border-zinc-800 dark:bg-zinc-950/70">
+              <div className="mb-3">
+                <p className="text-xs font-black uppercase text-zinc-500 dark:text-zinc-400">
+                  Escolha onde seu post deve aparecer.
+                </p>
+                <p className="mt-1 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+                  Conteudo adulto fica isolado e so aparece para usuarios verificados 18+.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-bold text-zinc-600 dark:text-zinc-300">
+                    Comunidade
+                  </span>
+                  <select
+                    value={communityType}
+                    onChange={(event) => handleCommunityChange(event.target.value)}
+                    className="h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm font-semibold text-zinc-900 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800 dark:bg-black dark:text-white"
+                  >
+                    {COMMUNITIES.map((community) => (
+                      <option
+                        key={community.key}
+                        value={community.key}
+                        disabled={community.requires18Plus && !canAccessAdult18Plus}
+                      >
+                        {community.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-bold text-zinc-600 dark:text-zinc-300">
+                    Classificacao
+                  </span>
+                  <select
+                    value={contentRating}
+                    onChange={(event) => handleContentRatingChange(event.target.value)}
+                    disabled={communityType === 'adult_18plus'}
+                    className="h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm font-semibold text-zinc-900 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10 disabled:cursor-not-allowed disabled:opacity-70 dark:border-zinc-800 dark:bg-black dark:text-white"
+                  >
+                    {CONTENT_RATINGS.map((rating) => (
+                      <option
+                        key={rating.key}
+                        value={rating.key}
+                        disabled={rating.requires18Plus && !canAccessAdult18Plus}
+                      >
+                        {rating.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+                <span className="rounded-full border border-zinc-200 bg-white px-2.5 py-1 font-bold dark:border-zinc-800 dark:bg-black">
+                  {selectedCommunity.label}
+                </span>
+                {selectedCommunity.sensitive && (
+                  <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 font-bold text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+                    Sensivel
+                  </span>
+                )}
+                {!canAccessAdult18Plus && (
+                  <span className="rounded-full border border-zinc-200 bg-white px-2.5 py-1 font-bold dark:border-zinc-800 dark:bg-black">
+                    Area 18+ exige verificacao de idade.
+                  </span>
+                )}
+              </div>
+            </div>
+
             <div className="flex flex-col gap-3">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
@@ -1436,9 +1569,9 @@ export default function PostComposer({
 
               <div className="flex flex-wrap items-center gap-2 pl-1 text-xs text-zinc-500 dark:text-zinc-500">
                 <span>{t('postComposer.mediaCounter').replace('{current}', String(media.length)).replace('{max}', String(MAX_MEDIA_FILES))}</span>
-                {category === '18plus' && (
+                {contentRating === 'adult_18plus' && (
                   <span className="rounded-full border border-yellow-300/40 bg-yellow-50 px-2 py-1 font-bold text-yellow-800 dark:bg-yellow-950/30 dark:text-yellow-200">
-                    Marcar como conteudo sensivel / 18+. Esse conteudo aparecera protegido por aviso.
+                    Conteudo adulto fica isolado e protegido por verificacao 18+.
                   </span>
                 )}
               </div>

@@ -17,6 +17,12 @@ import TranslatePostButton from './TranslatePostButton'
 import { useLanguage } from './LanguageProvider'
 import { isModeratedHidden, type ModeratedPostFields } from '@/lib/post-moderation'
 import type { UserTier } from '@/lib/user-tiers'
+import {
+  getCommunityLabel,
+  getContentRatingLabel,
+  isAdultCommunityOrRating,
+  normalizeContentRating,
+} from '@/lib/communities'
 
 export type VisibilityType = 'public' | 'followers' | 'private'
 
@@ -46,6 +52,8 @@ export type PostCardPost = ModeratedPostFields & {
   video_url: string | null
   visibility: VisibilityType
   is_sensitive: boolean | null
+  community_type?: string | null
+  content_rating?: string | null
   profiles: PostCardProfile | null
   media?: PostCardMedia[]
 }
@@ -273,6 +281,8 @@ function SharedGiftPostCard({ post }: { post: PostCardPost }) {
 function isSensitivePost(post: PostCardPost) {
   return (
     post.is_sensitive ||
+    normalizeContentRating(post.content_rating) !== 'safe' ||
+    isAdultCommunityOrRating(post.community_type, post.content_rating) ||
     post.category === 'adulto' ||
     post.category === 'sensual' ||
     post.category === '18plus'
@@ -330,6 +340,8 @@ export default function PostCard({
   const postMedia = getPostMedia(post)
   const isSharedGiftPost = post.category === 'gift_received'
   const sensitive = isSensitivePost(post)
+  const ratingLabel = getContentRatingLabel(post.content_rating)
+  const communityLabel = getCommunityLabel(post.community_type)
   const moderatedHidden = isModeratedHidden(post)
   const shouldProtectSensitive = sensitive && !showSensitiveContent
 
@@ -459,9 +471,13 @@ export default function PostCard({
           {getVisibilityLabel(post.visibility, t)}
         </span>
 
+        <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-200">
+          {communityLabel}
+        </span>
+
         {sensitive && (
           <span className="rounded-full border border-yellow-200 bg-yellow-50 px-2 py-1 text-xs text-yellow-700 dark:border-yellow-800 dark:bg-yellow-950 dark:text-yellow-300">
-            18+
+            {ratingLabel === 'Adulto 18+' ? '18+' : ratingLabel}
           </span>
         )}
 

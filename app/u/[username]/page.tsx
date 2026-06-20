@@ -28,6 +28,12 @@ import {
   getEffectiveProfileThemeKey,
   getProfileTheme,
 } from "@/lib/profile-themes";
+import {
+  canViewCommunity,
+  isAdultCommunityOrRating,
+  normalizeCommunity,
+  normalizeContentRating,
+} from "@/lib/communities";
 
 type VisibilityType = "public" | "followers" | "private";
 type ProfileTab = "posts" | "replies" | "media";
@@ -45,6 +51,7 @@ type Profile = {
   website_url: string | null;
   website_title: string | null;
   show_sensitive_content?: boolean | null;
+  is_minor?: boolean | null;
   wants_18_plus?: boolean | null;
   age_verification_status?: string | null;
   vip_status?: string | null;
@@ -82,6 +89,8 @@ type Post = ModeratedPostFields & {
   video_url: string | null;
   visibility: VisibilityType;
   is_sensitive: boolean | null;
+  community_type?: string | null;
+  content_rating?: string | null;
   profiles: ProfileSummary | null;
   media?: PostMedia[];
 };
@@ -136,12 +145,21 @@ type FeedItem =
   };
 
 const PROFILE_SELECT_WITH_THEME =
-  "id, username, display_name, bio, avatar_url, banner_url, country, city, state, website_url, website_title, show_sensitive_content, wants_18_plus, age_verification_status, vip_status, vip_expires_at, profile_theme";
+  "id, username, display_name, bio, avatar_url, banner_url, country, city, state, website_url, website_title, show_sensitive_content, is_minor, wants_18_plus, age_verification_status, vip_status, vip_expires_at, profile_theme";
 const PROFILE_SELECT_FALLBACK =
-  "id, username, display_name, bio, avatar_url, banner_url, country, city, state, website_url, website_title, show_sensitive_content, wants_18_plus, age_verification_status, vip_status, vip_expires_at";
+  "id, username, display_name, bio, avatar_url, banner_url, country, city, state, website_url, website_title, show_sensitive_content, is_minor, wants_18_plus, age_verification_status, vip_status, vip_expires_at";
+const POST_SELECT_COMMUNITY_FIELDS = `
+        community_type,
+        content_rating,
+`;
 
 function isMissingProfileThemeColumnError(error: { message?: string } | null) {
   return Boolean(error?.message && /profile_theme/i.test(error.message));
+}
+
+function isMissingCommunityColumnError(error: { message?: string } | null | undefined) {
+  const message = (error?.message || "").toLowerCase();
+  return message.includes("community_type") || message.includes("content_rating");
 }
 
 export default function PublicProfilePage() {
@@ -259,6 +277,7 @@ export default function PublicProfilePage() {
       const normalizedLoggedProfile = loggedProfileData
         ? {
             ...loggedProfileData,
+            is_minor: Boolean(loggedProfileData.is_minor),
             show_sensitive_content: Boolean(
               loggedProfileData.wants_18_plus &&
                 loggedProfileData.age_verification_status === "approved",
@@ -382,6 +401,7 @@ export default function PublicProfilePage() {
             isOwn,
             !!currentFollowData,
             normalizedLoggedProfile?.show_sensitive_content || false,
+            normalizedLoggedProfile,
           ),
           loadCounts(profileData.id),
           loadLikes(),
@@ -659,6 +679,7 @@ export default function PublicProfilePage() {
     isOwn: boolean,
     currentIsFollowing: boolean,
     allowSensitiveContent: boolean,
+    viewerProfile: Profile | null = loggedProfile,
   ) {
     const postSelectWithModeration = `
         id,
@@ -670,6 +691,7 @@ export default function PublicProfilePage() {
         video_url,
         visibility,
         is_sensitive,
+        ${POST_SELECT_COMMUNITY_FIELDS}
         moderation_status,
         moderated_at,
         moderated_by,
@@ -690,6 +712,7 @@ export default function PublicProfilePage() {
         video_url,
         visibility,
         is_sensitive,
+        ${POST_SELECT_COMMUNITY_FIELDS}
         profiles (
           username,
           display_name,
@@ -726,6 +749,17 @@ export default function PublicProfilePage() {
       ownPostsError = fallback.error;
     }
 
+    if (ownPostsError && isMissingCommunityColumnError(ownPostsError)) {
+      const fallback = await supabase
+        .from("posts")
+        .select(postSelectWithModeration.replace(POST_SELECT_COMMUNITY_FIELDS, ""))
+        .eq("user_id", profileData.id)
+        .order("created_at", { ascending: false });
+
+      ownPostsData = fallback.data as typeof ownPostsData;
+      ownPostsError = fallback.error;
+    }
+
     if (ownPostsError) {
       setMessage("Erro ao carregar publicações: " + ownPostsError.message);
       return;
@@ -736,12 +770,23 @@ export default function PublicProfilePage() {
         ...post,
         visibility: (post.visibility || "public") as VisibilityType,
         is_sensitive: post.is_sensitive || false,
+        community_type: normalizeCommunity(post.community_type),
+        content_rating: normalizeContentRating(post.content_rating),
         profiles: Array.isArray(post.profiles)
           ? post.profiles[0] || null
           : post.profiles,
       }))
       .filter((post: Post) =>
         !isModeratedHidden(post) &&
+        canViewCommunity(
+          {
+            isMinor: viewerProfile?.is_minor,
+            wants18Plus: viewerProfile?.wants_18_plus,
+            ageVerificationStatus: viewerProfile?.age_verification_status,
+          },
+          post.community_type,
+          post.content_rating,
+        ) &&
         canSeePost(post, currentUserId, isOwn, currentIsFollowing),
       );
 
@@ -764,6 +809,16 @@ export default function PublicProfilePage() {
         repostedPostsError = fallback.error;
       }
 
+      if (repostedPostsError && isMissingCommunityColumnError(repostedPostsError)) {
+        const fallback = await supabase
+          .from("posts")
+          .select(postSelectWithModeration.replace(POST_SELECT_COMMUNITY_FIELDS, ""))
+          .in("id", repostPostIds);
+
+        repostedPostsData = fallback.data as typeof repostedPostsData;
+        repostedPostsError = fallback.error;
+      }
+
       if (repostedPostsError) {
         setMessage(
           "Erro ao carregar posts repostados: " + repostedPostsError.message,
@@ -776,11 +831,24 @@ export default function PublicProfilePage() {
           ...post,
           visibility: (post.visibility || "public") as VisibilityType,
           is_sensitive: post.is_sensitive || false,
+          community_type: normalizeCommunity(post.community_type),
+          content_rating: normalizeContentRating(post.content_rating),
           profiles: Array.isArray(post.profiles)
             ? post.profiles[0] || null
             : post.profiles,
         }))
         .filter((post: Post) => !isModeratedHidden(post))
+        .filter((post: Post) =>
+          canViewCommunity(
+            {
+              isMinor: viewerProfile?.is_minor,
+              wants18Plus: viewerProfile?.wants_18_plus,
+              ageVerificationStatus: viewerProfile?.age_verification_status,
+            },
+            post.community_type,
+            post.content_rating,
+          ),
+        )
         .filter((post: Post) =>
           canSeePost(
             post,
@@ -869,6 +937,8 @@ export default function PublicProfilePage() {
   function isSensitivePost(post: Post) {
     return (
       post.is_sensitive ||
+      normalizeContentRating(post.content_rating) !== "safe" ||
+      isAdultCommunityOrRating(post.community_type, post.content_rating) ||
       post.category === "adulto" ||
       post.category === "sensual" ||
       post.category === "18plus"
