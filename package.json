@@ -34,6 +34,7 @@
     "audit:rls:local": "node scripts/audit-rls-local-migrations.js",
     "audit:adult-media": "node scripts/audit-adult-media-exposure.js",
     "plan:adult-media-protection": "node scripts/plan-adult-media-protection-migration.js",
+    "qa:18plus": "node scripts/preflight-18plus-private-media.js",
     "test:smoke": "playwright test tests/e2e/smoke.spec.ts"
   },
   "dependencies": {

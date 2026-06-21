@@ -1,11 +1,11 @@
 # Checklist manual: fluxo privado de mídia adulta
 
-Execute sem registrar URLs, keys, conteúdo ou dados pessoais.
+Use também o [plano QA completo](qa-18plus-private-media-test-plan.md) e o [checklist de prontidão de criadores](creator-readiness-security-checklist.md). Execute o preflight local com `npm.cmd run qa:18plus`.
 
-- Visitante/deslogado, menor, adulto não verificado e adulto verificado sem opt-in: bloqueio seguro na API e interface.
-- Adulto verificado com opt-in e admin autorizado: signed URL temporária apenas para mídia adulta nova.
+- Visitante, menor, adulto não verificado e adulto sem opt-in recebem bloqueio seguro.
+- Adulto aprovado com opt-in e admin autorizado recebem signed URL temporária apenas para mídia adulta nova.
 - Post seguro com imagem e vídeo continua normal.
-- Post adulto novo com imagem e vídeo: `access_level = adult_private`, sem URL pública permanente e com `ProtectedPostMedia`.
-- Post adulto legado sem metadata: placeholder; `media_url` não é renderizada.
-- Verificar feed, post individual, perfil público, salvos e admin/reports conforme a permissão.
+- Post adulto novo usa `access_level = adult_private`, sem URL pública permanente e com `ProtectedPostMedia`.
+- Post adulto legado sem metadata mostra placeholder; `media_url` não é renderizada.
+- Confirmar feed, post individual, perfil público, salvos e admin/reports conforme permissão.
 - Inspecionar resposta e HTML: bucket, `storage_key`, provider e URL pública adulta não podem aparecer.
