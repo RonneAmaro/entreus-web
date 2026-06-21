@@ -21,6 +21,7 @@ import {
   getSafePostContentRating as normalizeContentRating,
   isAdultPostClassification as isAdultCommunityOrRating,
 } from '@/lib/post-classification'
+import { applyPostVisibilityFilters } from '@/lib/post-visibility'
 
 
 function getDateLocale(language: string) {
@@ -422,26 +423,38 @@ export default function SavedPage() {
         )
       `
 
-    let { data, error } = await supabase
+    let { data, error } = await applyPostVisibilityFilters(supabase
       .from('posts')
       .select(selectWithModeration)
-      .in('id', postIds)
+      .in('id', postIds), {
+        isMinor: viewerProfile?.is_minor,
+        wants18Plus: viewerProfile?.wants_18_plus,
+        ageVerificationStatus: viewerProfile?.age_verification_status,
+      }, 'saved')
 
     if (error && isMissingPostModerationColumnError(error)) {
-      const fallback = await supabase
+      const fallback = await applyPostVisibilityFilters(supabase
         .from('posts')
         .select(selectFallback)
-        .in('id', postIds)
+        .in('id', postIds), {
+          isMinor: viewerProfile?.is_minor,
+          wants18Plus: viewerProfile?.wants_18_plus,
+          ageVerificationStatus: viewerProfile?.age_verification_status,
+        }, 'saved')
 
       data = fallback.data as typeof data
       error = fallback.error
     }
 
     if (error && isMissingCommunityColumnError(error)) {
-      const fallback = await supabase
+      const fallback = await applyPostVisibilityFilters(supabase
         .from('posts')
         .select(selectWithModeration.replace(POST_SELECT_COMMUNITY_FIELDS, ''))
-        .in('id', postIds)
+        .in('id', postIds), {
+          isMinor: viewerProfile?.is_minor,
+          wants18Plus: viewerProfile?.wants_18_plus,
+          ageVerificationStatus: viewerProfile?.age_verification_status,
+        }, 'saved')
 
       data = fallback.data as typeof data
       error = fallback.error

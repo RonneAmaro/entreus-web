@@ -71,6 +71,7 @@ import {
   type PostContentRating as ContentRating,
 } from '@/lib/post-classification'
 import { normalizePostClassification } from '@/lib/content-access'
+import { applyPostVisibilityFilters } from '@/lib/post-visibility'
 
 type VisibilityType = 'public' | 'followers' | 'private'
 type ComposerSubmitData = {
@@ -1262,6 +1263,16 @@ function FeedContent() {
         if (communityFilter === 'general') {
           postsQuery = postsQuery.eq('content_rating', 'safe')
         }
+
+        postsQuery = applyPostVisibilityFilters(
+          postsQuery,
+          {
+            isMinor: currentProfile?.is_minor,
+            wants18Plus: currentProfile?.wants_18_plus,
+            ageVerificationStatus: currentProfile?.age_verification_status,
+          },
+          communityFilter === 'general' ? 'general-feed' : 'public-list',
+        )
       }
 
       return postsQuery

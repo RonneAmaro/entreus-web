@@ -34,6 +34,7 @@ import {
   getSafePostContentRating as normalizeContentRating,
   isAdultPostClassification as isAdultCommunityOrRating,
 } from "@/lib/post-classification";
+import { applyPostVisibilityFilters } from "@/lib/post-visibility";
 
 type VisibilityType = "public" | "followers" | "private";
 type ProfileTab = "posts" | "replies" | "media";
@@ -732,17 +733,25 @@ export default function PublicProfilePage() {
 
     const repostPostIds = (repostsData || []).map((repost) => repost.post_id);
 
-    let { data: ownPostsData, error: ownPostsError } = await supabase
+    let { data: ownPostsData, error: ownPostsError } = await applyPostVisibilityFilters(supabase
       .from("posts")
       .select(postSelectWithModeration)
-      .eq("user_id", profileData.id)
+      .eq("user_id", profileData.id), {
+        isMinor: viewerProfile?.is_minor,
+        wants18Plus: viewerProfile?.wants_18_plus,
+        ageVerificationStatus: viewerProfile?.age_verification_status,
+      }, 'public-list')
       .order("created_at", { ascending: false });
 
     if (ownPostsError && isMissingPostModerationColumnError(ownPostsError)) {
-      const fallback = await supabase
+      const fallback = await applyPostVisibilityFilters(supabase
         .from("posts")
         .select(postSelectFallback)
-        .eq("user_id", profileData.id)
+        .eq("user_id", profileData.id), {
+          isMinor: viewerProfile?.is_minor,
+          wants18Plus: viewerProfile?.wants_18_plus,
+          ageVerificationStatus: viewerProfile?.age_verification_status,
+        }, 'public-list')
         .order("created_at", { ascending: false });
 
       ownPostsData = fallback.data as typeof ownPostsData;
@@ -750,10 +759,14 @@ export default function PublicProfilePage() {
     }
 
     if (ownPostsError && isMissingCommunityColumnError(ownPostsError)) {
-      const fallback = await supabase
+      const fallback = await applyPostVisibilityFilters(supabase
         .from("posts")
         .select(postSelectWithModeration.replace(POST_SELECT_COMMUNITY_FIELDS, ""))
-        .eq("user_id", profileData.id)
+        .eq("user_id", profileData.id), {
+          isMinor: viewerProfile?.is_minor,
+          wants18Plus: viewerProfile?.wants_18_plus,
+          ageVerificationStatus: viewerProfile?.age_verification_status,
+        }, 'public-list')
         .order("created_at", { ascending: false });
 
       ownPostsData = fallback.data as typeof ownPostsData;
@@ -794,26 +807,38 @@ export default function PublicProfilePage() {
 
     if (repostPostIds.length > 0) {
       let { data: repostedPostsData, error: repostedPostsError } =
-        await supabase
+        await applyPostVisibilityFilters(supabase
           .from("posts")
           .select(postSelectWithModeration)
-          .in("id", repostPostIds);
+          .in("id", repostPostIds), {
+            isMinor: viewerProfile?.is_minor,
+            wants18Plus: viewerProfile?.wants_18_plus,
+            ageVerificationStatus: viewerProfile?.age_verification_status,
+          }, 'public-list');
 
       if (repostedPostsError && isMissingPostModerationColumnError(repostedPostsError)) {
-        const fallback = await supabase
+        const fallback = await applyPostVisibilityFilters(supabase
           .from("posts")
           .select(postSelectFallback)
-          .in("id", repostPostIds);
+          .in("id", repostPostIds), {
+            isMinor: viewerProfile?.is_minor,
+            wants18Plus: viewerProfile?.wants_18_plus,
+            ageVerificationStatus: viewerProfile?.age_verification_status,
+          }, 'public-list');
 
         repostedPostsData = fallback.data as typeof repostedPostsData;
         repostedPostsError = fallback.error;
       }
 
       if (repostedPostsError && isMissingCommunityColumnError(repostedPostsError)) {
-        const fallback = await supabase
+        const fallback = await applyPostVisibilityFilters(supabase
           .from("posts")
           .select(postSelectWithModeration.replace(POST_SELECT_COMMUNITY_FIELDS, ""))
-          .in("id", repostPostIds);
+          .in("id", repostPostIds), {
+            isMinor: viewerProfile?.is_minor,
+            wants18Plus: viewerProfile?.wants_18_plus,
+            ageVerificationStatus: viewerProfile?.age_verification_status,
+          }, 'public-list');
 
         repostedPostsData = fallback.data as typeof repostedPostsData;
         repostedPostsError = fallback.error;

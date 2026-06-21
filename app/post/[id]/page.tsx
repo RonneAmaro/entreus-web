@@ -18,6 +18,7 @@ import {
   getSafePostContentRating as normalizeContentRating,
   isAdultPostClassification as isAdultCommunityOrRating,
 } from '@/lib/post-classification'
+import { applyPostVisibilityFilters } from '@/lib/post-visibility'
 
 type VisibilityType = 'public' | 'followers' | 'private'
 
@@ -221,17 +222,17 @@ export default function PostPage() {
           )
         `
 
-      let { data: postData, error: postError } = await supabase
+      let { data: postData, error: postError } = await applyPostVisibilityFilters(supabase
         .from('posts')
         .select(postSelectWithModeration)
-        .eq('id', postId)
+        .eq('id', postId), adultViewer, currentUserIsAdmin ? 'admin' : 'post-detail')
         .maybeSingle()
 
       if (postError && isMissingPostModerationColumnError(postError)) {
-        const fallback = await supabase
+        const fallback = await applyPostVisibilityFilters(supabase
           .from('posts')
           .select(postSelectFallback)
-          .eq('id', postId)
+          .eq('id', postId), adultViewer, currentUserIsAdmin ? 'admin' : 'post-detail')
           .maybeSingle()
 
         postData = fallback.data as typeof postData
@@ -239,10 +240,10 @@ export default function PostPage() {
       }
 
       if (postError && isMissingCommunityColumnError(postError)) {
-        const fallback = await supabase
+        const fallback = await applyPostVisibilityFilters(supabase
           .from('posts')
           .select(postSelectWithModeration.replace(POST_SELECT_COMMUNITY_FIELDS, ''))
-          .eq('id', postId)
+          .eq('id', postId), adultViewer, currentUserIsAdmin ? 'admin' : 'post-detail')
           .maybeSingle()
 
         postData = fallback.data as typeof postData

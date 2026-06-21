@@ -30,6 +30,7 @@
     "test:e2e:report": "playwright show-report",
     "test:unit": "vitest run",
     "test:unit:watch": "vitest",
+    "audit:adult-access": "node scripts/audit-adult-content-access.js",
     "test:smoke": "playwright test tests/e2e/smoke.spec.ts"
   },
   "dependencies": {
