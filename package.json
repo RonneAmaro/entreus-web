@@ -31,6 +31,7 @@
     "test:unit": "vitest run",
     "test:unit:watch": "vitest",
     "audit:adult-access": "node scripts/audit-adult-content-access.js",
+    "audit:rls:local": "node scripts/audit-rls-local-migrations.js",
     "test:smoke": "playwright test tests/e2e/smoke.spec.ts"
   },
   "dependencies": {

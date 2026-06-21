@@ -12,6 +12,12 @@ O script `npm.cmd run audit:adult-access` mapeia leitores de `posts` por sinais 
 
 ## RLS
 
+## Requisitos mínimos de RLS para 18+
+
+- Anônimo, menor, conta sem verificação aprovada e consentimento parental não leem adulto.
+- Adulto aprovado com opt-in lê adulto no contexto 18+; admin modera somente no contexto administrativo.
+- `post_media`, comentários, notificações e storage não podem vazar mídia ou preview adulto.
+
 Não foi criada migration RLS automática. Habilitar RLS ou substituir policies sem o schema/policies efetivamente aplicados pode interromper leituras seguras existentes. A proposta para staging é: preservar as policies existentes de posts, criar uma policy `SELECT` que permita `adult_18plus` somente quando `public.is_admin()` ou quando o perfil de `auth.uid()` tiver `is_minor = false`, `wants_18_plus = true` e `age_verification_status = 'approved'`; manter safe/sensitive público conforme a policy existente; e aplicar regra equivalente a `post_media` via `exists` no post pai.
 
 Antes de aplicar, exporte policies reais do ambiente, teste visitante/menor/não verificado/adulto aprovado/admin e valide feed, perfil, salvos, post individual, denúncias e moderação. Não aplicar migrations automaticamente.
