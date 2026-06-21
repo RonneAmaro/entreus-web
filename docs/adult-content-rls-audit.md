@@ -12,6 +12,10 @@ O script `npm.cmd run audit:adult-access` mapeia leitores de `posts` por sinais 
 
 ## RLS
 
+## Migration proposta no Pacote 38
+
+`20260621_harden_adult_content_rls.sql` é uma proposta para aplicação manual: ativa RLS em posts, comentários e curtidas e conecta mídia/reposts à visibilidade do post pai. Verifique com `supabase/sql/verify-adult-content-rls.sql` e use o rollback documentado se necessário. Storage público continua um risco separado.
+
 ## Requisitos mínimos de RLS para 18+
 
 - Anônimo, menor, conta sem verificação aprovada e consentimento parental não leem adulto.
