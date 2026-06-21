@@ -1,11 +1,18 @@
-export type PostCommunityType =
-  | 'general'
-  | 'sports'
-  | 'geopolitics'
-  | 'military'
-  | 'adult_18plus'
+import {
+  getSafePostCommunity,
+  getSafePostContentRating,
+  isPostCommunityType,
+  isPostContentRating,
+  type PostCommunityType,
+  type PostContentRating,
+} from './post-classification-types'
+import {
+  canViewAdultContent,
+  canViewPostByClassification,
+  isAdultPost,
+} from './content-access'
 
-export type PostContentRating = 'safe' | 'sensitive' | 'adult_18plus'
+export type { PostCommunityType, PostContentRating } from './post-classification-types'
 
 export type PostCommunityFilter = PostCommunityType
 
@@ -93,24 +100,7 @@ export const POST_CONTENT_RATINGS: {
   },
 ]
 
-const POST_COMMUNITY_KEYS = new Set(POST_COMMUNITIES.map((community) => community.key))
-const POST_CONTENT_RATING_KEYS = new Set(POST_CONTENT_RATINGS.map((rating) => rating.key))
-
-export function isPostCommunityType(value: unknown): value is PostCommunityType {
-  return typeof value === 'string' && POST_COMMUNITY_KEYS.has(value as PostCommunityType)
-}
-
-export function isPostContentRating(value: unknown): value is PostContentRating {
-  return typeof value === 'string' && POST_CONTENT_RATING_KEYS.has(value as PostContentRating)
-}
-
-export function getSafePostCommunity(value: unknown): PostCommunityType {
-  return isPostCommunityType(value) ? value : 'general'
-}
-
-export function getSafePostContentRating(value: unknown): PostContentRating {
-  return isPostContentRating(value) ? value : 'safe'
-}
+export { isPostCommunityType, isPostContentRating, getSafePostCommunity, getSafePostContentRating }
 
 export function getPostCommunityDefinition(value: unknown) {
   const community = getSafePostCommunity(value)
@@ -119,16 +109,11 @@ export function getPostCommunityDefinition(value: unknown) {
 }
 
 export function canViewAdultPostContent(viewer: PostClassificationViewer | null | undefined) {
-  return Boolean(
-    viewer &&
-      !viewer.isMinor &&
-      viewer.wants18Plus &&
-      viewer.ageVerificationStatus === 'approved',
-  )
+  return canViewAdultContent(viewer)
 }
 
 export function isAdultPostClassification(community: unknown, rating?: unknown) {
-  return getSafePostCommunity(community) === 'adult_18plus' || getSafePostContentRating(rating) === 'adult_18plus'
+  return isAdultPost({ community_type: community, content_rating: rating })
 }
 
 export function canViewerSeePostClassification(
@@ -136,9 +121,7 @@ export function canViewerSeePostClassification(
   community: unknown,
   rating?: unknown,
 ) {
-  if (!isAdultPostClassification(community, rating)) return true
-
-  return canViewAdultPostContent(viewer)
+  return canViewPostByClassification(viewer, { community_type: community, content_rating: rating })
 }
 
 export function shouldShowInGeneralFeed(community: unknown, rating?: unknown) {

@@ -70,6 +70,7 @@ import {
   type PostCommunityType as CommunityType,
   type PostContentRating as ContentRating,
 } from '@/lib/post-classification'
+import { normalizePostClassification } from '@/lib/content-access'
 
 type VisibilityType = 'public' | 'followers' | 'private'
 type ComposerSubmitData = {
@@ -2526,8 +2527,8 @@ function FeedContent() {
       return false
     }
 
-    const normalizedCommunity = normalizeCommunity(communityType)
-    const normalizedRating = normalizeContentRating(contentRating)
+    const { communityType: normalizedCommunity, contentRating: normalizedRating } =
+      normalizePostClassification(communityType, contentRating)
 
     if (
       isAdultCommunityOrRating(normalizedCommunity, normalizedRating) &&
@@ -2570,7 +2571,7 @@ function FeedContent() {
       content: content.trim() || null,
       category,
       community_type: normalizedCommunity,
-      content_rating: normalizedCommunity === 'adult_18plus' ? 'adult_18plus' : normalizedRating,
+      content_rating: normalizedRating,
       image_url: firstImage,
       video_url: firstVideo,
       visibility,

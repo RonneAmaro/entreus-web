@@ -22,6 +22,7 @@ import { isAdminRole } from '@/lib/admin'
 import { isMissingPostModerationColumnError, normalizeModerationStatus, type ModeratedPostFields } from '@/lib/post-moderation'
 import { supabase } from '@/lib/supabase'
 import { notifyAdminPendingAlertsChanged } from '@/app/hooks/useAdminPendingAlerts'
+import { getSafePostCommunity, getSafePostContentRating } from '@/lib/post-classification'
 
 type AdminProfile = {
   id: string
@@ -47,6 +48,8 @@ type ReportedPostContext = ModeratedPostFields & {
   image_url: string | null
   video_url: string | null
   is_sensitive: boolean | null
+  community_type?: string | null
+  content_rating?: string | null
 }
 
 type ReportStatus = 'pending' | 'in_review' | 'resolved' | 'rejected' | 'archived'
@@ -191,8 +194,8 @@ export default function AdminReportsPage() {
     }
 
     const selectWithModeration =
-      'id, user_id, content, category, image_url, video_url, is_sensitive, moderation_status, moderated_at, moderated_by, moderation_reason'
-    const selectFallback = 'id, user_id, content, category, image_url, video_url, is_sensitive'
+      'id, user_id, content, category, image_url, video_url, is_sensitive, community_type, content_rating, moderation_status, moderated_at, moderated_by, moderation_reason'
+    const selectFallback = 'id, user_id, content, category, image_url, video_url, is_sensitive, community_type, content_rating'
 
     let { data, error } = await supabase
       .from('posts')
@@ -229,6 +232,8 @@ export default function AdminReportsPage() {
   function isSensitivePost(post: ReportedPostContext | undefined) {
     return Boolean(
       post?.is_sensitive ||
+        getSafePostContentRating(post?.content_rating) !== 'safe' ||
+        getSafePostCommunity(post?.community_type) === 'adult_18plus' ||
         post?.category === 'adulto' ||
         post?.category === 'sensual' ||
         post?.category === '18plus',
@@ -511,6 +516,12 @@ export default function AdminReportsPage() {
                         <div className="flex flex-wrap items-center gap-2 text-xs font-black text-zinc-300">
                           <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 ${getPostModerationClass(postContext)}`}>
                             {getPostModerationLabel(postContext)}
+                          </span>
+                          <span className="rounded-full bg-white/10 px-2.5 py-1 text-zinc-200">
+                            {getSafePostCommunity(postContext.community_type)}
+                          </span>
+                          <span className="rounded-full bg-white/10 px-2.5 py-1 text-zinc-200">
+                            {getSafePostContentRating(postContext.content_rating)}
                           </span>
                           {hasImage && (
                             <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2.5 py-1 text-blue-100">
