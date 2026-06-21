@@ -6,6 +6,8 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import GoogleLogo from '../components/GoogleLogo'
 import { signInWithSocialProvider, supabase } from '@/lib/supabase'
+import { getAuthErrorMessage } from '@/lib/auth/auth-error-messages'
+import { ensureProfile } from '@/lib/auth/ensure-profile'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -22,17 +24,23 @@ export default function LoginPage() {
     setLoading(true)
     setMessage('')
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email: email.trim(),
       password,
     })
 
     if (error) {
-      setMessage('Erro ao entrar: ' + error.message)
+      setMessage(getAuthErrorMessage(error))
       setLoading(false)
       return
     }
 
+    if (data.user) {
+      const repaired = await ensureProfile(supabase as never, data.user.id)
+      if (!repaired.profile) { router.push('/complete-profile'); setLoading(false); return }
+      if (repaired.profile.is_minor && repaired.profile.parental_consent_status !== 'approved') { router.push('/account-pending'); setLoading(false); return }
+      if (!repaired.profile.username || !repaired.profile.birth_date) { router.push('/complete-profile'); setLoading(false); return }
+    }
     router.push('/feed')
     setLoading(false)
   }
@@ -73,6 +81,7 @@ export default function LoginPage() {
             </span>
             {socialLoading ? 'Conectando...' : 'Continuar com Google'}
           </button>
+          <Link href="/forgot-password" className="block text-center text-sm underline">Esqueci minha senha</Link>
 
           <button
             type="button"

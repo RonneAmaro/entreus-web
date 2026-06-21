@@ -11,6 +11,7 @@ import {
   CURRENT_TERMS_VERSION,
   isMissingProfileAcceptanceColumnError,
 } from '@/lib/profile-completion'
+import { getAuthErrorMessage, isExistingAccountError } from '@/lib/auth/auth-error-messages'
 
 function validatePassword(password: string) {
   if (password.length < 8) {
@@ -55,10 +56,12 @@ export default function SignupPage() {
   const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(false)
   const [socialLoading, setSocialLoading] = useState(false)
+  const [existingAccount, setExistingAccount] = useState(false)
 
   async function handleSignup(e: React.FormEvent) {
     e.preventDefault()
     setMessage('')
+    setExistingAccount(false)
 
     const passwordError = validatePassword(password)
 
@@ -122,10 +125,10 @@ export default function SignupPage() {
         privacy_version: CURRENT_PRIVACY_VERSION,
         updated_at: acceptedAt,
       }
-      const { error: profileError } = await supabase.from('profiles').upsert(profilePayload)
+      let { error: profileError } = await supabase.from('profiles').upsert(profilePayload)
 
       if (isMissingProfileAcceptanceColumnError(profileError)) {
-        await supabase.from('profiles').upsert({
+        const fallback = await supabase.from('profiles').upsert({
           id: data.user.id,
           birth_date: birthDate,
           is_minor: isMinor,
@@ -135,13 +138,20 @@ export default function SignupPage() {
           age_verification_status: 'not_started',
           updated_at: acceptedAt,
         })
+        profileError = fallback.error
+      }
+      if (profileError) {
+        setLoading(false)
+        setMessage('Sua conta foi criada, mas ainda precisamos completar seu perfil. Tente entrar com este e-mail para continuar.')
+        return
       }
     }
 
     setLoading(false)
 
     if (error) {
-      setMessage('Erro ao criar conta: ' + error.message)
+      setExistingAccount(isExistingAccountError(error))
+      setMessage(getAuthErrorMessage(error))
       return
     }
 
@@ -376,7 +386,7 @@ export default function SignupPage() {
           </button>
         </form>
 
-        {message && (
+          {message && (
           <p
             className={`mt-4 rounded-xl border px-4 py-3 text-center text-sm ${
               message.includes('sucesso')
@@ -386,7 +396,8 @@ export default function SignupPage() {
           >
             {message}
           </p>
-        )}
+          )}
+          {existingAccount && <div className="mt-3 flex flex-wrap gap-3 text-sm"><Link className="underline" href="/login">Entrar agora</Link><Link className="underline" href="/forgot-password">Esqueci minha senha</Link><button type="button" className="underline" onClick={async () => { await supabase.auth.resend({ type: 'signup', email: email.trim() }); setMessage('Se este e-mail estiver aguardando confirmação, enviaremos um novo link.') }}>Reenviar confirmação de e-mail</button></div>}
 
         <p className="mt-6 text-center text-sm text-zinc-400">
           Já tem conta?{' '}
