@@ -116,6 +116,16 @@ export default function MoreMenu({
           </div>
         </Link>
 
+        <Link href="/creators" onClick={onClose} className={itemClass('/creators')}>
+          <Lightbulb className={iconClass('/creators')} />
+          <div className="min-w-0 flex-1">
+            <p>Programa Criadores</p>
+            <p className="mt-0.5 truncate text-[11px] font-medium opacity-60">
+              Entre desde o começo
+            </p>
+          </div>
+        </Link>
+
         <Link
           href="/lab"
           onClick={onClose}
