@@ -32,6 +32,7 @@
     "test:unit:watch": "vitest",
     "audit:adult-access": "node scripts/audit-adult-content-access.js",
     "audit:rls:local": "node scripts/audit-rls-local-migrations.js",
+    "audit:adult-media": "node scripts/audit-adult-media-exposure.js",
     "test:smoke": "playwright test tests/e2e/smoke.spec.ts"
   },
   "dependencies": {
