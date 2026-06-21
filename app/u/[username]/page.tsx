@@ -900,7 +900,7 @@ export default function PublicProfilePage() {
       const { data: mediaData, error: mediaError } = await supabase
         .from("post_media")
         .select(
-          "id, post_id, user_id, media_url, media_type, position, created_at",
+          "id, post_id, user_id, media_url, media_type, position, created_at, access_level",
         )
         .in("post_id", allPostIds)
         .order("position", { ascending: true });

@@ -12,7 +12,11 @@ export function shouldUseProtectedMedia(post: Post, media: Media) {
 }
 export function getProtectedMediaPlaceholder() { return 'Mídia protegida' }
 export function sanitizePostMediaForViewer(media: Media, post: Post, viewer: ContentAccessProfile | null | undefined, adminContext = false) {
-  if (!isAdultPostMedia(post) && media.access_level !== 'adult_private') return { id: media.id, media_url: media.media_url || null, media_type: media.media_type || null, protected: false }
+  const adult = isAdultPostMedia(post) || media.access_level === 'adult_private'
+  if (!adult) return { id: media.id, media_url: media.media_url || null, media_type: media.media_type || null, accessLevel: media.access_level || 'public', protected: false }
   if (!canRequestProtectedPostMedia(viewer, post, adminContext)) return { id: media.id, media_type: media.media_type || null, protected: true, blocked: true, placeholder: getProtectedMediaPlaceholder() }
-  return { id: media.id, media_type: media.media_type || null, protected: true, requiresSignedUrl: true }
+  if (media.access_level !== 'adult_private' || !media.storage_key || !media.storage_bucket || media.storage_provider !== 'r2') {
+    return { id: media.id, media_type: media.media_type || null, accessLevel: media.access_level || null, protected: true, legacyUnavailable: true, placeholder: 'Mídia protegida indisponível.' }
+  }
+  return { id: media.id, media_type: media.media_type || null, accessLevel: 'adult_private', protected: true, requiresSignedUrl: true }
 }

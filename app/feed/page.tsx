@@ -122,6 +122,7 @@ type PostMedia = {
   media_type: 'image' | 'video' | 'gif'
   position: number
   created_at?: string
+  access_level?: string | null
 }
 
 type Post = ModeratedPostFields & {
@@ -1344,7 +1345,7 @@ function FeedContent() {
     if (postIds.length > 0) {
       const { data: mediaData, error: mediaError } = await supabase
         .from('post_media')
-        .select('id, post_id, user_id, media_url, media_type, position, created_at')
+        .select('id, post_id, user_id, media_url, media_type, position, created_at, access_level')
         .in('post_id', postIds)
         .order('position', { ascending: true })
 
@@ -2071,7 +2072,11 @@ function FeedContent() {
     data: {
       uploadUrl?: string
       publicUrl?: string
-      key?: string
+    key?: string
+    storageProvider?: string
+    storageBucket?: string
+    storageKey?: string
+    accessLevel?: string
       contentType?: string
     } | null,
     file: File,
@@ -2079,21 +2084,27 @@ function FeedContent() {
     expectedContentType: string,
   ): data is {
     uploadUrl: string
-    publicUrl: string
+    publicUrl?: string
     key: string
     contentType: string
+    storageProvider?: string
+    storageBucket?: string
+    storageKey?: string
+    accessLevel?: string
   } {
     if (!data) return false
-    if (!isSafeHttpMediaUrl(data.uploadUrl) || !isSafeHttpMediaUrl(data.publicUrl)) return false
+    if (!isSafeHttpMediaUrl(data.uploadUrl)) return false
+    if (folder === 'comments' && !isSafeHttpMediaUrl(data.publicUrl)) return false
     if (data.contentType !== expectedContentType) return false
-    if (typeof data.key !== 'string' || !data.key.startsWith(`${folder}/${userId}/`)) return false
+    if (typeof data.key !== 'string') return false
 
     return true
   }
 
   async function uploadMediaFile(
-    file: File
-  ): Promise<{ url: string; type: 'image' | 'video' | 'gif' } | null> {
+    file: File,
+    adultPrivate = false,
+  ): Promise<{ url: string | null; type: 'image' | 'video' | 'gif'; storageProvider: string; storageBucket: string; storageKey: string; accessLevel: 'public' | 'adult_private' } | null> {
     if (!userId) return null
 
     const uploadContentType = getEffectiveContentType(file)
@@ -2157,6 +2168,9 @@ function FeedContent() {
           contentType: uploadContentType,
           fileSize: file.size,
           folder: 'posts',
+          communityType: adultPrivate ? 'adult_18plus' : 'general',
+          contentRating: adultPrivate ? 'adult_18plus' : 'safe',
+          accessLevel: adultPrivate ? 'adult_private' : 'public',
         }),
       })
 
@@ -2165,6 +2179,10 @@ function FeedContent() {
         uploadUrl?: string
         publicUrl?: string
         key?: string
+        storageProvider?: string
+        storageBucket?: string
+        storageKey?: string
+        accessLevel?: 'public' | 'adult_private'
         contentType?: string
         message?: string
         error?: string
@@ -2217,6 +2235,19 @@ function FeedContent() {
           step: 'presign-validation',
           ...getPresignContractFlags(presignData),
         })
+        setMessage(PRESIGN_UPLOAD_FAILURE_MESSAGE)
+        return null
+      }
+
+      if (
+        typeof presignData.storageProvider !== 'string' ||
+        typeof presignData.storageBucket !== 'string' ||
+        typeof presignData.storageKey !== 'string' ||
+        presignData.accessLevel !== (adultPrivate ? 'adult_private' : 'public') ||
+        (adultPrivate
+          ? typeof presignData.publicUrl === 'string'
+          : !isSafeHttpMediaUrl(presignData.publicUrl))
+      ) {
         setMessage(PRESIGN_UPLOAD_FAILURE_MESSAGE)
         return null
       }
@@ -2285,8 +2316,12 @@ function FeedContent() {
       }
 
       return {
-        url: presignData.publicUrl,
+        url: adultPrivate ? null : presignData.publicUrl || null,
         type: uploadContentType === 'image/gif' ? 'gif' : mediaType,
+        storageProvider: presignData.storageProvider,
+        storageBucket: presignData.storageBucket,
+        storageKey: presignData.storageKey,
+        accessLevel: presignData.accessLevel,
       }
     } catch (error) {
       const errorMessage =
@@ -2495,7 +2530,7 @@ function FeedContent() {
       }
 
       return {
-        url: presignData.publicUrl,
+        url: presignData.publicUrl!,
         type: mediaType,
       }
     } catch (error) {
@@ -2551,13 +2586,18 @@ function FeedContent() {
 
     setMessage('')
 
+    const isAdultPost = normalizedRating === 'adult_18plus'
     const uploadedMedia: {
-      url: string
+      url: string | null
       type: 'image' | 'video' | 'gif'
+      storageProvider: string
+      storageBucket: string
+      storageKey: string
+      accessLevel: 'public' | 'adult_private'
     }[] = []
 
     for (const file of finalMediaFiles) {
-      const uploaded = await uploadMediaFile(file)
+      const uploaded = await uploadMediaFile(file, isAdultPost)
 
       if (!uploaded) {
         return false
@@ -2566,8 +2606,8 @@ function FeedContent() {
       uploadedMedia.push(uploaded)
     }
 
-    const firstImage = uploadedMedia.find((item) => item.type === 'image' || item.type === 'gif')?.url || null
-    const firstVideo = uploadedMedia.find((item) => item.type === 'video')?.url || null
+    const firstImage = isAdultPost ? null : uploadedMedia.find((item) => item.type === 'image' || item.type === 'gif')?.url || null
+    const firstVideo = isAdultPost ? null : uploadedMedia.find((item) => item.type === 'video')?.url || null
 
     console.info('[FeedUpload] Salvando post apos upload:', {
       mediaCount: uploadedMedia.length,
@@ -2622,9 +2662,13 @@ function FeedContent() {
       const mediaRows = uploadedMedia.map((item, index) => ({
         post_id: insertedPost.id,
         user_id: userId,
-        media_url: item.url,
+        media_url: item.accessLevel === 'adult_private' ? null : item.url,
         media_type: item.type,
         position: index,
+        storage_provider: item.storageProvider,
+        storage_bucket: item.storageBucket,
+        storage_key: item.storageKey,
+        access_level: item.accessLevel,
       }))
 
       const { error: mediaError } = await supabase

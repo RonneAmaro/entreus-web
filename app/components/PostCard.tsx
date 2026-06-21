@@ -7,6 +7,7 @@ import PostActions from './PostActions'
 import GiftModal from './GiftModal'
 import TipModal from './TipModal'
 import PostMediaGallery from './PostMediaGallery'
+import ProtectedPostMedia from './ProtectedPostMedia'
 import LinkPreview, { LinkedPostText } from './LinkPreview'
 import SensitiveContent from './SensitiveContent'
 import PostMoreMenu from './PostMoreMenu'
@@ -40,6 +41,7 @@ export type PostCardMedia = {
   media_type: 'image' | 'video' | 'gif'
   position: number
   created_at?: string
+  access_level?: string | null
 }
 
 export type PostCardPost = ModeratedPostFields & {
@@ -340,6 +342,7 @@ export default function PostCard({
   const postMedia = getPostMedia(post)
   const isSharedGiftPost = post.category === 'gift_received'
   const sensitive = isSensitivePost(post)
+  const adultPost = isAdultCommunityOrRating(post.community_type, post.content_rating)
   const ratingLabel = getContentRatingLabel(post.content_rating)
   const communityLabel = getCommunityLabel(post.community_type)
   const moderatedHidden = isModeratedHidden(post)
@@ -525,7 +528,11 @@ export default function PostCard({
 
           <LinkPreview content={post.content} enableExternalEmbeds />
 
-          {!isSharedGiftPost && <PostMediaGallery media={postMedia} />}
+          {!isSharedGiftPost && (adultPost ? (
+            <div className="mb-4 grid gap-2 sm:grid-cols-2">
+              {postMedia.map((media) => <ProtectedPostMedia key={media.id} media={media} adultPost className="max-h-[32rem] w-full rounded-2xl object-contain" />)}
+            </div>
+          ) : <PostMediaGallery media={postMedia} />)}
         </SensitiveContent>
       ) : (
         <>
@@ -542,7 +549,11 @@ export default function PostCard({
 
           <LinkPreview content={post.content} enableExternalEmbeds />
 
-          {!isSharedGiftPost && <PostMediaGallery media={postMedia} />}
+          {!isSharedGiftPost && (adultPost ? (
+            <div className="mb-4 grid gap-2 sm:grid-cols-2">
+              {postMedia.map((media) => <ProtectedPostMedia key={media.id} media={media} adultPost className="max-h-[32rem] w-full rounded-2xl object-contain" />)}
+            </div>
+          ) : <PostMediaGallery media={postMedia} />)}
         </>
       )}
 

@@ -2,6 +2,7 @@ import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
+import { canPreparePostMediaUpload, resolvePostMediaAccessLevel } from '@/lib/media/post-media-access'
 import {
   UPLOAD_EXTENSION_BY_MIME_TYPE,
   formatUploadLimitMegabytes,
@@ -37,6 +38,9 @@ type PresignBody = {
   contentType?: unknown
   folder?: unknown
   fileSize?: unknown
+  communityType?: unknown
+  contentRating?: unknown
+  accessLevel?: unknown
 }
 
 type RateLimitEntry = {
@@ -104,11 +108,14 @@ function getSupabaseAdminForUploadLimits() {
   })
 }
 
-function buildObjectKey(folder: R2UploadFolder, userId: string, contentType: string) {
+function buildObjectKey(folder: R2UploadFolder, userId: string, contentType: string, accessLevel: 'public' | 'adult_private') {
   const timestamp = Date.now()
   const extension = UPLOAD_EXTENSION_BY_MIME_TYPE[contentType] || 'bin'
 
-  return `${folder}/${userId}/${timestamp}-${crypto.randomUUID()}.${extension}`
+  const prefix = accessLevel === 'adult_private'
+    ? 'protected/adult-post-media'
+    : folder
+  return `${prefix}/${userId}/${timestamp}-${crypto.randomUUID()}.${extension}`
 }
 
 function isProfileMediaFolder(folder: R2UploadFolder) {
@@ -283,6 +290,11 @@ export async function POST(request: Request) {
 
   const contentType = normalizeContentType(body.contentType, body.fileName)
   const folder = getFolder(body.folder)
+  const accessLevel = resolvePostMediaAccessLevel({
+    communityType: body.communityType,
+    contentRating: body.contentRating,
+    accessLevel: body.accessLevel,
+  })
 
   console.info('[R2Presign] Upload solicitado:', {
     fileName: body.fileName,
@@ -292,7 +304,7 @@ export async function POST(request: Request) {
     folder,
   })
 
-  if (!folder) {
+  if (!folder || !accessLevel || (accessLevel === 'adult_private' && folder !== 'posts')) {
     return NextResponse.json(
       {
         ok: false,
@@ -301,6 +313,28 @@ export async function POST(request: Request) {
       },
       { status: 400 },
     )
+  }
+
+  if (accessLevel === 'adult_private') {
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('is_minor, wants_18_plus, age_verification_status, parental_consent_status')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    if (profileError || !canPreparePostMediaUpload(accessLevel, profile
+      ? {
+          isMinor: profile.is_minor,
+          wants18Plus: profile.wants_18_plus,
+          ageVerificationStatus: profile.age_verification_status,
+          parentalConsentStatus: profile.parental_consent_status,
+        }
+      : null)) {
+      return NextResponse.json(
+        { ok: false, error: 'ADULT_UPLOAD_NOT_ALLOWED', message: 'Este conteudo nao esta disponivel para sua conta.' },
+        { status: 403 },
+      )
+    }
   }
 
   if (!contentType || (folder && isProfileMediaFolder(folder) && !PROFILE_IMAGE_CONTENT_TYPES.has(contentType))) {
@@ -361,7 +395,7 @@ export async function POST(request: Request) {
   const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY as string
   const bucketName = process.env.R2_BUCKET_NAME as string
   const publicBaseUrl = process.env.R2_PUBLIC_BASE_URL as string
-  const key = buildObjectKey(folder, user.id, contentType)
+  const key = buildObjectKey(folder, user.id, contentType, accessLevel)
 
   const client = new S3Client({
     region: 'auto',
@@ -382,7 +416,7 @@ export async function POST(request: Request) {
     const uploadUrl = await getSignedUrl(client, command, {
       expiresIn: PRESIGNED_URL_EXPIRES_IN_SECONDS,
     })
-    const publicUrl = buildPublicUrl(publicBaseUrl, key)
+    const publicUrl = accessLevel === 'public' ? buildPublicUrl(publicBaseUrl, key) : null
 
     console.info('[R2Presign] Upload preparado:', {
       fileName: body.fileName,
@@ -392,6 +426,7 @@ export async function POST(request: Request) {
       folder,
       status: 200,
       hasUploadUrl: Boolean(uploadUrl),
+      accessLevel,
       hasPublicUrl: Boolean(publicUrl),
       hasKey: Boolean(key),
     })
@@ -399,8 +434,13 @@ export async function POST(request: Request) {
     return NextResponse.json({
       ok: true,
       uploadUrl,
-      publicUrl,
+      ...(publicUrl ? { publicUrl } : {}),
       key,
+      storageProvider: 'r2',
+      storageBucket: bucketName,
+      storageKey: key,
+      accessLevel,
+      mediaType: contentType === 'image/gif' ? 'gif' : contentType.startsWith('video/') ? 'video' : 'image',
       contentType,
       maxFileSize,
       videoUploadTier: videoUploadLimit?.tier || null,

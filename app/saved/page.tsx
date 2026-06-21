@@ -481,7 +481,7 @@ export default function SavedPage() {
     if (postIds.length > 0) {
       const { data: mediaData, error: mediaError } = await supabase
         .from('post_media')
-        .select('id, post_id, user_id, media_url, media_type, position, created_at')
+        .select('id, post_id, user_id, media_url, media_type, position, created_at, access_level')
         .in('post_id', postIds)
         .order('position', { ascending: true })
 

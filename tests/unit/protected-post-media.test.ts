@@ -10,6 +10,16 @@ describe('protected post media', () => {
     expect(sanitizePostMediaForViewer(media, adult, null)).not.toHaveProperty('storage_key')
   })
   it('requires a signed URL for approved opted-in adults or admin context', () => {
-    expect(sanitizePostMediaForViewer(media, adult, { isMinor: false, wants18Plus: true, ageVerificationStatus: 'approved' })).toEqual(expect.objectContaining({ requiresSignedUrl: true }))
+    const privateMedia = { ...media, access_level: 'adult_private', storage_provider: 'r2', storage_bucket: 'private', storage_key: 'protected/adult-post-media/user/file' }
+    const payload = sanitizePostMediaForViewer(privateMedia, adult, { isMinor: false, wants18Plus: true, ageVerificationStatus: 'approved' })
+    expect(payload).toEqual(expect.objectContaining({ requiresSignedUrl: true }))
+    expect(payload).not.toHaveProperty('storage_key')
+    expect(payload).not.toHaveProperty('storage_bucket')
+    expect(payload).not.toHaveProperty('storage_provider')
+  })
+  it('does not expose a legacy adult URL without trusted private metadata', () => {
+    const payload = sanitizePostMediaForViewer(media, adult, { isMinor: false, wants18Plus: true, ageVerificationStatus: 'approved' })
+    expect(payload).toEqual(expect.objectContaining({ legacyUnavailable: true }))
+    expect(payload).not.toHaveProperty('media_url')
   })
 })
