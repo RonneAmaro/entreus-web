@@ -1,5 +1,9 @@
 # Metadata de storage — Pacote 39B
 
-Aplicar manualmente `20260621_add_post_media_storage_metadata.sql`, verificar com `verify-post-media-storage-metadata.sql` e usar o rollback apenas para constraints/índices. As colunas preservam `media_url` legado e permitem que uploads futuros registrem provider, bucket, key e `access_level`.
+A migration `20260621_add_post_media_storage_metadata.sql` deve ser aplicada manualmente antes do uso em produção. Ela preserva `media_url` legado e adiciona `storage_provider`, `storage_bucket`, `storage_key` e `access_level`. Use `verify-post-media-storage-metadata.sql` somente para leitura; o plano dry-run não toca banco nem storage.
 
-Mídia adulta legada continua bloqueada pelo helper; não é migrada automaticamente. O plano dry-run `npm.cmd run plan:adult-media-protection` não toca banco ou storage. A rota GET signed URL e o upload privado só devem ser integrados depois da migration estar aplicada e o cliente passar metadata confiável do presign.
+## Continuação implementada no Pacote 39C
+
+As colunas do 39B são usadas pelo fluxo privado real. `access_level = adult_private` sinaliza renderização protegida. `storage_provider`, `storage_bucket` e `storage_key` são a fonte confiável para a signed URL; `media_url` permanece para mídia pública ou legada.
+
+Mídia adulta legada sem metadata privada confiável não pode renderizar URL direta. A migration 39B é pré-requisito do fluxo 39C em produção.

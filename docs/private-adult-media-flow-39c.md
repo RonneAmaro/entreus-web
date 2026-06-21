@@ -1,9 +1,15 @@
-# Private adult media flow (39C)
+# Fluxo privado de mídia adulta (39C)
 
-New adult post uploads are presigned into `protected/adult-post-media/` and never receive a permanent public URL. The post composer saves R2 provider, bucket, key, and `adult_private` in `post_media`; its legacy `media_url` is null.
+Uploads adultos novos são presignados em `protected/adult-post-media/` e não recebem URL pública permanente. O compositor grava provider R2, bucket, key e `access_level = adult_private` em `post_media`; `media_url` fica nula.
 
-The signed download route authenticates the requester, relies on post/media RLS, checks the parent post classification and approved 18+ opt-in, then produces a short-lived R2 GET URL. The response exposes only the temporary URL, expiry, and media type.
+A rota de download assinado autentica o solicitante, depende de RLS para post/mídia, valida classificação do post e opt-in 18+ aprovado. Ela retorna somente URL temporária, expiração e tipo de mídia. `ProtectedPostMedia` requisita essa URL para `adult_private`; mídia adulta antiga sem metadata confiável exibe placeholder e não reutiliza URL legada.
 
-`ProtectedPostMedia` requests that URL only for `adult_private` media. Adult media without reliable private metadata is rendered as an unavailable placeholder and its legacy URL is never used. Public media keeps its normal public URL flow.
+O backfill é operação manual futura: copiar objetos legados para área protegida, atualizar metadata, verificar os agregados e só então retirar referências públicas. Este pacote não aplica migration, move ou apaga arquivos.
 
-Backfill remains a separate manual operation: copy legacy adult objects into protected storage, update metadata, verify counts with the SQL check, and only then retire legacy public references. This package does not move or delete objects and does not apply migrations.
+## Checklist operacional
+
+1. Confirmar que a migration 39B está aplicada.
+2. Publicar imagem e vídeo adultos novos; confirmar `access_level = adult_private`, `storage_key` preenchida e ausência de URL pública permanente em `media_url`.
+3. Confirmar que o PostCard usa `ProtectedPostMedia`.
+4. Confirmar placeholder para usuário sem permissão e mídia adulta legada sem metadata.
+5. Confirmar que adulto aprovado com opt-in recebe URL temporária e que a resposta não contém bucket, key ou provider.

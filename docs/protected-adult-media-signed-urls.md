@@ -1,7 +1,11 @@
 # Mídia adulta protegida e signed URLs
 
-RLS protege metadata, não URLs públicas já emitidas. O presign R2 atual produz `publicUrl` e `key`, enquanto `post_media` versionado persiste `media_url`; não há coluna versionada para provider/bucket/key que permita uma rota GET assinada segura depois do upload.
+## Implementação 39C
 
-`lib/media/protected-post-media.ts` é fail-closed: mídia adulta bloqueada não entrega URL, key, bucket ou path. Para usuário autorizado, ela exige uma signed URL em vez de reutilizar URL direta.
+A rota real é `GET /api/post-media/[mediaId]/signed-url`. Ela exige usuário autenticado, consulta mídia e post pai sob RLS, valida a classificação 18+ e bloqueia menor, conta não verificada ou sem opt-in. A signed URL R2 expira em 10 minutos.
 
-Etapa 39B: adicionar metadata de provider/bucket/key, guardar uploads adultos num prefixo/bucket privado, criar `GET /api/post-media/[mediaId]/signed-url` que consulta o post pai e `content-access`, migrar arquivos adultos antigos e remover URLs públicas. Não alteramos buckets, R2, arquivos ou uploads neste pacote.
+A resposta nunca retorna bucket, key ou provider. O erro bloqueado é sempre `Este conteúdo não está disponível para sua conta.`
+
+- Mídia pública segura: usa sua URL pública normal.
+- Mídia adulta privada nova: usa metadata confiável e signed URL temporária.
+- Mídia adulta legada sem metadata: recebe placeholder e não reutiliza `media_url`.

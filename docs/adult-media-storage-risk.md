@@ -1,7 +1,9 @@
 # Risco residual: mídia adulta em storage público
 
-Esta migration protege linhas de posts, mídias e interações, mas não torna privadas URLs já publicadas. Os buckets `post-images` e `post-videos` têm leitura pública: quem possuir uma URL pode acessá-la fora do RLS das tabelas.
+RLS protege metadados e tabelas, mas não torna privadas URLs públicas já emitidas. Mídia segura pode continuar pública; mídia adulta nova deve evitar URL pública permanente.
 
-Não alteramos `storage.objects` neste pacote. A correção exige um pacote separado para bucket privado/R2 protegido com signed URLs, ou separação física de mídia adulta antes da publicação.
+## Estado após o Pacote 39C
 
-O Pacote 39 adiciona sanitização fail-closed e auditoria estática, mas a rota signed URL fica para 39B: o schema atual não mantém provider/bucket/key por mídia de modo suficiente para assinar um GET sem depender da URL pública.
+O 39C protege uploads adultos novos com `adult_private` e signed URL temporária. Não houve alteração automática de buckets, movimentação ou exclusão de arquivos.
+
+Mídia adulta antiga com `media_url` pública continua sendo risco até um backfill seguro. O próximo passo futuro é copiar os objetos adultos antigos para área protegida, salvar provider/bucket/key confiáveis, verificar os agregados e somente então retirar referências públicas.
