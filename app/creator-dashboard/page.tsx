@@ -68,9 +68,9 @@ type AnalyticsTotals = {
 type CreatorPost = {
   id: string
   content: string | null
-  image_url: string | null
-  video_url: string | null
   created_at: string
+  community_type?: string | null
+  content_rating?: string | null
 }
 
 type PostPerformance = {
@@ -141,6 +141,12 @@ function getPostTitle(post: CreatorPost) {
   const clean = (post.content || '').replace(/\s+/g, ' ').trim()
   if (!clean) return 'Publicacao sem legenda'
   return clean.length > 110 ? `${clean.slice(0, 110)}...` : clean
+}
+
+function getPostClassification(post: CreatorPost) {
+  if (post.community_type === 'adult_18plus' || post.content_rating === 'adult_18plus') return 'Adulto 18+'
+  if (post.content_rating === 'sensitive') return 'Sensível'
+  return 'Seguro'
 }
 
 function getRegion(row: AnalyticsRow) {
@@ -336,7 +342,7 @@ export default function CreatorDashboardPage() {
         .limit(500),
       supabase
         .from('posts')
-        .select('id, content, image_url, video_url, created_at')
+        .select('id, content, created_at, community_type, content_rating')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
         .limit(80),
@@ -498,7 +504,7 @@ export default function CreatorDashboardPage() {
               Painel do criador
             </h1>
             <p className="mt-4 max-w-2xl text-base leading-7 text-zinc-400">
-              Acompanhe alcance, engajamento e distribuicao regional das suas publicacoes.
+              Acompanhe seus conteúdos, crescimento e preparação para monetização.
             </p>
           </div>
 
@@ -664,31 +670,10 @@ export default function CreatorDashboardPage() {
                       className="grid gap-4 rounded-3xl border border-white/10 bg-black/35 p-4 transition hover:border-blue-300/25 hover:bg-blue-950/10 md:grid-cols-[6rem_minmax(0,1fr)_auto]"
                     >
                       <div className="relative flex aspect-video h-24 w-full items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-zinc-900 md:aspect-square md:h-24 md:w-24">
-                        {item.post.image_url ? (
-                          <img
-                            src={item.post.image_url}
-                            alt="Miniatura da publicacao"
-                            className="h-full w-full object-cover"
-                          />
-                        ) : item.post.video_url ? (
-                          <>
-                            <video
-                              src={item.post.video_url}
-                              muted
-                              playsInline
-                              preload="metadata"
-                              className="h-full w-full object-cover opacity-80"
-                            />
-                            <span className="absolute rounded-full bg-black/60 px-3 py-1 text-xs font-black text-white">
-                              Video
-                            </span>
-                          </>
-                        ) : (
-                          <div className="flex h-full w-full flex-col items-center justify-center text-zinc-500">
-                            <ImageIcon className="h-7 w-7" />
-                            <span className="mt-1 text-xs font-bold">Post</span>
-                          </div>
-                        )}
+                        <div className="flex h-full w-full flex-col items-center justify-center text-zinc-500">
+                          <ImageIcon className="h-7 w-7" />
+                          <span className="mt-1 text-xs font-bold">Mídia protegida</span>
+                        </div>
                       </div>
 
                       <div className="min-w-0">
@@ -698,6 +683,7 @@ export default function CreatorDashboardPage() {
                         <p className="mt-2 text-sm font-semibold text-zinc-500">
                           Publicado em {formatPostDate(item.post.created_at)}
                         </p>
+                        <span className="mt-2 inline-flex rounded-full bg-white/10 px-2 py-1 text-xs font-bold text-zinc-300">{getPostClassification(item.post)}</span>
                       </div>
 
                       <div className="flex flex-wrap items-center gap-2 md:justify-end">
