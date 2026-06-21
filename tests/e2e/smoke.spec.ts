@@ -13,6 +13,7 @@ const publicRoutes = [
   '/vip-plus',
   '/status',
   '/creators',
+  '/creators/apply',
 ]
 
 const protectedRoutes = ['/feed']

@@ -1,0 +1,4 @@
+import { createClient } from '@supabase/supabase-js'
+import { NextResponse } from 'next/server'
+import { validateCreatorInterest } from '@/lib/creator-interest'
+export async function POST(request: Request) { try { const input=validateCreatorInterest(await request.json()); if(!input.ok)return NextResponse.json({message:input.error},{status:400}); const url=process.env.NEXT_PUBLIC_SUPABASE_URL,key=process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY; if(!url||!key) throw new Error(); const db=createClient(url,key); const {error}=await db.from('creator_interest_requests').insert(input.value); if(error) throw error; return NextResponse.json({message:'Recebemos seu interesse. A equipe EntreUS poderá analisar e entrar em contato quando houver novas etapas.'}) } catch { return NextResponse.json({message:'Não foi possível enviar agora. Tente novamente em instantes.'},{status:500}) } }
