@@ -17,6 +17,7 @@ import {
 import AppSidebar from '../components/AppSidebar'
 import MobileNavigation from '../components/MobileNavigation'
 import { supabase } from '@/lib/supabase'
+import { summarizeCreatorPosts } from '@/lib/creator-dashboard/creator-metrics'
 
 type AnalyticsRow = {
   id?: string
@@ -88,6 +89,9 @@ type CurrentProfile = {
   username: string | null
   display_name: string | null
   avatar_url: string | null
+  birth_date?: string | null
+  age_verification_status?: string | null
+  wants_18_plus?: boolean | null
 }
 
 function numberFrom(value: unknown, fallback = 0) {
@@ -372,7 +376,7 @@ export default function CreatorDashboardPage() {
   async function loadNavigationProfile(currentUserId: string) {
     const { data } = await supabase
       .from('profiles')
-      .select('username, display_name, avatar_url')
+      .select('username, display_name, avatar_url, birth_date, age_verification_status, wants_18_plus')
       .eq('id', currentUserId)
       .maybeSingle()
 
@@ -382,6 +386,9 @@ export default function CreatorDashboardPage() {
       username: data.username,
       display_name: data.display_name,
       avatar_url: data.avatar_url,
+      birth_date: data.birth_date,
+      age_verification_status: data.age_verification_status,
+      wants_18_plus: data.wants_18_plus,
     })
   }
 
@@ -422,6 +429,10 @@ export default function CreatorDashboardPage() {
   }, [rows])
 
   const kpis: KpiCard[] = [
+    { label: 'Posts publicados', value: posts.length, icon: BarChart3, tone: 'bg-blue-500/15 text-blue-200' },
+    { label: 'Posts seguros', value: summarizeCreatorPosts(posts).safePosts, icon: BarChart3, tone: 'bg-emerald-500/15 text-emerald-200' },
+    { label: 'Posts sensíveis', value: summarizeCreatorPosts(posts).sensitivePosts, icon: Eye, tone: 'bg-amber-500/15 text-amber-200' },
+    { label: 'Posts adultos 18+', value: summarizeCreatorPosts(posts).adultPosts, icon: Eye, tone: 'bg-violet-500/15 text-violet-200' },
     {
       label: 'Visualizacoes Totais',
       value: totals.views,
@@ -540,6 +551,11 @@ export default function CreatorDashboardPage() {
               {kpis.map((item) => (
                 <KpiCard key={item.label} item={item} />
               ))}
+            </section>
+
+            <section className="grid gap-4 lg:grid-cols-2">
+              <article className="rounded-[2rem] border border-white/10 bg-zinc-950/90 p-5"><p className="text-xs font-black uppercase tracking-[0.18em] text-blue-300">Status da conta</p><p className="mt-3 font-bold">Perfil {currentProfile?.username && currentProfile?.birth_date ? 'completo' : 'incompleto'}</p><p className="mt-2 text-sm text-zinc-400">Verificação 18+: {currentProfile?.age_verification_status || 'não enviada'}</p><p className="mt-2 text-sm text-zinc-400">Opt-in 18+: {currentProfile?.wants_18_plus ? 'ativado' : 'desativado'}</p><p className="mt-3 text-sm text-amber-200">Conteúdo adulto exige verificação 18+ aprovada e opt-in.</p></article>
+              <article className="rounded-[2rem] border border-white/10 bg-zinc-950/90 p-5"><p className="text-xs font-black uppercase tracking-[0.18em] text-violet-300">Monetização futura</p><div className="mt-3 grid gap-2 text-sm text-zinc-300"><p>Gorjetas com ItaCash — em breve</p><p>Posts pagos — em breve</p><p>Assinatura de perfil — em planejamento</p><p>Solicitação de saque — em planejamento</p></div></article>
             </section>
 
             <section className="grid gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(22rem,0.65fr)]">
