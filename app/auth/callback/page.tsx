@@ -156,6 +156,29 @@ export default function AuthCallbackPage() {
     async function finishOAuthLogin() {
       const searchParams = new URLSearchParams(window.location.search)
       const code = searchParams.get('code')
+      const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+      const isPasswordRecovery =
+        searchParams.get('type') === 'recovery' || hashParams.get('type') === 'recovery'
+
+      if (isPasswordRecovery) {
+        if (code) {
+          const { error } = await supabase.auth.exchangeCodeForSession(code)
+
+          if (error) {
+            logAuthCallbackError('password recovery exchangeCodeForSession failed', error)
+            if (!cancelled) {
+              setMessage('Não foi possível validar seu link de recuperação. Solicite um novo link e tente novamente.')
+            }
+            return
+          }
+        }
+
+        if (!cancelled) {
+          const recoveryHash = window.location.hash
+          window.location.replace(`/reset-password?flow=recovery${recoveryHash}`)
+        }
+        return
+      }
 
       if (code) {
         const { error } = await supabase.auth.exchangeCodeForSession(code)
