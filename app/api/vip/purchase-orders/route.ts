@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { calculatePaymentTotals, PLATFORM_FEE_PERCENT } from '@/lib/payment-fees'
+import { getSafeCheckoutUrl } from '@/lib/vip-checkout-flow'
 import { getVipPurchasePlan, VIP_PRICE_VERSION } from '@/lib/vip-plans'
 
 type CreateVipOrderBody = {
@@ -18,6 +19,8 @@ type PaymentOrder = {
   operator_fee_brl_cents: number
   total_brl_cents: number
   metadata: Record<string, unknown> | null
+  provider_init_point?: string | null
+  created_at?: string
 }
 
 function getSupabaseForRequest(request: Request) {
@@ -82,8 +85,9 @@ export async function POST(request: Request) {
     })
 
     if (orderError || !orderData) {
+      console.error('Nao foi possivel criar o pedido VIP.', { code: orderError?.code })
       return NextResponse.json(
-        { ok: false, error: orderError?.message || 'Nao foi possivel criar o pedido VIP.' },
+        { ok: false, error: 'Não foi possível preparar a compra VIP agora. Tente novamente em instantes.' },
         { status: 400 },
       )
     }
@@ -106,5 +110,56 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error('Erro ao preparar pedido VIP:', error)
     return NextResponse.json({ ok: false, error: 'Erro interno ao preparar pedido VIP.' }, { status: 500 })
+  }
+}
+
+export async function GET(request: Request) {
+  try {
+    const supabase = getSupabaseForRequest(request)
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser()
+
+    if (userError || !user) {
+      return NextResponse.json({ ok: false, error: 'Entre na sua conta para continuar o pagamento VIP.' }, { status: 401 })
+    }
+
+    const { data, error } = await supabase
+      .from('payment_orders')
+      .select('id, external_reference, product_id, status, total_brl_cents, provider_init_point, metadata, created_at')
+      .eq('product_type', 'vip_plus')
+      .eq('status', 'pending')
+      .not('provider_init_point', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (error) {
+      console.error('Nao foi possivel consultar pedido VIP pendente.', { code: error.code })
+      return NextResponse.json({ ok: false, error: 'Não foi possível consultar pagamentos pendentes agora.' }, { status: 500 })
+    }
+
+    const order = data as PaymentOrder | null
+    const checkoutUrl = getSafeCheckoutUrl(order?.provider_init_point)
+    const plan = getVipPurchasePlan(order?.product_id)
+
+    return NextResponse.json({
+      ok: true,
+      order:
+        order && checkoutUrl && plan
+          ? {
+              id: order.id,
+              externalReference: order.external_reference,
+              status: order.status,
+              planKey: plan.planKey,
+              planLabel: plan.label,
+              days: plan.days,
+              checkoutUrl,
+            }
+          : null,
+    })
+  } catch {
+    return NextResponse.json({ ok: false, error: 'Não foi possível consultar pagamentos pendentes agora.' }, { status: 500 })
   }
 }

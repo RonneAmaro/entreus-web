@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { calculatePaymentTotals, getPaymentMethodConfig } from '@/lib/payment-fees'
+import { getSafeCheckoutUrl } from '@/lib/vip-checkout-flow'
 import { getVipPurchasePlan, VIP_PRICE_VERSION } from '@/lib/vip-plans'
 
 type ProductType = 'itacash' | 'vip_plus'
@@ -197,13 +198,28 @@ export async function POST(request: Request) {
     const preference = (await preferenceResponse.json().catch(() => null)) as MercadoPagoPreference | null
 
     if (!preferenceResponse.ok || !preference?.id) {
+      console.error('Mercado Pago recusou a criacao da preferencia.', {
+        status: preferenceResponse.status,
+      })
+
       return NextResponse.json(
-        { error: preference?.message || 'Nao foi possivel criar preferencia Mercado Pago.' },
+        { error: 'Não foi possível abrir o pagamento agora. Tente novamente em instantes.' },
         { status: 502 }
       )
     }
 
-    const initPoint = preference.init_point || preference.sandbox_init_point || ''
+    const initPoint = getSafeCheckoutUrl(preference.init_point || preference.sandbox_init_point)
+
+    if (!initPoint) {
+      console.error('Mercado Pago criou uma preferencia sem URL de checkout valida.', {
+        preferenceId: preference.id,
+      })
+
+      return NextResponse.json(
+        { error: 'Não foi possível abrir o pagamento agora. Tente novamente em instantes.' },
+        { status: 502 },
+      )
+    }
 
     const { error: attachError } = await supabase.rpc('attach_mercadopago_preference', {
       p_order_id: order.id,
@@ -212,8 +228,12 @@ export async function POST(request: Request) {
     })
 
     if (attachError) {
+      console.error('Nao foi possivel associar a preferencia Mercado Pago ao pedido.', {
+        code: attachError.code,
+      })
+
       return NextResponse.json(
-        { error: 'Preferencia criada, mas nao foi possivel salvar o link: ' + attachError.message },
+        { error: 'Não foi possível preparar o pagamento agora. Tente novamente em instantes.' },
         { status: 500 }
       )
     }
@@ -223,6 +243,7 @@ export async function POST(request: Request) {
       external_reference: order.external_reference,
       provider_preference_id: preference.id,
       provider_init_point: initPoint,
+      checkout_url: initPoint,
       payment_method_option: paymentMethod.value,
       totals,
     })

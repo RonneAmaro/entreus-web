@@ -1,10 +1,13 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import crypto from 'crypto'
+import { verifyVipPaymentForActivation } from '@/lib/vip-payment-verification'
 
 type MercadoPagoPayment = {
   id?: number | string
   status?: string
+  transaction_amount?: number
+  currency_id?: string
   external_reference?: string
   payment_method_id?: string
   payment_type_id?: string
@@ -12,6 +15,7 @@ type MercadoPagoPayment = {
     order_id?: string
     product_type?: string
     payment_method_option?: string
+    plan_key?: string
     user_id?: string
   } | null
   order?: {
@@ -52,6 +56,16 @@ type ProcessPaymentResult = {
   reason?: string
   status?: string
   result?: unknown
+}
+
+type PaymentOrderForVerification = {
+  id: string
+  product_type: string
+  product_id: string | null
+  total_brl_cents: number
+  metadata: Record<string, unknown> | null
+  provider_preference_id: string | null
+  processed_at: string | null
 }
 
 const PAYMENT_EVENT_TYPES = new Set(['payment'])
@@ -202,6 +216,34 @@ function getSafeOrderId(value: unknown) {
   return uuidPattern.test(value) ? value : null
 }
 
+async function getPaymentOrderForVerification(
+  supabase: ReturnType<typeof getServiceSupabase>,
+  externalReference: string | null,
+  orderId: string | null,
+) {
+  const select = 'id, product_type, product_id, total_brl_cents, metadata, provider_preference_id, processed_at'
+
+  if (externalReference) {
+    const byReference = await supabase
+      .from('payment_orders')
+      .select(select)
+      .eq('external_reference', externalReference)
+      .maybeSingle()
+
+    if (byReference.error || byReference.data || !orderId) return byReference
+  }
+
+  if (orderId) {
+    return supabase
+      .from('payment_orders')
+      .select(select)
+      .eq('id', orderId)
+      .maybeSingle()
+  }
+
+  return { data: null, error: null }
+}
+
 function isPaymentEvent(eventType: string, body: unknown) {
   if (PAYMENT_EVENT_TYPES.has(eventType)) return true
 
@@ -338,6 +380,61 @@ async function processPaymentId(
   })
 
   const supabase = getServiceSupabase()
+
+  if (providerStatus === 'approved') {
+    const orderLookup = await getPaymentOrderForVerification(supabase, paymentExternalReference, orderId)
+
+    if (orderLookup.error) {
+      console.error('Mercado Pago nao conseguiu validar o pedido antes da ativacao VIP.', {
+        code: orderLookup.error.code,
+        paymentId: providerPaymentId,
+      })
+      return NextResponse.json({ ok: false, reason: 'order_validation_error', paymentId: providerPaymentId }, { status: 500 })
+    }
+
+    const order = orderLookup.data as PaymentOrderForVerification | null
+
+    if (order?.product_type === 'vip_plus') {
+      const metadata = order.metadata || {}
+      const verification = verifyVipPaymentForActivation(
+        {
+          productType: order.product_type,
+          planKey: order.product_id,
+          totalBrlCents: order.total_brl_cents,
+          paymentMethodOption:
+            typeof metadata.payment_method_option === 'string' ? metadata.payment_method_option : null,
+          providerPreferenceId: order.provider_preference_id,
+          processedAt: order.processed_at,
+        },
+        {
+          status: providerStatus,
+          transactionAmount: payment.transaction_amount ?? null,
+          currencyId: payment.currency_id ?? null,
+          metadata: {
+            productType: payment.metadata?.product_type ?? null,
+            planKey: payment.metadata?.plan_key ?? null,
+          },
+          providerPreferenceId: merchantOrder?.preference_id || null,
+        },
+      )
+
+      if (!verification.valid) {
+        console.warn('Mercado Pago pagamento VIP ignorado por validacao.', {
+          paymentId: providerPaymentId,
+          orderId: order.id,
+          reason: verification.reason,
+        })
+        return NextResponse.json({
+          ok: true,
+          received: true,
+          ignored: true,
+          reason: 'vip_payment_validation_failed',
+          paymentId: providerPaymentId,
+        })
+      }
+    }
+  }
+
   let { data, error } = await supabase.rpc('complete_mercadopago_payment_order_v2', {
     p_provider_payment_id: providerPaymentId,
     p_provider_status: providerStatus,

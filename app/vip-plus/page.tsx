@@ -22,6 +22,12 @@ import {
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { calculatePaymentTotals } from '@/lib/payment-fees'
+import {
+  getSafeCheckoutUrl,
+  getVipCheckoutButtonLabel,
+  getVipPaymentReturnMessage,
+  type VipPaymentReturnStatus,
+} from '@/lib/vip-checkout-flow'
 import { VIP_PURCHASE_PLANS, type VipPlanKey } from '@/lib/vip-plans'
 
 type CurrentProfile = {
@@ -33,23 +39,39 @@ type CurrentProfile = {
   vip_expires_at: string | null
 }
 
-type VipPurchaseOrderResponse =
+type PendingVipCheckout = {
+  id: string
+  externalReference: string
+  status: string
+  planKey: VipPlanKey
+  planLabel: string
+  days: number
+  checkoutUrl: string
+}
+
+type PendingVipCheckoutResponse =
   | {
       ok: true
-      order: {
-        id: string
-        externalReference: string
-        status: string
-        planKey: VipPlanKey
-        planLabel: string
-        days: number
-        totals: ReturnType<typeof calculatePaymentTotals>
-      }
+      order: PendingVipCheckout | null
     }
   | {
       ok: false
       error: string
     }
+
+type MercadoPagoPreferenceResponse = {
+  order_id?: string
+  external_reference?: string
+  checkout_url?: string
+}
+
+type ManualPixResponse = {
+  configured?: boolean
+  pix_key?: string
+  pixPaymentLink?: string
+  receiver_name?: string
+  receiver_city?: string
+}
 
 const BADGE_MEDIA = {
   ansiao: {
@@ -140,8 +162,12 @@ export default function VipPlusPage() {
   const [videoFailed, setVideoFailed] = useState(false)
   const [selectedPlanKey, setSelectedPlanKey] = useState<VipPlanKey>('vip_90d')
   const [preparingPurchase, setPreparingPurchase] = useState(false)
+  const [checkoutRequested, setCheckoutRequested] = useState(false)
   const [purchaseMessage, setPurchaseMessage] = useState('')
-  const [preparedOrder, setPreparedOrder] = useState<Extract<VipPurchaseOrderResponse, { ok: true }>['order'] | null>(null)
+  const [preparedOrder, setPreparedOrder] = useState<PendingVipCheckout | null>(null)
+  const [manualPix, setManualPix] = useState<ManualPixResponse | null>(null)
+  const [loadingManualPix, setLoadingManualPix] = useState(false)
+  const [paymentReturnStatus, setPaymentReturnStatus] = useState<VipPaymentReturnStatus>(null)
 
   useEffect(() => {
     setMounted(true)
@@ -149,6 +175,14 @@ export default function VipPlusPage() {
 
   useEffect(() => {
     loadNavigationShell()
+  }, [])
+
+  useEffect(() => {
+    const paymentStatus = new URLSearchParams(window.location.search).get('payment')
+
+    if (paymentStatus === 'success' || paymentStatus === 'pending' || paymentStatus === 'failure') {
+      setPaymentReturnStatus(paymentStatus)
+    }
   }, [])
 
   const vipActive = useMemo(() => isVipActive(currentProfile), [currentProfile])
@@ -160,11 +194,14 @@ export default function VipPlusPage() {
     () => calculatePaymentTotals(selectedPlan.amountBrlCents, 'mercadopago_pix'),
     [selectedPlan],
   )
+  const paymentReturnMessage = getVipPaymentReturnMessage(paymentReturnStatus, vipActive)
 
   async function loadNavigationShell() {
     const {
-      data: { user },
-    } = await supabase.auth.getUser()
+      data: { session },
+    } = await supabase.auth.getSession()
+
+    const user = session?.user
 
     if (!user) return
 
@@ -173,6 +210,7 @@ export default function VipPlusPage() {
     await Promise.all([
       loadNavigationProfile(user.id),
       loadUnreadNotificationsCount(user.id),
+      loadPendingVipCheckout(session.access_token),
     ])
   }
 
@@ -218,45 +256,117 @@ export default function VipPlusPage() {
     router.push('/feed')
   }
 
-  async function prepareVipPurchase() {
+  async function loadPendingVipCheckout(accessToken: string) {
+    try {
+      const response = await fetch('/api/vip/purchase-orders', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      const data = (await response.json()) as PendingVipCheckoutResponse
+
+      if (!response.ok || !data.ok || !data.order) return
+
+      setPreparedOrder(data.order)
+      setSelectedPlanKey(data.order.planKey)
+    } catch {
+      // A ausência de um pedido pendente não impede a criação de um checkout novo.
+    }
+  }
+
+  async function openMercadoPagoCheckout() {
     setPreparingPurchase(true)
     setPurchaseMessage('')
-    setPreparedOrder(null)
 
     const {
       data: { session },
     } = await supabase.auth.getSession()
 
     if (!session?.access_token) {
-      setPurchaseMessage('Entre na sua conta para preparar a compra VIP.')
+      setPurchaseMessage('Entre na sua conta para abrir o pagamento VIP.')
       setPreparingPurchase(false)
       return
     }
 
     try {
-      const response = await fetch('/api/vip/purchase-orders', {
+      const checkoutUrlFromPendingOrder = getSafeCheckoutUrl(preparedOrder?.checkoutUrl)
+
+      if (checkoutUrlFromPendingOrder) {
+        setPurchaseMessage('Abrindo pagamento...')
+        window.location.assign(checkoutUrlFromPendingOrder)
+        return
+      }
+
+      setCheckoutRequested(true)
+
+      const response = await fetch('/api/payments/mercadopago/create-preference', {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${session.access_token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          product_type: 'vip_plus',
           plan_key: selectedPlan.planKey,
+          payment_method_option: 'mercadopago_pix',
         }),
       })
-      const data = (await response.json()) as VipPurchaseOrderResponse
+      const data = (await response.json().catch(() => null)) as MercadoPagoPreferenceResponse | null
+      const checkoutUrl = getSafeCheckoutUrl(data?.checkout_url)
 
-      if (!response.ok || !data.ok) {
-        setPurchaseMessage(data.ok ? 'Nao foi possivel preparar a compra VIP.' : data.error)
+      if (!response.ok || !checkoutUrl || !data?.order_id || !data.external_reference) {
+        setPurchaseMessage('Não foi possível abrir o pagamento agora. Tente novamente em instantes.')
         return
       }
 
-      setPreparedOrder(data.order)
-      setPurchaseMessage('Pedido VIP pendente criado. Nenhum VIP foi ativado sem pagamento confirmado.')
+      setPreparedOrder({
+        id: data.order_id,
+        externalReference: data.external_reference,
+        status: 'pending',
+        planKey: selectedPlan.planKey,
+        planLabel: selectedPlan.label,
+        days: selectedPlan.days,
+        checkoutUrl,
+      })
+      setPurchaseMessage('Abrindo pagamento...')
+      window.location.assign(checkoutUrl)
     } catch {
-      setPurchaseMessage('Nao foi possivel preparar a compra VIP agora.')
+      setPurchaseMessage('Não foi possível abrir o pagamento agora. Tente novamente em instantes.')
     } finally {
       setPreparingPurchase(false)
+    }
+  }
+
+  async function loadManualPix() {
+    setLoadingManualPix(true)
+    setPurchaseMessage('')
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+
+    if (!session?.access_token) {
+      setPurchaseMessage('Entre na sua conta para ver as instruções de Pix manual.')
+      setLoadingManualPix(false)
+      return
+    }
+
+    try {
+      const response = await fetch('/api/payments/pix/manual-info', {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      })
+      const data = (await response.json().catch(() => null)) as ManualPixResponse | null
+
+      if (!response.ok || !data?.configured) {
+        setManualPix(null)
+        setPurchaseMessage('Pix manual indisponível no momento.')
+        return
+      }
+
+      setManualPix(data)
+    } catch {
+      setManualPix(null)
+      setPurchaseMessage('Não foi possível carregar o Pix manual agora. Tente novamente em instantes.')
+    } finally {
+      setLoadingManualPix(false)
     }
   }
 
@@ -455,6 +565,8 @@ export default function VipPlusPage() {
                       onClick={() => {
                         setSelectedPlanKey(plan.planKey)
                         setPreparedOrder(null)
+                        setCheckoutRequested(false)
+                        setManualPix(null)
                         setPurchaseMessage('')
                       }}
                       className={`rounded-3xl border p-4 text-left transition hover:-translate-y-0.5 ${
@@ -500,7 +612,7 @@ export default function VipPlusPage() {
             }`}>
               <p className="text-xs font-black uppercase tracking-[0.2em] opacity-70">Status da conta</p>
               <p className="mt-2 text-2xl font-black">
-                {vipActive ? 'Voce ja e VIP' : 'Escolha um plano para preparar a compra'}
+                {vipActive ? 'Você já é VIP' : 'Escolha um plano para pagar'}
               </p>
               {vipActive && (
                 <p className="mt-2 text-sm font-semibold opacity-80">
@@ -512,7 +624,7 @@ export default function VipPlusPage() {
             <div className="mt-4 grid gap-3 text-sm text-zinc-300">
               <div className="rounded-2xl border border-white/10 bg-black/35 px-4 py-3">
                 <strong className="block text-white">{selectedPlan.label}</strong>
-                <span className="mt-1 block text-zinc-400">{selectedPlan.days} dias de VIP apos confirmacao futura do pagamento.</span>
+                <span className="mt-1 block text-zinc-400">{selectedPlan.days} dias de VIP após confirmação do pagamento.</span>
               </div>
               <div className="rounded-2xl border border-white/10 bg-black/35 px-4 py-3">
                 <strong className="block text-white">Total previsto</strong>
@@ -528,17 +640,40 @@ export default function VipPlusPage() {
 
             <button
               type="button"
-              onClick={prepareVipPurchase}
+              onClick={openMercadoPagoCheckout}
               disabled={preparingPurchase}
               className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-black text-black transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {preparingPurchase ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-              Preparar compra
+              {preparingPurchase
+                ? 'Abrindo pagamento...'
+                : getVipCheckoutButtonLabel(Boolean(preparedOrder?.checkoutUrl), checkoutRequested)}
             </button>
+
+            <button
+              type="button"
+              onClick={loadManualPix}
+              disabled={loadingManualPix}
+              className="mt-3 inline-flex w-full items-center justify-center rounded-full border border-blue-200/35 bg-blue-500/10 px-5 py-3 text-sm font-bold text-blue-100 transition hover:bg-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {loadingManualPix ? 'Carregando Pix manual...' : 'Ver Pix manual'}
+            </button>
+
+            {paymentReturnMessage && (
+              <div className={`mt-4 rounded-2xl border px-4 py-3 text-sm font-semibold ${
+                paymentReturnStatus === 'failure'
+                  ? 'border-red-300/20 bg-red-500/10 text-red-100'
+                  : paymentReturnStatus === 'pending'
+                    ? 'border-amber-300/20 bg-amber-500/10 text-amber-100'
+                    : 'border-emerald-300/20 bg-emerald-500/10 text-emerald-100'
+              }`}>
+                {paymentReturnMessage}
+              </div>
+            )}
 
             {purchaseMessage && (
               <div className={`mt-4 rounded-2xl border px-4 py-3 text-sm font-semibold ${
-                preparedOrder
+                purchaseMessage === 'Abrindo pagamento...'
                   ? 'border-emerald-300/20 bg-emerald-500/10 text-emerald-100'
                   : 'border-amber-300/20 bg-amber-500/10 text-amber-100'
               }`}>
@@ -551,6 +686,30 @@ export default function VipPlusPage() {
                 <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-200/70">Pedido pendente</p>
                 <p className="mt-2 font-black">{preparedOrder.planLabel}</p>
                 <p className="mt-1 break-all text-xs text-emerald-50/70">Referencia: {preparedOrder.externalReference}</p>
+              </div>
+            )}
+
+            {manualPix && (
+              <div className="mt-4 rounded-3xl border border-blue-300/20 bg-blue-500/10 p-4 text-sm text-blue-50">
+                <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-200/70">Pix manual</p>
+                <p className="mt-2 font-semibold">O VIP só será ativado após confirmação do pagamento.</p>
+                {manualPix.receiver_name && <p className="mt-3 text-blue-50/80">Recebedor: {manualPix.receiver_name}</p>}
+                {manualPix.receiver_city && <p className="text-blue-50/80">Cidade: {manualPix.receiver_city}</p>}
+                {manualPix.pix_key && (
+                  <p className="mt-3 break-all rounded-xl border border-white/10 bg-black/25 px-3 py-2 text-xs text-blue-50/90">
+                    Chave Pix: {manualPix.pix_key}
+                  </p>
+                )}
+                {getSafeCheckoutUrl(manualPix.pixPaymentLink) && (
+                  <a
+                    href={getSafeCheckoutUrl(manualPix.pixPaymentLink) || undefined}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-3 inline-flex rounded-full bg-white px-4 py-2 text-xs font-black text-black transition hover:bg-blue-50"
+                  >
+                    Abrir instruções de Pix
+                  </a>
+                )}
               </div>
             )}
           </aside>
