@@ -30,13 +30,14 @@ export async function GET(request: Request) {
     }
 
     const pixKey = process.env.PIX_KEY || ''
+    const pixPaymentLink = process.env.PIX_PAYMENT_LINK || ''
 
     return NextResponse.json({
       pix_key: pixKey,
-      pixPaymentLink: process.env.PIX_PAYMENT_LINK || '',
+      pixPaymentLink,
       receiver_name: process.env.PIX_RECEIVER_NAME || '',
       receiver_city: process.env.PIX_RECEIVER_CITY || '',
-      configured: Boolean(pixKey),
+      configured: Boolean(pixKey || pixPaymentLink),
     })
   } catch (error) {
     console.error('Erro ao carregar informacoes Pix:', error)
