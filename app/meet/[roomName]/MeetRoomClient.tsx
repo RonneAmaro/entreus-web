@@ -2,6 +2,12 @@
 
 import { supabase } from '@/lib/supabase'
 import {
+  MEET_RECORDING_MENU_ITEM,
+  MEET_RECORDING_PREPARATION_MESSAGE,
+  shouldCloseMeetOptionsMenu,
+  toggleMeetOptionsMenu,
+} from '@/lib/meet-options-menu'
+import {
   DisconnectButton,
   GridLayout,
   LiveKitRoom,
@@ -17,6 +23,7 @@ import {
 import '@livekit/components-styles'
 import {
   Check,
+  Circle,
   Clock3,
   Copy,
   Download,
@@ -561,6 +568,7 @@ function PortugueseConference({
   const [showReactions, setShowReactions] = useState(false)
   const [floatingReactions, setFloatingReactions] = useState<ReactionMessage[]>([])
   const [showMoreMenu, setShowMoreMenu] = useState(false)
+  const [recordingNotice, setRecordingNotice] = useState<string | null>(null)
   const [compactLayout, setCompactLayout] = useState(false)
   const [inviteFeedback, setInviteFeedback] = useState<InviteFeedback>('idle')
   const [handNotice, setHandNotice] = useState<string | null>(null)
@@ -576,7 +584,6 @@ function PortugueseConference({
   const participantsInitializedRef = useRef(false)
   const timeWarningPlayedRef = useRef(false)
   const moreButtonRef = useRef<HTMLButtonElement | null>(null)
-  const ignoreNextMoreOutsidePointerRef = useRef(false)
   const localDisplayName = normalizeDisplayName(participantName) || 'Participante'
   const showTimeWarning = typeof secondsLeft === 'number' && secondsLeft > 0 && secondsLeft <= 60
   const pendingRequestCount = isModerator ? pendingRequests.length : 0
@@ -660,13 +667,9 @@ function PortugueseConference({
       }
 
       if (showMoreMenu) {
-        if (ignoreNextMoreOutsidePointerRef.current) {
-          ignoreNextMoreOutsidePointerRef.current = false
-        } else {
-          const clickedButton = Boolean(moreButtonRef.current?.contains(target))
-          const clickedMenu = Boolean(moreMenuRef.current?.contains(target))
-          if (!clickedButton && !clickedMenu) setShowMoreMenu(false)
-        }
+        const clickedButton = Boolean(moreButtonRef.current?.contains(target))
+        const clickedMenu = Boolean(moreMenuRef.current?.contains(target))
+        if (shouldCloseMeetOptionsMenu({ clickedButton, clickedMenu })) setShowMoreMenu(false)
       }
 
       if (showChatEmojiPanel && chatEmojiPanelRef.current && !chatEmojiPanelRef.current.contains(target)) {
@@ -924,15 +927,13 @@ function PortugueseConference({
   }
 
   function toggleMoreMenu() {
-    setShowMoreMenu((current) => !current)
+    setShowMoreMenu((current) => toggleMeetOptionsMenu(current))
     setShowReactions(false)
   }
 
-  function ignoreOpeningMorePointer() {
-    ignoreNextMoreOutsidePointerRef.current = true
-    window.setTimeout(() => {
-      ignoreNextMoreOutsidePointerRef.current = false
-    }, 80)
+  function showRecordingPreparation() {
+    setRecordingNotice(MEET_RECORDING_PREPARATION_MESSAGE)
+    setShowMoreMenu(false)
   }
 
   const iconButtonClass =
@@ -1193,6 +1194,20 @@ function PortugueseConference({
             </div>
           ) : null}
 
+          {recordingNotice ? (
+            <div role="status" className="absolute left-1/2 top-16 z-40 w-[calc(100%-1.5rem)] max-w-md -translate-x-1/2 rounded-3xl border border-blue-300/25 bg-black/85 p-4 text-center shadow-2xl shadow-black/45 ring-1 ring-blue-200/10 backdrop-blur-2xl sm:top-20">
+              <p className="text-sm font-black text-white">Gravação em preparação</p>
+              <p className="mt-2 text-sm leading-6 text-zinc-300">{recordingNotice}</p>
+              <button
+                type="button"
+                onClick={() => setRecordingNotice(null)}
+                className="mt-3 inline-flex min-h-10 items-center justify-center rounded-full border border-blue-300/30 bg-blue-500/15 px-4 py-2 text-sm font-bold text-blue-50 transition hover:bg-blue-500/25"
+              >
+                Entendi
+              </button>
+            </div>
+          ) : null}
+
           {mediaPermissionMessage ? (
             <div className="absolute left-1/2 top-16 z-30 w-[calc(100%-1.5rem)] max-w-md -translate-x-1/2 rounded-3xl border border-amber-300/30 bg-black/80 p-4 text-center shadow-2xl shadow-black/45 ring-1 ring-amber-100/10 backdrop-blur-2xl sm:top-20">
               <div className="mx-auto mb-2 flex h-11 w-11 items-center justify-center rounded-full bg-amber-300/12 text-amber-100 ring-1 ring-amber-200/20">
@@ -1290,7 +1305,17 @@ function PortugueseConference({
               </button>
 
               <div className="relative">
-                <button ref={moreButtonRef} type="button" onPointerDown={(event) => { event.stopPropagation(); ignoreOpeningMorePointer() }} onMouseDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); toggleMoreMenu() }} className={showMoreMenu ? activeIconButtonClass : iconButtonClass} aria-label="Mais opções" title="Mais opções">
+                <button
+                  ref={moreButtonRef}
+                  type="button"
+                  onClick={toggleMoreMenu}
+                  className={showMoreMenu ? activeIconButtonClass : iconButtonClass}
+                  aria-label="Mais opções"
+                  aria-haspopup="menu"
+                  aria-expanded={showMoreMenu}
+                  aria-controls="meet-options-menu"
+                  title="Mais opções"
+                >
                   <MoreHorizontal className="h-5 w-5" />
                 </button>
                 {showMoreMenu ? (
@@ -1301,7 +1326,7 @@ function PortugueseConference({
                       onClick={() => setShowMoreMenu(false)}
                       className="fixed inset-0 z-40 bg-black/45 backdrop-blur-sm sm:hidden"
                     />
-                    <div ref={moreMenuRef} onPointerDown={(event) => event.stopPropagation()} onMouseDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()} className="fixed inset-x-0 bottom-0 z-50 max-h-[86vh] overflow-y-auto rounded-t-[2rem] border border-blue-200/10 bg-[linear-gradient(180deg,rgba(10,18,34,0.98),rgba(2,6,23,0.98))] p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] text-sm shadow-2xl shadow-black/60 ring-1 ring-blue-200/10 backdrop-blur-2xl sm:absolute sm:bottom-14 sm:right-0 sm:inset-x-auto sm:max-h-[min(76vh,620px)] sm:w-[22rem] sm:rounded-3xl sm:p-3">
+                    <div id="meet-options-menu" ref={moreMenuRef} role="menu" aria-label="Mais opções da sala" className="fixed inset-x-0 bottom-0 z-50 max-h-[86vh] overflow-y-auto rounded-t-[2rem] border border-blue-200/10 bg-[linear-gradient(180deg,rgba(10,18,34,0.98),rgba(2,6,23,0.98))] p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] text-sm shadow-2xl shadow-black/60 ring-1 ring-blue-200/10 backdrop-blur-2xl sm:absolute sm:bottom-14 sm:right-0 sm:inset-x-auto sm:max-h-[min(76vh,620px)] sm:w-[22rem] sm:rounded-3xl sm:p-3">
                       <div className="mx-auto mb-4 h-1.5 w-11 rounded-full bg-blue-100/25 sm:hidden" />
 
                       <div className="mb-4 flex items-start justify-between gap-3 px-1 sm:mb-3">
@@ -1375,18 +1400,31 @@ function PortugueseConference({
                           <span>{soundAlertsEnabled ? 'Sons ligados' : 'Sons desligados'}</span>
                         </button>
 
-                        <button type="button" onClick={() => setCompactLayout((current) => !current)} className={sheetActionClass}>
+                        <button type="button" onClick={() => { setCompactLayout((current) => !current); setShowMoreMenu(false) }} className={sheetActionClass}>
                           <span className={sheetIconClass}>
                             <LayoutGrid className="h-5 w-5" />
                           </span>
                           <span>Layout</span>
                         </button>
 
-                        <button type="button" onClick={() => document.documentElement.requestFullscreen?.()} className={sheetActionClass}>
+                        <button type="button" onClick={() => { void document.documentElement.requestFullscreen?.(); setShowMoreMenu(false) }} className={sheetActionClass}>
                           <span className={sheetIconClass}>
                             <Maximize className="h-5 w-5" />
                           </span>
                           <span>Tela cheia</span>
+                        </button>
+
+                        <button type="button" role="menuitem" onClick={showRecordingPreparation} className="col-span-2 flex min-h-16 items-center gap-3 rounded-2xl border border-blue-300/20 bg-blue-500/10 px-3 py-3 text-left text-sm font-semibold text-blue-50 shadow-sm shadow-black/15 transition hover:border-blue-200/35 hover:bg-blue-500/20 focus:outline-none focus:ring-2 focus:ring-blue-300/30">
+                          <span className={sheetIconClass}>
+                            <Circle className="h-5 w-5" />
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block">{MEET_RECORDING_MENU_ITEM.label}</span>
+                            <span className="mt-0.5 block text-xs font-normal text-blue-100/65">Exigirá aviso aos participantes.</span>
+                          </span>
+                          <span className="rounded-full border border-blue-200/25 bg-black/25 px-2 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-blue-100">
+                            {MEET_RECORDING_MENU_ITEM.badge}
+                          </span>
                         </button>
 
                         <div className="flex min-h-16 items-center gap-3 rounded-2xl border border-blue-300/10 bg-white/[0.04] px-3 py-3 text-left text-sm text-zinc-300">
