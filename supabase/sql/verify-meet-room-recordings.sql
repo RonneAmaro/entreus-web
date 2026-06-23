@@ -1,9 +1,10 @@
--- Read-only verification for the Meet recording metadata migration.
--- It returns schema and RLS policy metadata only, never recording rows or storage keys.
+﻿-- Verify: meet_room_recordings
+-- Este script só consulta estrutura, RLS, policies e constraints.
+-- Não altera banco, não insere dados e não apaga nada.
 
 select
-  table_schema,
-  table_name,
+  schemaname as table_schema,
+  tablename as table_name,
   rowsecurity as rls_enabled
 from pg_tables
 where schemaname = 'public'
