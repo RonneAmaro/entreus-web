@@ -6,12 +6,31 @@ export function toggleMeetOptionsMenu(isOpen: boolean) {
   return !isOpen
 }
 
-export function shouldCloseMeetOptionsMenu({
-  clickedButton,
-  clickedMenu,
+type MeetOptionsMenuBoundary = Pick<Node, 'contains'>
+
+export function isInsideMeetOptionsMenuTarget({
+  target,
+  button,
+  menu,
 }: {
-  clickedButton: boolean
-  clickedMenu: boolean
+  target: EventTarget | null
+  button: MeetOptionsMenuBoundary | null
+  menu: MeetOptionsMenuBoundary | null
 }) {
-  return !clickedButton && !clickedMenu
+  if (!target) return false
+
+  const node = target as Node
+  return Boolean(button?.contains(node) || menu?.contains(node))
+}
+
+export function shouldCloseMeetOptionsMenu({
+  target,
+  button,
+  menu,
+}: {
+  target: EventTarget | null
+  button: MeetOptionsMenuBoundary | null
+  menu: MeetOptionsMenuBoundary | null
+}) {
+  return !isInsideMeetOptionsMenuTarget({ target, button, menu })
 }

@@ -727,12 +727,6 @@ function PortugueseConference({
         setShowReactions(false)
       }
 
-      if (showMoreMenu) {
-        const clickedButton = Boolean(moreButtonRef.current?.contains(target))
-        const clickedMenu = Boolean(moreMenuRef.current?.contains(target))
-        if (shouldCloseMeetOptionsMenu({ clickedButton, clickedMenu })) setShowMoreMenu(false)
-      }
-
       if (showChatEmojiPanel && chatEmojiPanelRef.current && !chatEmojiPanelRef.current.contains(target)) {
         setShowChatEmojiPanel(false)
       }
@@ -740,7 +734,6 @@ function PortugueseConference({
 
     function handleDocumentKeyDown(event: KeyboardEvent) {
       if (event.key !== 'Escape') return
-      setShowMoreMenu(false)
       setShowReactions(false)
       setShowChatEmojiPanel(false)
     }
@@ -751,7 +744,34 @@ function PortugueseConference({
       document.removeEventListener('pointerdown', handleDocumentPointerDown)
       document.removeEventListener('keydown', handleDocumentKeyDown)
     }
-  }, [showChatEmojiPanel, showMoreMenu, showReactions])
+  }, [showChatEmojiPanel, showReactions])
+
+  useEffect(() => {
+    if (!showMoreMenu) return
+
+    function handleOptionsMenuPointerDown(event: PointerEvent) {
+      if (
+        shouldCloseMeetOptionsMenu({
+          target: event.target,
+          button: moreButtonRef.current,
+          menu: moreMenuRef.current,
+        })
+      ) {
+        setShowMoreMenu(false)
+      }
+    }
+
+    function handleOptionsMenuKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') setShowMoreMenu(false)
+    }
+
+    document.addEventListener('pointerdown', handleOptionsMenuPointerDown)
+    document.addEventListener('keydown', handleOptionsMenuKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', handleOptionsMenuPointerDown)
+      document.removeEventListener('keydown', handleOptionsMenuKeyDown)
+    }
+  }, [showMoreMenu])
 
   useEffect(() => {
     if (floatingReactions.length === 0) return
@@ -1473,6 +1493,7 @@ function PortugueseConference({
                 <button
                   ref={moreButtonRef}
                   type="button"
+                  onPointerDown={(event) => event.stopPropagation()}
                   onClick={toggleMoreMenu}
                   className={showMoreMenu ? activeIconButtonClass : iconButtonClass}
                   aria-label="Mais opções"
@@ -1491,7 +1512,7 @@ function PortugueseConference({
                       onClick={() => setShowMoreMenu(false)}
                       className="fixed inset-0 z-40 bg-black/45 backdrop-blur-sm sm:hidden"
                     />
-                    <div id="meet-options-menu" ref={moreMenuRef} role="menu" aria-label="Mais opções da sala" className="fixed inset-x-0 bottom-0 z-50 max-h-[86vh] overflow-y-auto rounded-t-[2rem] border border-blue-200/10 bg-[linear-gradient(180deg,rgba(10,18,34,0.98),rgba(2,6,23,0.98))] p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] text-sm shadow-2xl shadow-black/60 ring-1 ring-blue-200/10 backdrop-blur-2xl sm:absolute sm:bottom-14 sm:right-0 sm:inset-x-auto sm:max-h-[min(76vh,620px)] sm:w-[22rem] sm:rounded-3xl sm:p-3">
+                    <div id="meet-options-menu" ref={moreMenuRef} role="menu" aria-label="Mais opções da sala" onPointerDown={(event) => event.stopPropagation()} className="fixed inset-x-0 bottom-0 z-50 max-h-[86vh] overflow-y-auto rounded-t-[2rem] border border-blue-200/10 bg-[linear-gradient(180deg,rgba(10,18,34,0.98),rgba(2,6,23,0.98))] p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] text-sm shadow-2xl shadow-black/60 ring-1 ring-blue-200/10 backdrop-blur-2xl sm:absolute sm:bottom-14 sm:right-0 sm:inset-x-auto sm:max-h-[min(76vh,620px)] sm:w-[22rem] sm:rounded-3xl sm:p-3">
                       <div className="mx-auto mb-4 h-1.5 w-11 rounded-full bg-blue-100/25 sm:hidden" />
 
                       <div className="mb-4 flex items-start justify-between gap-3 px-1 sm:mb-3">
