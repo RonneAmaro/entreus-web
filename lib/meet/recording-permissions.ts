@@ -36,7 +36,7 @@ export function evaluateMeetRecordingPermission(
     return { allowed: false, status: 403, message: MEET_RECORDING_HOST_REQUIRED_MESSAGE }
   }
 
-  if (!input.isVipActive) {
+  if (!input.isVipActive && !input.isPlatformAdmin) {
     return { allowed: false, status: 403, message: MEET_RECORDING_VIP_REQUIRED_MESSAGE }
   }
 

@@ -28,6 +28,8 @@ A opção usada é **LiveKit Egress**, iniciado exclusivamente pelo backend apó
 
 O resultado deve ficar no R2 privado, com metadata privada e URL assinada curta para download. O campo legado `is_recording_enabled` não ativa Egress por si só: a ativação depende da configuração server-side protegida e do fluxo de consentimento.
 
-## Implementação do Pacote 49
+## Implementação do Pacote 49C
 
-Veja [meet-recording-implementation.md](meet-recording-implementation.md) para a arquitetura, variáveis necessárias, migration manual, limites e procedimentos de teste.
+Além da fundação, o Pacote 49C define compactação obrigatória, teto de duração/tamanho e retenção de acesso. O perfil padrão é `economy`; gravações gratuitas continuam bloqueadas, VIP e testes administrativos respeitam o mesmo teto, e a gravação real segue indisponível até o opt-in seguro.
+
+Veja [meet-recording-implementation.md](meet-recording-implementation.md) para a arquitetura, variáveis necessárias, migration manual e procedimentos de teste. Consulte a [política de armazenamento](meet-recording-storage-policy.md) para perfis, limites, retenção e checklist de ativação.

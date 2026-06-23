@@ -44,6 +44,17 @@ describe('Meet recording permissions', () => {
     expect(evaluateMeetRecordingPermission(allowedInput)).toEqual({ allowed: true })
   })
 
+  it('allows an administrator to run a controlled test without VIP billing state', () => {
+    expect(
+      evaluateMeetRecordingPermission({
+        ...allowedInput,
+        isRoomModerator: false,
+        isPlatformAdmin: true,
+        isVipActive: false,
+      }),
+    ).toEqual({ allowed: true })
+  })
+
   it('blocks a minor even when the account is a VIP host', () => {
     expect(evaluateMeetRecordingPermission({ ...allowedInput, isMinor: true })).toEqual({
       allowed: false,

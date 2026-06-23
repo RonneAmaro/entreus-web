@@ -29,6 +29,7 @@ describe('Meet recording admin diagnostics payload', () => {
       'hasLiveKitServerConfig',
       'missing',
       'warnings',
+      'storagePolicy',
     ])
     expect(serializedPayload).not.toContain('private-bucket-name')
     expect(serializedPayload).not.toContain('private-r2-secret')
