@@ -143,6 +143,8 @@ type PublicMeetRecording = {
   durationSeconds: number | null
   fileSizeBytes: number | null
   errorMessage: string | null
+  compressionProfile: 'economy' | 'standard' | null
+  retentionExpiresAt: string | null
   canDownload: boolean
 }
 
@@ -1611,7 +1613,7 @@ function PortugueseConference({
                                 : activeRecording
                                   ? 'Aguarde a conclusão antes de iniciar outra gravação.'
                                   : canControlRecording
-                                    ? 'Exige consentimento e avisa todos os participantes.'
+                                    ? 'Exige consentimento e, quando ativada, usará compressão para economizar armazenamento.'
                                     : 'Somente o anfitrião ou administrador pode gravar.'}
                             </span>
                           </span>
@@ -1643,6 +1645,7 @@ function PortugueseConference({
                                     <span className="block truncate text-[11px] text-zinc-500">
                                       {formatTime(Date.parse(recording.createdAt))}
                                       {recording.durationSeconds !== null ? ` · ${formatSeconds(recording.durationSeconds)}` : ''}
+                                      {recording.retentionExpiresAt ? ` · Disponível até ${new Date(recording.retentionExpiresAt).toLocaleDateString('pt-BR')}` : ''}
                                     </span>
                                   </span>
                                   {recording.canDownload ? (
@@ -1650,6 +1653,7 @@ function PortugueseConference({
                                       type="button"
                                       disabled={recordingAction !== 'idle'}
                                       onClick={() => void downloadRecording(recording)}
+                                      title={recording.retentionExpiresAt ? `Download disponível até ${new Date(recording.retentionExpiresAt).toLocaleDateString('pt-BR')}` : 'Download seguro'}
                                       className="inline-flex min-h-9 shrink-0 items-center gap-1 rounded-full border border-blue-300/25 bg-blue-500/15 px-3 text-xs font-bold text-blue-50 transition hover:bg-blue-500/25 disabled:cursor-not-allowed disabled:opacity-55"
                                     >
                                       <Download className="h-3.5 w-3.5" />
@@ -1707,7 +1711,7 @@ function PortugueseConference({
               </div>
               <h2 id="recording-confirmation-title" className="mt-5 text-2xl font-black text-white">Gravar reunião?</h2>
               <p className="mt-3 text-sm leading-6 text-zinc-200">
-                Todos os participantes serão avisados de que a reunião está sendo gravada. A gravação ficará disponível apenas para pessoas autorizadas.
+                Todos os participantes serão avisados de que a reunião está sendo gravada. A gravação ficará disponível apenas para pessoas autorizadas e usará um perfil otimizado para economizar armazenamento quando o recurso estiver ativado.
               </p>
               {recordingActionError ? (
                 <p role="alert" className="mt-4 rounded-2xl border border-red-300/30 bg-red-950/45 px-4 py-3 text-sm font-semibold text-red-100">

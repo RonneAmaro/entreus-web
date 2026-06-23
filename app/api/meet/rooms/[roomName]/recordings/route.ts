@@ -53,7 +53,7 @@ export async function GET(request: Request, context: RecordingRouteContext) {
 
   const { data, error } = await access.supabase
     .from('meet_room_recordings')
-    .select('id, room_id, created_by, status, recording_provider, egress_id, storage_provider, storage_bucket, storage_key, file_size_bytes, duration_seconds, error_message, started_at, ended_at, created_at')
+    .select('id, room_id, created_by, status, recording_provider, egress_id, storage_provider, storage_bucket, storage_key, file_size_bytes, duration_seconds, error_message, started_at, ended_at, created_at, compression_profile, retention_expires_at, storage_estimate_bytes')
     .eq('room_id', access.room.id)
     .order('created_at', { ascending: false })
     .limit(20)

@@ -69,6 +69,17 @@ describe('Meet recording environment diagnostics', () => {
       warnings: [
         'Confirme manualmente a migration Supabase, a privacidade do bucket R2 e o suporte a Egress antes de liberar a gravação.',
       ],
+      storagePolicy: {
+        compressionProfile: 'economy',
+        compressionDescription:
+          'Qualidade equilibrada para reuniões e aulas, com prioridade para economia de armazenamento.',
+        storageUsage: 'Baixo para vídeo composto de reunião; estimativa de cerca de 500 MB por hora.',
+        maxDurationSeconds: 3600,
+        maxExpectedFileSizeBytes: 629145600,
+        retentionDays: 15,
+        retentionWarning:
+          'Downloads ficam disponíveis por até 15 dias; a exclusão física automática será adicionada em pacote futuro.',
+      },
     })
     expect(serializedPayload).not.toContain('entreus-meet-recordings')
     expect(serializedPayload).not.toContain('access-key-secret')

@@ -30,6 +30,24 @@ type RecordingDiagnostics = {
   hasLiveKitServerConfig: boolean
   missing: string[]
   warnings: string[]
+  storagePolicy: {
+    compressionProfile: 'economy' | 'standard'
+    compressionDescription: string
+    storageUsage: string
+    maxDurationSeconds: number
+    maxExpectedFileSizeBytes: number
+    retentionDays: number
+    retentionWarning: string
+  }
+}
+
+function formatRecordingDuration(totalSeconds: number) {
+  const minutes = Math.round(totalSeconds / 60)
+  return `${minutes} minuto${minutes === 1 ? '' : 's'}`
+}
+
+function formatRecordingMegabytes(bytes: number) {
+  return `${Math.round(bytes / (1024 * 1024))} MB`
 }
 
 function DiagnosticItem({
@@ -198,7 +216,7 @@ export default function AdminMeetRecordingPage() {
         </header>
 
         <section className="mt-5 rounded-3xl border border-amber-300/25 bg-amber-500/10 p-4 text-sm font-semibold leading-6 text-amber-50">
-          A gravação só será liberada quando todos os itens estiverem prontos.
+          A gravação só será liberada quando todos os itens estiverem prontos. O perfil econômico é obrigatório para controlar o uso de armazenamento.
         </section>
 
         {message ? (
@@ -216,8 +234,8 @@ export default function AdminMeetRecordingPage() {
           <>
             <section className="mt-5 grid gap-3 sm:grid-cols-2">
               <DiagnosticItem
-                title="Supabase migration"
-                description="Manual: aplique a migration e execute o script verify antes da liberação."
+                title="Migration Supabase"
+                description="Confirmação manual: aplique a base e a migration de compactação, depois execute os scripts verify antes da liberação."
                 ready={false}
               />
               <DiagnosticItem
@@ -231,10 +249,42 @@ export default function AdminMeetRecordingPage() {
                 ready={diagnostics.hasLiveKitServerConfig}
               />
               <DiagnosticItem
+                title="Compressão obrigatória"
+                description={`Perfil padrão: ${diagnostics.storagePolicy.compressionProfile}. ${diagnostics.storagePolicy.compressionDescription}`}
+                ready={diagnostics.storagePolicy.compressionProfile === 'economy'}
+              />
+              <DiagnosticItem
+                title="Retenção planejada"
+                description={`Downloads terão prazo de ${diagnostics.storagePolicy.retentionDays} dias. A remoção física automática continua pendente de um job futuro.`}
+                ready={diagnostics.storagePolicy.retentionDays > 0}
+              />
+              <DiagnosticItem
                 title="Opt-in de gravação"
                 description={diagnostics.egressEnabled ? 'Ligado no ambiente.' : 'Desligado: a gravação continua bloqueada.'}
                 ready={diagnostics.egressEnabled}
               />
+            </section>
+
+            <section className="mt-5 rounded-[2rem] border border-blue-300/20 bg-blue-500/10 p-5 text-blue-50">
+              <h2 className="text-lg font-black">Política de armazenamento</h2>
+              <p className="mt-2 text-sm leading-6 text-blue-100/85">
+                {diagnostics.storagePolicy.storageUsage}
+              </p>
+              <dl className="mt-4 grid gap-3 sm:grid-cols-3">
+                <div className="rounded-2xl border border-blue-200/15 bg-black/15 p-3">
+                  <dt className="text-xs font-bold uppercase tracking-[0.12em] text-blue-100/60">Perfil</dt>
+                  <dd className="mt-1 text-sm font-black capitalize">{diagnostics.storagePolicy.compressionProfile}</dd>
+                </div>
+                <div className="rounded-2xl border border-blue-200/15 bg-black/15 p-3">
+                  <dt className="text-xs font-bold uppercase tracking-[0.12em] text-blue-100/60">Limite</dt>
+                  <dd className="mt-1 text-sm font-black">{formatRecordingDuration(diagnostics.storagePolicy.maxDurationSeconds)} · {formatRecordingMegabytes(diagnostics.storagePolicy.maxExpectedFileSizeBytes)}</dd>
+                </div>
+                <div className="rounded-2xl border border-blue-200/15 bg-black/15 p-3">
+                  <dt className="text-xs font-bold uppercase tracking-[0.12em] text-blue-100/60">Retenção</dt>
+                  <dd className="mt-1 text-sm font-black">{diagnostics.storagePolicy.retentionDays} dias</dd>
+                </div>
+              </dl>
+              <p className="mt-4 text-xs leading-5 text-blue-100/70">{diagnostics.storagePolicy.retentionWarning}</p>
             </section>
 
             <section className={`mt-5 rounded-[2rem] border p-5 ${diagnostics.ready ? 'border-emerald-300/25 bg-emerald-500/10 text-emerald-50' : 'border-amber-300/25 bg-amber-500/10 text-amber-50'}`}>

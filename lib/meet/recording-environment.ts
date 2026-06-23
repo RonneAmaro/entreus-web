@@ -1,3 +1,8 @@
+import {
+  getMeetRecordingCompressionPolicy,
+  getMeetRecordingRetention,
+} from './recording-compression'
+
 export type MeetRecordingEnvironment = Record<string, string | undefined>
 
 export type MeetRecordingEnvironmentDiagnostics = {
@@ -8,6 +13,15 @@ export type MeetRecordingEnvironmentDiagnostics = {
   ready: boolean
   missing: string[]
   warnings: string[]
+  storagePolicy: {
+    compressionProfile: 'economy' | 'standard'
+    compressionDescription: string
+    storageUsage: string
+    maxDurationSeconds: number
+    maxExpectedFileSizeBytes: number
+    retentionDays: number
+    retentionWarning: string
+  }
 }
 
 const R2_ACCESS_VARIABLES = ['R2_ACCOUNT_ID', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY'] as const
@@ -27,6 +41,8 @@ function getMissingVariables(
 export function getMeetRecordingEnvironmentDiagnostics(
   environment: MeetRecordingEnvironment = process.env,
 ): MeetRecordingEnvironmentDiagnostics {
+  const compressionPolicy = getMeetRecordingCompressionPolicy()
+  const retention = getMeetRecordingRetention()
   const egressEnabled = environment.MEET_RECORDING_EGRESS_ENABLED?.trim().toLowerCase() === 'true'
   const hasMeetRecordingsBucketName = hasConfiguredValue(environment, 'R2_MEET_RECORDINGS_BUCKET_NAME')
   const missingR2 = getMissingVariables(environment, R2_ACCESS_VARIABLES)
@@ -58,6 +74,15 @@ export function getMeetRecordingEnvironmentDiagnostics(
     ready,
     missing,
     warnings,
+    storagePolicy: {
+      compressionProfile: compressionPolicy.profile,
+      compressionDescription: compressionPolicy.description,
+      storageUsage: compressionPolicy.storageUsage,
+      maxDurationSeconds: compressionPolicy.limits.maxDurationSeconds,
+      maxExpectedFileSizeBytes: compressionPolicy.limits.maxExpectedFileSizeBytes,
+      retentionDays: retention.retentionDays,
+      retentionWarning: retention.warning,
+    },
   }
 }
 
@@ -72,5 +97,6 @@ export function toSafeMeetRecordingDiagnosticsPayload(
     hasLiveKitServerConfig: diagnostics.hasLiveKitServerConfig,
     missing: diagnostics.missing,
     warnings: diagnostics.warnings,
+    storagePolicy: diagnostics.storagePolicy,
   }
 }

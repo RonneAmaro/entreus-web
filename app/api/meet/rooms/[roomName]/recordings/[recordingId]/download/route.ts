@@ -1,6 +1,7 @@
 import { jsonError } from '@/lib/meet-server'
 import { getMeetRecordingAccess } from '@/lib/meet/recording-access'
 import { MEET_RECORDING_HOST_REQUIRED_MESSAGE } from '@/lib/meet/recording-permissions'
+import { hasActiveMeetRecordingRetention } from '@/lib/meet/recording-compression'
 import { createR2GetSignedUrl, R2_SIGNED_GET_EXPIRATION_SECONDS } from '@/lib/r2/signed-url'
 import { NextResponse } from 'next/server'
 
@@ -17,6 +18,7 @@ type DownloadRecordingRow = {
   storage_provider: string | null
   storage_bucket: string | null
   storage_key: string | null
+  retention_expires_at: string | null
 }
 
 function isSafeRecordingId(value: string) {
@@ -44,7 +46,7 @@ export async function GET(request: Request, context: DownloadRecordingContext) {
 
   const { data, error } = await access.supabase
     .from('meet_room_recordings')
-    .select('id, status, storage_provider, storage_bucket, storage_key')
+    .select('id, status, storage_provider, storage_bucket, storage_key, retention_expires_at')
     .eq('id', recordingId)
     .eq('room_id', access.room.id)
     .maybeSingle()
@@ -52,6 +54,10 @@ export async function GET(request: Request, context: DownloadRecordingContext) {
   const recording = data as DownloadRecordingRow | null
   if (error || !recording || recording.status !== 'ready') {
     return jsonError('Gravação não disponível para download.', 404)
+  }
+
+  if (!hasActiveMeetRecordingRetention(recording.retention_expires_at)) {
+    return jsonError('Esta gravação expirou ou não possui prazo de retenção válido.', 410)
   }
 
   if (

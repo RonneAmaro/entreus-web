@@ -2,6 +2,11 @@ import { hasRoomExpired, jsonError } from '@/lib/meet-server'
 import { getMeetRecordingAccess } from '@/lib/meet/recording-access'
 import { evaluateMeetRecordingPermission } from '@/lib/meet/recording-permissions'
 import {
+  getMeetRecordingCompressionPolicy,
+  getMeetRecordingPlanLimits,
+  getMeetRecordingRetention,
+} from '@/lib/meet/recording-compression'
+import {
   MEET_RECORDING_FAILURE_MESSAGE,
   isActiveMeetRecordingStatus,
   toPublicMeetRecording,
@@ -55,6 +60,14 @@ export async function POST(request: Request, context: StartRecordingContext) {
   })
   if (!permission.allowed) return jsonError(permission.message, permission.status)
 
+  const recordingLimits = getMeetRecordingPlanLimits({
+    isVipActive: access.isVipActive,
+    isPlatformAdmin: access.isPlatformAdmin,
+  })
+  if (!recordingLimits.canStartRecording) {
+    return jsonError('A gravação de reuniões exige VIP ativo.', 403)
+  }
+
   if (access.room.status !== 'active' || hasRoomExpired(access.room)) {
     return jsonError('Esta sala não está ativa para iniciar uma gravação.', 403)
   }
@@ -80,6 +93,8 @@ export async function POST(request: Request, context: StartRecordingContext) {
 
   const recordingId = crypto.randomUUID()
   const now = new Date().toISOString()
+  const compressionPolicy = getMeetRecordingCompressionPolicy(recordingLimits.compressionProfile)
+  const retention = getMeetRecordingRetention(new Date(now))
   const storageKey = buildMeetRecordingStorageKey(access.room.room_name, recordingId)
   const { data: inserted, error: insertError } = await access.supabase
     .from('meet_room_recordings')
@@ -93,9 +108,12 @@ export async function POST(request: Request, context: StartRecordingContext) {
       storage_provider: 'r2',
       storage_bucket: storageBucket,
       storage_key: storageKey,
+      compression_profile: recordingLimits.compressionProfile,
+      storage_estimate_bytes: compressionPolicy.limits.estimatedFileSizeBytes,
+      retention_expires_at: retention.retentionExpiresAt,
       consent_notice_shown_at: now,
     })
-    .select('id, status, created_at, started_at, ended_at, duration_seconds, file_size_bytes, error_message, storage_key, storage_bucket, egress_id')
+    .select('id, status, created_at, started_at, ended_at, duration_seconds, file_size_bytes, error_message, storage_key, storage_bucket, egress_id, compression_profile, retention_expires_at, storage_estimate_bytes')
     .single()
 
   if (insertError || !inserted) return jsonError(MEET_RECORDING_FAILURE_MESSAGE, 500)
@@ -104,6 +122,7 @@ export async function POST(request: Request, context: StartRecordingContext) {
     const egress = await startMeetRoomEgress({
       roomName: access.room.room_name,
       recordingId,
+      compressionProfile: recordingLimits.compressionProfile,
     })
     const { data: recording, error: updateError } = await access.supabase
       .from('meet_room_recordings')
@@ -115,7 +134,7 @@ export async function POST(request: Request, context: StartRecordingContext) {
         storage_key: egress.storageKey,
       })
       .eq('id', recordingId)
-      .select('id, status, created_at, started_at, ended_at, duration_seconds, file_size_bytes, error_message, storage_key, storage_bucket, egress_id')
+      .select('id, status, created_at, started_at, ended_at, duration_seconds, file_size_bytes, error_message, storage_key, storage_bucket, egress_id, compression_profile, retention_expires_at, storage_estimate_bytes')
       .single()
 
     if (updateError || !recording) {

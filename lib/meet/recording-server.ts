@@ -1,11 +1,25 @@
-import { EgressStatus, EncodedFileOutput, S3Upload, type EgressInfo } from '@livekit/protocol'
+import {
+  AudioCodec,
+  EgressStatus,
+  EncodedFileOutput,
+  EncodingOptions,
+  S3Upload,
+  VideoCodec,
+  type EgressInfo,
+} from '@livekit/protocol'
 import { EgressClient } from 'livekit-server-sdk'
+import {
+  getMeetRecordingCompressionPolicy,
+  isWithinMeetRecordingLimits,
+  resolveMeetRecordingCompressionProfile,
+} from './recording-compression'
 import {
   getMeetRecordingEnvironmentDiagnostics,
   type MeetRecordingEnvironment,
 } from './recording-environment'
 import {
   MEET_RECORDING_FAILURE_MESSAGE,
+  MEET_RECORDING_LIMIT_EXCEEDED_MESSAGE,
   MEET_RECORDING_UNAVAILABLE_MESSAGE,
   type MeetRecordingRow,
   type MeetRecordingStatus,
@@ -95,6 +109,21 @@ export function buildMeetRecordingStorageKey(roomName: string, recordingId: stri
   return `meet-recordings/${safeRoomPathSegment(roomName)}/${recordingId}.mp4`
 }
 
+export function getMeetRecordingEgressEncoding(profile: unknown) {
+  const encoding = getMeetRecordingCompressionPolicy(profile).serverEncoding
+
+  return new EncodingOptions({
+    width: encoding.width,
+    height: encoding.height,
+    framerate: encoding.framerate,
+    audioCodec: AudioCodec.OPUS,
+    audioBitrate: encoding.audioBitrateKbps,
+    audioFrequency: encoding.audioFrequency,
+    videoCodec: VideoCodec.H264_MAIN,
+    videoBitrate: encoding.videoBitrateKbps,
+  })
+}
+
 function getEgressClient(infrastructure: MeetRecordingInfrastructure) {
   return new EgressClient(
     toHttpLivekitUrl(infrastructure.livekitUrl),
@@ -106,9 +135,11 @@ function getEgressClient(infrastructure: MeetRecordingInfrastructure) {
 export async function startMeetRoomEgress({
   roomName,
   recordingId,
+  compressionProfile,
 }: {
   roomName: string
   recordingId: string
+  compressionProfile?: unknown
 }): Promise<MeetRecordingEgressResult> {
   const infrastructure = getMeetRecordingInfrastructure()
   if (!infrastructure) throw new Error(MEET_RECORDING_UNAVAILABLE_MESSAGE)
@@ -131,6 +162,9 @@ export async function startMeetRoomEgress({
 
   const egress = await getEgressClient(infrastructure).startRoomCompositeEgress(roomName, output, {
     layout: 'grid',
+    encodingOptions: getMeetRecordingEgressEncoding(
+      resolveMeetRecordingCompressionProfile(compressionProfile),
+    ),
   })
 
   if (!egress.egressId) throw new Error(MEET_RECORDING_FAILURE_MESSAGE)
@@ -153,6 +187,11 @@ function asSafeNumber(value: bigint) {
   return Number.isSafeInteger(numberValue) && numberValue >= 0 ? numberValue : null
 }
 
+function asSafeDurationSeconds(value: bigint) {
+  const durationMilliseconds = asSafeNumber(value)
+  return durationMilliseconds === null ? null : Math.ceil(durationMilliseconds / 1000)
+}
+
 export function getMeetRecordingStatusFromEgress(egress: EgressInfo): MeetRecordingStatus {
   switch (egress.status) {
     case EgressStatus.EGRESS_ACTIVE:
@@ -171,20 +210,33 @@ export function getMeetRecordingStatusFromEgress(egress: EgressInfo): MeetRecord
   }
 }
 
-export function getMeetRecordingEgressUpdate(egress: EgressInfo) {
+export function getMeetRecordingEgressUpdate(
+  egress: EgressInfo,
+  compressionProfile: unknown,
+) {
   const status = getMeetRecordingStatusFromEgress(egress)
   const file = egress.fileResults[0]
 
+  if (status === 'ready') {
+    const fileSizeBytes = file ? asSafeNumber(file.size) : null
+    const durationSeconds = file ? asSafeDurationSeconds(file.duration) : null
+    const withinLimits = isWithinMeetRecordingLimits({
+      durationSeconds,
+      fileSizeBytes,
+      profile: compressionProfile,
+    })
+
+    return {
+      status: withinLimits ? 'ready' : 'failed',
+      ended_at: new Date().toISOString(),
+      file_size_bytes: fileSizeBytes,
+      duration_seconds: durationSeconds,
+      error_message: withinLimits ? null : MEET_RECORDING_LIMIT_EXCEEDED_MESSAGE,
+    }
+  }
+
   return {
     status,
-    ...(status === 'ready'
-      ? {
-          ended_at: new Date().toISOString(),
-          file_size_bytes: file ? asSafeNumber(file.size) : null,
-          duration_seconds: file ? asSafeNumber(file.duration) : null,
-          error_message: null,
-        }
-      : {}),
     ...(status === 'failed'
       ? {
           ended_at: new Date().toISOString(),
@@ -202,5 +254,5 @@ export async function refreshMeetRecordingFromEgress(row: MeetRecordingRow) {
 
   const egresses = await getEgressClient(infrastructure).listEgress({ egressId: row.egress_id })
   const egress = egresses[0]
-  return egress ? getMeetRecordingEgressUpdate(egress) : null
+  return egress ? getMeetRecordingEgressUpdate(egress, row.compression_profile) : null
 }

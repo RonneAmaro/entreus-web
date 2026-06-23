@@ -1,6 +1,13 @@
+import {
+  hasActiveMeetRecordingRetention,
+  isMeetRecordingCompressionProfile,
+} from './recording-compression'
+
 export const MEET_RECORDING_UNAVAILABLE_MESSAGE =
-  'A gravação ainda não está configurada neste ambiente.'
+  'A gravação ainda não está configurada neste ambiente. Quando for ativada, usará um perfil otimizado para economizar armazenamento.'
 export const MEET_RECORDING_FAILURE_MESSAGE = 'Não foi possível iniciar a gravação agora.'
+export const MEET_RECORDING_LIMIT_EXCEEDED_MESSAGE =
+  'A gravação ultrapassou o limite de duração ou tamanho definido para armazenamento.'
 
 export const MEET_RECORDING_STATUSES = [
   'preparing',
@@ -25,6 +32,9 @@ export type MeetRecordingRow = {
   storage_key?: string | null
   storage_bucket?: string | null
   egress_id?: string | null
+  compression_profile?: string | null
+  retention_expires_at?: string | null
+  storage_estimate_bytes?: number | null
 }
 
 export type PublicMeetRecording = {
@@ -36,6 +46,8 @@ export type PublicMeetRecording = {
   durationSeconds: number | null
   fileSizeBytes: number | null
   errorMessage: string | null
+  compressionProfile: 'economy' | 'standard' | null
+  retentionExpiresAt: string | null
   canDownload: boolean
 }
 
@@ -76,6 +88,11 @@ export function toPublicMeetRecording(
   row: MeetRecordingRow,
   canDownload: boolean,
 ): PublicMeetRecording {
+  const compressionProfile = isMeetRecordingCompressionProfile(row.compression_profile)
+    ? row.compression_profile
+    : null
+  const retentionExpiresAt = row.retention_expires_at ?? null
+
   return {
     id: row.id,
     status: row.status,
@@ -85,6 +102,11 @@ export function toPublicMeetRecording(
     durationSeconds: row.duration_seconds,
     fileSizeBytes: row.file_size_bytes,
     errorMessage: row.status === 'failed' ? row.error_message || MEET_RECORDING_FAILURE_MESSAGE : null,
-    canDownload: canDownload && canDownloadMeetRecording(row.status),
+    compressionProfile,
+    retentionExpiresAt,
+    canDownload:
+      canDownload &&
+      canDownloadMeetRecording(row.status) &&
+      hasActiveMeetRecordingRetention(retentionExpiresAt),
   }
 }

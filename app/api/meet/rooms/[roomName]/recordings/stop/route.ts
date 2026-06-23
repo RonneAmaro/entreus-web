@@ -29,7 +29,7 @@ export async function POST(request: Request, context: StopRecordingContext) {
 
   const { data: current, error: currentError } = await access.supabase
     .from('meet_room_recordings')
-    .select('id, status, created_at, started_at, ended_at, duration_seconds, file_size_bytes, error_message, egress_id, storage_key, storage_bucket')
+    .select('id, status, created_at, started_at, ended_at, duration_seconds, file_size_bytes, error_message, egress_id, storage_key, storage_bucket, compression_profile, retention_expires_at, storage_estimate_bytes')
     .eq('room_id', access.room.id)
     .in('status', ['preparing', 'recording'])
     .order('created_at', { ascending: false })
@@ -47,7 +47,7 @@ export async function POST(request: Request, context: StopRecordingContext) {
       .from('meet_room_recordings')
       .update({ status: 'cancelled', ended_at: endedAt })
       .eq('id', recording.id)
-      .select('id, status, created_at, started_at, ended_at, duration_seconds, file_size_bytes, error_message, storage_key, storage_bucket')
+      .select('id, status, created_at, started_at, ended_at, duration_seconds, file_size_bytes, error_message, storage_key, storage_bucket, compression_profile, retention_expires_at, storage_estimate_bytes')
       .single()
     if (cancelError || !cancelled) return jsonError(MEET_RECORDING_FAILURE_MESSAGE, 500)
     return NextResponse.json({ ok: true, recording: toPublicMeetRecording(cancelled as StopRecordingRow, false) })
@@ -67,7 +67,7 @@ export async function POST(request: Request, context: StopRecordingContext) {
     .from('meet_room_recordings')
     .update({ status: 'processing', ended_at: endedAt })
     .eq('id', recording.id)
-    .select('id, status, created_at, started_at, ended_at, duration_seconds, file_size_bytes, error_message, storage_key, storage_bucket')
+    .select('id, status, created_at, started_at, ended_at, duration_seconds, file_size_bytes, error_message, storage_key, storage_bucket, compression_profile, retention_expires_at, storage_estimate_bytes')
     .single()
 
   if (updateError || !processing) return jsonError(MEET_RECORDING_FAILURE_MESSAGE, 500)

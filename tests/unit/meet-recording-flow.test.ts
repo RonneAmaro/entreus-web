@@ -22,6 +22,8 @@ describe('Meet recording flow', () => {
         storage_bucket: 'private-recordings',
         storage_key: 'meet-recordings/sala/recording-1.mp4',
         egress_id: 'egress-private-id',
+        compression_profile: 'economy',
+        retention_expires_at: '2030-06-23T12:00:00.000Z',
       },
       true,
     )
@@ -29,6 +31,8 @@ describe('Meet recording flow', () => {
     expect(recording).not.toHaveProperty('storage_key')
     expect(recording).not.toHaveProperty('storageKey')
     expect(recording).not.toHaveProperty('egress_id')
+    expect(recording.compressionProfile).toBe('economy')
+    expect(recording.retentionExpiresAt).toBe('2030-06-23T12:00:00.000Z')
     expect(recording.canDownload).toBe(true)
   })
 
@@ -44,7 +48,7 @@ describe('Meet recording flow', () => {
 
   it('keeps an Egress configuration failure safe and explicit', () => {
     expect(MEET_RECORDING_UNAVAILABLE_MESSAGE).toBe(
-      'A gravação ainda não está configurada neste ambiente.',
+      'A gravação ainda não está configurada neste ambiente. Quando for ativada, usará um perfil otimizado para economizar armazenamento.',
     )
   })
 })
