@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
   MEET_RECORDING_MENU_ITEM,
-  MEET_RECORDING_PREPARATION_MESSAGE,
   shouldCloseMeetOptionsMenu,
   toggleMeetOptionsMenu,
 } from '../../lib/meet-options-menu'
@@ -18,11 +17,9 @@ describe('Meet options menu', () => {
     expect(shouldCloseMeetOptionsMenu({ clickedButton: false, clickedMenu: false })).toBe(true)
   })
 
-  it('exposes recording as a preparation-only option', () => {
+  it('exposes the controlled recording entry point', () => {
     expect(MEET_RECORDING_MENU_ITEM).toEqual({
-      label: 'Gravar reunião',
-      badge: 'Em preparação',
+      label: 'Iniciar gravação',
     })
-    expect(MEET_RECORDING_PREPARATION_MESSAGE).toContain('aviso aos participantes')
   })
 })

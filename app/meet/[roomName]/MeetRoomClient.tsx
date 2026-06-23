@@ -3,10 +3,14 @@
 import { supabase } from '@/lib/supabase'
 import {
   MEET_RECORDING_MENU_ITEM,
-  MEET_RECORDING_PREPARATION_MESSAGE,
   shouldCloseMeetOptionsMenu,
   toggleMeetOptionsMenu,
 } from '@/lib/meet-options-menu'
+import {
+  getMeetRecordingParticipantNotice,
+  getMeetRecordingStatusLabel,
+  type MeetRecordingStatus,
+} from '@/lib/meet/recording-flow'
 import {
   DisconnectButton,
   GridLayout,
@@ -128,6 +132,32 @@ type ChatMessagesResponse =
       ok: true
       messages: ChatMessage[]
     }
+  | { ok: false; error: string }
+
+type PublicMeetRecording = {
+  id: string
+  status: MeetRecordingStatus
+  createdAt: string
+  startedAt: string | null
+  endedAt: string | null
+  durationSeconds: number | null
+  fileSizeBytes: number | null
+  errorMessage: string | null
+  canDownload: boolean
+}
+
+type RecordingsResponse =
+  | {
+      ok: true
+      canManage: boolean
+      roomActive: boolean
+      activeRecording: PublicMeetRecording | null
+      recordings: PublicMeetRecording[]
+    }
+  | { ok: false; error: string }
+
+type RecordingActionResponse =
+  | { ok: true; recording: PublicMeetRecording }
   | { ok: false; error: string }
 
 type MeetRoomClientProps = {
@@ -568,7 +598,12 @@ function PortugueseConference({
   const [showReactions, setShowReactions] = useState(false)
   const [floatingReactions, setFloatingReactions] = useState<ReactionMessage[]>([])
   const [showMoreMenu, setShowMoreMenu] = useState(false)
-  const [recordingNotice, setRecordingNotice] = useState<string | null>(null)
+  const [activeRecording, setActiveRecording] = useState<PublicMeetRecording | null>(null)
+  const [recordings, setRecordings] = useState<PublicMeetRecording[]>([])
+  const [canManageRecordings, setCanManageRecordings] = useState(false)
+  const [showRecordingConfirmation, setShowRecordingConfirmation] = useState(false)
+  const [recordingAction, setRecordingAction] = useState<'idle' | 'starting' | 'stopping' | 'downloading'>('idle')
+  const [recordingActionError, setRecordingActionError] = useState<string | null>(null)
   const [compactLayout, setCompactLayout] = useState(false)
   const [inviteFeedback, setInviteFeedback] = useState<InviteFeedback>('idle')
   const [handNotice, setHandNotice] = useState<string | null>(null)
@@ -587,6 +622,24 @@ function PortugueseConference({
   const localDisplayName = normalizeDisplayName(participantName) || 'Participante'
   const showTimeWarning = typeof secondsLeft === 'number' && secondsLeft > 0 && secondsLeft <= 60
   const pendingRequestCount = isModerator ? pendingRequests.length : 0
+  const canControlRecording = canManageRecordings || isModerator
+
+  const loadRecordings = useCallback(async () => {
+    const headers = await authHeaders()
+    if (!headers) return
+
+    try {
+      const response = await fetch(`/api/meet/rooms/${encodeURIComponent(roomName)}/recordings`, { headers })
+      const data = (await response.json()) as RecordingsResponse
+      if (!response.ok || !data.ok) return
+
+      setActiveRecording(data.activeRecording)
+      setRecordings(data.recordings)
+      setCanManageRecordings(data.canManage)
+    } catch {
+      // The visible call continues even if recording status cannot be refreshed.
+    }
+  }, [authHeaders, roomName])
 
   const { send } = useDataChannel(MEET_DATA_TOPIC, (message) => {
     const data = parseMeetDataMessage(message.payload)
@@ -604,6 +657,12 @@ function PortugueseConference({
   useEffect(() => {
     if (sidePanel === 'chat') setChatUnread(false)
   }, [sidePanel])
+
+  useEffect(() => {
+    void loadRecordings()
+    const timer = window.setInterval(() => void loadRecordings(), 5000)
+    return () => window.clearInterval(timer)
+  }, [loadRecordings])
 
   useEffect(() => {
     let active = true
@@ -931,9 +990,115 @@ function PortugueseConference({
     setShowReactions(false)
   }
 
-  function showRecordingPreparation() {
-    setRecordingNotice(MEET_RECORDING_PREPARATION_MESSAGE)
+  function requestRecordingStart() {
+    if (!canControlRecording) {
+      setRecordingActionError('Apenas o anfitrião da sala pode iniciar a gravação.')
+      return
+    }
+
+    setRecordingActionError(null)
+    setShowRecordingConfirmation(true)
     setShowMoreMenu(false)
+  }
+
+  async function confirmRecordingStart() {
+    setRecordingAction('starting')
+    setRecordingActionError(null)
+
+    try {
+      const headers = await authHeaders()
+      if (!headers) {
+        setRecordingActionError('Você precisa estar logado para gravar.')
+        return
+      }
+
+      const response = await fetch(`/api/meet/rooms/${encodeURIComponent(roomName)}/recordings/start`, {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ consentConfirmed: true }),
+      })
+      const data = (await response.json()) as RecordingActionResponse
+
+      if (!response.ok || !data.ok) {
+        setRecordingActionError(
+          'error' in data ? data.error : 'Não foi possível iniciar a gravação agora.',
+        )
+        return
+      }
+
+      setActiveRecording(data.recording)
+      setShowRecordingConfirmation(false)
+      await loadRecordings()
+    } catch {
+      setRecordingActionError('Não foi possível iniciar a gravação agora.')
+    } finally {
+      setRecordingAction('idle')
+    }
+  }
+
+  async function stopRecording() {
+    setRecordingAction('stopping')
+    setRecordingActionError(null)
+
+    try {
+      const headers = await authHeaders()
+      if (!headers) {
+        setRecordingActionError('Você precisa estar logado para gravar.')
+        return
+      }
+
+      const response = await fetch(`/api/meet/rooms/${encodeURIComponent(roomName)}/recordings/stop`, {
+        method: 'POST',
+        headers,
+      })
+      const data = (await response.json()) as RecordingActionResponse
+
+      if (!response.ok || !data.ok) {
+        setRecordingActionError(
+          'error' in data ? data.error : 'Não foi possível parar a gravação agora.',
+        )
+        return
+      }
+
+      setActiveRecording(data.recording)
+      await loadRecordings()
+    } catch {
+      setRecordingActionError('Não foi possível parar a gravação agora.')
+    } finally {
+      setRecordingAction('idle')
+    }
+  }
+
+  async function downloadRecording(recording: PublicMeetRecording) {
+    if (!recording.canDownload) return
+
+    setRecordingAction('downloading')
+    setRecordingActionError(null)
+
+    try {
+      const headers = await authHeaders()
+      if (!headers) {
+        setRecordingActionError('Você precisa estar logado para baixar a gravação.')
+        return
+      }
+
+      const response = await fetch(
+        `/api/meet/rooms/${encodeURIComponent(roomName)}/recordings/${encodeURIComponent(recording.id)}/download`,
+        { headers },
+      )
+      const data = (await response.json()) as { ok: boolean; url?: string; error?: string }
+
+      if (!response.ok || !data.ok || !data.url) {
+        setRecordingActionError(data.error || 'Não foi possível gerar o download seguro.')
+        return
+      }
+
+      window.open(data.url, '_blank', 'noopener,noreferrer')
+    } catch {
+      setRecordingActionError('Não foi possível gerar o download seguro.')
+    } finally {
+      setRecordingAction('idle')
+    }
   }
 
   const iconButtonClass =
@@ -1194,17 +1359,15 @@ function PortugueseConference({
             </div>
           ) : null}
 
-          {recordingNotice ? (
-            <div role="status" className="absolute left-1/2 top-16 z-40 w-[calc(100%-1.5rem)] max-w-md -translate-x-1/2 rounded-3xl border border-blue-300/25 bg-black/85 p-4 text-center shadow-2xl shadow-black/45 ring-1 ring-blue-200/10 backdrop-blur-2xl sm:top-20">
-              <p className="text-sm font-black text-white">Gravação em preparação</p>
-              <p className="mt-2 text-sm leading-6 text-zinc-300">{recordingNotice}</p>
-              <button
-                type="button"
-                onClick={() => setRecordingNotice(null)}
-                className="mt-3 inline-flex min-h-10 items-center justify-center rounded-full border border-blue-300/30 bg-blue-500/15 px-4 py-2 text-sm font-bold text-blue-50 transition hover:bg-blue-500/25"
-              >
-                Entendi
-              </button>
+          {activeRecording?.status === 'recording' ? (
+            <div className="pointer-events-none absolute left-1/2 top-5 z-40 w-[calc(100%-1.5rem)] max-w-md -translate-x-1/2 text-center">
+              <div role="status" className="inline-flex items-center gap-2 rounded-full border border-red-300/45 bg-red-950/85 px-4 py-2 text-sm font-black text-red-50 shadow-2xl shadow-black/45 backdrop-blur-xl">
+                <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-red-400" aria-hidden="true" />
+                Gravando
+              </div>
+              <p className="mx-auto mt-2 max-w-sm rounded-2xl border border-red-200/20 bg-black/80 px-4 py-2 text-xs font-semibold text-red-50 shadow-xl shadow-black/35 backdrop-blur-xl">
+                {getMeetRecordingParticipantNotice(activeRecording.status)}
+              </p>
             </div>
           ) : null}
 
@@ -1414,18 +1577,90 @@ function PortugueseConference({
                           <span>Tela cheia</span>
                         </button>
 
-                        <button type="button" role="menuitem" onClick={showRecordingPreparation} className="col-span-2 flex min-h-16 items-center gap-3 rounded-2xl border border-blue-300/20 bg-blue-500/10 px-3 py-3 text-left text-sm font-semibold text-blue-50 shadow-sm shadow-black/15 transition hover:border-blue-200/35 hover:bg-blue-500/20 focus:outline-none focus:ring-2 focus:ring-blue-300/30">
+                        <button
+                          type="button"
+                          role="menuitem"
+                          disabled={
+                            recordingAction !== 'idle' ||
+                            !canControlRecording ||
+                            Boolean(activeRecording && activeRecording.status !== 'recording')
+                          }
+                          onClick={() => {
+                            if (activeRecording?.status === 'recording') {
+                              void stopRecording()
+                              return
+                            }
+                            requestRecordingStart()
+                          }}
+                          className="col-span-2 flex min-h-16 items-center gap-3 rounded-2xl border border-red-300/25 bg-red-500/10 px-3 py-3 text-left text-sm font-semibold text-red-50 shadow-sm shadow-black/15 transition hover:border-red-200/45 hover:bg-red-500/20 focus:outline-none focus:ring-2 focus:ring-red-300/35 disabled:cursor-not-allowed disabled:opacity-55"
+                        >
                           <span className={sheetIconClass}>
-                            <Circle className="h-5 w-5" />
+                            <Circle className={`h-5 w-5 ${activeRecording?.status === 'recording' ? 'fill-red-400 text-red-400' : ''}`} />
                           </span>
                           <span className="min-w-0 flex-1">
-                            <span className="block">{MEET_RECORDING_MENU_ITEM.label}</span>
-                            <span className="mt-0.5 block text-xs font-normal text-blue-100/65">Exigirá aviso aos participantes.</span>
+                            <span className="block">
+                              {activeRecording?.status === 'recording'
+                                ? 'Parar gravação'
+                                : activeRecording
+                                  ? getMeetRecordingStatusLabel(activeRecording.status)
+                                  : MEET_RECORDING_MENU_ITEM.label}
+                            </span>
+                            <span className="mt-0.5 block text-xs font-normal text-red-100/75">
+                              {activeRecording?.status === 'recording'
+                                ? 'Todos os participantes foram avisados.'
+                                : activeRecording
+                                  ? 'Aguarde a conclusão antes de iniciar outra gravação.'
+                                  : canControlRecording
+                                    ? 'Exige consentimento e avisa todos os participantes.'
+                                    : 'Somente o anfitrião ou administrador pode gravar.'}
+                            </span>
                           </span>
-                          <span className="rounded-full border border-blue-200/25 bg-black/25 px-2 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-blue-100">
-                            {MEET_RECORDING_MENU_ITEM.badge}
+                          <span className="rounded-full border border-red-200/25 bg-black/25 px-2 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-red-100">
+                            {recordingAction === 'starting'
+                              ? 'Iniciando'
+                              : recordingAction === 'stopping'
+                                ? 'Parando'
+                                : activeRecording
+                                  ? getMeetRecordingStatusLabel(activeRecording.status)
+                                  : 'VIP'}
                           </span>
                         </button>
+
+                        {recordingActionError ? (
+                          <p role="alert" className="col-span-2 rounded-2xl border border-red-300/25 bg-red-950/40 px-3 py-2 text-xs font-semibold leading-5 text-red-100">
+                            {recordingActionError}
+                          </p>
+                        ) : null}
+
+                        {recordings.length > 0 ? (
+                          <div className="col-span-2 rounded-3xl border border-blue-300/10 bg-black/25 p-3">
+                            <p className="px-1 text-xs font-bold uppercase tracking-[0.14em] text-blue-100/55">Gravações da sala</p>
+                            <div className="mt-2 space-y-2">
+                              {recordings.slice(0, 5).map((recording) => (
+                                <div key={recording.id} className="flex items-center justify-between gap-3 rounded-2xl border border-white/5 bg-white/[0.04] px-3 py-2">
+                                  <span className="min-w-0">
+                                    <span className="block text-xs font-bold text-zinc-100">{getMeetRecordingStatusLabel(recording.status)}</span>
+                                    <span className="block truncate text-[11px] text-zinc-500">
+                                      {formatTime(Date.parse(recording.createdAt))}
+                                      {recording.durationSeconds !== null ? ` · ${formatSeconds(recording.durationSeconds)}` : ''}
+                                    </span>
+                                  </span>
+                                  {recording.canDownload ? (
+                                    <button
+                                      type="button"
+                                      disabled={recordingAction !== 'idle'}
+                                      onClick={() => void downloadRecording(recording)}
+                                      className="inline-flex min-h-9 shrink-0 items-center gap-1 rounded-full border border-blue-300/25 bg-blue-500/15 px-3 text-xs font-bold text-blue-50 transition hover:bg-blue-500/25 disabled:cursor-not-allowed disabled:opacity-55"
+                                    >
+                                      <Download className="h-3.5 w-3.5" />
+                                      Baixar
+                                    </button>
+                                  ) : null}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
 
                         <div className="flex min-h-16 items-center gap-3 rounded-2xl border border-blue-300/10 bg-white/[0.04] px-3 py-3 text-left text-sm text-zinc-300">
                           <span className={sheetIconClass}>
@@ -1463,6 +1698,47 @@ function PortugueseConference({
             </div>
           </div>
         </main>
+
+        {showRecordingConfirmation ? (
+          <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="recording-confirmation-title">
+            <section className="w-full max-w-lg rounded-[2rem] border border-red-300/30 bg-[linear-gradient(145deg,rgba(48,8,16,0.98),rgba(9,12,24,0.98))] p-6 shadow-2xl shadow-black/60 ring-1 ring-red-100/10 sm:p-7">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full border border-red-300/35 bg-red-500/15 text-red-100">
+                <Circle className="h-5 w-5 fill-red-400 text-red-400" />
+              </div>
+              <h2 id="recording-confirmation-title" className="mt-5 text-2xl font-black text-white">Gravar reunião?</h2>
+              <p className="mt-3 text-sm leading-6 text-zinc-200">
+                Todos os participantes serão avisados de que a reunião está sendo gravada. A gravação ficará disponível apenas para pessoas autorizadas.
+              </p>
+              {recordingActionError ? (
+                <p role="alert" className="mt-4 rounded-2xl border border-red-300/30 bg-red-950/45 px-4 py-3 text-sm font-semibold text-red-100">
+                  {recordingActionError}
+                </p>
+              ) : null}
+              <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  disabled={recordingAction === 'starting'}
+                  onClick={() => {
+                    setShowRecordingConfirmation(false)
+                    setRecordingActionError(null)
+                  }}
+                  className="inline-flex min-h-11 items-center justify-center rounded-full border border-white/15 bg-white/[0.06] px-5 py-2.5 text-sm font-bold text-zinc-100 transition hover:bg-white/[0.12] disabled:cursor-not-allowed disabled:opacity-55"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={recordingAction === 'starting'}
+                  onClick={() => void confirmRecordingStart()}
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-red-600 px-5 py-2.5 text-sm font-black text-white shadow-lg shadow-red-950/35 transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-55"
+                >
+                  {recordingAction === 'starting' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Circle className="h-4 w-4 fill-white" />}
+                  Iniciar gravação
+                </button>
+              </div>
+            </section>
+          </div>
+        ) : null}
 
         {sidePanel ? (
           <aside className="z-40 flex w-full max-w-sm shrink-0 flex-col border-l border-blue-400/15 bg-black/80 shadow-2xl shadow-black/40 backdrop-blur-2xl max-lg:absolute max-lg:bottom-0 max-lg:right-0 max-lg:top-0 max-lg:max-w-full sm:max-w-md lg:relative">
