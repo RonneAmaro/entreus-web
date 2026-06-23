@@ -1,6 +1,10 @@
 import { EgressStatus, EncodedFileOutput, S3Upload, type EgressInfo } from '@livekit/protocol'
 import { EgressClient } from 'livekit-server-sdk'
 import {
+  getMeetRecordingEnvironmentDiagnostics,
+  type MeetRecordingEnvironment,
+} from './recording-environment'
+import {
   MEET_RECORDING_FAILURE_MESSAGE,
   MEET_RECORDING_UNAVAILABLE_MESSAGE,
   type MeetRecordingRow,
@@ -29,7 +33,7 @@ function readRequiredEnv(name: string) {
 }
 
 function getMeetRecordingInfrastructure(): MeetRecordingInfrastructure | null {
-  if (readRequiredEnv('MEET_RECORDING_EGRESS_ENABLED') !== 'true') return null
+  if (!getMeetRecordingEnvironmentDiagnostics().ready) return null
 
   const livekitUrl = readRequiredEnv('LIVEKIT_URL')
   const livekitApiKey = readRequiredEnv('LIVEKIT_API_KEY')
@@ -73,8 +77,10 @@ function safeRoomPathSegment(roomName: string) {
   return roomName.replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 80)
 }
 
-export function isMeetRecordingInfrastructureConfigured() {
-  return Boolean(getMeetRecordingInfrastructure())
+export function isMeetRecordingInfrastructureConfigured(
+  environment: MeetRecordingEnvironment = process.env,
+) {
+  return getMeetRecordingEnvironmentDiagnostics(environment).ready
 }
 
 export function getMeetRecordingStorageBucket() {

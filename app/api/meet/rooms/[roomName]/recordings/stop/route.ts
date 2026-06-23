@@ -2,7 +2,11 @@ import { jsonError } from '@/lib/meet-server'
 import { getMeetRecordingAccess } from '@/lib/meet/recording-access'
 import { MEET_RECORDING_HOST_REQUIRED_MESSAGE } from '@/lib/meet/recording-permissions'
 import { MEET_RECORDING_FAILURE_MESSAGE, toPublicMeetRecording, type MeetRecordingRow } from '@/lib/meet/recording-flow'
-import { stopMeetRoomEgress } from '@/lib/meet/recording-server'
+import {
+  getMeetRecordingUnavailableMessage,
+  isMeetRecordingInfrastructureConfigured,
+  stopMeetRoomEgress,
+} from '@/lib/meet/recording-server'
 import { NextResponse } from 'next/server'
 
 export const runtime = 'nodejs'
@@ -47,6 +51,10 @@ export async function POST(request: Request, context: StopRecordingContext) {
       .single()
     if (cancelError || !cancelled) return jsonError(MEET_RECORDING_FAILURE_MESSAGE, 500)
     return NextResponse.json({ ok: true, recording: toPublicMeetRecording(cancelled as StopRecordingRow, false) })
+  }
+
+  if (!isMeetRecordingInfrastructureConfigured()) {
+    return jsonError(getMeetRecordingUnavailableMessage(), 503)
   }
 
   try {

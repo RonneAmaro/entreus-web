@@ -1,5 +1,5 @@
 export const MEET_RECORDING_UNAVAILABLE_MESSAGE =
-  'Gravação indisponível neste ambiente. Configure LiveKit Egress e armazenamento seguro.'
+  'A gravação ainda não está configurada neste ambiente.'
 export const MEET_RECORDING_FAILURE_MESSAGE = 'Não foi possível iniciar a gravação agora.'
 
 export const MEET_RECORDING_STATUSES = [

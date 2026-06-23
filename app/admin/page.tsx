@@ -92,6 +92,13 @@ const adminCards = [
     badge: 'dry-run',
   },
   {
+    title: 'Gravação Meet',
+    description: 'Confira o diagnóstico seguro antes de liberar gravações de reuniões.',
+    href: '/admin/meet-recording',
+    icon: ShieldCheck,
+    badge: 'configuração',
+  },
+  {
     title: 'Checklist de seguranca',
     description: 'Confira buckets, migrations e pontos criticos antes de liberar usuarios reais.',
     href: '/admin/security-check',

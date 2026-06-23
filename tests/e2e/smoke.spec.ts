@@ -19,7 +19,7 @@ const publicRoutes = [
   '/creators/apply',
 ]
 
-const protectedRoutes = ['/feed']
+const protectedRoutes = ['/feed', '/admin/meet-recording']
 
 async function expectNoServerError(page: Page) {
   await expect(page.locator('body')).toBeVisible()
@@ -46,7 +46,7 @@ test.describe('protected smoke routes', () => {
 
       expect(response?.status() || 200).toBeLessThan(500)
       await expectNoServerError(page)
-      expect(page.url()).toMatch(/\/(feed|login|signup)(?:[/?#]|$)/)
+      expect(page.url()).toMatch(/\/(feed|admin\/meet-recording|login|signup)(?:[/?#]|$)/)
     })
   }
 })

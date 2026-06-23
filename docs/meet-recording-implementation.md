@@ -6,7 +6,7 @@ O Pacote 49 entrega a base funcional para gravar salas Meet com LiveKit Egress, 
 
 Quando a infraestrutura não estiver pronta, `POST /recordings/start` retorna:
 
-> Gravação indisponível neste ambiente. Configure LiveKit Egress e armazenamento seguro.
+> A gravação ainda não está configurada neste ambiente.
 
 Não há `MediaRecorder`, arquivo simulado, URL pública, nem registro marcado como gravado nessa condição.
 

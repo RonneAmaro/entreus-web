@@ -44,7 +44,7 @@ describe('Meet recording flow', () => {
 
   it('keeps an Egress configuration failure safe and explicit', () => {
     expect(MEET_RECORDING_UNAVAILABLE_MESSAGE).toBe(
-      'Gravação indisponível neste ambiente. Configure LiveKit Egress e armazenamento seguro.',
+      'A gravação ainda não está configurada neste ambiente.',
     )
   })
 })
