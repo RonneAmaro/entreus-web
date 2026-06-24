@@ -1,6 +1,6 @@
 import { canViewAdultContent, isAdultPost, type ContentAccessProfile } from '../content-access'
 
-type Post = { community_type?: unknown; content_rating?: unknown }
+type Post = { community_type?: unknown; content_rating?: unknown; category?: unknown }
 type Media = { id: string; media_url?: string | null; storage_key?: string | null; storage_bucket?: string | null; storage_provider?: string | null; access_level?: string | null; path?: string | null; media_type?: string | null }
 
 export function isAdultPostMedia(post: Post) { return isAdultPost(post) }
