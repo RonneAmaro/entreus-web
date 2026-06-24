@@ -51,6 +51,7 @@ import {
   type PostCommunityType as CommunityType,
   type PostContentRating as ContentRating,
 } from '@/lib/post-classification'
+import { isLegacyAdultCategory, normalizePostClassification } from '@/lib/content-access'
 
 type VisibilityType = 'public' | 'followers' | 'private'
 
@@ -675,6 +676,25 @@ export default function PostComposer({
     setAiFeedback(null)
   }
 
+  function handleCategoryChange(value: string) {
+    const nextCategory = CATEGORY_OPTIONS.some((item) => item.value === value)
+      ? value
+      : 'cotidiano'
+
+    if (isLegacyAdultCategory(nextCategory) && !canAccessAdult18Plus) {
+      setError('Area 18+ exige verificacao de idade aprovada.')
+      return
+    }
+
+    setError('')
+    setCategory(nextCategory)
+
+    if (isLegacyAdultCategory(nextCategory)) {
+      setCommunityType('adult_18plus')
+      setContentRating('adult_18plus')
+    }
+  }
+
   function handleCommunityChange(value: string) {
     const nextCommunity = COMMUNITIES.some((item) => item.key === value)
       ? (value as CommunityType)
@@ -867,9 +887,13 @@ export default function PostComposer({
     const imageFile = media.find((item) => item.type === 'image')?.file || null
     const videoFile = media.find((item) => item.type === 'video')?.file || null
     const mediaFiles = media.map((item) => item.file)
-    const resolvedRating = resolveContentRating(communityType, contentRating)
+    const resolvedClassification = normalizePostClassification(
+      communityType,
+      resolveContentRating(communityType, contentRating),
+      category,
+    )
 
-    if (resolvedRating === 'adult_18plus' && !canAccessAdult18Plus) {
+    if (resolvedClassification.contentRating === 'adult_18plus' && !canAccessAdult18Plus) {
       setError('Area 18+ exige verificacao de idade aprovada.')
       return
     }
@@ -877,8 +901,8 @@ export default function PostComposer({
     const result = await onSubmit({
       content: trimmedContent,
       category,
-      communityType,
-      contentRating: resolvedRating,
+      communityType: resolvedClassification.communityType,
+      contentRating: resolvedClassification.contentRating,
       visibility,
       imageFile,
       videoFile,
@@ -1508,13 +1532,17 @@ export default function PostComposer({
                   >
                     <select
                       value={category}
-                      onChange={(event) => setCategory(event.target.value)}
+                      onChange={(event) => handleCategoryChange(event.target.value)}
                       className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
                       title={t('postComposer.category')}
                       aria-label={t('postComposer.category')}
                     >
                       {CATEGORY_OPTIONS.map((item) => (
-                        <option key={item.value} value={item.value}>
+                        <option
+                          key={item.value}
+                          value={item.value}
+                          disabled={isLegacyAdultCategory(item.value) && !canAccessAdult18Plus}
+                        >
                           {t(item.labelKey)}
                         </option>
                       ))}

@@ -34,6 +34,7 @@ import {
   getSafePostContentRating as normalizeContentRating,
   isAdultPostClassification as isAdultCommunityOrRating,
 } from "@/lib/post-classification";
+import { canViewAdultContent } from "@/lib/content-access";
 import { applyPostVisibilityFilters } from "@/lib/post-visibility";
 
 type VisibilityType = "public" | "followers" | "private";
@@ -278,11 +279,12 @@ export default function PublicProfilePage() {
       const normalizedLoggedProfile = loggedProfileData
         ? {
             ...loggedProfileData,
-            is_minor: Boolean(loggedProfileData.is_minor),
-            show_sensitive_content: Boolean(
-              loggedProfileData.wants_18_plus &&
-                loggedProfileData.age_verification_status === "approved",
-            ),
+            is_minor: loggedProfileData.is_minor,
+            show_sensitive_content: canViewAdultContent({
+              isMinor: loggedProfileData.is_minor,
+              wants18Plus: loggedProfileData.wants_18_plus,
+              ageVerificationStatus: loggedProfileData.age_verification_status,
+            }),
           }
         : null;
 
@@ -799,6 +801,7 @@ export default function PublicProfilePage() {
           },
           post.community_type,
           post.content_rating,
+          post.category,
         ) &&
         canSeePost(post, currentUserId, isOwn, currentIsFollowing),
       );
@@ -872,6 +875,7 @@ export default function PublicProfilePage() {
             },
             post.community_type,
             post.content_rating,
+            post.category,
           ),
         )
         .filter((post: Post) =>
@@ -963,7 +967,7 @@ export default function PublicProfilePage() {
     return (
       post.is_sensitive ||
       normalizeContentRating(post.content_rating) !== "safe" ||
-      isAdultCommunityOrRating(post.community_type, post.content_rating) ||
+      isAdultCommunityOrRating(post.community_type, post.content_rating, post.category) ||
       post.category === "adulto" ||
       post.category === "sensual" ||
       post.category === "18plus"
@@ -1854,6 +1858,11 @@ export default function PublicProfilePage() {
         reported={reportedPostIds.includes(post.id)}
         reporting={reportingPostId === post.id}
         showSensitiveContent={loggedProfile?.show_sensitive_content || false}
+        canViewAdultContent={canViewAdultContent({
+          isMinor: loggedProfile?.is_minor,
+          wants18Plus: loggedProfile?.wants_18_plus,
+          ageVerificationStatus: loggedProfile?.age_verification_status,
+        })}
         repostInfo={item.type === "repost" ? item.repost : null}
         footerLabel={
           item.type === "post"
@@ -2622,6 +2631,11 @@ export default function PublicProfilePage() {
                     showSensitiveContent={
                       loggedProfile?.show_sensitive_content || false
                     }
+                    canViewAdultContent={canViewAdultContent({
+                      isMinor: loggedProfile?.is_minor,
+                      wants18Plus: loggedProfile?.wants_18_plus,
+                      ageVerificationStatus: loggedProfile?.age_verification_status,
+                    })}
                     repostInfo={item.type === "repost" ? item.repost : null}
                     footerLabel={
                       item.type === "post"

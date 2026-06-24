@@ -18,6 +18,7 @@ import {
   getSafePostContentRating as normalizeContentRating,
   isAdultPostClassification as isAdultCommunityOrRating,
 } from '@/lib/post-classification'
+import { canViewAdultContent } from '@/lib/content-access'
 import { applyPostVisibilityFilters } from '@/lib/post-visibility'
 
 type VisibilityType = 'public' | 'followers' | 'private'
@@ -165,7 +166,7 @@ export default function PostPage() {
         if (profileData) {
           currentUserIsAdmin = isAdminRole(profileData.role)
           adultViewer = {
-            isMinor: profileData.is_minor || false,
+            isMinor: profileData.is_minor,
             wants18Plus: profileData.wants_18_plus || false,
             ageVerificationStatus: profileData.age_verification_status || 'not_started',
           }
@@ -174,11 +175,14 @@ export default function PostPage() {
             display_name: profileData.display_name,
             avatar_url: profileData.avatar_url,
             role: profileData.role || 'user',
-            is_minor: profileData.is_minor || false,
+            is_minor: profileData.is_minor,
             wants_18_plus: profileData.wants_18_plus || false,
             age_verification_status: profileData.age_verification_status || 'not_started',
-            show_sensitive_content:
-              Boolean(profileData.wants_18_plus && profileData.age_verification_status === 'approved'),
+            show_sensitive_content: canViewAdultContent({
+              isMinor: profileData.is_minor,
+              wants18Plus: profileData.wants_18_plus,
+              ageVerificationStatus: profileData.age_verification_status,
+            }),
           })
         }
       }
@@ -285,11 +289,17 @@ export default function PostPage() {
       }
 
       if (
-        isAdultCommunityOrRating(normalizedPost.community_type, normalizedPost.content_rating) &&
+        isAdultCommunityOrRating(
+          normalizedPost.community_type,
+          normalizedPost.content_rating,
+          normalizedPost.category,
+        ) &&
+        !currentUserIsAdmin &&
         !canViewCommunity(
           adultViewer,
           normalizedPost.community_type,
           normalizedPost.content_rating,
+          normalizedPost.category,
         )
       ) {
         setPost(normalizedPost)
@@ -887,6 +897,14 @@ export default function PostPage() {
               reposted={postReposted}
               copied={copiedPostId === post.id}
               showSensitiveContent={currentProfile?.show_sensitive_content || false}
+              canViewAdultContent={
+                isAdminRole(currentProfile?.role) ||
+                canViewAdultContent({
+                  isMinor: currentProfile?.is_minor,
+                  wants18Plus: currentProfile?.wants_18_plus,
+                  ageVerificationStatus: currentProfile?.age_verification_status,
+                })
+              }
               footerLabel={`Publicado em ${new Date(post.created_at).toLocaleString('pt-BR')}`}
               onLike={handleToggleLike}
               onCommentClick={() => {

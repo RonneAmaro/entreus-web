@@ -21,6 +21,7 @@ import {
   getSafePostContentRating as normalizeContentRating,
   isAdultPostClassification as isAdultCommunityOrRating,
 } from '@/lib/post-classification'
+import { canViewAdultContent } from '@/lib/content-access'
 import { applyPostVisibilityFilters } from '@/lib/post-visibility'
 
 
@@ -181,11 +182,14 @@ export default function SavedPage() {
               username: profileData.username,
               display_name: profileData.display_name,
               avatar_url: profileData.avatar_url,
-              is_minor: profileData.is_minor || false,
+              is_minor: profileData.is_minor,
               wants_18_plus: profileData.wants_18_plus || false,
               age_verification_status: profileData.age_verification_status || 'not_started',
-              show_sensitive_content:
-                Boolean(profileData.wants_18_plus && profileData.age_verification_status === 'approved'),
+              show_sensitive_content: canViewAdultContent({
+                isMinor: profileData.is_minor,
+                wants18Plus: profileData.wants_18_plus,
+                ageVerificationStatus: profileData.age_verification_status,
+              }),
             }
           : null
 
@@ -363,7 +367,7 @@ export default function SavedPage() {
     return (
       post.is_sensitive ||
       normalizeContentRating(post.content_rating) !== 'safe' ||
-      isAdultCommunityOrRating(post.community_type, post.content_rating) ||
+      isAdultCommunityOrRating(post.community_type, post.content_rating, post.category) ||
       post.category === 'adulto' ||
       post.category === 'sensual' ||
       post.category === '18plus'
@@ -476,13 +480,29 @@ export default function SavedPage() {
         : post.profiles,
     })) as Post[]
 
+    const visiblePosts = rawPosts
+      .filter((post) => !currentBlockedIds.includes(post.user_id))
+      .filter((post) => !isModeratedHidden(post))
+      .filter((post) => canViewCommunity(
+        {
+          isMinor: viewerProfile?.is_minor,
+          wants18Plus: viewerProfile?.wants_18_plus,
+          ageVerificationStatus: viewerProfile?.age_verification_status,
+        },
+        post.community_type,
+        post.content_rating,
+        post.category,
+      ))
+      .filter((post) => canSeePost(post, currentUserId, currentFollows))
+
+    const visiblePostIds = visiblePosts.map((post) => post.id)
     let mediaByPost: Record<string, PostMedia[]> = {}
 
-    if (postIds.length > 0) {
+    if (visiblePostIds.length > 0) {
       const { data: mediaData, error: mediaError } = await supabase
         .from('post_media')
         .select('id, post_id, user_id, media_url, media_type, position, created_at, access_level')
-        .in('post_id', postIds)
+        .in('post_id', visiblePostIds)
         .order('position', { ascending: true })
 
       if (mediaError) {
@@ -505,23 +525,11 @@ export default function SavedPage() {
       bookmarkOrder.set(bookmark.post_id, index)
     })
 
-    const normalizedPosts = rawPosts
+    const normalizedPosts = visiblePosts
       .map((post) => ({
         ...post,
         media: mediaByPost[post.id] || [],
       }))
-      .filter((post) => !currentBlockedIds.includes(post.user_id))
-      .filter((post) => !isModeratedHidden(post))
-      .filter((post) => canViewCommunity(
-        {
-          isMinor: viewerProfile?.is_minor,
-          wants18Plus: viewerProfile?.wants_18_plus,
-          ageVerificationStatus: viewerProfile?.age_verification_status,
-        },
-        post.community_type,
-        post.content_rating,
-      ))
-      .filter((post) => canSeePost(post, currentUserId, currentFollows))
       .sort((a, b) => {
         const orderA = bookmarkOrder.get(a.id) ?? 999999
         const orderB = bookmarkOrder.get(b.id) ?? 999999
@@ -894,6 +902,11 @@ export default function SavedPage() {
                 reported={reportedPostIds.includes(post.id)}
                 reporting={reportingPostId === post.id}
                 showSensitiveContent={currentProfile?.show_sensitive_content || false}
+                canViewAdultContent={canViewAdultContent({
+                  isMinor: currentProfile?.is_minor,
+                  wants18Plus: currentProfile?.wants_18_plus,
+                  ageVerificationStatus: currentProfile?.age_verification_status,
+                })}
                 footerLabel={`${t('saved.publishedAt')} ${new Date(post.created_at).toLocaleString(getDateLocale(language))}`}
                 onLike={() => handleToggleLike(post.id)}
                 onCommentClick={() => router.push(`/post/${post.id}`)}

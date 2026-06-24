@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
-import { BLOCKED_CONTENT_MESSAGE, canViewAdultContent } from '@/lib/content-access'
+import { BLOCKED_CONTENT_MESSAGE, canViewAdultContent, isAdultPost } from '@/lib/content-access'
 import { createR2GetSignedUrl, R2_SIGNED_GET_EXPIRATION_SECONDS } from '@/lib/r2/signed-url'
 
 export const runtime = 'nodejs'
@@ -35,7 +35,7 @@ export async function GET(request: Request, context: { params: Promise<{ mediaId
 
   const { data: post, error: postError } = await supabase
     .from('posts')
-    .select('id, community_type, content_rating')
+    .select('id, community_type, content_rating, category')
     .eq('id', media.post_id)
     .maybeSingle()
   if (postError || !post) return unavailable()
@@ -45,7 +45,7 @@ export async function GET(request: Request, context: { params: Promise<{ mediaId
     .select('is_minor, wants_18_plus, age_verification_status, parental_consent_status')
     .eq('id', user.id)
     .maybeSingle()
-  const isAdult = post.community_type === 'adult_18plus' || post.content_rating === 'adult_18plus' || media.access_level === 'adult_private'
+  const isAdult = isAdultPost(post) || media.access_level === 'adult_private'
   if (isAdult && !canViewAdultContent(profile ? {
     isMinor: profile.is_minor,
     wants18Plus: profile.wants_18_plus,

@@ -80,6 +80,7 @@ type PostCardProps = {
   reporting?: boolean
   highlighted?: boolean
   showSensitiveContent?: boolean
+  canViewAdultContent?: boolean
   repostInfo?: PostCardRepostInfo | null
   footerLabel?: string
   showMenu?: boolean
@@ -284,7 +285,7 @@ function isSensitivePost(post: PostCardPost) {
   return (
     post.is_sensitive ||
     normalizeContentRating(post.content_rating) !== 'safe' ||
-    isAdultCommunityOrRating(post.community_type, post.content_rating) ||
+    isAdultCommunityOrRating(post.community_type, post.content_rating, post.category) ||
     post.category === 'adulto' ||
     post.category === 'sensual' ||
     post.category === '18plus'
@@ -310,6 +311,7 @@ export default function PostCard({
   reporting = false,
   highlighted = false,
   showSensitiveContent = false,
+  canViewAdultContent = false,
   repostInfo = null,
   footerLabel,
   showMenu = true,
@@ -331,6 +333,22 @@ export default function PostCard({
   const { t, language } = useLanguage()
   const [giftModalOpen, setGiftModalOpen] = useState(false)
   const [tipModalOpen, setTipModalOpen] = useState(false)
+  const adultPost = isAdultCommunityOrRating(
+    post.community_type,
+    post.content_rating,
+    post.category,
+  )
+
+  if (adultPost && !canViewAdultContent) {
+    return (
+      <article className="rounded-[1.65rem] border border-zinc-200/70 bg-white/95 p-5 text-zinc-700 shadow-sm ring-1 ring-black/5 dark:border-zinc-800/70 dark:bg-slate-950/85 dark:text-zinc-300 dark:ring-white/10">
+        <h2 className="text-base font-black text-zinc-950 dark:text-white">Publicação restrita</h2>
+        <p className="mt-2 text-sm leading-6">
+          Este conteúdo não está disponível para sua conta.
+        </p>
+      </article>
+    )
+  }
 
   const authorName =
     post.profiles?.display_name || post.profiles?.username || t('feed.post.user')
@@ -342,7 +360,6 @@ export default function PostCard({
   const postMedia = getPostMedia(post)
   const isSharedGiftPost = post.category === 'gift_received'
   const sensitive = isSensitivePost(post)
-  const adultPost = isAdultCommunityOrRating(post.community_type, post.content_rating)
   const ratingLabel = getContentRatingLabel(post.content_rating)
   const communityLabel = getCommunityLabel(post.community_type)
   const moderatedHidden = isModeratedHidden(post)

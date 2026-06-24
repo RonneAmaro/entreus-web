@@ -938,14 +938,17 @@ function FeedContent() {
             username: profileData.username,
             display_name: profileData.display_name,
             avatar_url: profileData.avatar_url,
-            is_minor: profileData.is_minor || false,
+            is_minor: profileData.is_minor,
             wants_18_plus: profileData.wants_18_plus || false,
             age_verification_status: profileData.age_verification_status || 'not_started',
             vip_status: profileData.vip_status,
             vip_expires_at: profileData.vip_expires_at,
             badge_slugs: badgeSlugs,
-            show_sensitive_content:
-              Boolean(profileData.wants_18_plus && profileData.age_verification_status === 'approved'),
+            show_sensitive_content: canViewAdult18Plus({
+              isMinor: profileData.is_minor,
+              wants18Plus: profileData.wants_18_plus,
+              ageVerificationStatus: profileData.age_verification_status,
+            }),
           }
           : null
 
@@ -1185,7 +1188,7 @@ function FeedContent() {
     return (
       post.is_sensitive ||
       normalizeContentRating(post.content_rating) !== 'safe' ||
-      isAdultCommunityOrRating(post.community_type, post.content_rating) ||
+      isAdultCommunityOrRating(post.community_type, post.content_rating, post.category) ||
       post.category === 'adulto' ||
       post.category === 'sensual' ||
       post.category === '18plus'
@@ -1378,9 +1381,16 @@ function FeedContent() {
         },
         post.community_type,
         post.content_rating,
+        post.category,
       ))
       .filter((post) => normalizeCommunity(post.community_type) === communityFilter)
-      .filter((post) => communityFilter !== 'general' || normalizeContentRating(post.content_rating) === 'safe')
+      .filter((post) =>
+        communityFilter !== 'general' ||
+        (
+          normalizeContentRating(post.content_rating) === 'safe' &&
+          !isAdultCommunityOrRating(post.community_type, post.content_rating, post.category)
+        )
+      )
       .filter((post) => canSeePost(post, currentUserId, currentFollows))
 
     if (options.append) {
@@ -2574,10 +2584,10 @@ function FeedContent() {
     }
 
     const { communityType: normalizedCommunity, contentRating: normalizedRating } =
-      normalizePostClassification(communityType, contentRating)
+      normalizePostClassification(communityType, contentRating, category)
 
     if (
-      isAdultCommunityOrRating(normalizedCommunity, normalizedRating) &&
+      isAdultCommunityOrRating(normalizedCommunity, normalizedRating, category) &&
       !canAccessAdult18Plus
     ) {
       setMessage('Area 18+ exige verificacao de idade aprovada.')

@@ -112,16 +112,21 @@ export function canViewAdultPostContent(viewer: PostClassificationViewer | null 
   return canViewAdultContent(viewer)
 }
 
-export function isAdultPostClassification(community: unknown, rating?: unknown) {
-  return isAdultPost({ community_type: community, content_rating: rating })
+export function isAdultPostClassification(community: unknown, rating?: unknown, category?: unknown) {
+  return isAdultPost({ community_type: community, content_rating: rating, category })
 }
 
 export function canViewerSeePostClassification(
   viewer: PostClassificationViewer | null | undefined,
   community: unknown,
   rating?: unknown,
+  category?: unknown,
 ) {
-  return canViewPostByClassification(viewer, { community_type: community, content_rating: rating })
+  return canViewPostByClassification(viewer, {
+    community_type: community,
+    content_rating: rating,
+    category,
+  })
 }
 
 export function shouldShowInGeneralFeed(community: unknown, rating?: unknown) {

@@ -14,6 +14,7 @@ describe('post visibility', () => {
   it('limits the general feed at query time', () => {
     expect(applyPostVisibilityFilters(new Query(), null, 'general-feed').filters).toEqual([
       'eq:community_type:general', 'eq:content_rating:safe',
+      'neq:category:adulto', 'neq:category:sensual', 'neq:category:18plus',
     ])
     expect(canReceiveRenderablePost(null, adult, 'general-feed')).toBe(false)
   })
@@ -22,6 +23,7 @@ describe('post visibility', () => {
     for (const viewer of [null, { isMinor: true, wants18Plus: true, ageVerificationStatus: 'approved' }, { isMinor: false, wants18Plus: true, parentalConsentStatus: 'approved', ageVerificationStatus: 'pending' }]) {
       expect(applyPostVisibilityFilters(new Query(), viewer, 'post-detail').filters).toEqual([
         'neq:community_type:adult_18plus', 'neq:content_rating:adult_18plus',
+        'neq:category:adulto', 'neq:category:sensual', 'neq:category:18plus',
       ])
       expect(canReceiveRenderablePost(viewer, adult, 'public-list')).toBe(false)
     }
@@ -31,5 +33,10 @@ describe('post visibility', () => {
     expect(applyPostVisibilityFilters(new Query(), approved, 'saved').filters).toEqual([])
     expect(canReceiveRenderablePost(approved, adult, 'saved')).toBe(true)
     expect(canReceiveRenderablePost(null, adult, 'admin')).toBe(true)
+  })
+
+  it('treats legacy adult categories as adult posts in render decisions', () => {
+    expect(canReceiveRenderablePost(null, { community_type: 'general', content_rating: 'safe', category: '18plus' }, 'saved')).toBe(false)
+    expect(canReceiveRenderablePost(approved, { community_type: 'general', content_rating: 'safe', category: '18plus' }, 'saved')).toBe(true)
   })
 })

@@ -2149,6 +2149,7 @@ export default function ProfilePage() {
                   reported={reportedPostIds.includes(post.id)}
                   reporting={reportingPostId === post.id}
                   showSensitiveContent={canView18Plus}
+                  canViewAdultContent={canView18Plus}
                   repostInfo={item.type === 'repost' ? item.repost : null}
                   footerLabel={
                     item.type === 'post'

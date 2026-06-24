@@ -314,6 +314,14 @@ export default function AdminAgeVerificationsPage() {
   async function approveRequest(request: AgeVerificationRequest) {
     if (!adminProfile) return
 
+    const verifiedBirthDate = request.birth_date || profilesById[request.user_id]?.birth_date || null
+    const verifiedAge = calculateAge(verifiedBirthDate)
+
+    if (verifiedAge === null || verifiedAge < 18) {
+      setMessage('Aprovacao 18+ bloqueada: a data de nascimento deve confirmar maioridade.')
+      return
+    }
+
     setActionLoading(true)
     setMessage('')
 

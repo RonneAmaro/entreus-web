@@ -1,10 +1,17 @@
-import { canViewAdultContent, type ContentAccessProfile } from './content-access'
+import { canViewAdultContent, isAdultPost, type ContentAccessProfile } from './content-access'
 
 export type PostVisibilityContext = 'general-feed' | 'public-list' | 'saved' | 'post-detail' | 'admin'
 
 type FilterablePostQuery = {
   eq: (column: string, value: string) => FilterablePostQuery
   neq: (column: string, value: string) => FilterablePostQuery
+}
+
+function excludeLegacyAdultCategories(query: FilterablePostQuery) {
+  return query
+    .neq('category', 'adulto')
+    .neq('category', 'sensual')
+    .neq('category', '18plus')
 }
 
 /**
@@ -25,25 +32,32 @@ export function applyPostVisibilityFilters(
 ): unknown {
   const filterable = query as FilterablePostQuery
   if (context === 'general-feed') {
-    return filterable.eq('community_type', 'general').eq('content_rating', 'safe')
+    return excludeLegacyAdultCategories(
+      filterable.eq('community_type', 'general').eq('content_rating', 'safe'),
+    )
   }
 
   if (context === 'admin' || canViewAdultContent(viewer)) return query
 
-  return filterable.neq('community_type', 'adult_18plus').neq('content_rating', 'adult_18plus')
+  return excludeLegacyAdultCategories(
+    filterable
+      .neq('community_type', 'adult_18plus')
+      .neq('content_rating', 'adult_18plus'),
+  )
 }
 
 export function canReceiveRenderablePost(
   viewer: ContentAccessProfile | null | undefined,
-  post: { community_type?: unknown; content_rating?: unknown },
+  post: { community_type?: unknown; content_rating?: unknown; category?: unknown },
   context: PostVisibilityContext,
 ) {
   if (context === 'admin') return true
   if (context === 'general-feed') {
-    return post.community_type === 'general' && post.content_rating === 'safe'
+    return (
+      post.community_type === 'general' &&
+      post.content_rating === 'safe' &&
+      !isAdultPost(post)
+    )
   }
-  return !(
-    (post.community_type === 'adult_18plus' || post.content_rating === 'adult_18plus') &&
-    !canViewAdultContent(viewer)
-  )
+  return !isAdultPost(post) || canViewAdultContent(viewer)
 }

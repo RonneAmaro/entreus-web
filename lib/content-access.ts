@@ -15,6 +15,20 @@ export type ContentAccessProfile = {
 export type ClassifiedPost = {
   community_type?: unknown
   content_rating?: unknown
+  category?: unknown
+}
+
+/**
+ * Categories used before `community_type` and `content_rating` existed. They
+ * remain adult classifications, never merely a UI label.
+ */
+const LEGACY_ADULT_CATEGORIES = new Set(['adulto', 'sensual', '18plus'])
+
+export function isLegacyAdultCategory(value: unknown) {
+  return (
+    typeof value === 'string' &&
+    LEGACY_ADULT_CATEGORIES.has(value.trim().toLowerCase())
+  )
 }
 
 export const BLOCKED_CONTENT_MESSAGE = 'Este conteúdo não está disponível para sua conta.'
@@ -22,7 +36,8 @@ export const BLOCKED_CONTENT_MESSAGE = 'Este conteúdo não está disponível pa
 export function isAdultPost(post: ClassifiedPost) {
   return (
     getSafePostCommunity(post.community_type) === 'adult_18plus' ||
-    getSafePostContentRating(post.content_rating) === 'adult_18plus'
+    getSafePostContentRating(post.content_rating) === 'adult_18plus' ||
+    isLegacyAdultCategory(post.category)
   )
 }
 
@@ -63,11 +78,16 @@ export function getBlockedContentReason(
 export function normalizePostClassification(
   community: unknown,
   rating: unknown,
+  category?: unknown,
 ): { communityType: PostCommunityType; contentRating: PostContentRating } {
   const safeCommunity = getSafePostCommunity(community)
   const safeRating = getSafePostContentRating(rating)
 
-  if (safeCommunity === 'adult_18plus' || safeRating === 'adult_18plus') {
+  if (
+    safeCommunity === 'adult_18plus' ||
+    safeRating === 'adult_18plus' ||
+    isLegacyAdultCategory(category)
+  ) {
     return { communityType: 'adult_18plus', contentRating: 'adult_18plus' }
   }
 

@@ -6,6 +6,7 @@ import {
   canViewPostByClassification,
   getBlockedContentReason,
   isAdultPost,
+  isLegacyAdultCategory,
   normalizePostClassification,
 } from '../../lib/content-access'
 import { shouldShowInGeneralFeed } from '../../lib/post-classification'
@@ -18,19 +19,27 @@ const approvedAdult = {
 }
 
 describe('content access', () => {
-  it('fails closed for anonymous, minor, unverified, parental-consent, and unknown viewers', () => {
+  it('blocks adult content for an anonymous viewer', () => {
     expect(canViewPostByClassification(null, adultPost)).toBe(false)
-    expect(canViewPostByClassification({ isMinor: true, wants18Plus: true, ageVerificationStatus: 'approved' }, adultPost)).toBe(false)
-    expect(canViewPostByClassification({ isMinor: false, wants18Plus: true, ageVerificationStatus: 'pending' }, adultPost)).toBe(false)
-    expect(canViewPostByClassification({ isMinor: true, wants18Plus: true, parentalConsentStatus: 'approved', ageVerificationStatus: 'approved' }, adultPost)).toBe(false)
-    expect(canViewPostByClassification({ isMinor: false, wants18Plus: true }, adultPost)).toBe(false)
     expect(getBlockedContentReason(null, adultPost)).toBe('Este conteúdo não está disponível para sua conta.')
+  })
+
+  it('blocks adult content for minors, including with parental consent', () => {
+    expect(canViewPostByClassification({ isMinor: true, wants18Plus: true, ageVerificationStatus: 'approved' }, adultPost)).toBe(false)
+    expect(canViewPostByClassification({ isMinor: true, wants18Plus: true, parentalConsentStatus: 'approved', ageVerificationStatus: 'approved' }, adultPost)).toBe(false)
+  })
+
+  it('blocks adult content without approved 18+ verification and for unknown status', () => {
+    expect(canViewPostByClassification({ isMinor: false, wants18Plus: true, ageVerificationStatus: 'pending' }, adultPost)).toBe(false)
+    expect(canViewPostByClassification({ isMinor: false, wants18Plus: true }, adultPost)).toBe(false)
   })
 
   it('allows only an opted-in adult with approved age verification', () => {
     expect(canViewAdultContent(approvedAdult)).toBe(true)
     expect(canViewPostByClassification(approvedAdult, adultPost)).toBe(true)
     expect(canCreateAdultPost(approvedAdult)).toBe(true)
+    expect(canCreateAdultPost({ isMinor: true, wants18Plus: true, ageVerificationStatus: 'approved' })).toBe(false)
+    expect(canCreateAdultPost({ isMinor: false, wants18Plus: true, ageVerificationStatus: 'pending' })).toBe(false)
     expect(canCreateAdultPost({ isMinor: false, wants18Plus: true, ageVerificationStatus: 'rejected' })).toBe(false)
   })
 
@@ -48,5 +57,10 @@ describe('content access', () => {
       communityType: 'adult_18plus', contentRating: 'adult_18plus',
     })
     expect(isAdultPost({ community_type: 'general', content_rating: 'adult_18plus' })).toBe(true)
+    expect(isLegacyAdultCategory('18plus')).toBe(true)
+    expect(canViewPostByClassification(null, { category: 'adulto' })).toBe(false)
+    expect(normalizePostClassification('general', 'safe', 'sensual')).toEqual({
+      communityType: 'adult_18plus', contentRating: 'adult_18plus',
+    })
   })
 })
