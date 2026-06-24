@@ -1,327 +1,144 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
-import Link from 'next/link'
 import {
   ArrowLeft,
+  BadgeCheck,
   BarChart3,
-  Eye,
+  Bookmark,
+  Coins,
   Heart,
-  ImageIcon,
   Loader2,
   MessageCircle,
-  Share2,
+  Repeat2,
+  Send,
+  ShieldAlert,
+  Users,
+  Wallet,
 } from 'lucide-react'
 import AppSidebar from '../components/AppSidebar'
 import MobileNavigation from '../components/MobileNavigation'
+import { CreatorChecklist, CreatorDashboardStats } from '../components/CreatorDashboardStats'
 import { supabase } from '@/lib/supabase'
-import { summarizeCreatorPosts } from '@/lib/creator-dashboard/creator-metrics'
-
-type AnalyticsRow = {
-  id?: string
-  creator_id?: string
-  post_id?: string | null
-  created_at?: string | null
-  viewed_at?: string | null
-  event_date?: string | null
-  views?: number | null
-  view_count?: number | null
-  likes?: number | null
-  like_count?: number | null
-  comments?: number | null
-  comment_count?: number | null
-  shares?: number | null
-  share_count?: number | null
-  state?: string | null
-  state_code?: string | null
-  region?: string | null
-  viewer_state?: string | null
-  [key: string]: unknown
-}
-
-type KpiCard = {
-  label: string
-  value: number
-  icon: typeof Eye
-  tone: string
-}
-
-type DailyViews = {
-  date: string
-  label: string
-  views: number
-}
-
-type RegionStat = {
-  region: string
-  views: number
-}
-
-type AnalyticsTotals = {
-  views: number
-  likes: number
-  comments: number
-  shares: number
-}
-
-type CreatorPost = {
-  id: string
-  content: string | null
-  created_at: string
-  community_type?: string | null
-  content_rating?: string | null
-}
-
-type PostPerformance = {
-  post: CreatorPost
-  views: number
-  likes: number
-  comments: number
-}
-
-type PostSortMode = 'views' | 'likes' | 'recent'
-
-const REGION_FALLBACK = 'Nao informado'
+import {
+  summarizeCreatorDashboard,
+  type CreatorDashboardPost,
+  type CreatorMetric,
+} from '@/lib/creator-dashboard'
 
 type CurrentProfile = {
   username: string | null
   display_name: string | null
   avatar_url: string | null
-  birth_date?: string | null
-  age_verification_status?: string | null
-  wants_18_plus?: boolean | null
+  bio: string | null
+  age_verification_status: string | null
+  terms_accepted_at: string | null
 }
 
-function numberFrom(value: unknown, fallback = 0) {
-  if (typeof value === 'number' && Number.isFinite(value)) return value
-  if (typeof value === 'string') {
-    const parsed = Number(value)
-    return Number.isFinite(parsed) ? parsed : fallback
-  }
-  return fallback
+type PostReference = { post_id: string | null }
+type TipRow = { amount: number | null }
+type WalletRow = { balance: number | null }
+
+type QueryResult<T> = {
+  data: T[] | null
+  error: { message?: string } | null
 }
 
-function getMetric(row: AnalyticsRow, keys: string[], fallbackPerRow = 0) {
-  for (const key of keys) {
-    const value = numberFrom(row[key])
-    if (value > 0) return value
-  }
+const EMPTY_QUERY: QueryResult<PostReference> = { data: [], error: null }
 
-  return fallbackPerRow
+function isMissingPostColumnError(error: { message?: string } | null | undefined) {
+  const message = (error?.message || '').toLowerCase()
+  return (
+    message.includes('community_type') ||
+    message.includes('content_rating') ||
+    message.includes('moderation_status')
+  )
 }
 
-function getRowDate(row: AnalyticsRow) {
-  const value = row.created_at || row.viewed_at || row.event_date
-  const date = value ? new Date(value) : new Date()
-  return Number.isNaN(date.getTime()) ? new Date() : date
+function metricFromQuery<T>(result: QueryResult<T>, getValue: (rows: T[]) => number): number | undefined {
+  if (result.error) return undefined
+  return getValue(result.data || [])
 }
 
-function getDateKey(date: Date) {
-  return date.toISOString().slice(0, 10)
+function countReferences(rows: PostReference[]) {
+  return rows.reduce<Record<string, number>>((counts, row) => {
+    if (!row.post_id) return counts
+    counts[row.post_id] = (counts[row.post_id] || 0) + 1
+    return counts
+  }, {})
 }
 
-function formatDayLabel(date: Date) {
-  return date.toLocaleDateString('pt-BR', {
-    day: '2-digit',
-    month: '2-digit',
-  })
+function mergeInteractionCounts(...sources: Record<string, number>[]) {
+  return sources.reduce<Record<string, number>>((counts, source) => {
+    for (const [postId, value] of Object.entries(source)) {
+      counts[postId] = (counts[postId] || 0) + value
+    }
+    return counts
+  }, {})
 }
 
 function formatNumber(value: number) {
   return value.toLocaleString('pt-BR')
 }
 
-function formatPostDate(value: string) {
-  return new Date(value).toLocaleDateString('pt-BR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  })
+function formatDate(value: string | null) {
+  if (!value) return 'Sem atividade ainda'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'Data indisponível'
+  return date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
-function getPostTitle(post: CreatorPost) {
-  const clean = (post.content || '').replace(/\s+/g, ' ').trim()
-  if (!clean) return 'Publicacao sem legenda'
-  return clean.length > 110 ? `${clean.slice(0, 110)}...` : clean
+function labelCommunity(value: string) {
+  const labels: Record<string, string> = {
+    general: 'Geral',
+    sports: 'Esportes',
+    geopolitics: 'Geopolítica',
+    military: 'Militar',
+    adult_18plus: 'Adulto 18+',
+  }
+  return labels[value] || 'Geral'
 }
 
-function getPostClassification(post: CreatorPost) {
-  if (post.community_type === 'adult_18plus' || post.content_rating === 'adult_18plus') return 'Adulto 18+'
-  if (post.content_rating === 'sensitive') return 'Sensível'
-  return 'Seguro'
+function labelRating(value: string) {
+  const labels: Record<string, string> = {
+    safe: 'Seguro',
+    sensitive: 'Sensível',
+    adult_18plus: 'Adulto 18+',
+  }
+  return labels[value] || 'Seguro'
 }
 
-function getRegion(row: AnalyticsRow) {
-  return String(
-    row.state ||
-      row.state_code ||
-      row.region ||
-      row.viewer_state ||
-      REGION_FALLBACK
-  ).trim() || REGION_FALLBACK
-}
-
-function buildLastSevenDays(rows: AnalyticsRow[]): DailyViews[] {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-
-  const days = Array.from({ length: 7 }, (_, index) => {
-    const date = new Date(today)
-    date.setDate(today.getDate() - (6 - index))
-
-    return {
-      date: getDateKey(date),
-      label: formatDayLabel(date),
-      views: 0,
-    }
-  })
-
-  const dayMap = new Map(days.map((day) => [day.date, day]))
-
-  rows.forEach((row) => {
-    const key = getDateKey(getRowDate(row))
-    const day = dayMap.get(key)
-    if (!day) return
-
-    day.views += getMetric(row, ['views', 'view_count'], 1)
-  })
-
-  return days
-}
-
-function buildRegionStats(rows: AnalyticsRow[]): RegionStat[] {
-  const totals = new Map<string, number>()
-
-  rows.forEach((row) => {
-    const region = getRegion(row)
-    const views = getMetric(row, ['views', 'view_count'], 1)
-    totals.set(region, (totals.get(region) || 0) + views)
-  })
-
-  return Array.from(totals.entries())
-    .map(([region, views]) => ({ region, views }))
-    .sort((a, b) => b.views - a.views)
-    .slice(0, 8)
-}
-
-function buildLinePath(points: DailyViews[], width: number, height: number) {
-  const maxViews = Math.max(...points.map((point) => point.views), 1)
-  const step = points.length > 1 ? width / (points.length - 1) : width
-
-  return points
-    .map((point, index) => {
-      const x = index * step
-      const y = height - (point.views / maxViews) * (height - 20) - 10
-      return `${index === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`
-    })
-    .join(' ')
-}
-
-function buildAreaPath(points: DailyViews[], width: number, height: number) {
-  const line = buildLinePath(points, width, height)
-  return `${line} L ${width} ${height} L 0 ${height} Z`
-}
-
-function buildPostPerformance(
-  posts: CreatorPost[],
-  rows: AnalyticsRow[],
-  sortMode: PostSortMode
-) {
-  const metricsByPost = new Map<string, { views: number; likes: number; comments: number }>()
-
-  rows.forEach((row) => {
-    if (!row.post_id) return
-
-    const current = metricsByPost.get(row.post_id) || {
-      views: 0,
-      likes: 0,
-      comments: 0,
-    }
-
-    current.views += getMetric(row, ['views', 'view_count'], 1)
-    current.likes += getMetric(row, ['likes', 'like_count'])
-    current.comments += getMetric(row, ['comments', 'comment_count'])
-
-    metricsByPost.set(row.post_id, current)
-  })
-
-  return posts
-    .map((post) => {
-      const metrics = metricsByPost.get(post.id) || {
-        views: 0,
-        likes: 0,
-        comments: 0,
-      }
-
-      return {
-        post,
-        ...metrics,
-      }
-    })
-    .sort((a, b) => {
-      if (sortMode === 'likes') return b.likes - a.likes
-      if (sortMode === 'recent') {
-        return new Date(b.post.created_at).getTime() - new Date(a.post.created_at).getTime()
-      }
-
-      return b.views - a.views
-    })
-}
-
-function LoadingBlock({ className = '' }: { className?: string }) {
-  return (
-    <div className={`animate-pulse rounded-[2rem] bg-white/10 ${className}`}>
-      <div className="h-full w-full rounded-[2rem] bg-gradient-to-r from-transparent via-white/10 to-transparent" />
-    </div>
-  )
-}
-
-function KpiCard({ item }: { item: KpiCard }) {
-  const Icon = item.icon
-
-  return (
-    <article className="rounded-[2rem] border border-white/10 bg-zinc-950/90 p-5 shadow-xl shadow-black/20 ring-1 ring-white/5">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-xs font-black uppercase tracking-[0.18em] text-zinc-500">
-            {item.label}
-          </p>
-          <p className="mt-3 text-4xl font-black text-white">{formatNumber(item.value)}</p>
-        </div>
-
-        <span className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${item.tone}`}>
-          <Icon className="h-5 w-5" />
-        </span>
-      </div>
-    </article>
-  )
+function creatorMetric(value: number | undefined): CreatorMetric {
+  return value === undefined
+    ? { value: 0, available: false }
+    : { value, available: true }
 }
 
 export default function CreatorDashboardPage() {
   const router = useRouter()
   const { theme, setTheme } = useTheme()
-
-  const [mounted, setMounted] = useState(false)
-  const [email, setEmail] = useState('')
-  const [currentProfile, setCurrentProfile] = useState<CurrentProfile | null>(null)
-  const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0)
+  const mounted = true
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState('')
-  const [rows, setRows] = useState<AnalyticsRow[]>([])
-  const [posts, setPosts] = useState<CreatorPost[]>([])
-  const [postSortMode, setPostSortMode] = useState<PostSortMode>('views')
+  const [email, setEmail] = useState('')
+  const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0)
+  const [profile, setProfile] = useState<CurrentProfile | null>(null)
+  const [posts, setPosts] = useState<CreatorDashboardPost[]>([])
+  const [metrics, setMetrics] = useState({
+    likes: undefined as number | undefined,
+    comments: undefined as number | undefined,
+    reposts: undefined as number | undefined,
+    saves: undefined as number | undefined,
+    followers: undefined as number | undefined,
+    supports: undefined as number | undefined,
+    walletBalance: undefined as number | undefined,
+  })
+  const [interactionsByPostId, setInteractionsByPostId] = useState<Record<string, number>>({})
 
-  useEffect(() => {
-    setMounted(true)
-  }, [])
-
-  useEffect(() => {
-    loadAnalytics()
-  }, [])
-
-  async function loadAnalytics() {
+  const loadDashboard = useCallback(async () => {
     setLoading(true)
     setMessage('')
 
@@ -337,397 +154,326 @@ export default function CreatorDashboardPage() {
 
     setEmail(user.email || '')
 
-    const [analyticsResult, postsResult] = await Promise.all([
+    const [profileResult, unreadResult] = await Promise.all([
       supabase
-        .from('post_analytics')
-        .select('*')
-        .eq('creator_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(500),
+        .from('profiles')
+        .select('username, display_name, avatar_url, bio, age_verification_status, terms_accepted_at')
+        .eq('id', user.id)
+        .maybeSingle(),
       supabase
-        .from('posts')
-        .select('id, content, created_at, community_type, content_rating')
+        .from('notifications')
+        .select('*', { count: 'exact', head: true })
         .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(80),
-      loadNavigationProfile(user.id),
-      loadUnreadNotificationsCount(user.id),
+        .eq('read', false),
     ])
 
+    if (profileResult.data) {
+      setProfile(profileResult.data as CurrentProfile)
+    }
+    setUnreadNotificationsCount(unreadResult.count || 0)
+
+    let postsResult = await supabase
+      .from('posts')
+      .select('id, created_at, community_type, content_rating, category, moderation_status')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(200)
+
+    if (isMissingPostColumnError(postsResult.error)) {
+      const fallbackPostsResult = await supabase
+        .from('posts')
+        .select('id, created_at, category')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(200)
+      postsResult = fallbackPostsResult as typeof postsResult
+    }
+
     if (postsResult.error) {
-      setMessage('Nao foi possivel carregar suas publicacoes agora. Tente novamente em instantes.')
-      setRows([])
+      setMessage('Não foi possível carregar suas publicações agora. Tente novamente em instantes.')
       setPosts([])
       setLoading(false)
       return
     }
 
-    if (analyticsResult.error) {
-      setMessage('Analytics indisponivel no momento. Suas publicacoes continuam visiveis abaixo.')
-      setRows([])
-    } else {
-      setRows((analyticsResult.data || []) as AnalyticsRow[])
+    const ownPosts = (postsResult.data || []) as CreatorDashboardPost[]
+    setPosts(ownPosts)
+    const postIds = ownPosts.map((post) => post.id)
+
+    const postReferences = <T extends PostReference>(table: 'likes' | 'comments' | 'reposts' | 'bookmarks') => {
+      if (postIds.length === 0) return Promise.resolve(EMPTY_QUERY as QueryResult<T>)
+      return supabase
+        .from(table)
+        .select('post_id')
+        .in('post_id', postIds) as unknown as Promise<QueryResult<T>>
     }
 
-    setPosts((postsResult.data || []) as CreatorPost[])
+    const [likesResult, commentsResult, repostsResult, savesResult, followersResult, tipsResult, walletResult] = await Promise.all([
+      postReferences('likes'),
+      postReferences('comments'),
+      postReferences('reposts'),
+      postReferences('bookmarks'),
+      supabase
+        .from('follows')
+        .select('*', { count: 'exact', head: true })
+        .eq('following_id', user.id),
+      supabase
+        .from('itacash_transactions')
+        .select('amount')
+        .eq('user_id', user.id)
+        .eq('type', 'tip_received'),
+      supabase
+        .from('itacash_wallets')
+        .select('balance')
+        .eq('user_id', user.id)
+        .maybeSingle(),
+    ])
+
+    const likes = metricFromQuery(likesResult, (rows) => rows.length)
+    const comments = metricFromQuery(commentsResult, (rows) => rows.length)
+    const reposts = metricFromQuery(repostsResult, (rows) => rows.length)
+    const saves = metricFromQuery(savesResult, (rows) => rows.length)
+    const followers = followersResult.error ? undefined : followersResult.count || 0
+    const supports = tipsResult.error
+      ? undefined
+      : (tipsResult.data || []).reduce((total, row) => total + Math.max(0, Number((row as TipRow).amount) || 0), 0)
+    const walletBalance = walletResult.error ? undefined : Math.max(0, Number((walletResult.data as WalletRow | null)?.balance) || 0)
+
+    setMetrics({ likes, comments, reposts, saves, followers, supports, walletBalance })
+    setInteractionsByPostId(
+      mergeInteractionCounts(
+        countReferences((likesResult.data || []) as PostReference[]),
+        countReferences((commentsResult.data || []) as PostReference[]),
+        countReferences((repostsResult.data || []) as PostReference[]),
+        countReferences((savesResult.data || []) as PostReference[]),
+      ),
+    )
+
+    if ([likesResult, commentsResult, repostsResult, savesResult].some((result) => result.error)) {
+      setMessage('Algumas métricas de interação estão indisponíveis no momento. Seus posts continuam seguros e privados neste painel.')
+    }
+
     setLoading(false)
-  }
+  }, [router])
 
-  async function loadNavigationProfile(currentUserId: string) {
-    const { data } = await supabase
-      .from('profiles')
-      .select('username, display_name, avatar_url, birth_date, age_verification_status, wants_18_plus')
-      .eq('id', currentUserId)
-      .maybeSingle()
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void loadDashboard()
+    }, 0)
 
-    if (!data) return
-
-    setCurrentProfile({
-      username: data.username,
-      display_name: data.display_name,
-      avatar_url: data.avatar_url,
-      birth_date: data.birth_date,
-      age_verification_status: data.age_verification_status,
-      wants_18_plus: data.wants_18_plus,
-    })
-  }
-
-  async function loadUnreadNotificationsCount(currentUserId: string) {
-    const { count } = await supabase
-      .from('notifications')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', currentUserId)
-      .eq('read', false)
-
-    setUnreadNotificationsCount(count || 0)
-  }
+    return () => window.clearTimeout(timer)
+  }, [loadDashboard])
 
   async function handleLogout() {
     await supabase.auth.signOut()
     router.push('/login')
   }
 
-  function handleToggleTheme() {
-    setTheme(theme === 'dark' ? 'light' : 'dark')
-  }
+  const summary = useMemo(
+    () => summarizeCreatorDashboard({
+      posts,
+      likesReceived: metrics.likes,
+      commentsReceived: metrics.comments,
+      repostsReceived: metrics.reposts,
+      savesReceived: metrics.saves,
+      followers: metrics.followers,
+      supportsReceived: metrics.supports,
+      walletBalance: metrics.walletBalance,
+      interactionsByPostId,
+    }),
+    [interactionsByPostId, metrics, posts],
+  )
 
-  function handlePostClick() {
-    router.push('/feed')
-  }
-
-  const totals = useMemo(() => {
-    return rows.reduce<AnalyticsTotals>(
-      (acc, row) => {
-        acc.views += getMetric(row, ['views', 'view_count'], 1)
-        acc.likes += getMetric(row, ['likes', 'like_count'])
-        acc.comments += getMetric(row, ['comments', 'comment_count'])
-        acc.shares += getMetric(row, ['shares', 'share_count'])
-        return acc
-      },
-      { views: 0, likes: 0, comments: 0, shares: 0 }
-    )
-  }, [rows])
-
-  const kpis: KpiCard[] = [
-    { label: 'Posts publicados', value: posts.length, icon: BarChart3, tone: 'bg-blue-500/15 text-blue-200' },
-    { label: 'Posts seguros', value: summarizeCreatorPosts(posts).safePosts, icon: BarChart3, tone: 'bg-emerald-500/15 text-emerald-200' },
-    { label: 'Posts sensíveis', value: summarizeCreatorPosts(posts).sensitivePosts, icon: Eye, tone: 'bg-amber-500/15 text-amber-200' },
-    { label: 'Posts adultos 18+', value: summarizeCreatorPosts(posts).adultPosts, icon: Eye, tone: 'bg-violet-500/15 text-violet-200' },
-    {
-      label: 'Visualizacoes Totais',
-      value: totals.views,
-      icon: Eye,
-      tone: 'bg-blue-500/15 text-blue-200',
-    },
-    {
-      label: 'Total de Curtidas',
-      value: totals.likes,
-      icon: Heart,
-      tone: 'bg-red-500/15 text-red-200',
-    },
-    {
-      label: 'Engajamento (Comentarios)',
-      value: totals.comments,
-      icon: MessageCircle,
-      tone: 'bg-emerald-500/15 text-emerald-200',
-    },
-    {
-      label: 'Compartilhamentos',
-      value: totals.shares,
-      icon: Share2,
-      tone: 'bg-violet-500/15 text-violet-200',
-    },
+  const statCards = [
+    { label: 'Posts publicados', metric: creatorMetric(summary.posts), icon: BarChart3, tone: 'bg-blue-500/15 text-blue-200' },
+    { label: 'Curtidas recebidas', metric: summary.likes, icon: Heart, tone: 'bg-rose-500/15 text-rose-200', unavailableLabel: 'Disponível quando a leitura de interações responder.' },
+    { label: 'Comentários recebidos', metric: summary.comments, icon: MessageCircle, tone: 'bg-emerald-500/15 text-emerald-200', unavailableLabel: 'Disponível quando a leitura de interações responder.' },
+    { label: 'Seguidores', metric: summary.followers, icon: Users, tone: 'bg-violet-500/15 text-violet-200', unavailableLabel: 'Disponível quando a lista de seguidores responder.' },
+    { label: 'Engajamento estimado', metric: summary.engagementRate, icon: BarChart3, tone: 'bg-amber-500/15 text-amber-200', suffix: summary.engagementRate.available ? '%' : '', unavailableLabel: 'Analytics de visualizações ainda está em preparação.' },
+    { label: 'Apoios recebidos', metric: summary.supports, icon: Coins, tone: 'bg-cyan-500/15 text-cyan-200', suffix: summary.supports.available ? ' ItaCash' : '', unavailableLabel: 'Mostra apenas apoios ItaCash já registrados.' },
   ]
 
-  const dailyViews = useMemo(() => buildLastSevenDays(rows), [rows])
-  const regionStats = useMemo(() => buildRegionStats(rows), [rows])
-  const postPerformance = useMemo(
-    () => buildPostPerformance(posts, rows, postSortMode),
-    [postSortMode, posts, rows]
-  )
-  const linePath = buildLinePath(dailyViews, 640, 220)
-  const areaPath = buildAreaPath(dailyViews, 640, 220)
-  const maxRegionViews = Math.max(...regionStats.map((item) => item.views), 1)
+  const checklist = [
+    { label: 'Foto de perfil', complete: Boolean(profile?.avatar_url), description: 'Ajuda seu público a reconhecer sua conta.' },
+    { label: 'Bio preenchida', complete: Boolean(profile?.bio?.trim()), description: 'Explique que tipo de conteúdo você cria.' },
+    { label: 'Username configurado', complete: Boolean(profile?.username), description: 'Necessário para divulgar seu perfil.' },
+    { label: 'Primeira publicação', complete: summary.posts > 0, description: 'As métricas aparecem após a primeira publicação.' },
+    { label: 'Regras da comunidade aceitas', complete: Boolean(profile?.terms_accepted_at), description: 'Use a plataforma conforme os termos aceitos.' },
+    { label: 'Verificação 18+ para conteúdo adulto', complete: profile?.age_verification_status === 'approved', description: 'Opcional; exigida apenas para publicar na área adulta.' },
+    { label: 'Pronto para monetização futura', complete: Boolean(profile?.username && profile?.avatar_url && summary.posts > 0), description: 'Gorjetas, posts pagos e saques terão pacote próprio.' },
+  ]
 
   return (
-    <main className="min-h-screen overflow-hidden bg-black text-white">
+    <main className="min-h-screen overflow-x-hidden bg-black text-white">
       <AppSidebar
         unreadNotificationsCount={unreadNotificationsCount}
         mounted={mounted}
         theme={theme}
-        displayName={currentProfile?.display_name || currentProfile?.username || undefined}
-        username={currentProfile?.username || null}
+        displayName={profile?.display_name || profile?.username || undefined}
+        username={profile?.username || null}
         email={email}
-        avatarUrl={currentProfile?.avatar_url || null}
-        onToggleTheme={handleToggleTheme}
+        avatarUrl={profile?.avatar_url || null}
+        onToggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
         onLogout={handleLogout}
       />
 
       <MobileNavigation
         email={email}
-        displayName={currentProfile?.display_name || currentProfile?.username || 'Minha conta'}
-        avatarUrl={currentProfile?.avatar_url || null}
+        displayName={profile?.display_name || profile?.username || 'Minha conta'}
+        avatarUrl={profile?.avatar_url || null}
         unreadNotificationsCount={unreadNotificationsCount}
         mounted={mounted}
         theme={theme}
-        onToggleTheme={handleToggleTheme}
+        onToggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
         onLogout={handleLogout}
-        onPostClick={handlePostClick}
+        onPostClick={() => router.push('/feed#post-composer')}
       />
 
-      <section className="relative mx-auto min-h-screen w-full max-w-7xl px-4 py-20 pb-24 sm:px-6 lg:ml-[104px] lg:max-w-[calc(80rem-104px)] lg:px-8 lg:py-6">
-        <div className="pointer-events-none absolute -right-24 top-20 h-80 w-80 rounded-full bg-blue-500/15 blur-3xl" />
-        <div className="pointer-events-none absolute -left-24 top-96 h-72 w-72 rounded-full bg-emerald-400/10 blur-3xl" />
+      <section className="mx-auto min-h-screen w-full max-w-7xl px-4 py-20 pb-24 sm:px-6 lg:ml-[104px] lg:max-w-[calc(80rem-104px)] lg:px-8 lg:py-8">
+        <Link href="/feed" className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-black transition hover:bg-white/10">
+          <ArrowLeft className="h-4 w-4" />
+          Feed
+        </Link>
 
-        <header className="relative z-10 flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <Link
-              href="/feed"
-              className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-black transition hover:bg-white/10"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Feed
-            </Link>
-            <p className="text-xs font-black uppercase tracking-[0.24em] text-blue-300">
-              EntreUS Pro
-            </p>
-            <h1 className="mt-3 text-4xl font-black tracking-tight sm:text-6xl">
-              Painel do criador
-            </h1>
-            <p className="mt-4 max-w-2xl text-base leading-7 text-zinc-400">
-              Acompanhe seus conteúdos, crescimento e preparação para monetização.
-            </p>
+        <header className="mt-6 flex flex-col gap-5 rounded-[2rem] border border-blue-300/20 bg-gradient-to-br from-blue-500/15 via-zinc-950 to-zinc-950 p-6 shadow-2xl shadow-blue-950/20 ring-1 ring-white/5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-center gap-4">
+            {profile?.avatar_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={profile.avatar_url} alt="" className="h-16 w-16 rounded-3xl border border-blue-200/30 object-cover" />
+            ) : (
+              <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-blue-500/15 text-2xl font-black text-blue-100 ring-1 ring-blue-300/20">
+                {(profile?.display_name || profile?.username || 'C').slice(0, 1).toUpperCase()}
+              </div>
+            )}
+            <div className="min-w-0">
+              <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-300">EntreUS para criadores</p>
+              <h1 className="mt-2 truncate text-3xl font-black tracking-tight sm:text-4xl">Painel do Criador</h1>
+              <p className="mt-1 truncate text-sm text-zinc-400">{profile?.display_name || profile?.username || 'Seu perfil'}</p>
+              {profile?.username && <p className="mt-1 text-sm font-bold text-blue-100">@{profile.username}</p>}
+            </div>
           </div>
-
-          <div className="rounded-[2rem] border border-blue-300/20 bg-blue-500/10 p-5 text-blue-50 ring-1 ring-blue-300/10">
-            <BarChart3 className="h-8 w-8 text-blue-200" />
-            <p className="mt-3 text-sm font-bold text-blue-100/70">Modo profissional</p>
-            <p className="text-2xl font-black">Analytics</p>
+          <div className="inline-flex items-center gap-2 self-start rounded-full bg-blue-500/15 px-4 py-2 text-sm font-black text-blue-100 ring-1 ring-blue-300/20 sm:self-auto">
+            <BadgeCheck className="h-4 w-4" />
+            Métricas iniciais
           </div>
         </header>
 
-        {message && (
-          <div className="relative z-10 mt-6 rounded-2xl border border-amber-300/20 bg-amber-500/10 px-4 py-3 text-sm font-semibold text-amber-100">
-            {message}
-          </div>
-        )}
+        {message && <p className="mt-5 rounded-2xl border border-amber-300/20 bg-amber-500/10 px-4 py-3 text-sm font-semibold text-amber-100">{message}</p>}
 
         {loading ? (
-          <div className="relative z-10 mt-8 space-y-6">
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              {Array.from({ length: 4 }).map((_, index) => (
-                <LoadingBlock key={index} className="h-36" />
-              ))}
-            </div>
-            <div className="grid gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(22rem,0.65fr)]">
-              <LoadingBlock className="h-[24rem]" />
-              <LoadingBlock className="h-[24rem]" />
-            </div>
-            <LoadingBlock className="h-[26rem]" />
+          <div className="mt-6 flex min-h-80 items-center justify-center rounded-[2rem] border border-white/10 bg-zinc-950/90 text-zinc-300">
+            <Loader2 className="mr-3 h-5 w-5 animate-spin" />
+            Carregando seu painel...
           </div>
         ) : (
-          <div className="relative z-10 mt-8 space-y-6 pb-10">
-            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              {kpis.map((item) => (
-                <KpiCard key={item.label} item={item} />
-              ))}
-            </section>
+          <div className="mt-6 space-y-6">
+            <CreatorDashboardStats items={statCards} />
 
-            <section className="grid gap-4 lg:grid-cols-2">
-              <article className="rounded-[2rem] border border-white/10 bg-zinc-950/90 p-5"><p className="text-xs font-black uppercase tracking-[0.18em] text-blue-300">Status da conta</p><p className="mt-3 font-bold">Perfil {currentProfile?.username && currentProfile?.birth_date ? 'completo' : 'incompleto'}</p><p className="mt-2 text-sm text-zinc-400">Verificação 18+: {currentProfile?.age_verification_status || 'não enviada'}</p><p className="mt-2 text-sm text-zinc-400">Opt-in 18+: {currentProfile?.wants_18_plus ? 'ativado' : 'desativado'}</p><p className="mt-3 text-sm text-amber-200">Conteúdo adulto exige verificação 18+ aprovada e opt-in.</p></article>
-              <article className="rounded-[2rem] border border-white/10 bg-zinc-950/90 p-5"><p className="text-xs font-black uppercase tracking-[0.18em] text-violet-300">Monetização futura</p><div className="mt-3 grid gap-2 text-sm text-zinc-300"><p>Gorjetas com ItaCash — em breve</p><p>Posts pagos — em breve</p><p>Assinatura de perfil — em planejamento</p><p>Solicitação de saque — em planejamento</p></div></article>
-            </section>
-
-            <section className="grid gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(22rem,0.65fr)]">
-              <article className="rounded-[2rem] border border-white/10 bg-zinc-950/90 p-5 shadow-2xl shadow-black/20 ring-1 ring-white/5">
-                <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-300">
-                      Ultimos 7 dias
-                    </p>
-                    <h2 className="mt-1 text-2xl font-black">Evolucao de visualizacoes</h2>
+            {summary.posts === 0 ? (
+              <section className="rounded-[2rem] border border-blue-300/20 bg-blue-500/10 p-7 text-center ring-1 ring-blue-300/10">
+                <Send className="mx-auto h-9 w-9 text-blue-200" />
+                <h2 className="mt-4 text-2xl font-black">Publique seu primeiro conteúdo</h2>
+                <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-blue-100/75">Depois da primeira publicação, você verá aqui o resumo de conteúdo e as interações recebidas.</p>
+                <Link href="/feed#post-composer" className="mt-5 inline-flex rounded-full bg-white px-5 py-2.5 text-sm font-black text-black transition hover:bg-blue-50">Criar publicação</Link>
+              </section>
+            ) : (
+              <section className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(20rem,0.65fr)]">
+                <article className="rounded-[2rem] border border-white/10 bg-zinc-950/90 p-5 shadow-xl shadow-black/20 ring-1 ring-white/5">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-300">Resumo de conteúdo</p>
+                      <h2 className="mt-2 text-2xl font-black">Suas publicações</h2>
+                    </div>
+                    <p className="text-sm text-zinc-500">Última atividade: {formatDate(summary.lastActivityAt)}</p>
                   </div>
-                  <span className="rounded-full bg-blue-500/10 px-3 py-1 text-xs font-black text-blue-200 ring-1 ring-blue-300/15">
-                    {formatNumber(totals.views)} views
-                  </span>
-                </div>
-
-                <div className="overflow-hidden rounded-3xl border border-white/10 bg-black/35 p-4">
-                  <svg viewBox="0 0 640 260" className="h-72 w-full" role="img" aria-label="Grafico de visualizacoes dos ultimos 7 dias">
-                    <defs>
-                      <linearGradient id="viewsArea" x1="0" x2="0" y1="0" y2="1">
-                        <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.45" />
-                        <stop offset="100%" stopColor="#3b82f6" stopOpacity="0" />
-                      </linearGradient>
-                    </defs>
-                    <path d={areaPath} fill="url(#viewsArea)" transform="translate(0 10)" />
-                    <path d={linePath} fill="none" stroke="#60a5fa" strokeLinecap="round" strokeLinejoin="round" strokeWidth="5" transform="translate(0 10)" />
-                    {dailyViews.map((point, index) => {
-                      const x = index * (640 / Math.max(dailyViews.length - 1, 1))
-                      const maxViews = Math.max(...dailyViews.map((item) => item.views), 1)
-                      const y = 220 - (point.views / maxViews) * 200
-
-                      return (
-                        <g key={point.date} transform={`translate(${x} ${y + 10})`}>
-                          <circle r="6" fill="#bfdbfe" stroke="#2563eb" strokeWidth="3" />
-                          <text y="-14" textAnchor="middle" className="fill-zinc-200 text-[18px] font-bold">
-                            {point.views}
-                          </text>
-                        </g>
-                      )
-                    })}
-                    {dailyViews.map((point, index) => {
-                      const x = index * (640 / Math.max(dailyViews.length - 1, 1))
-
-                      return (
-                        <text key={point.date} x={x} y="252" textAnchor="middle" className="fill-zinc-500 text-[16px] font-bold">
-                          {point.label}
-                        </text>
-                      )
-                    })}
-                  </svg>
-                </div>
-              </article>
-
-              <article className="rounded-[2rem] border border-white/10 bg-zinc-950/90 p-5 shadow-2xl shadow-black/20 ring-1 ring-white/5">
-                <div className="mb-5">
-                  <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-300">
-                    Publico
-                  </p>
-                  <h2 className="mt-1 text-2xl font-black">Distribuicao regional</h2>
-                </div>
-
-                {regionStats.length === 0 ? (
-                  <div className="flex min-h-72 items-center justify-center rounded-3xl border border-dashed border-white/15 bg-black/35 p-8 text-center text-zinc-500">
-                    Nenhum dado regional encontrado ainda.
+                  <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                    {Object.entries(summary.ratings).map(([rating, count]) => (
+                      <div key={rating} className="rounded-2xl border border-white/10 bg-black/30 p-4">
+                        <p className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">{labelRating(rating)}</p>
+                        <p className="mt-2 text-2xl font-black">{formatNumber(count)}</p>
+                      </div>
+                    ))}
                   </div>
-                ) : (
-                  <div className="space-y-4">
-                    {regionStats.map((item) => {
-                      const percent = (item.views / maxRegionViews) * 100
-
-                      return (
-                        <div key={item.region}>
-                          <div className="mb-2 flex items-center justify-between gap-3 text-sm">
-                            <span className="font-black text-zinc-100">{item.region}</span>
-                            <span className="font-semibold text-zinc-500">{formatNumber(item.views)}</span>
-                          </div>
-                          <div className="h-3 overflow-hidden rounded-full bg-white/10">
-                            <div
-                              className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-blue-400"
-                              style={{ width: `${percent}%` }}
-                            />
-                          </div>
-                        </div>
-                      )
-                    })}
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {Object.entries(summary.communities).filter(([, count]) => count > 0).map(([community, count]) => (
+                      <span key={community} className="rounded-full border border-blue-300/15 bg-blue-500/10 px-3 py-1.5 text-xs font-bold text-blue-100">{labelCommunity(community)} · {formatNumber(count)}</span>
+                    ))}
                   </div>
-                )}
-              </article>
-            </section>
+                  {summary.hiddenPosts > 0 && (
+                    <p className="mt-4 inline-flex items-center gap-2 rounded-xl border border-amber-300/20 bg-amber-500/10 px-3 py-2 text-sm font-semibold text-amber-100"><ShieldAlert className="h-4 w-4" />{summary.hiddenPosts} publicação(ões) com status de moderação diferente de ativo.</p>
+                  )}
+                </article>
 
-            <section className="rounded-[2rem] border border-white/10 bg-zinc-950/90 p-5 shadow-2xl shadow-black/20 ring-1 ring-white/5">
-              <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                <div>
-                  <p className="text-xs font-black uppercase tracking-[0.2em] text-violet-300">
-                    Conteudo
-                  </p>
-                  <h2 className="mt-1 text-2xl font-black">Desempenho por Publicacao</h2>
-                  <p className="mt-2 text-sm text-zinc-500">
-                    Compare seus posts por alcance, curtidas e comentarios.
-                  </p>
-                </div>
-
-                <label className="w-full lg:w-64">
-                  <span className="mb-2 block text-xs font-black uppercase tracking-[0.16em] text-zinc-500">
-                    Ordenar por
-                  </span>
-                  <select
-                    value={postSortMode}
-                    onChange={(event) => setPostSortMode(event.target.value as PostSortMode)}
-                    className="w-full rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm font-black text-white outline-none transition focus:border-blue-300"
-                  >
-                    <option value="views">Mais Vistos</option>
-                    <option value="likes">Mais Curtidos</option>
-                    <option value="recent">Mais Recentes</option>
-                  </select>
-                </label>
-              </div>
-
-              {postPerformance.length === 0 ? (
-                <div className="flex min-h-56 items-center justify-center rounded-3xl border border-dashed border-white/15 bg-black/35 p-8 text-center text-zinc-500">
-                  Nenhuma publicacao encontrada para este criador.
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {postPerformance.map((item) => (
-                    <article
-                      key={item.post.id}
-                      className="grid gap-4 rounded-3xl border border-white/10 bg-black/35 p-4 transition hover:border-blue-300/25 hover:bg-blue-950/10 md:grid-cols-[6rem_minmax(0,1fr)_auto]"
-                    >
-                      <div className="relative flex aspect-video h-24 w-full items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-zinc-900 md:aspect-square md:h-24 md:w-24">
-                        <div className="flex h-full w-full flex-col items-center justify-center text-zinc-500">
-                          <ImageIcon className="h-7 w-7" />
-                          <span className="mt-1 text-xs font-bold">Mídia protegida</span>
-                        </div>
-                      </div>
-
-                      <div className="min-w-0">
-                        <h3 className="line-clamp-2 font-black text-white">
-                          {getPostTitle(item.post)}
-                        </h3>
-                        <p className="mt-2 text-sm font-semibold text-zinc-500">
-                          Publicado em {formatPostDate(item.post.created_at)}
-                        </p>
-                        <span className="mt-2 inline-flex rounded-full bg-white/10 px-2 py-1 text-xs font-bold text-zinc-300">{getPostClassification(item.post)}</span>
-                      </div>
-
-                      <div className="flex flex-wrap items-center gap-2 md:justify-end">
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-500/10 px-3 py-1.5 text-xs font-black text-blue-200 ring-1 ring-blue-300/15">
-                          <Eye className="h-3.5 w-3.5" />
-                          {formatNumber(item.views)}
-                        </span>
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-red-500/10 px-3 py-1.5 text-xs font-black text-red-200 ring-1 ring-red-300/15">
-                          <Heart className="h-3.5 w-3.5" />
-                          {formatNumber(item.likes)}
-                        </span>
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-3 py-1.5 text-xs font-black text-emerald-200 ring-1 ring-emerald-300/15">
-                          <MessageCircle className="h-3.5 w-3.5" />
-                          {formatNumber(item.comments)}
-                        </span>
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              )}
-            </section>
-
-            {rows.length === 0 && (
-              <div className="rounded-[2rem] border border-white/10 bg-zinc-950/90 p-8 text-center text-zinc-400 ring-1 ring-white/5">
-                <Loader2 className="mx-auto mb-3 h-8 w-8 text-blue-200" />
-                Ainda nao ha eventos de analytics para suas publicacoes.
-              </div>
+                <article className="rounded-[2rem] border border-white/10 bg-zinc-950/90 p-5 shadow-xl shadow-black/20 ring-1 ring-white/5">
+                  <p className="text-xs font-black uppercase tracking-[0.18em] text-violet-300">Monetização</p>
+                  <h2 className="mt-2 text-2xl font-black">Preparação segura</h2>
+                  {summary.walletBalance.available ? (
+                    <div className="mt-4 rounded-2xl border border-cyan-300/20 bg-cyan-500/10 p-4">
+                      <p className="text-xs font-black uppercase tracking-[0.14em] text-cyan-100/70">Saldo ItaCash da carteira</p>
+                      <p className="mt-2 text-2xl font-black text-cyan-50">{formatNumber(summary.walletBalance.value)} ItaCash</p>
+                      <p className="mt-2 text-xs leading-5 text-cyan-100/70">Consulta somente leitura; não representa saldo disponível para saque.</p>
+                    </div>
+                  ) : (
+                    <p className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-zinc-400">Carteira ItaCash indisponível no momento.</p>
+                  )}
+                  <ul className="mt-4 space-y-2 text-sm text-zinc-300">
+                    <li>Gorjetas com ItaCash — em preparação</li>
+                    <li>Posts pagos — em preparação</li>
+                    <li>Solicitação de saque — em preparação</li>
+                  </ul>
+                  <Link href="/wallet" className="mt-5 inline-flex items-center gap-2 text-sm font-black text-cyan-200 hover:text-cyan-100"><Wallet className="h-4 w-4" />Abrir carteira</Link>
+                </article>
+              </section>
             )}
+
+            {summary.posts > 0 && (
+              <section className="grid gap-6 xl:grid-cols-2">
+                <article className="rounded-[2rem] border border-white/10 bg-zinc-950/90 p-5 shadow-xl shadow-black/20 ring-1 ring-white/5">
+                  <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-300">Publicações recentes</p>
+                  <h2 className="mt-2 text-2xl font-black">Atividade recente</h2>
+                  <div className="mt-4 space-y-3">
+                    {summary.recentPosts.map((post) => (
+                      <div key={post.id} className="flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-black/30 p-3">
+                        <div className="min-w-0"><p className="text-sm font-bold text-zinc-100">Publicação em {labelCommunity(post.community)}</p><p className="mt-1 text-xs text-zinc-500">{formatDate(post.createdAt)} · {labelRating(post.rating)}</p></div>
+                        <span className="shrink-0 rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-black text-emerald-200">{formatNumber(post.engagement)} interações</span>
+                      </div>
+                    ))}
+                  </div>
+                </article>
+
+                <article className="rounded-[2rem] border border-white/10 bg-zinc-950/90 p-5 shadow-xl shadow-black/20 ring-1 ring-white/5">
+                  <p className="text-xs font-black uppercase tracking-[0.18em] text-rose-300">Destaques</p>
+                  <h2 className="mt-2 text-2xl font-black">Mais engajadas</h2>
+                  <div className="mt-4 space-y-3">
+                    {summary.topPosts.map((post) => (
+                      <div key={post.id} className="flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-black/30 p-3">
+                        <div className="min-w-0"><p className="text-sm font-bold text-zinc-100">Publicação em {labelCommunity(post.community)}</p><p className="mt-1 text-xs text-zinc-500">{formatDate(post.createdAt)} · {labelRating(post.rating)}</p></div>
+                        <span className="shrink-0 rounded-full bg-rose-500/10 px-2.5 py-1 text-xs font-black text-rose-200">{formatNumber(post.engagement)} interações</span>
+                      </div>
+                    ))}
+                  </div>
+                </article>
+              </section>
+            )}
+
+            <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+              <article className="rounded-[2rem] border border-white/10 bg-zinc-950/90 p-5 shadow-xl shadow-black/20 ring-1 ring-white/5">
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-300">Checklist do criador</p>
+                <h2 className="mt-2 text-2xl font-black">Próximos passos</h2>
+                <CreatorChecklist items={checklist} />
+              </article>
+
+              <article className="rounded-[2rem] border border-white/10 bg-zinc-950/90 p-5 shadow-xl shadow-black/20 ring-1 ring-white/5">
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-zinc-400">Interações recebidas</p>
+                <h2 className="mt-2 text-2xl font-black">Visão complementar</h2>
+                <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-2xl bg-black/30 p-4"><Repeat2 className="h-5 w-5 text-violet-200" /><p className="mt-3 text-xl font-black">{summary.reposts.available ? formatNumber(summary.reposts.value) : '—'}</p><p className="mt-1 text-xs text-zinc-500">Reposts</p></div>
+                  <div className="rounded-2xl bg-black/30 p-4"><Bookmark className="h-5 w-5 text-amber-200" /><p className="mt-3 text-xl font-black">{summary.saves.available ? formatNumber(summary.saves.value) : '—'}</p><p className="mt-1 text-xs text-zinc-500">Salvos</p></div>
+                  <div className="rounded-2xl bg-black/30 p-4"><Coins className="h-5 w-5 text-cyan-200" /><p className="mt-3 text-xl font-black">{summary.supports.available ? `${formatNumber(summary.supports.value)} ItaCash` : '—'}</p><p className="mt-1 text-xs text-zinc-500">Apoios</p></div>
+                </div>
+                <p className="mt-5 text-sm leading-6 text-zinc-500">Não carregamos conteúdo, mídia, URLs de storage ou dados de outros criadores neste painel.</p>
+              </article>
+            </section>
           </div>
         )}
       </section>

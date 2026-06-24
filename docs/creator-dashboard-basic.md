@@ -1,9 +1,41 @@
-# Painel básico do criador
+# Dashboard básico do Criador
 
-O painel mostra apenas os posts e analytics pertencentes ao usuário autenticado. Usa `post_analytics` quando disponível e `posts` para a lista recente; falhas de analytics retornam estado amigável sem quebrar a página.
+`/creator-dashboard` é um painel privado do usuário autenticado. Ele consolida sinais já existentes no EntreUS sem criar uma camada financeira nova, sem buscar mídia e sem expor conteúdo ou dados de outros criadores.
 
-Posts recentes mostram trecho, data e classificação, mas não renderizam mídia: isso evita expor URLs públicas, signed URLs, chaves de storage ou mídia adulta protegida. Métricas atuais são iniciais e dependem dos dados já existentes em analytics.
+## Métricas reais neste pacote
 
-O painel não implementa saldo, gorjetas, ItaCash financeiro, posts pagos, assinatura ou saque. Esses recursos exigem pacote futuro específico. Testar login, ausência de posts, falha de analytics e post adulto próprio sem verificar qualquer URL de mídia.
+- Posts do próprio criador, por comunidade e classificação (`safe`, `sensitive`, `adult_18plus`).
+- Curtidas, comentários, reposts e salvos recebidos por posts próprios, quando a leitura das tabelas responder.
+- Total de seguidores via `follows.following_id`.
+- Última atividade, posts recentes e posts com mais interações, calculados apenas com identificador, data, classificação e contagens.
+- Posts com status de moderação diferente de `active`, quando esse campo estiver disponível.
+- Apoios em ItaCash já registrados como `itacash_transactions.type = tip_received` e saldo da própria carteira, ambos somente leitura.
 
-As métricas básicas usam posts próprios e, quando disponível, `post_analytics`. Métricas opcionais devem aparecer como zero/indisponíveis se RLS, tabela ou dados não permitirem consulta. O helper de métricas normaliza posts recentes removendo mídia e metadata de storage; posts adultos aparecem só como indicador para o dono. Próximos passos: gorjetas com ItaCash, posts pagos, assinatura, saque e analytics avançado, todos em pacotes financeiros separados.
+Cada fonte opcional tem fallback seguro: se a consulta falhar, o painel mostra “Em preparação” ou indisponível, em vez de inventar um número. O cálculo percentual de engajamento exige uma fonte real de visualizações; como não há tabela de analytics confirmada neste schema, permanece explicitamente em preparação.
+
+## Segurança e consultas
+
+As consultas usam a sessão atual e limitam os dados a:
+
+- `posts.user_id = auth.uid()`;
+- interações filtradas pelos IDs desses posts;
+- `follows.following_id = auth.uid()`;
+- carteira e transações de ItaCash do próprio usuário.
+
+O painel não busca texto do post, imagens, vídeos, URLs assinadas, chaves de storage ou mídia protegida. Conteúdo adulto próprio aparece apenas como classificação agregada; conteúdo de terceiros nunca é carregado pelo dashboard.
+
+## Monetização
+
+O painel exibe o saldo atual da carteira ItaCash apenas para referência e informa que ele não representa um saldo de saque. Não cria gorjetas, posts pagos, assinaturas, compras, aprovações, transferências ou solicitações de saque.
+
+Itens preparados para pacotes futuros:
+
+- gorjetas com ItaCash voltadas a criadores;
+- posts pagos;
+- solicitação de saque manual, com regras e revisão próprias;
+- analytics de visualização e engajamento percentual;
+- dashboard avançado e programa de criadores fundadores.
+
+## Testes
+
+`tests/unit/creator-dashboard.test.ts` cobre cálculo de engajamento com zero visualizações, fallback de métricas ausentes, agregação por comunidade e classificação, moderação e ordenação segura de posts. O smoke E2E inclui a rota protegida do dashboard e aceita redirecionamento para login sem depender de conta real.
