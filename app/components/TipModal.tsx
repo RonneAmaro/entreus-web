@@ -1,8 +1,14 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { CheckCircle2, Coins, Loader2, Send, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import {
+  CREATOR_TIP_QUICK_AMOUNTS,
+  getCreatorTipErrorMessage,
+  validateCreatorTipPayload,
+} from '@/lib/creator-tips'
 
 type TipRecipient = {
   id: string
@@ -15,11 +21,10 @@ type TipModalProps = {
   open: boolean
   recipient: TipRecipient | null
   currentUserId?: string | null
+  postId?: string | null
   onClose: () => void
   onSent?: () => void
 }
-
-const QUICK_AMOUNTS = [5, 10, 25, 50, 100]
 
 function getInitial(text: string) {
   return (text || 'U').slice(0, 1).toUpperCase()
@@ -29,69 +34,106 @@ export default function TipModal({
   open,
   recipient,
   currentUserId,
+  postId = null,
   onClose,
   onSent,
 }: TipModalProps) {
-  const [amount, setAmount] = useState(10)
+  const [amount, setAmount] = useState<number>(CREATOR_TIP_QUICK_AMOUNTS[0])
   const [customAmount, setCustomAmount] = useState('')
   const [tipMessage, setTipMessage] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [message, setMessage] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
+  const [showBuyLink, setShowBuyLink] = useState(false)
 
   useEffect(() => {
     if (!open) return
 
-    setAmount(10)
+    setAmount(CREATOR_TIP_QUICK_AMOUNTS[0])
     setCustomAmount('')
     setTipMessage('')
     setMessage('')
     setSuccessMessage('')
+    setShowBuyLink(false)
   }, [open])
 
   async function sendTip() {
     if (!recipient) return
 
-    const finalAmount = Number(customAmount || amount)
-
     if (!currentUserId) {
-      setMessage('Usuario nao logado.')
+      setMessage(getCreatorTipErrorMessage('not_authenticated'))
       return
     }
 
-    if (currentUserId === recipient.id) {
-      setMessage('Voce nao pode apoiar a si mesmo.')
-      return
-    }
+    const validation = validateCreatorTipPayload({
+      receiverUserId: recipient.id,
+      amount: customAmount || amount,
+      postId,
+      message: tipMessage,
+      currentUserId,
+    })
 
-    if (!Number.isInteger(finalAmount) || finalAmount <= 0) {
-      setMessage('Informe um valor valido em ItaCash.')
+    if (!validation.ok) {
+      setMessage(validation.message)
+      setShowBuyLink(validation.reason === 'insufficient_balance')
       return
     }
 
     setSubmitting(true)
     setMessage('')
     setSuccessMessage('')
+    setShowBuyLink(false)
 
-    const { error } = await supabase.rpc('send_itacash_tip', {
-      p_receiver_id: recipient.id,
-      p_amount: finalAmount,
-      p_message: tipMessage.trim() || null,
-    })
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
 
-    setSubmitting(false)
-
-    if (error) {
-      const lowerMessage = error.message.toLowerCase()
-      setMessage(
-        lowerMessage.includes('saldo') || lowerMessage.includes('insufficient')
-          ? 'Saldo ItaCash insuficiente.'
-          : 'Nao foi possivel enviar apoio.',
-      )
+    if (!session?.access_token) {
+      setSubmitting(false)
+      setMessage(getCreatorTipErrorMessage('not_authenticated'))
       return
     }
 
-    setSuccessMessage('Apoio enviado com sucesso.')
+    let response: Response
+    let result: {
+      ok?: boolean
+      amount?: number
+      error?: string
+      reason?: string
+      message?: string
+    } | null
+
+    try {
+      response = await fetch('/api/creator-tips', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          receiverUserId: validation.value.receiverUserId,
+          amount: validation.value.amount,
+          postId: validation.value.postId,
+          message: validation.value.message,
+        }),
+      })
+
+      result = await response.json().catch(() => null)
+    } catch {
+      setSubmitting(false)
+      setMessage(getCreatorTipErrorMessage('internal'))
+      return
+    }
+
+    setSubmitting(false)
+
+    if (!response.ok || !result?.ok) {
+      setShowBuyLink(result?.reason === 'insufficient_balance')
+      setMessage(result?.error || getCreatorTipErrorMessage('internal'))
+      return
+    }
+
+    setSuccessMessage(result.message || `Voce enviou ${result.amount || validation.value.amount} ItaCash.`)
     onSent?.()
 
     window.setTimeout(() => {
@@ -108,8 +150,8 @@ export default function TipModal({
       <div className="relative z-10 max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-[2rem] border border-white/10 bg-zinc-950 p-5 shadow-2xl shadow-black/50 ring-1 ring-white/10">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-xs font-black uppercase tracking-[0.22em] text-blue-300">Apoiar</p>
-            <h2 className="mt-2 text-2xl font-black">Enviar ItaCash</h2>
+            <p className="text-xs font-black uppercase tracking-[0.22em] text-blue-300">Apoiar criador</p>
+            <h2 className="mt-2 text-2xl font-black">Enviar gorjeta</h2>
             <p className="mt-2 text-sm leading-6 text-zinc-400">
               Apoiar transfere ItaCash diretamente para a carteira do criador.
             </p>
@@ -146,14 +188,21 @@ export default function TipModal({
               : 'border-amber-300/20 bg-amber-500/10 text-amber-100'
           }`}>
             {successMessage ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" /> : <Coins className="mt-0.5 h-4 w-4 shrink-0" />}
-            <span>{successMessage || message}</span>
+            <span>
+              {successMessage || message}
+              {showBuyLink && (
+                <Link href="/buy-itacash" className="ml-2 font-black underline decoration-2 underline-offset-2">
+                  Comprar ItaCash
+                </Link>
+              )}
+            </span>
           </div>
         )}
 
         <div className="mt-5">
           <p className="text-sm font-black">Valor rapido</p>
-          <div className="mt-2 grid grid-cols-5 gap-2">
-            {QUICK_AMOUNTS.map((item) => (
+          <div className="mt-2 grid grid-cols-4 gap-2">
+            {CREATOR_TIP_QUICK_AMOUNTS.map((item) => (
               <button
                 key={item}
                 type="button"
@@ -204,7 +253,7 @@ export default function TipModal({
           className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-black text-black transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-          Confirmar apoio
+          Enviar gorjeta
         </button>
       </div>
     </div>

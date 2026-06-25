@@ -851,6 +851,7 @@ function FeedContent() {
     name: string
     username?: string | null
     avatarUrl?: string | null
+    postId?: string | null
   } | null>(null)
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0)
   const [copiedPostId, setCopiedPostId] = useState<string | null>(null)
@@ -3801,6 +3802,7 @@ function FeedContent() {
         open={Boolean(tipRecipient)}
         recipient={tipRecipient}
         currentUserId={userId}
+        postId={tipRecipient?.postId || null}
         onClose={() => setTipRecipient(null)}
       />
 
@@ -4180,8 +4182,8 @@ function FeedContent() {
                       reposted={postReposted}
                       saved={postSaved}
                       copied={copiedPostId === post.id}
-                      showGift={post.user_id !== userId}
-                      showTip={post.user_id !== userId}
+                      showGift={post.user_id !== userId && !isBlockedRelation}
+                      showTip={post.user_id !== userId && !isBlockedRelation}
                       onLike={() => handleToggleLike(post.id)}
                       onCommentClick={() => handleOpenReplyModal(post.id)}
                       onRepost={() => handleToggleRepost(post.id)}
@@ -4200,6 +4202,7 @@ function FeedContent() {
                           name: authorName,
                           username: post.profiles?.username,
                           avatarUrl: authorAvatar,
+                          postId: post.id,
                         })
                       }
                       onShare={() => handleCopyPostLink(post.id)}

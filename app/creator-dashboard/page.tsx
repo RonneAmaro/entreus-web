@@ -28,6 +28,7 @@ import {
   type CreatorDashboardPost,
   type CreatorMetric,
 } from '@/lib/creator-dashboard'
+import { summarizeCreatorTips, type CreatorTipRecentItem } from '@/lib/creator-tips'
 
 type CurrentProfile = {
   username: string | null
@@ -39,7 +40,7 @@ type CurrentProfile = {
 }
 
 type PostReference = { post_id: string | null }
-type TipRow = { amount: number | null }
+type TipRow = { id: string | null; amount: number | null; created_at: string | null; metadata: Record<string, unknown> | null }
 type WalletRow = { balance: number | null }
 
 type QueryResult<T> = {
@@ -136,6 +137,10 @@ export default function CreatorDashboardPage() {
     supports: undefined as number | undefined,
     walletBalance: undefined as number | undefined,
   })
+  const [tipActivity, setTipActivity] = useState({
+    count: undefined as number | undefined,
+    recentTips: [] as CreatorTipRecentItem[],
+  })
   const [interactionsByPostId, setInteractionsByPostId] = useState<Record<string, number>>({})
 
   const loadDashboard = useCallback(async () => {
@@ -219,9 +224,11 @@ export default function CreatorDashboardPage() {
         .eq('following_id', user.id),
       supabase
         .from('itacash_transactions')
-        .select('amount')
+        .select('id, amount, created_at, metadata')
         .eq('user_id', user.id)
-        .eq('type', 'tip_received'),
+        .eq('type', 'tip_received')
+        .order('created_at', { ascending: false })
+        .limit(25),
       supabase
         .from('itacash_wallets')
         .select('balance')
@@ -234,12 +241,15 @@ export default function CreatorDashboardPage() {
     const reposts = metricFromQuery(repostsResult, (rows) => rows.length)
     const saves = metricFromQuery(savesResult, (rows) => rows.length)
     const followers = followersResult.error ? undefined : followersResult.count || 0
-    const supports = tipsResult.error
-      ? undefined
-      : (tipsResult.data || []).reduce((total, row) => total + Math.max(0, Number((row as TipRow).amount) || 0), 0)
+    const tipsSummary = tipsResult.error ? null : summarizeCreatorTips((tipsResult.data || []) as TipRow[])
+    const supports = tipsSummary?.totalReceived
     const walletBalance = walletResult.error ? undefined : Math.max(0, Number((walletResult.data as WalletRow | null)?.balance) || 0)
 
     setMetrics({ likes, comments, reposts, saves, followers, supports, walletBalance })
+    setTipActivity({
+      count: tipsSummary?.countReceived,
+      recentTips: tipsSummary?.recentTips || [],
+    })
     setInteractionsByPostId(
       mergeInteractionCounts(
         countReferences((likesResult.data || []) as PostReference[]),
@@ -300,7 +310,7 @@ export default function CreatorDashboardPage() {
     { label: 'Primeira publicação', complete: summary.posts > 0, description: 'As métricas aparecem após a primeira publicação.' },
     { label: 'Regras da comunidade aceitas', complete: Boolean(profile?.terms_accepted_at), description: 'Use a plataforma conforme os termos aceitos.' },
     { label: 'Verificação 18+ para conteúdo adulto', complete: profile?.age_verification_status === 'approved', description: 'Opcional; exigida apenas para publicar na área adulta.' },
-    { label: 'Pronto para monetização futura', complete: Boolean(profile?.username && profile?.avatar_url && summary.posts > 0), description: 'Gorjetas, posts pagos e saques terão pacote próprio.' },
+    { label: 'Pronto para monetização futura', complete: Boolean(profile?.username && profile?.avatar_url && summary.posts > 0), description: 'Gorjetas ItaCash ja podem aparecer no painel; posts pagos e saques terao pacote proprio.' },
   ]
 
   return (
@@ -406,7 +416,7 @@ export default function CreatorDashboardPage() {
 
                 <article className="rounded-[2rem] border border-white/10 bg-zinc-950/90 p-5 shadow-xl shadow-black/20 ring-1 ring-white/5">
                   <p className="text-xs font-black uppercase tracking-[0.18em] text-violet-300">Monetização</p>
-                  <h2 className="mt-2 text-2xl font-black">Preparação segura</h2>
+                  <h2 className="mt-2 text-2xl font-black">Gorjetas ItaCash</h2>
                   {summary.walletBalance.available ? (
                     <div className="mt-4 rounded-2xl border border-cyan-300/20 bg-cyan-500/10 p-4">
                       <p className="text-xs font-black uppercase tracking-[0.14em] text-cyan-100/70">Saldo ItaCash da carteira</p>
@@ -416,8 +426,36 @@ export default function CreatorDashboardPage() {
                   ) : (
                     <p className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-zinc-400">Carteira ItaCash indisponível no momento.</p>
                   )}
+                  {summary.supports.available ? (
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
+                        <p className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Total recebido</p>
+                        <p className="mt-2 text-xl font-black text-white">{formatNumber(summary.supports.value)} ItaCash</p>
+                      </div>
+                      <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
+                        <p className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Apoios recebidos</p>
+                        <p className="mt-2 text-xl font-black text-white">{formatNumber(tipActivity.count || 0)}</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-zinc-400">Apoios em ItaCash indisponiveis no momento.</p>
+                  )}
+                  <div className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-4">
+                    <p className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Ultimos apoios</p>
+                    {summary.supports.available && tipActivity.recentTips.length > 0 ? (
+                      <div className="mt-3 space-y-2">
+                        {tipActivity.recentTips.map((tip) => (
+                          <div key={tip.id} className="flex items-center justify-between gap-3 rounded-xl bg-white/5 px-3 py-2 text-sm">
+                            <span className="font-bold text-zinc-100">{formatNumber(tip.amount)} ItaCash</span>
+                            <span className="shrink-0 text-xs text-zinc-500">{formatDate(tip.createdAt)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="mt-3 text-sm leading-6 text-zinc-400">Quando alguem apoiar seu conteudo, os ItaCash aparecerao aqui.</p>
+                    )}
+                  </div>
                   <ul className="mt-4 space-y-2 text-sm text-zinc-300">
-                    <li>Gorjetas com ItaCash — em preparação</li>
                     <li>Posts pagos — em preparação</li>
                     <li>Solicitação de saque — em preparação</li>
                   </ul>

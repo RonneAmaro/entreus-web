@@ -2300,8 +2300,8 @@ export default function PublicProfilePage() {
                     type="button"
                     onClick={() => setTipModalOpen(true)}
                     disabled={isOwnProfile || hasBlockedMe || isBlockedByMe}
-                    title="Apoiar"
-                    aria-label="Apoiar"
+                    title="Apoiar criador"
+                    aria-label="Apoiar criador"
                     className={`inline-flex h-11 items-center justify-center gap-2 rounded-full border px-4 text-sm font-bold transition ${
                       isOwnProfile || hasBlockedMe || isBlockedByMe
                         ? "cursor-not-allowed border-zinc-300 bg-zinc-100 text-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-600"
@@ -2309,7 +2309,7 @@ export default function PublicProfilePage() {
                     }`}
                   >
                     <Coins className="h-5 w-5" />
-                    <span className="hidden sm:inline">Apoiar</span>
+                    <span className="hidden sm:inline">Apoiar criador</span>
                   </button>
 
                   <button

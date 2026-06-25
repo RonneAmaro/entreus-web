@@ -608,6 +608,7 @@ export default function PostCard({
       <TipModal
         open={tipModalOpen}
         currentUserId={currentUserId}
+        postId={post.id}
         recipient={{
           id: post.user_id,
           name: authorName,
