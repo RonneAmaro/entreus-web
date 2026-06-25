@@ -1,6 +1,6 @@
 import { canCreateAdultPost, type ContentAccessProfile } from '@/lib/content-access'
 
-export type PostMediaAccessLevel = 'public' | 'adult_private'
+export type PostMediaAccessLevel = 'public' | 'protected' | 'adult_private'
 
 export function resolvePostMediaAccessLevel(input: {
   communityType?: unknown
@@ -17,6 +17,8 @@ export function resolvePostMediaAccessLevel(input: {
     if (input.contentRating && input.contentRating !== 'adult_18plus') return null
     return 'adult_private'
   }
+
+  if (input.accessLevel === 'protected') return 'protected'
 
   return input.accessLevel === undefined || input.accessLevel === 'public' ? 'public' : null
 }

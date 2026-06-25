@@ -5,6 +5,7 @@ import AppSidebar from '../components/AppSidebar'
 import MobileNavigation from '../components/MobileNavigation'
 import PostMoreMenu from '../components/PostMoreMenu'
 import PostMediaGallery from '../components/PostMediaGallery'
+import ProtectedPostMedia from '../components/ProtectedPostMedia'
 import PostActions from '../components/PostActions'
 import GiftModal from '../components/GiftModal'
 import TipModal from '../components/TipModal'
@@ -17,6 +18,7 @@ import TranslatePostButton from '../components/TranslatePostButton'
 import Link from 'next/link'
 import {
   Award,
+  Coins,
   CreditCard,
   Download,
   Edit3,
@@ -25,6 +27,8 @@ import {
   Heart,
   ImageIcon,
   Landmark,
+  Loader2,
+  Lock,
   MessageCircle,
   MoreHorizontal,
   Newspaper,
@@ -72,6 +76,14 @@ import {
 } from '@/lib/post-classification'
 import { normalizePostClassification } from '@/lib/content-access'
 import { applyPostVisibilityFilters } from '@/lib/post-visibility'
+import {
+  getPaidPostErrorMessage,
+  getPaidPostPrice,
+  isMissingPaidPostColumnError,
+  isPaidPost,
+  sanitizeLockedPaidPostForClient,
+  validatePaidPostPrice,
+} from '@/lib/paid-posts'
 
 type VisibilityType = 'public' | 'followers' | 'private'
 type ComposerSubmitData = {
@@ -83,6 +95,8 @@ type ComposerSubmitData = {
   imageFile: File | null
   videoFile: File | null
   mediaFiles?: File[]
+  isPaid?: boolean
+  priceItacash?: number | null
 }
 
 type CurrentProfile = {
@@ -118,12 +132,14 @@ type PostMedia = {
   id: string
   post_id: string
   user_id: string
-  media_url: string
+  media_url: string | null
   media_type: 'image' | 'video' | 'gif'
   position: number
   created_at?: string
   access_level?: string | null
 }
+
+type FeedPostMediaAccessLevel = 'public' | 'protected' | 'adult_private'
 
 type Post = ModeratedPostFields & {
   id: string
@@ -137,6 +153,9 @@ type Post = ModeratedPostFields & {
   is_sensitive: boolean | null
   community_type?: string | null
   content_rating?: string | null
+  is_paid?: boolean | null
+  price_itacash?: number | null
+  paid_unlocked?: boolean
   profiles: ProfileSummary | null
   media?: PostMedia[]
 }
@@ -181,6 +200,10 @@ function normalizeFeedHighlight(highlight: FeedHighlightResponse): FeedHighlight
 function isMissingCommunityColumnError(error: { message?: string } | null | undefined) {
   const message = (error?.message || '').toLowerCase()
   return message.includes('community_type') || message.includes('content_rating')
+}
+
+function removePaidPostSelectFields(selectFields: string) {
+  return selectFields.replace(POST_SELECT_PAID_FIELDS, '')
 }
 
 type Comment = {
@@ -265,6 +288,10 @@ const FEED_COMMENTS_PLACEHOLDER_HEIGHT = 180
 const POST_SELECT_COMMUNITY_FIELDS = `
         community_type,
         content_rating,
+`
+const POST_SELECT_PAID_FIELDS = `
+        is_paid,
+        price_itacash,
 `
 
 type FeedTexts = {
@@ -840,6 +867,9 @@ function FeedContent() {
 
   const [reportingPostId, setReportingPostId] = useState<string | null>(null)
   const [reportedPostIds, setReportedPostIds] = useState<string[]>([])
+  const [paidUnlockingPostId, setPaidUnlockingPostId] = useState<string | null>(null)
+  const [paidUnlockMessages, setPaidUnlockMessages] = useState<Record<string, string>>({})
+  const [paidUnlockedPostIds, setPaidUnlockedPostIds] = useState<Set<string>>(() => new Set())
   const [giftRecipient, setGiftRecipient] = useState<{
     id: string
     name: string
@@ -1168,6 +1198,25 @@ function FeedContent() {
     return normalizedReposts
   }
 
+  async function loadPaidUnlockIdsForPosts(currentUserId: string, postIds: string[]) {
+    if (!currentUserId || postIds.length === 0) return new Set<string>()
+
+    const { data, error } = await supabase
+      .from('paid_post_unlocks')
+      .select('post_id')
+      .eq('buyer_id', currentUserId)
+      .in('post_id', postIds)
+
+    if (error) {
+      if (!isMissingPaidPostColumnError(error)) {
+        console.warn('Nao foi possivel carregar desbloqueios de posts pagos:', error.message)
+      }
+      return new Set<string>()
+    }
+
+    return new Set((data || []).map((row) => row.post_id).filter(Boolean) as string[])
+  }
+
   function canSeePost(post: Post, currentUserId: string, currentFollows: Follow[]) {
     if (post.user_id === currentUserId) return true
     if (post.visibility === 'public') return true
@@ -1216,6 +1265,7 @@ function FeedContent() {
         visibility,
         is_sensitive,
         ${POST_SELECT_COMMUNITY_FIELDS}
+        ${POST_SELECT_PAID_FIELDS}
         moderation_status,
         moderated_at,
         moderated_by,
@@ -1239,6 +1289,7 @@ function FeedContent() {
         visibility,
         is_sensitive,
         ${POST_SELECT_COMMUNITY_FIELDS}
+        ${POST_SELECT_PAID_FIELDS}
         profiles (
           username,
           display_name,
@@ -1285,15 +1336,27 @@ function FeedContent() {
 
     let { data, error } = await buildPostsQuery(postSelectWithModeration)
 
-    if (error && isMissingPostModerationColumnError(error)) {
-      const fallback = await buildPostsQuery(postSelectFallback)
+    if (error && isMissingPaidPostColumnError(error)) {
+      const fallback = await buildPostsQuery(removePaidPostSelectFields(postSelectWithModeration))
       data = fallback.data as typeof data
       error = fallback.error
     }
 
+    if (error && isMissingPostModerationColumnError(error)) {
+      const fallback = await buildPostsQuery(postSelectFallback)
+      data = fallback.data as typeof data
+      error = fallback.error
+
+      if (error && isMissingPaidPostColumnError(error)) {
+        const paidFallback = await buildPostsQuery(removePaidPostSelectFields(postSelectFallback))
+        data = paidFallback.data as typeof data
+        error = paidFallback.error
+      }
+    }
+
     if (error && isMissingCommunityColumnError(error)) {
-      const fallbackSelectWithModeration = postSelectWithModeration.replace(POST_SELECT_COMMUNITY_FIELDS, '')
-      const fallbackSelect = postSelectFallback.replace(POST_SELECT_COMMUNITY_FIELDS, '')
+      const fallbackSelectWithModeration = removePaidPostSelectFields(postSelectWithModeration).replace(POST_SELECT_COMMUNITY_FIELDS, '')
+      const fallbackSelect = removePaidPostSelectFields(postSelectFallback).replace(POST_SELECT_COMMUNITY_FIELDS, '')
       const fallback = await buildPostsQuery(
         isMissingPostModerationColumnError(error)
           ? fallbackSelect
@@ -1341,6 +1404,7 @@ function FeedContent() {
     })) as Post[]
 
     const postIds = rawPosts.map((post) => post.id)
+    const paidUnlockedIds = await loadPaidUnlockIdsForPosts(currentUserId, postIds)
 
     await loadTierBadgeSlugs(rawPosts.map((post) => post.user_id))
 
@@ -1368,10 +1432,14 @@ function FeedContent() {
     }
 
     const normalizedPosts = rawPosts
-      .map((post) => ({
-        ...post,
-        media: mediaByPost[post.id] || [],
-      }))
+      .map((post) => {
+        const paidUnlocked = post.user_id === currentUserId || paidUnlockedIds.has(post.id)
+        return sanitizeLockedPaidPostForClient({
+          ...post,
+          media: mediaByPost[post.id] || [],
+          paid_unlocked: paidUnlocked,
+        }, currentUserId, paidUnlocked)
+      })
       .filter((post) => !currentBlockedIds.includes(post.user_id))
       .filter((post) => !isModeratedHidden(post))
       .filter((post) => canViewCommunity(
@@ -1578,7 +1646,9 @@ function FeedContent() {
     currentBlockedIds: string[] = blockedUserIds,
     options: { append?: boolean } = {}
   ) {
-    const postIds = postRows.map((post) => post.id)
+    const postIds = postRows
+      .filter((post) => !isPaidPost(post) || post.user_id === userId || post.paid_unlocked)
+      .map((post) => post.id)
 
     if (postIds.length === 0) {
       if (!options.append) {
@@ -1784,6 +1854,80 @@ function FeedContent() {
     setReportedPostIds((prev) => [...prev, postId])
     setMessage(t('feed.messages.reportSuccess'))
     setReportingPostId(null)
+  }
+
+  async function handleUnlockPaidPost(postId: string) {
+    if (!userId) {
+      setPaidUnlockMessages((current) => ({
+        ...current,
+        [postId]: getPaidPostErrorMessage('not_authenticated'),
+      }))
+      return
+    }
+
+    setPaidUnlockingPostId(postId)
+    setPaidUnlockMessages((current) => ({ ...current, [postId]: '' }))
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+
+      if (!session?.access_token) {
+        setPaidUnlockMessages((current) => ({
+          ...current,
+          [postId]: getPaidPostErrorMessage('not_authenticated'),
+        }))
+        return
+      }
+
+      const response = await fetch('/api/paid-posts/unlock', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ postId }),
+      })
+      const payload = await response.json().catch(() => null) as {
+        ok?: boolean
+        message?: string
+        error?: string
+      } | null
+
+      if (!response.ok || !payload?.ok) {
+        setPaidUnlockMessages((current) => ({
+          ...current,
+          [postId]: payload?.error || getPaidPostErrorMessage('internal'),
+        }))
+        return
+      }
+
+      setPaidUnlockedPostIds((current) => {
+        const next = new Set(current)
+        next.add(postId)
+        return next
+      })
+      setPosts((current) =>
+        current.map((post) =>
+          post.id === postId
+            ? { ...post, paid_unlocked: true }
+            : post,
+        ),
+      )
+      setPaidUnlockMessages((current) => ({
+        ...current,
+        [postId]: payload.message || 'Post desbloqueado com sucesso.',
+      }))
+      await reloadInitialFeed()
+    } catch {
+      setPaidUnlockMessages((current) => ({
+        ...current,
+        [postId]: getPaidPostErrorMessage('internal'),
+      }))
+    } finally {
+      setPaidUnlockingPostId(null)
+    }
   }
 
   async function handleCopyPostLink(postId: string) {
@@ -2114,9 +2258,10 @@ function FeedContent() {
 
   async function uploadMediaFile(
     file: File,
-    adultPrivate = false,
-  ): Promise<{ url: string | null; type: 'image' | 'video' | 'gif'; storageProvider: string; storageBucket: string; storageKey: string; accessLevel: 'public' | 'adult_private' } | null> {
+    accessLevel: FeedPostMediaAccessLevel = 'public',
+  ): Promise<{ url: string | null; type: 'image' | 'video' | 'gif'; storageProvider: string; storageBucket: string; storageKey: string; accessLevel: FeedPostMediaAccessLevel } | null> {
     if (!userId) return null
+    const adultPrivate = accessLevel === 'adult_private'
 
     const uploadContentType = getEffectiveContentType(file)
     const mediaType: 'image' | 'video' | null = uploadContentType && getEffectiveImageContentType(file)
@@ -2181,7 +2326,7 @@ function FeedContent() {
           folder: 'posts',
           communityType: adultPrivate ? 'adult_18plus' : 'general',
           contentRating: adultPrivate ? 'adult_18plus' : 'safe',
-          accessLevel: adultPrivate ? 'adult_private' : 'public',
+          accessLevel,
         }),
       })
 
@@ -2193,7 +2338,7 @@ function FeedContent() {
         storageProvider?: string
         storageBucket?: string
         storageKey?: string
-        accessLevel?: 'public' | 'adult_private'
+        accessLevel?: FeedPostMediaAccessLevel
         contentType?: string
         message?: string
         error?: string
@@ -2254,8 +2399,8 @@ function FeedContent() {
         typeof presignData.storageProvider !== 'string' ||
         typeof presignData.storageBucket !== 'string' ||
         typeof presignData.storageKey !== 'string' ||
-        presignData.accessLevel !== (adultPrivate ? 'adult_private' : 'public') ||
-        (adultPrivate
+        presignData.accessLevel !== accessLevel ||
+        (accessLevel !== 'public'
           ? typeof presignData.publicUrl === 'string'
           : !isSafeHttpMediaUrl(presignData.publicUrl))
       ) {
@@ -2327,7 +2472,7 @@ function FeedContent() {
       }
 
       return {
-        url: adultPrivate ? null : presignData.publicUrl || null,
+        url: accessLevel === 'public' ? presignData.publicUrl || null : null,
         type: uploadContentType === 'image/gif' ? 'gif' : mediaType,
         storageProvider: presignData.storageProvider,
         storageBucket: presignData.storageBucket,
@@ -2568,6 +2713,8 @@ function FeedContent() {
     imageFile,
     videoFile,
     mediaFiles = [],
+    isPaid = false,
+    priceItacash = null,
   }: ComposerSubmitData) {
     const finalMediaFiles =
       mediaFiles.length > 0
@@ -2595,20 +2742,34 @@ function FeedContent() {
       return false
     }
 
+    const paidPriceValidation = isPaid
+      ? validatePaidPostPrice(priceItacash)
+      : ({ ok: true as const, value: null })
+
+    if (!paidPriceValidation.ok) {
+      setMessage(getPaidPostErrorMessage(paidPriceValidation.reason))
+      return false
+    }
+
     setMessage('')
 
     const isAdultPost = normalizedRating === 'adult_18plus'
+    const mediaAccessLevel: FeedPostMediaAccessLevel = isAdultPost
+      ? 'adult_private'
+      : isPaid
+        ? 'protected'
+        : 'public'
     const uploadedMedia: {
       url: string | null
       type: 'image' | 'video' | 'gif'
       storageProvider: string
       storageBucket: string
       storageKey: string
-      accessLevel: 'public' | 'adult_private'
+      accessLevel: FeedPostMediaAccessLevel
     }[] = []
 
     for (const file of finalMediaFiles) {
-      const uploaded = await uploadMediaFile(file, isAdultPost)
+      const uploaded = await uploadMediaFile(file, mediaAccessLevel)
 
       if (!uploaded) {
         return false
@@ -2617,8 +2778,8 @@ function FeedContent() {
       uploadedMedia.push(uploaded)
     }
 
-    const firstImage = isAdultPost ? null : uploadedMedia.find((item) => item.type === 'image' || item.type === 'gif')?.url || null
-    const firstVideo = isAdultPost ? null : uploadedMedia.find((item) => item.type === 'video')?.url || null
+    const firstImage = mediaAccessLevel === 'public' ? uploadedMedia.find((item) => item.type === 'image' || item.type === 'gif')?.url || null : null
+    const firstVideo = mediaAccessLevel === 'public' ? uploadedMedia.find((item) => item.type === 'video')?.url || null : null
 
     console.info('[FeedUpload] Salvando post apos upload:', {
       mediaCount: uploadedMedia.length,
@@ -2638,6 +2799,8 @@ function FeedContent() {
       video_url: firstVideo,
       visibility,
       is_sensitive: category === '18plus' || normalizedRating !== 'safe',
+      is_paid: isPaid,
+      price_itacash: isPaid ? paidPriceValidation.value : null,
     }
 
     let { data: insertedPost, error } = await supabase
@@ -2648,6 +2811,23 @@ function FeedContent() {
 
     if (error && isMissingCommunityColumnError(error)) {
       const { community_type, content_rating, ...legacyPayload } = postPayload
+      const legacyResult = await supabase
+        .from('posts')
+        .insert(legacyPayload)
+        .select('id')
+        .single()
+
+      insertedPost = legacyResult.data
+      error = legacyResult.error
+    }
+
+    if (error && isMissingPaidPostColumnError(error)) {
+      if (isPaid) {
+        setMessage('Posts pagos precisam da migration aplicada no Supabase.')
+        return false
+      }
+
+      const { is_paid, price_itacash, ...legacyPayload } = postPayload
       const legacyResult = await supabase
         .from('posts')
         .insert(legacyPayload)
@@ -2673,7 +2853,7 @@ function FeedContent() {
       const mediaRows = uploadedMedia.map((item, index) => ({
         post_id: insertedPost.id,
         user_id: userId,
-        media_url: item.accessLevel === 'adult_private' ? null : item.url,
+        media_url: item.accessLevel === 'public' ? item.url : null,
         media_type: item.type,
         position: index,
         storage_provider: item.storageProvider,
@@ -3233,6 +3413,14 @@ function FeedContent() {
     }
 
     return legacyMedia
+  }
+
+  function hasProtectedPostMedia(media: PostMedia[]) {
+    return media.some((item) => item.access_level === 'protected' || item.access_level === 'adult_private' || !item.media_url)
+  }
+
+  function getPublicPostMedia(media: PostMedia[]) {
+    return media.filter((item): item is PostMedia & { media_url: string } => typeof item.media_url === 'string' && item.media_url.length > 0)
   }
 
   const followStateMap = useMemo(() => {
@@ -3919,6 +4107,12 @@ function FeedContent() {
                 const isHighlighted = highlightedPostId === post.id
                 const postMedia = getPostMedia(post)
                 const isSharedGiftPost = post.category === 'gift_received'
+                const postPaid = isPaidPost(post)
+                const postPrice = getPaidPostPrice(post)
+                const postPaidUnlocked = !postPaid || isOwnPost || post.paid_unlocked || paidUnlockedPostIds.has(post.id)
+                const postPaidLocked = postPaid && !postPaidUnlocked
+                const paidUnlockMessage = paidUnlockMessages[post.id] || ''
+                const useProtectedMedia = hasProtectedPostMedia(postMedia)
 
                 const isSensitivePostItem = isSensitivePost(post)
 
@@ -4075,6 +4269,12 @@ function FeedContent() {
                         </span>
                       )}
 
+                      {postPaid && (
+                        <span className="rounded-full bg-cyan-50 px-2.5 py-1 text-xs font-bold text-cyan-700 ring-1 ring-cyan-200/80 dark:bg-cyan-950/30 dark:text-cyan-200 dark:ring-cyan-900/60">
+                          {postPaidUnlocked ? 'Desbloqueado' : `${postPrice} ItaCash`}
+                        </span>
+                      )}
+
                       {postReposted && (
                         <span className="rounded-full bg-green-50 px-2.5 py-1 text-xs font-bold text-green-700 ring-1 ring-green-200/80 dark:bg-green-950/30 dark:text-green-300 dark:ring-green-900/60">
                           {t('postStatus.reposted')}
@@ -4094,7 +4294,42 @@ function FeedContent() {
                       )}
                     </div>
 
-                    {isEditing ? (
+                    {postPaidLocked ? (
+                      <div className="mb-4 rounded-[1.5rem] border border-cyan-200/70 bg-cyan-50/80 p-4 text-cyan-950 ring-1 ring-cyan-100 dark:border-cyan-900/60 dark:bg-cyan-950/25 dark:text-cyan-50 dark:ring-cyan-900/30">
+                        <div className="flex items-start gap-3">
+                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-cyan-600 text-white">
+                            <Lock className="h-5 w-5" />
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <h3 className="font-black">Post pago</h3>
+                            <p className="mt-1 text-sm leading-6 text-cyan-900/75 dark:text-cyan-100/75">
+                              Desbloqueie por {postPrice} ItaCash para ver o conteudo e as midias.
+                            </p>
+                            <div className="mt-3 flex flex-wrap items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleUnlockPaidPost(post.id)}
+                                disabled={paidUnlockingPostId === post.id}
+                                className="inline-flex items-center gap-2 rounded-full bg-cyan-600 px-4 py-2 text-sm font-black text-white transition hover:bg-cyan-500 disabled:cursor-not-allowed disabled:opacity-60"
+                              >
+                                {paidUnlockingPostId === post.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Coins className="h-4 w-4" />}
+                                Desbloquear
+                              </button>
+                              {paidUnlockMessage === getPaidPostErrorMessage('insufficient_balance') && (
+                                <Link href="/buy-itacash" className="rounded-full border border-cyan-300/50 px-4 py-2 text-sm font-black text-cyan-800 transition hover:bg-cyan-100 dark:text-cyan-100 dark:hover:bg-cyan-950">
+                                  Comprar ItaCash
+                                </Link>
+                              )}
+                            </div>
+                            {paidUnlockMessage && (
+                              <p className="mt-2 text-sm font-semibold text-cyan-900 dark:text-cyan-100">
+                                {paidUnlockMessage}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ) : isEditing ? (
                       <div className="mb-4">
                         <textarea
                           value={editContent}
@@ -4143,7 +4378,20 @@ function FeedContent() {
 
                             {!isSharedGiftPost && postMedia.length > 0 && (
                               <DeferredFeedSection active={isNearViewport} minHeight={FEED_MEDIA_PLACEHOLDER_HEIGHT}>
-                                <PostMediaGallery media={postMedia} />
+                                {useProtectedMedia ? (
+                                  <div className="mb-4 grid gap-2 sm:grid-cols-2">
+                                    {postMedia.map((media) => (
+                                      <ProtectedPostMedia
+                                        key={media.id}
+                                        media={media}
+                                        adultPost={isAdultCommunityOrRating(post.community_type, post.content_rating, post.category)}
+                                        className="max-h-[32rem] w-full rounded-2xl object-contain"
+                                      />
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <PostMediaGallery media={getPublicPostMedia(postMedia)} />
+                                )}
                               </DeferredFeedSection>
                             )}
                           </SensitiveContent>
@@ -4166,7 +4414,20 @@ function FeedContent() {
 
                             {!isSharedGiftPost && postMedia.length > 0 && (
                               <DeferredFeedSection active={isNearViewport} minHeight={FEED_MEDIA_PLACEHOLDER_HEIGHT}>
-                                <PostMediaGallery media={postMedia} />
+                                {useProtectedMedia ? (
+                                  <div className="mb-4 grid gap-2 sm:grid-cols-2">
+                                    {postMedia.map((media) => (
+                                      <ProtectedPostMedia
+                                        key={media.id}
+                                        media={media}
+                                        adultPost={isAdultCommunityOrRating(post.community_type, post.content_rating, post.category)}
+                                        className="max-h-[32rem] w-full rounded-2xl object-contain"
+                                      />
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <PostMediaGallery media={getPublicPostMedia(postMedia)} />
+                                )}
                               </DeferredFeedSection>
                             )}
                           </>
@@ -4214,6 +4475,7 @@ function FeedContent() {
                         : new Date(post.created_at).toLocaleString(getDateLocale(language))}
                     </p>
 
+                    {!postPaidLocked && (
                     <DeferredFeedSection active={isNearViewport} minHeight={FEED_COMMENTS_PLACEHOLDER_HEIGHT}>
                     <div className="mt-4 border-t border-zinc-200/70 pt-4 dark:border-zinc-800/70">
                       <h3 className="mb-3 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
@@ -4435,6 +4697,7 @@ function FeedContent() {
                       </div>
                     </div>
                     </DeferredFeedSection>
+                    )}
                   </article>
                     )}
                   </FeedWindowItem>

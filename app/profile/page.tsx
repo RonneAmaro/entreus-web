@@ -22,6 +22,7 @@ import {
   type ModeratedPostFields,
 } from '@/lib/post-moderation'
 import { resolveUserTier } from '@/lib/user-tiers'
+import { isMissingPaidPostColumnError, sanitizeLockedPaidPostForClient } from '@/lib/paid-posts'
 import {
   getEffectiveProfileThemeKey,
   getProfileTheme,
@@ -68,10 +69,11 @@ type PostMedia = {
   id: string
   post_id: string
   user_id: string
-  media_url: string
-  media_type: 'image' | 'video'
+  media_url: string | null
+  media_type: 'image' | 'video' | 'gif'
   position: number
   created_at?: string
+  access_level?: string | null
 }
 
 type Post = ModeratedPostFields & {
@@ -84,6 +86,9 @@ type Post = ModeratedPostFields & {
   video_url: string | null
   visibility: VisibilityType
   is_sensitive: boolean | null
+  is_paid?: boolean | null
+  price_itacash?: number | null
+  paid_unlocked?: boolean
   profiles: ProfileSummary | null
   media?: PostMedia[]
 }
@@ -147,9 +152,17 @@ const PROFILE_SELECT_WITH_THEME =
   'id, username, display_name, bio, avatar_url, banner_url, country, city, state, website_url, website_title, birth_date, show_sensitive_content, is_minor, parental_consent_status, wants_18_plus, age_verification_status, age_verified_at, vip_status, vip_expires_at, profile_theme'
 const PROFILE_SELECT_FALLBACK =
   'id, username, display_name, bio, avatar_url, banner_url, country, city, state, website_url, website_title, birth_date, show_sensitive_content, is_minor, parental_consent_status, wants_18_plus, age_verification_status, age_verified_at, vip_status, vip_expires_at'
+const POST_SELECT_PAID_FIELDS = `
+        is_paid,
+        price_itacash,
+`
 
 function isMissingProfileThemeColumnError(error: { message?: string } | null) {
   return Boolean(error?.message && /profile_theme/i.test(error.message))
+}
+
+function removePaidPostSelectFields(selectFields: string) {
+  return selectFields.replace(POST_SELECT_PAID_FIELDS, '')
 }
 
 function getDateLocale(language: string) {
@@ -721,6 +734,25 @@ export default function ProfilePage() {
     setReposts(normalizedReposts)
   }
 
+  async function loadPaidUnlockIdsForPosts(currentUserId: string, postIds: string[]) {
+    if (!currentUserId || postIds.length === 0) return new Set<string>()
+
+    const { data, error } = await supabase
+      .from('paid_post_unlocks')
+      .select('post_id')
+      .eq('buyer_id', currentUserId)
+      .in('post_id', postIds)
+
+    if (error) {
+      if (!isMissingPaidPostColumnError(error)) {
+        console.warn('Nao foi possivel carregar desbloqueios de posts pagos do perfil:', error.message)
+      }
+      return new Set<string>()
+    }
+
+    return new Set((data || []).map((row) => row.post_id).filter(Boolean) as string[])
+  }
+
   async function loadProfileActivity(currentUserId: string, currentProfileData: Profile) {
     const postSelectWithModeration = `
         id,
@@ -732,6 +764,7 @@ export default function ProfilePage() {
         video_url,
         visibility,
         is_sensitive,
+        ${POST_SELECT_PAID_FIELDS}
         moderation_status,
         moderated_at,
         moderated_by,
@@ -752,6 +785,7 @@ export default function ProfilePage() {
         video_url,
         visibility,
         is_sensitive,
+        ${POST_SELECT_PAID_FIELDS}
         profiles (
           username,
           display_name,
@@ -777,6 +811,17 @@ export default function ProfilePage() {
       .eq('user_id', currentUserId)
       .order('created_at', { ascending: false })
 
+    if (ownPostsError && isMissingPaidPostColumnError(ownPostsError)) {
+      const fallback = await supabase
+        .from('posts')
+        .select(removePaidPostSelectFields(postSelectWithModeration))
+        .eq('user_id', currentUserId)
+        .order('created_at', { ascending: false })
+
+      ownPostsData = fallback.data as typeof ownPostsData
+      ownPostsError = fallback.error
+    }
+
     if (ownPostsError && isMissingPostModerationColumnError(ownPostsError)) {
       const fallback = await supabase
         .from('posts')
@@ -786,6 +831,17 @@ export default function ProfilePage() {
 
       ownPostsData = fallback.data as typeof ownPostsData
       ownPostsError = fallback.error
+
+      if (ownPostsError && isMissingPaidPostColumnError(ownPostsError)) {
+        const paidFallback = await supabase
+          .from('posts')
+          .select(removePaidPostSelectFields(postSelectFallback))
+          .eq('user_id', currentUserId)
+          .order('created_at', { ascending: false })
+
+        ownPostsData = paidFallback.data as typeof ownPostsData
+        ownPostsError = paidFallback.error
+      }
     }
 
     if (ownPostsError) {
@@ -812,6 +868,16 @@ export default function ProfilePage() {
         .select(postSelectWithModeration)
         .in('id', repostPostIds)
 
+      if (repostedPostsError && isMissingPaidPostColumnError(repostedPostsError)) {
+        const fallback = await supabase
+          .from('posts')
+          .select(removePaidPostSelectFields(postSelectWithModeration))
+          .in('id', repostPostIds)
+
+        repostedPostsData = fallback.data as typeof repostedPostsData
+        repostedPostsError = fallback.error
+      }
+
       if (repostedPostsError && isMissingPostModerationColumnError(repostedPostsError)) {
         const fallback = await supabase
           .from('posts')
@@ -820,6 +886,16 @@ export default function ProfilePage() {
 
         repostedPostsData = fallback.data as typeof repostedPostsData
         repostedPostsError = fallback.error
+
+        if (repostedPostsError && isMissingPaidPostColumnError(repostedPostsError)) {
+          const paidFallback = await supabase
+            .from('posts')
+            .select(removePaidPostSelectFields(postSelectFallback))
+            .in('id', repostPostIds)
+
+          repostedPostsData = paidFallback.data as typeof repostedPostsData
+          repostedPostsError = paidFallback.error
+        }
       }
 
       if (repostedPostsError) {
@@ -847,6 +923,7 @@ export default function ProfilePage() {
 
     const allPosts = Array.from(allPostsMap.values())
     const allPostIds = allPosts.map((post) => post.id)
+    const paidUnlockedIds = await loadPaidUnlockIdsForPosts(currentUserId, allPostIds)
 
     let mediaByPost: Record<string, PostMedia[]> = {}
 
@@ -871,10 +948,14 @@ export default function ProfilePage() {
       )
     }
 
-    const normalizedPosts = allPosts.map((post) => ({
-      ...post,
-      media: mediaByPost[post.id] || [],
-    }))
+    const normalizedPosts = allPosts.map((post) => {
+      const paidUnlocked = post.user_id === currentUserId || paidUnlockedIds.has(post.id)
+      return sanitizeLockedPaidPostForClient({
+        ...post,
+        media: mediaByPost[post.id] || [],
+        paid_unlocked: paidUnlocked,
+      }, currentUserId, paidUnlocked)
+    })
 
     setPosts(normalizedPosts)
 
@@ -2165,6 +2246,7 @@ export default function ProfilePage() {
                   onEdit={() => router.push(`/post/${post.id}`)}
                   onDelete={() => handleDeletePost(post.id)}
                   onReport={() => handleReportPost(post.id, post.user_id)}
+                  onPaidPostUnlocked={() => profile ? loadProfileActivity(userId, profile) : undefined}
                   authorTier={post.user_id === userId ? profileTier : 'standard'}
                 />
               )

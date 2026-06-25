@@ -6,6 +6,7 @@ import Link from 'next/link'
 import {
   Camera,
   CheckCircle2,
+  Coins,
   Globe2,
   ImagePlus,
   Loader2,
@@ -52,6 +53,7 @@ import {
   type PostContentRating as ContentRating,
 } from '@/lib/post-classification'
 import { isLegacyAdultCategory, normalizePostClassification } from '@/lib/content-access'
+import { getPaidPostErrorMessage, validatePaidPostPrice } from '@/lib/paid-posts'
 
 type VisibilityType = 'public' | 'followers' | 'private'
 
@@ -92,6 +94,8 @@ type PostComposerProps = {
     imageFile: File | null
     videoFile: File | null
     mediaFiles: File[]
+    isPaid: boolean
+    priceItacash: number | null
   }) => boolean | void | Promise<boolean | void>
 }
 
@@ -296,6 +300,8 @@ export default function PostComposer({
   const [communityType, setCommunityType] = useState<CommunityType>('general')
   const [contentRating, setContentRating] = useState<ContentRating>('safe')
   const [visibility, setVisibility] = useState<VisibilityType>('public')
+  const [isPaidPost, setIsPaidPost] = useState(false)
+  const [paidPostPrice, setPaidPostPrice] = useState('')
   const [media, setMedia] = useState<MediaPreview[]>([])
   const [error, setError] = useState('')
   const [mediaFeedback, setMediaFeedback] = useState<MediaFeedback | null>(null)
@@ -898,6 +904,15 @@ export default function PostComposer({
       return
     }
 
+    const paidPriceValidation = isPaidPost
+      ? validatePaidPostPrice(paidPostPrice)
+      : ({ ok: true as const, value: null })
+
+    if (!paidPriceValidation.ok) {
+      setError(getPaidPostErrorMessage(paidPriceValidation.reason))
+      return
+    }
+
     const result = await onSubmit({
       content: trimmedContent,
       category,
@@ -907,6 +922,8 @@ export default function PostComposer({
       imageFile,
       videoFile,
       mediaFiles,
+      isPaid: isPaidPost,
+      priceItacash: paidPriceValidation.value,
     })
 
     if (result === false) return
@@ -914,6 +931,8 @@ export default function PostComposer({
     setContent('')
     setCommunityType('general')
     setContentRating('safe')
+    setIsPaidPost(false)
+    setPaidPostPrice('')
     setShowEmojiPicker(false)
     setShowMediaMenu(false)
     setMediaFeedback(null)
@@ -1324,6 +1343,43 @@ export default function PostComposer({
                   </span>
                 )}
               </div>
+            </div>
+
+            <div className="mb-3 rounded-2xl border border-cyan-200 bg-cyan-50/70 p-3 dark:border-cyan-900/60 dark:bg-cyan-950/20">
+              <label className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  checked={isPaidPost}
+                  onChange={(event) => setIsPaidPost(event.target.checked)}
+                  className="mt-1 h-4 w-4 rounded border-cyan-300 text-cyan-600 focus:ring-cyan-500"
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-2 text-sm font-black text-cyan-900 dark:text-cyan-100">
+                    <Coins className="h-4 w-4" />
+                    Post pago
+                  </span>
+                  <span className="mt-1 block text-xs leading-5 text-cyan-800/75 dark:text-cyan-100/70">
+                    O conteudo e as midias ficam bloqueados ate o usuario desbloquear com ItaCash.
+                  </span>
+                </span>
+              </label>
+
+              {isPaidPost && (
+                <label className="mt-3 block">
+                  <span className="mb-1.5 block text-xs font-bold text-cyan-900 dark:text-cyan-100">
+                    Preco em ItaCash
+                  </span>
+                  <input
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={paidPostPrice}
+                    onChange={(event) => setPaidPostPrice(event.target.value)}
+                    placeholder="Ex.: 25"
+                    className="h-11 w-full rounded-xl border border-cyan-200 bg-white px-3 text-sm font-semibold text-zinc-900 outline-none transition focus:border-cyan-400 focus:ring-4 focus:ring-cyan-500/10 dark:border-cyan-900/60 dark:bg-black dark:text-white"
+                  />
+                </label>
+              )}
             </div>
 
             <div className="flex flex-col gap-3">

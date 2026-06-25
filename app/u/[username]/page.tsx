@@ -36,6 +36,7 @@ import {
 } from "@/lib/post-classification";
 import { canViewAdultContent } from "@/lib/content-access";
 import { applyPostVisibilityFilters } from "@/lib/post-visibility";
+import { isMissingPaidPostColumnError, sanitizeLockedPaidPostForClient } from "@/lib/paid-posts";
 
 type VisibilityType = "public" | "followers" | "private";
 type ProfileTab = "posts" | "replies" | "media";
@@ -75,10 +76,11 @@ type PostMedia = {
   id: string;
   post_id: string;
   user_id: string;
-  media_url: string;
-  media_type: "image" | "video";
+  media_url: string | null;
+  media_type: "image" | "video" | "gif";
   position: number;
   created_at?: string;
+  access_level?: string | null;
 };
 
 type Post = ModeratedPostFields & {
@@ -93,6 +95,9 @@ type Post = ModeratedPostFields & {
   is_sensitive: boolean | null;
   community_type?: string | null;
   content_rating?: string | null;
+  is_paid?: boolean | null;
+  price_itacash?: number | null;
+  paid_unlocked?: boolean;
   profiles: ProfileSummary | null;
   media?: PostMedia[];
 };
@@ -154,6 +159,10 @@ const POST_SELECT_COMMUNITY_FIELDS = `
         community_type,
         content_rating,
 `;
+const POST_SELECT_PAID_FIELDS = `
+        is_paid,
+        price_itacash,
+`;
 
 function isMissingProfileThemeColumnError(error: { message?: string } | null) {
   return Boolean(error?.message && /profile_theme/i.test(error.message));
@@ -162,6 +171,10 @@ function isMissingProfileThemeColumnError(error: { message?: string } | null) {
 function isMissingCommunityColumnError(error: { message?: string } | null | undefined) {
   const message = (error?.message || "").toLowerCase();
   return message.includes("community_type") || message.includes("content_rating");
+}
+
+function removePaidPostSelectFields(selectFields: string) {
+  return selectFields.replace(POST_SELECT_PAID_FIELDS, "");
 }
 
 export default function PublicProfilePage() {
@@ -676,6 +689,25 @@ export default function PublicProfilePage() {
     setReposts(normalizedReposts);
   }
 
+  async function loadPaidUnlockIdsForPosts(currentUserId: string, postIds: string[]) {
+    if (!currentUserId || postIds.length === 0) return new Set<string>();
+
+    const { data, error } = await supabase
+      .from("paid_post_unlocks")
+      .select("post_id")
+      .eq("buyer_id", currentUserId)
+      .in("post_id", postIds);
+
+    if (error) {
+      if (!isMissingPaidPostColumnError(error)) {
+        console.warn("Nao foi possivel carregar desbloqueios de posts pagos do perfil publico:", error.message);
+      }
+      return new Set<string>();
+    }
+
+    return new Set((data || []).map((row) => row.post_id).filter(Boolean) as string[]);
+  }
+
   async function loadPublicProfileActivity(
     profileData: Profile,
     currentUserId: string,
@@ -695,6 +727,7 @@ export default function PublicProfilePage() {
         visibility,
         is_sensitive,
         ${POST_SELECT_COMMUNITY_FIELDS}
+        ${POST_SELECT_PAID_FIELDS}
         moderation_status,
         moderated_at,
         moderated_by,
@@ -716,6 +749,7 @@ export default function PublicProfilePage() {
         visibility,
         is_sensitive,
         ${POST_SELECT_COMMUNITY_FIELDS}
+        ${POST_SELECT_PAID_FIELDS}
         profiles (
           username,
           display_name,
@@ -745,6 +779,21 @@ export default function PublicProfilePage() {
       }, 'public-list')
       .order("created_at", { ascending: false });
 
+    if (ownPostsError && isMissingPaidPostColumnError(ownPostsError)) {
+      const fallback = await applyPostVisibilityFilters(supabase
+        .from("posts")
+        .select(removePaidPostSelectFields(postSelectWithModeration))
+        .eq("user_id", profileData.id), {
+          isMinor: viewerProfile?.is_minor,
+          wants18Plus: viewerProfile?.wants_18_plus,
+          ageVerificationStatus: viewerProfile?.age_verification_status,
+        }, 'public-list')
+        .order("created_at", { ascending: false });
+
+      ownPostsData = fallback.data as typeof ownPostsData;
+      ownPostsError = fallback.error;
+    }
+
     if (ownPostsError && isMissingPostModerationColumnError(ownPostsError)) {
       const fallback = await applyPostVisibilityFilters(supabase
         .from("posts")
@@ -758,12 +807,27 @@ export default function PublicProfilePage() {
 
       ownPostsData = fallback.data as typeof ownPostsData;
       ownPostsError = fallback.error;
+
+      if (ownPostsError && isMissingPaidPostColumnError(ownPostsError)) {
+        const paidFallback = await applyPostVisibilityFilters(supabase
+          .from("posts")
+          .select(removePaidPostSelectFields(postSelectFallback))
+          .eq("user_id", profileData.id), {
+            isMinor: viewerProfile?.is_minor,
+            wants18Plus: viewerProfile?.wants_18_plus,
+            ageVerificationStatus: viewerProfile?.age_verification_status,
+          }, 'public-list')
+          .order("created_at", { ascending: false });
+
+        ownPostsData = paidFallback.data as typeof ownPostsData;
+        ownPostsError = paidFallback.error;
+      }
     }
 
     if (ownPostsError && isMissingCommunityColumnError(ownPostsError)) {
       const fallback = await applyPostVisibilityFilters(supabase
         .from("posts")
-        .select(postSelectWithModeration.replace(POST_SELECT_COMMUNITY_FIELDS, ""))
+        .select(removePaidPostSelectFields(postSelectWithModeration).replace(POST_SELECT_COMMUNITY_FIELDS, ""))
         .eq("user_id", profileData.id), {
           isMinor: viewerProfile?.is_minor,
           wants18Plus: viewerProfile?.wants_18_plus,
@@ -819,6 +883,20 @@ export default function PublicProfilePage() {
             ageVerificationStatus: viewerProfile?.age_verification_status,
           }, 'public-list');
 
+      if (repostedPostsError && isMissingPaidPostColumnError(repostedPostsError)) {
+        const fallback = await applyPostVisibilityFilters(supabase
+          .from("posts")
+          .select(removePaidPostSelectFields(postSelectWithModeration))
+          .in("id", repostPostIds), {
+            isMinor: viewerProfile?.is_minor,
+            wants18Plus: viewerProfile?.wants_18_plus,
+            ageVerificationStatus: viewerProfile?.age_verification_status,
+          }, 'public-list');
+
+        repostedPostsData = fallback.data as typeof repostedPostsData;
+        repostedPostsError = fallback.error;
+      }
+
       if (repostedPostsError && isMissingPostModerationColumnError(repostedPostsError)) {
         const fallback = await applyPostVisibilityFilters(supabase
           .from("posts")
@@ -831,12 +909,26 @@ export default function PublicProfilePage() {
 
         repostedPostsData = fallback.data as typeof repostedPostsData;
         repostedPostsError = fallback.error;
+
+        if (repostedPostsError && isMissingPaidPostColumnError(repostedPostsError)) {
+          const paidFallback = await applyPostVisibilityFilters(supabase
+            .from("posts")
+            .select(removePaidPostSelectFields(postSelectFallback))
+            .in("id", repostPostIds), {
+              isMinor: viewerProfile?.is_minor,
+              wants18Plus: viewerProfile?.wants_18_plus,
+              ageVerificationStatus: viewerProfile?.age_verification_status,
+            }, 'public-list');
+
+          repostedPostsData = paidFallback.data as typeof repostedPostsData;
+          repostedPostsError = paidFallback.error;
+        }
       }
 
       if (repostedPostsError && isMissingCommunityColumnError(repostedPostsError)) {
         const fallback = await applyPostVisibilityFilters(supabase
           .from("posts")
-          .select(postSelectWithModeration.replace(POST_SELECT_COMMUNITY_FIELDS, ""))
+          .select(removePaidPostSelectFields(postSelectWithModeration).replace(POST_SELECT_COMMUNITY_FIELDS, ""))
           .in("id", repostPostIds), {
             isMinor: viewerProfile?.is_minor,
             wants18Plus: viewerProfile?.wants_18_plus,
@@ -897,6 +989,7 @@ export default function PublicProfilePage() {
 
     const allPosts = Array.from(allPostsMap.values());
     const allPostIds = allPosts.map((post) => post.id);
+    const paidUnlockedIds = await loadPaidUnlockIdsForPosts(currentUserId, allPostIds);
 
     let mediaByPost: Record<string, PostMedia[]> = {};
 
@@ -926,10 +1019,14 @@ export default function PublicProfilePage() {
       );
     }
 
-    const normalizedPosts = allPosts.map((post) => ({
-      ...post,
-      media: mediaByPost[post.id] || [],
-    }));
+    const normalizedPosts = allPosts.map((post) => {
+      const paidUnlocked = post.user_id === currentUserId || paidUnlockedIds.has(post.id);
+      return sanitizeLockedPaidPostForClient({
+        ...post,
+        media: mediaByPost[post.id] || [],
+        paid_unlocked: paidUnlocked,
+      }, currentUserId, paidUnlocked);
+    });
 
     setPosts(normalizedPosts);
 
@@ -1759,6 +1856,19 @@ export default function PublicProfilePage() {
     { id: "media", label: "Mídia", count: mediaItems.length },
   ];
 
+  async function refreshPublicProfileActivity() {
+    if (!profile) return;
+
+    await loadPublicProfileActivity(
+      profile,
+      loggedUserId,
+      loggedUserId === profile.id,
+      isFollowing,
+      loggedProfile?.show_sensitive_content || false,
+      loggedProfile,
+    );
+  }
+
   if (loading) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-zinc-50 text-black dark:bg-black dark:text-white">
@@ -1879,6 +1989,7 @@ export default function PublicProfilePage() {
         onEdit={() => router.push(`/post/${post.id}`)}
         onDelete={() => router.push(`/post/${post.id}`)}
         onReport={() => handleReportPost(post.id, post.user_id)}
+        onPaidPostUnlocked={refreshPublicProfileActivity}
         authorTier={post.user_id === profile?.id ? profileTier : 'standard'}
       />
     );
@@ -2652,6 +2763,7 @@ export default function PublicProfilePage() {
                     onEdit={() => router.push(`/post/${post.id}`)}
                     onDelete={() => router.push(`/post/${post.id}`)}
                     onReport={() => handleReportPost(post.id, post.user_id)}
+                    onPaidPostUnlocked={refreshPublicProfileActivity}
                   />
                 );
               })}

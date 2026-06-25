@@ -23,6 +23,7 @@ import {
 } from '@/lib/post-classification'
 import { canViewAdultContent } from '@/lib/content-access'
 import { applyPostVisibilityFilters } from '@/lib/post-visibility'
+import { isMissingPaidPostColumnError, sanitizeLockedPaidPostForClient } from '@/lib/paid-posts'
 
 
 function getDateLocale(language: string) {
@@ -60,10 +61,11 @@ type PostMedia = {
   id: string
   post_id: string
   user_id: string
-  media_url: string
-  media_type: 'image' | 'video'
+  media_url: string | null
+  media_type: 'image' | 'video' | 'gif'
   position: number
   created_at?: string
+  access_level?: string | null
 }
 
 type Post = ModeratedPostFields & {
@@ -78,6 +80,9 @@ type Post = ModeratedPostFields & {
   is_sensitive: boolean | null
   community_type?: string | null
   content_rating?: string | null
+  is_paid?: boolean | null
+  price_itacash?: number | null
+  paid_unlocked?: boolean
   profiles: ProfileSummary | null
   media?: PostMedia[]
 }
@@ -120,10 +125,18 @@ const POST_SELECT_COMMUNITY_FIELDS = `
         community_type,
         content_rating,
 `
+const POST_SELECT_PAID_FIELDS = `
+        is_paid,
+        price_itacash,
+`
 
 function isMissingCommunityColumnError(error: { message?: string } | null | undefined) {
   const message = (error?.message || '').toLowerCase()
   return message.includes('community_type') || message.includes('content_rating')
+}
+
+function removePaidPostSelectFields(selectFields: string) {
+  return selectFields.replace(POST_SELECT_PAID_FIELDS, '')
 }
 
 export default function SavedPage() {
@@ -374,6 +387,25 @@ export default function SavedPage() {
     )
   }
 
+  async function loadPaidUnlockIdsForPosts(currentUserId: string, postIds: string[]) {
+    if (!currentUserId || postIds.length === 0) return new Set<string>()
+
+    const { data, error } = await supabase
+      .from('paid_post_unlocks')
+      .select('post_id')
+      .eq('buyer_id', currentUserId)
+      .in('post_id', postIds)
+
+    if (error) {
+      if (!isMissingPaidPostColumnError(error)) {
+        console.warn('Nao foi possivel carregar desbloqueios de posts pagos salvos:', error.message)
+      }
+      return new Set<string>()
+    }
+
+    return new Set((data || []).map((row) => row.post_id).filter(Boolean) as string[])
+  }
+
   async function loadSavedPosts(
     currentUserId: string,
     currentBookmarks: SavedBookmark[],
@@ -399,6 +431,7 @@ export default function SavedPage() {
         visibility,
         is_sensitive,
         ${POST_SELECT_COMMUNITY_FIELDS}
+        ${POST_SELECT_PAID_FIELDS}
         moderation_status,
         moderated_at,
         moderated_by,
@@ -420,6 +453,7 @@ export default function SavedPage() {
         visibility,
         is_sensitive,
         ${POST_SELECT_COMMUNITY_FIELDS}
+        ${POST_SELECT_PAID_FIELDS}
         profiles (
           username,
           display_name,
@@ -436,6 +470,20 @@ export default function SavedPage() {
         ageVerificationStatus: viewerProfile?.age_verification_status,
       }, 'saved')
 
+    if (error && isMissingPaidPostColumnError(error)) {
+      const fallback = await applyPostVisibilityFilters(supabase
+        .from('posts')
+        .select(removePaidPostSelectFields(selectWithModeration))
+        .in('id', postIds), {
+          isMinor: viewerProfile?.is_minor,
+          wants18Plus: viewerProfile?.wants_18_plus,
+          ageVerificationStatus: viewerProfile?.age_verification_status,
+        }, 'saved')
+
+      data = fallback.data as typeof data
+      error = fallback.error
+    }
+
     if (error && isMissingPostModerationColumnError(error)) {
       const fallback = await applyPostVisibilityFilters(supabase
         .from('posts')
@@ -448,12 +496,26 @@ export default function SavedPage() {
 
       data = fallback.data as typeof data
       error = fallback.error
+
+      if (error && isMissingPaidPostColumnError(error)) {
+        const paidFallback = await applyPostVisibilityFilters(supabase
+          .from('posts')
+          .select(removePaidPostSelectFields(selectFallback))
+          .in('id', postIds), {
+            isMinor: viewerProfile?.is_minor,
+            wants18Plus: viewerProfile?.wants_18_plus,
+            ageVerificationStatus: viewerProfile?.age_verification_status,
+          }, 'saved')
+
+        data = paidFallback.data as typeof data
+        error = paidFallback.error
+      }
     }
 
     if (error && isMissingCommunityColumnError(error)) {
       const fallback = await applyPostVisibilityFilters(supabase
         .from('posts')
-        .select(selectWithModeration.replace(POST_SELECT_COMMUNITY_FIELDS, ''))
+        .select(removePaidPostSelectFields(selectWithModeration).replace(POST_SELECT_COMMUNITY_FIELDS, ''))
         .in('id', postIds), {
           isMinor: viewerProfile?.is_minor,
           wants18Plus: viewerProfile?.wants_18_plus,
@@ -496,6 +558,7 @@ export default function SavedPage() {
       .filter((post) => canSeePost(post, currentUserId, currentFollows))
 
     const visiblePostIds = visiblePosts.map((post) => post.id)
+    const paidUnlockedIds = await loadPaidUnlockIdsForPosts(currentUserId, visiblePostIds)
     let mediaByPost: Record<string, PostMedia[]> = {}
 
     if (visiblePostIds.length > 0) {
@@ -526,10 +589,14 @@ export default function SavedPage() {
     })
 
     const normalizedPosts = visiblePosts
-      .map((post) => ({
-        ...post,
-        media: mediaByPost[post.id] || [],
-      }))
+      .map((post) => {
+        const paidUnlocked = post.user_id === currentUserId || paidUnlockedIds.has(post.id)
+        return sanitizeLockedPaidPostForClient({
+          ...post,
+          media: mediaByPost[post.id] || [],
+          paid_unlocked: paidUnlocked,
+        }, currentUserId, paidUnlocked)
+      })
       .sort((a, b) => {
         const orderA = bookmarkOrder.get(a.id) ?? 999999
         const orderB = bookmarkOrder.get(b.id) ?? 999999
@@ -917,6 +984,7 @@ export default function SavedPage() {
                 onEdit={() => router.push(`/post/${post.id}`)}
                 onDelete={() => router.push(`/post/${post.id}`)}
                 onReport={() => handleReportPost(post.id, post.user_id)}
+                onPaidPostUnlocked={refreshSavedPosts}
               />
             )
           })}

@@ -29,6 +29,7 @@ import {
   type CreatorMetric,
 } from '@/lib/creator-dashboard'
 import { summarizeCreatorTips, type CreatorTipRecentItem } from '@/lib/creator-tips'
+import { summarizePaidPostUnlocks, type PaidPostTransactionRow } from '@/lib/paid-posts'
 
 type CurrentProfile = {
   username: string | null
@@ -141,6 +142,11 @@ export default function CreatorDashboardPage() {
     count: undefined as number | undefined,
     recentTips: [] as CreatorTipRecentItem[],
   })
+  const [paidPostActivity, setPaidPostActivity] = useState({
+    total: undefined as number | undefined,
+    count: undefined as number | undefined,
+    recentUnlocks: [] as ReturnType<typeof summarizePaidPostUnlocks>['recentUnlocks'],
+  })
   const [interactionsByPostId, setInteractionsByPostId] = useState<Record<string, number>>({})
 
   const loadDashboard = useCallback(async () => {
@@ -213,7 +219,7 @@ export default function CreatorDashboardPage() {
         .in('post_id', postIds) as unknown as Promise<QueryResult<T>>
     }
 
-    const [likesResult, commentsResult, repostsResult, savesResult, followersResult, tipsResult, walletResult] = await Promise.all([
+    const [likesResult, commentsResult, repostsResult, savesResult, followersResult, tipsResult, paidPostsResult, walletResult] = await Promise.all([
       postReferences('likes'),
       postReferences('comments'),
       postReferences('reposts'),
@@ -230,6 +236,13 @@ export default function CreatorDashboardPage() {
         .order('created_at', { ascending: false })
         .limit(25),
       supabase
+        .from('itacash_transactions')
+        .select('id, amount, created_at, metadata')
+        .eq('user_id', user.id)
+        .eq('type', 'paid_post_received')
+        .order('created_at', { ascending: false })
+        .limit(25),
+      supabase
         .from('itacash_wallets')
         .select('balance')
         .eq('user_id', user.id)
@@ -242,6 +255,7 @@ export default function CreatorDashboardPage() {
     const saves = metricFromQuery(savesResult, (rows) => rows.length)
     const followers = followersResult.error ? undefined : followersResult.count || 0
     const tipsSummary = tipsResult.error ? null : summarizeCreatorTips((tipsResult.data || []) as TipRow[])
+    const paidPostsSummary = paidPostsResult.error ? null : summarizePaidPostUnlocks((paidPostsResult.data || []) as PaidPostTransactionRow[])
     const supports = tipsSummary?.totalReceived
     const walletBalance = walletResult.error ? undefined : Math.max(0, Number((walletResult.data as WalletRow | null)?.balance) || 0)
 
@@ -249,6 +263,11 @@ export default function CreatorDashboardPage() {
     setTipActivity({
       count: tipsSummary?.countReceived,
       recentTips: tipsSummary?.recentTips || [],
+    })
+    setPaidPostActivity({
+      total: paidPostsSummary?.totalReceived,
+      count: paidPostsSummary?.unlockCount,
+      recentUnlocks: paidPostsSummary?.recentUnlocks || [],
     })
     setInteractionsByPostId(
       mergeInteractionCounts(
@@ -310,7 +329,7 @@ export default function CreatorDashboardPage() {
     { label: 'Primeira publicação', complete: summary.posts > 0, description: 'As métricas aparecem após a primeira publicação.' },
     { label: 'Regras da comunidade aceitas', complete: Boolean(profile?.terms_accepted_at), description: 'Use a plataforma conforme os termos aceitos.' },
     { label: 'Verificação 18+ para conteúdo adulto', complete: profile?.age_verification_status === 'approved', description: 'Opcional; exigida apenas para publicar na área adulta.' },
-    { label: 'Pronto para monetização futura', complete: Boolean(profile?.username && profile?.avatar_url && summary.posts > 0), description: 'Gorjetas ItaCash ja podem aparecer no painel; posts pagos e saques terao pacote proprio.' },
+    { label: 'Pronto para monetizacao', complete: Boolean(profile?.username && profile?.avatar_url && summary.posts > 0), description: 'Gorjetas e posts pagos com ItaCash ja podem aparecer no painel; saques terao pacote proprio.' },
   ]
 
   return (
@@ -455,8 +474,38 @@ export default function CreatorDashboardPage() {
                       <p className="mt-3 text-sm leading-6 text-zinc-400">Quando alguem apoiar seu conteudo, os ItaCash aparecerao aqui.</p>
                     )}
                   </div>
+                  <div className="mt-4 rounded-2xl border border-cyan-300/15 bg-cyan-500/10 p-4">
+                    <p className="text-xs font-black uppercase tracking-[0.14em] text-cyan-100/70">Posts pagos</p>
+                    {paidPostActivity.total !== undefined ? (
+                      <>
+                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                          <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
+                            <p className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Total recebido</p>
+                            <p className="mt-2 text-xl font-black text-white">{formatNumber(paidPostActivity.total)} ItaCash</p>
+                          </div>
+                          <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
+                            <p className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Desbloqueios</p>
+                            <p className="mt-2 text-xl font-black text-white">{formatNumber(paidPostActivity.count || 0)}</p>
+                          </div>
+                        </div>
+                        {paidPostActivity.recentUnlocks.length > 0 ? (
+                          <div className="mt-3 space-y-2">
+                            {paidPostActivity.recentUnlocks.map((unlock) => (
+                              <div key={unlock.id} className="flex items-center justify-between gap-3 rounded-xl bg-white/5 px-3 py-2 text-sm">
+                                <span className="font-bold text-zinc-100">{formatNumber(unlock.amount)} ItaCash</span>
+                                <span className="shrink-0 text-xs text-zinc-500">{formatDate(unlock.createdAt)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="mt-3 text-sm leading-6 text-cyan-100/75">Quando alguem desbloquear um post pago, ele aparecera aqui.</p>
+                        )}
+                      </>
+                    ) : (
+                      <p className="mt-3 text-sm leading-6 text-cyan-100/75">Recebimentos por posts pagos ficam disponiveis depois da migration aplicada.</p>
+                    )}
+                  </div>
                   <ul className="mt-4 space-y-2 text-sm text-zinc-300">
-                    <li>Posts pagos — em preparação</li>
                     <li>Solicitação de saque — em preparação</li>
                   </ul>
                   <Link href="/wallet" className="mt-5 inline-flex items-center gap-2 text-sm font-black text-cyan-200 hover:text-cyan-100"><Wallet className="h-4 w-4" />Abrir carteira</Link>

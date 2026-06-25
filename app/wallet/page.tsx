@@ -117,6 +117,8 @@ const transactionLabels: Record<string, string> = {
   tip_received: 'Apoio recebido',
   support_sent: 'Apoio enviado',
   support_received: 'Apoio recebido',
+  paid_post_unlock: 'Desbloqueio de post',
+  paid_post_received: 'Post pago recebido',
   purchase_confirmed: 'Compra de ItaCash',
   promotional_credit: 'Credito promocional',
   refund: 'Reembolso',
@@ -436,6 +438,22 @@ export default function WalletPage() {
       return {
         title: 'Voce recebeu apoio em ItaCash',
         detail: transaction.description || 'Apoio recebido na carteira',
+        tone: 'in',
+      }
+    }
+
+    if (transaction.type === 'paid_post_unlock') {
+      return {
+        title: 'Voce desbloqueou um post pago',
+        detail: transaction.description || 'Desbloqueio de post com ItaCash',
+        tone: 'out',
+      }
+    }
+
+    if (transaction.type === 'paid_post_received') {
+      return {
+        title: 'Voce recebeu por um post pago',
+        detail: transaction.description || 'Recebimento por desbloqueio de post',
         tone: 'in',
       }
     }

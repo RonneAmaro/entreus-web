@@ -19,13 +19,14 @@ const BLOCKED_MESSAGE = 'Este conteúdo não está disponível para sua conta.'
 
 export default function ProtectedPostMedia({ media, adultPost = false, alt = 'Mídia da publicação', className = '' }: ProtectedPostMediaProps) {
   const isPrivateAdultMedia = media.access_level === 'adult_private'
+  const isProtectedMedia = isPrivateAdultMedia || media.access_level === 'protected' || !media.media_url
   const isLegacyAdultMedia = adultPost && !isPrivateAdultMedia
   const [url, setUrl] = useState<string | null>(null)
   const [state, setState] = useState<'loading' | 'ready' | 'blocked'>('loading')
 
   useEffect(() => {
     let active = true
-    if (!isPrivateAdultMedia) {
+    if (!isProtectedMedia) {
       setState(isLegacyAdultMedia ? 'blocked' : 'ready')
       return () => { active = false }
     }
@@ -45,13 +46,13 @@ export default function ProtectedPostMedia({ media, adultPost = false, alt = 'M�
     }
     requestSignedUrl()
     return () => { active = false }
-  }, [isLegacyAdultMedia, isPrivateAdultMedia, media.id])
+  }, [isLegacyAdultMedia, isProtectedMedia, media.id])
 
   if (isLegacyAdultMedia) return <div className={`flex min-h-32 items-center justify-center rounded-2xl bg-zinc-100 p-4 text-sm text-zinc-600 dark:bg-zinc-900 dark:text-zinc-300 ${className}`}>Mídia protegida indisponível.</div>
   if (state === 'loading') return <div className={`flex min-h-32 items-center justify-center rounded-2xl bg-zinc-100 p-4 text-sm text-zinc-600 dark:bg-zinc-900 dark:text-zinc-300 ${className}`}>Carregando mídia protegida...</div>
   if (state === 'blocked') return <div className={`flex min-h-32 items-center justify-center rounded-2xl bg-zinc-100 p-4 text-sm text-zinc-600 dark:bg-zinc-900 dark:text-zinc-300 ${className}`}>{BLOCKED_MESSAGE}</div>
 
-  const source = isPrivateAdultMedia ? url : media.media_url
+  const source = isProtectedMedia ? url : media.media_url
   if (!source) return <div className={`flex min-h-32 items-center justify-center rounded-2xl bg-zinc-100 p-4 text-sm text-zinc-600 dark:bg-zinc-900 dark:text-zinc-300 ${className}`}>{BLOCKED_MESSAGE}</div>
   if (media.media_type === 'video') return <video src={source} controls playsInline preload="metadata" className={className} />
   return <img src={source} alt={alt} loading="lazy" decoding="async" className={className} />

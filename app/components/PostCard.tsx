@@ -1,8 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { useState } from 'react'
-import { Gift, Repeat2 } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Coins, Gift, Loader2, Lock, Repeat2 } from 'lucide-react'
 import PostActions from './PostActions'
 import GiftModal from './GiftModal'
 import TipModal from './TipModal'
@@ -17,6 +17,8 @@ import UserTierFrame, { getUserTierSurfaceClassName } from './UserTierFrame'
 import TranslatePostButton from './TranslatePostButton'
 import { useLanguage } from './LanguageProvider'
 import { isModeratedHidden, type ModeratedPostFields } from '@/lib/post-moderation'
+import { supabase } from '@/lib/supabase'
+import { getPaidPostErrorMessage, getPaidPostPrice, isPaidPost } from '@/lib/paid-posts'
 import type { UserTier } from '@/lib/user-tiers'
 import {
   getPostCommunityLabel as getCommunityLabel,
@@ -37,7 +39,7 @@ export type PostCardMedia = {
   id: string
   post_id: string
   user_id: string
-  media_url: string
+  media_url?: string | null
   media_type: 'image' | 'video' | 'gif'
   position: number
   created_at?: string
@@ -56,6 +58,9 @@ export type PostCardPost = ModeratedPostFields & {
   is_sensitive: boolean | null
   community_type?: string | null
   content_rating?: string | null
+  is_paid?: boolean | null
+  price_itacash?: number | null
+  paid_unlocked?: boolean
   profiles: PostCardProfile | null
   media?: PostCardMedia[]
 }
@@ -97,6 +102,7 @@ type PostCardProps = {
   onEdit?: () => void
   onDelete?: () => void
   onReport?: () => void
+  onPaidPostUnlocked?: (postId: string) => void | Promise<void>
   authorTier?: UserTier
 }
 
@@ -172,6 +178,14 @@ function getPostMedia(post: PostCardPost): PostCardMedia[] {
   return legacyMedia
 }
 
+function hasProtectedPostMedia(media: PostCardMedia[]) {
+  return media.some((item) => item.access_level === 'protected' || item.access_level === 'adult_private' || !item.media_url)
+}
+
+function getPublicPostMedia(media: PostCardMedia[]) {
+  return media.filter((item): item is PostCardMedia & { media_url: string } => typeof item.media_url === 'string' && item.media_url.length > 0)
+}
+
 function getGiftPoster(mediaUrl: string | null) {
   if (!mediaUrl) return undefined
 
@@ -210,6 +224,7 @@ function parseGiftSharedContent(content: string | null) {
 function SharedGiftPostCard({ post }: { post: PostCardPost }) {
   const [mediaFailed, setMediaFailed] = useState(false)
   const media = getPostMedia(post)[0] || null
+  const mediaUrl = media?.media_url || ''
   const details = parseGiftSharedContent(post.content)
 
   return (
@@ -223,10 +238,10 @@ function SharedGiftPostCard({ post }: { post: PostCardPost }) {
 
       <div className="grid gap-4 sm:grid-cols-[13rem_minmax(0,1fr)] sm:items-center">
         <div className="flex aspect-square items-center justify-center overflow-hidden rounded-3xl border border-blue-300/15 bg-gradient-to-br from-blue-500/15 via-black to-zinc-950 p-3">
-          {media && media.media_type === 'video' && !mediaFailed ? (
+          {media && mediaUrl && media.media_type === 'video' && !mediaFailed ? (
             <video
-              src={media.media_url}
-              poster={getGiftPoster(media.media_url)}
+              src={mediaUrl}
+              poster={getGiftPoster(mediaUrl)}
               muted
               loop
               playsInline
@@ -235,9 +250,9 @@ function SharedGiftPostCard({ post }: { post: PostCardPost }) {
               onError={() => setMediaFailed(true)}
               className="h-full w-full rounded-2xl object-contain"
             />
-          ) : media && !mediaFailed ? (
+          ) : media && mediaUrl && !mediaFailed ? (
             <img
-              src={media.media_url}
+              src={mediaUrl}
               alt={details.giftName}
               loading="lazy"
               decoding="async"
@@ -328,16 +343,25 @@ export default function PostCard({
   onEdit,
   onDelete,
   onReport,
+  onPaidPostUnlocked,
   authorTier = 'standard',
 }: PostCardProps) {
   const { t, language } = useLanguage()
   const [giftModalOpen, setGiftModalOpen] = useState(false)
   const [tipModalOpen, setTipModalOpen] = useState(false)
+  const [paidUnlocked, setPaidUnlocked] = useState(Boolean(post.paid_unlocked))
+  const [paidUnlocking, setPaidUnlocking] = useState(false)
+  const [paidUnlockMessage, setPaidUnlockMessage] = useState('')
   const adultPost = isAdultCommunityOrRating(
     post.community_type,
     post.content_rating,
     post.category,
   )
+
+  useEffect(() => {
+    setPaidUnlocked(Boolean(post.paid_unlocked))
+    setPaidUnlockMessage('')
+  }, [post.id, post.paid_unlocked])
 
   if (adultPost && !canViewAdultContent) {
     return (
@@ -356,8 +380,13 @@ export default function PostCard({
   const authorUsername = post.profiles?.username || t('feed.post.username')
   const authorAvatar = post.profiles?.avatar_url || ''
   const isOwnPost = post.user_id === currentUserId
+  const postPaid = isPaidPost(post)
+  const postPrice = getPaidPostPrice(post)
+  const postPaidUnlocked = !postPaid || isOwnPost || post.paid_unlocked || paidUnlocked
+  const postPaidLocked = postPaid && !postPaidUnlocked
   const canGiftAuthor = Boolean(currentUserId && post.user_id !== currentUserId)
   const postMedia = getPostMedia(post)
+  const useProtectedMedia = adultPost || hasProtectedPostMedia(postMedia)
   const isSharedGiftPost = post.category === 'gift_received'
   const sensitive = isSensitivePost(post)
   const ratingLabel = getContentRatingLabel(post.content_rating)
@@ -373,6 +402,54 @@ export default function PostCard({
   const reposterUsername = repostInfo?.profiles?.username || t('feed.post.username')
   const reposterAvatar = repostInfo?.profiles?.avatar_url || ''
   const isOwnRepost = repostInfo?.user_id === currentUserId
+
+  async function handleUnlockPaidPost() {
+    if (!currentUserId) {
+      setPaidUnlockMessage(getPaidPostErrorMessage('not_authenticated'))
+      return
+    }
+
+    setPaidUnlocking(true)
+    setPaidUnlockMessage('')
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+
+      if (!session?.access_token) {
+        setPaidUnlockMessage(getPaidPostErrorMessage('not_authenticated'))
+        return
+      }
+
+      const response = await fetch('/api/paid-posts/unlock', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ postId: post.id }),
+      })
+      const payload = await response.json().catch(() => null) as {
+        ok?: boolean
+        message?: string
+        error?: string
+      } | null
+
+      if (!response.ok || !payload?.ok) {
+        setPaidUnlockMessage(payload?.error || getPaidPostErrorMessage('internal'))
+        return
+      }
+
+      setPaidUnlocked(true)
+      setPaidUnlockMessage(payload.message || 'Post desbloqueado com sucesso.')
+      await onPaidPostUnlocked?.(post.id)
+    } catch {
+      setPaidUnlockMessage(getPaidPostErrorMessage('internal'))
+    } finally {
+      setPaidUnlocking(false)
+    }
+  }
 
   return (
     <article
@@ -501,6 +578,12 @@ export default function PostCard({
           </span>
         )}
 
+        {postPaid && (
+          <span className="rounded-full border border-cyan-200 bg-cyan-50 px-2 py-1 text-xs font-semibold text-cyan-700 dark:border-cyan-900/60 dark:bg-cyan-950/30 dark:text-cyan-200">
+            {postPaidUnlocked ? 'Desbloqueado' : `${postPrice} ItaCash`}
+          </span>
+        )}
+
         {reposted && (
           <span className="rounded-full border border-green-200 bg-green-50 px-2 py-1 text-xs text-green-700 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
             Repostado
@@ -530,6 +613,41 @@ export default function PostCard({
         <div className="mb-4 rounded-2xl border border-red-200/70 bg-red-50/80 p-4 text-sm font-semibold text-red-800 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-100">
           Este conteudo foi ocultado pela moderacao.
         </div>
+      ) : postPaidLocked ? (
+        <div className="mb-4 rounded-[1.5rem] border border-cyan-200/70 bg-cyan-50/80 p-4 text-cyan-950 ring-1 ring-cyan-100 dark:border-cyan-900/60 dark:bg-cyan-950/25 dark:text-cyan-50 dark:ring-cyan-900/30">
+          <div className="flex items-start gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-cyan-600 text-white">
+              <Lock className="h-5 w-5" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <h3 className="font-black">Post pago</h3>
+              <p className="mt-1 text-sm leading-6 text-cyan-900/75 dark:text-cyan-100/75">
+                Desbloqueie por {postPrice} ItaCash para ver o conteudo e as midias.
+              </p>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleUnlockPaidPost}
+                  disabled={paidUnlocking}
+                  className="inline-flex items-center gap-2 rounded-full bg-cyan-600 px-4 py-2 text-sm font-black text-white transition hover:bg-cyan-500 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {paidUnlocking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Coins className="h-4 w-4" />}
+                  Desbloquear
+                </button>
+                {paidUnlockMessage === getPaidPostErrorMessage('insufficient_balance') && (
+                  <Link href="/buy-itacash" className="rounded-full border border-cyan-300/50 px-4 py-2 text-sm font-black text-cyan-800 transition hover:bg-cyan-100 dark:text-cyan-100 dark:hover:bg-cyan-950">
+                    Comprar ItaCash
+                  </Link>
+                )}
+              </div>
+              {paidUnlockMessage && (
+                <p className="mt-2 text-sm font-semibold text-cyan-900 dark:text-cyan-100">
+                  {paidUnlockMessage}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
       ) : shouldProtectSensitive ? (
         <SensitiveContent>
           {isSharedGiftPost ? (
@@ -545,11 +663,11 @@ export default function PostCard({
 
           <LinkPreview content={post.content} enableExternalEmbeds />
 
-          {!isSharedGiftPost && (adultPost ? (
+          {!isSharedGiftPost && (useProtectedMedia ? (
             <div className="mb-4 grid gap-2 sm:grid-cols-2">
-              {postMedia.map((media) => <ProtectedPostMedia key={media.id} media={media} adultPost className="max-h-[32rem] w-full rounded-2xl object-contain" />)}
+              {postMedia.map((media) => <ProtectedPostMedia key={media.id} media={media} adultPost={adultPost} className="max-h-[32rem] w-full rounded-2xl object-contain" />)}
             </div>
-          ) : <PostMediaGallery media={postMedia} />)}
+          ) : <PostMediaGallery media={getPublicPostMedia(postMedia)} />)}
         </SensitiveContent>
       ) : (
         <>
@@ -566,11 +684,11 @@ export default function PostCard({
 
           <LinkPreview content={post.content} enableExternalEmbeds />
 
-          {!isSharedGiftPost && (adultPost ? (
+          {!isSharedGiftPost && (useProtectedMedia ? (
             <div className="mb-4 grid gap-2 sm:grid-cols-2">
-              {postMedia.map((media) => <ProtectedPostMedia key={media.id} media={media} adultPost className="max-h-[32rem] w-full rounded-2xl object-contain" />)}
+              {postMedia.map((media) => <ProtectedPostMedia key={media.id} media={media} adultPost={adultPost} className="max-h-[32rem] w-full rounded-2xl object-contain" />)}
             </div>
-          ) : <PostMediaGallery media={postMedia} />)}
+          ) : <PostMediaGallery media={getPublicPostMedia(postMedia)} />)}
         </>
       )}
 

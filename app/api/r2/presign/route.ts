@@ -108,13 +108,16 @@ function getSupabaseAdminForUploadLimits() {
   })
 }
 
-function buildObjectKey(folder: R2UploadFolder, userId: string, contentType: string, accessLevel: 'public' | 'adult_private') {
+function buildObjectKey(folder: R2UploadFolder, userId: string, contentType: string, accessLevel: 'public' | 'protected' | 'adult_private') {
   const timestamp = Date.now()
   const extension = UPLOAD_EXTENSION_BY_MIME_TYPE[contentType] || 'bin'
 
-  const prefix = accessLevel === 'adult_private'
-    ? 'protected/adult-post-media'
-    : folder
+  const prefix =
+    accessLevel === 'adult_private'
+      ? 'protected/adult-post-media'
+      : accessLevel === 'protected'
+        ? 'protected/paid-post-media'
+        : folder
   return `${prefix}/${userId}/${timestamp}-${crypto.randomUUID()}.${extension}`
 }
 
@@ -304,7 +307,7 @@ export async function POST(request: Request) {
     folder,
   })
 
-  if (!folder || !accessLevel || (accessLevel === 'adult_private' && folder !== 'posts')) {
+  if (!folder || !accessLevel || (accessLevel !== 'public' && folder !== 'posts')) {
     return NextResponse.json(
       {
         ok: false,

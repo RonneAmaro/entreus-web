@@ -20,6 +20,7 @@ import {
 } from '@/lib/post-classification'
 import { canViewAdultContent } from '@/lib/content-access'
 import { applyPostVisibilityFilters } from '@/lib/post-visibility'
+import { isMissingPaidPostColumnError, isPaidPost, sanitizeLockedPaidPostForClient } from '@/lib/paid-posts'
 
 type VisibilityType = 'public' | 'followers' | 'private'
 
@@ -44,10 +45,11 @@ type PostMedia = {
   id: string
   post_id: string
   user_id: string
-  media_url: string
-  media_type: 'image' | 'video'
+  media_url: string | null
+  media_type: 'image' | 'video' | 'gif'
   position: number
   created_at?: string
+  access_level?: string | null
 }
 
 type Post = ModeratedPostFields & {
@@ -62,6 +64,9 @@ type Post = ModeratedPostFields & {
   is_sensitive: boolean | null
   community_type?: string | null
   content_rating?: string | null
+  is_paid?: boolean | null
+  price_itacash?: number | null
+  paid_unlocked?: boolean
   profiles: Profile | null
   media?: PostMedia[]
 }
@@ -99,10 +104,18 @@ const POST_SELECT_COMMUNITY_FIELDS = `
           community_type,
           content_rating,
 `
+const POST_SELECT_PAID_FIELDS = `
+          is_paid,
+          price_itacash,
+`
 
 function isMissingCommunityColumnError(error: { message?: string } | null | undefined) {
   const message = (error?.message || '').toLowerCase()
   return message.includes('community_type') || message.includes('content_rating')
+}
+
+function removePaidPostSelectFields(selectFields: string) {
+  return selectFields.replace(POST_SELECT_PAID_FIELDS, '')
 }
 
 export default function PostPage() {
@@ -127,6 +140,47 @@ export default function PostPage() {
   const [canInteract, setCanInteract] = useState(false)
   const [permissionDenied, setPermissionDenied] = useState(false)
   const [moderationHiddenDenied, setModerationHiddenDenied] = useState(false)
+
+  async function loadPostMediaRows(targetPostId: string) {
+    const { data: mediaData, error: mediaError } = await supabase
+      .from('post_media')
+      .select('id, post_id, user_id, media_url, media_type, position, created_at, access_level')
+      .eq('post_id', targetPostId)
+      .order('position', { ascending: true })
+
+    if (mediaError) {
+      console.error('Erro ao carregar midias:', mediaError.message)
+      return []
+    }
+
+    return (mediaData || []) as PostMedia[]
+  }
+
+  async function refreshPaidPostContent(targetPostId: string) {
+    const { data: postData, error: postError } = await supabase
+      .from('posts')
+      .select('content, image_url, video_url')
+      .eq('id', targetPostId)
+      .maybeSingle()
+    const media = await loadPostMediaRows(targetPostId)
+
+    if (postError) {
+      console.warn('Nao foi possivel recarregar conteudo do post pago:', postError.message)
+    }
+
+    setPost((current) =>
+      current && current.id === targetPostId
+        ? { ...current, ...(postData || {}), media, paid_unlocked: true }
+        : current,
+    )
+
+    await Promise.all([
+      loadComments(),
+      loadLikes(),
+      loadReposts(),
+      loggedUserId ? loadBookmarks(loggedUserId) : Promise.resolve(),
+    ])
+  }
 
   useEffect(() => {
     async function loadPostPage() {
@@ -198,6 +252,7 @@ export default function PostPage() {
           visibility,
           is_sensitive,
           ${POST_SELECT_COMMUNITY_FIELDS}
+          ${POST_SELECT_PAID_FIELDS}
           moderation_status,
           moderated_at,
           moderated_by,
@@ -219,6 +274,7 @@ export default function PostPage() {
           visibility,
           is_sensitive,
           ${POST_SELECT_COMMUNITY_FIELDS}
+          ${POST_SELECT_PAID_FIELDS}
           profiles (
             username,
             display_name,
@@ -232,6 +288,17 @@ export default function PostPage() {
         .eq('id', postId), adultViewer, currentUserIsAdmin ? 'admin' : 'post-detail')
         .maybeSingle()
 
+      if (postError && isMissingPaidPostColumnError(postError)) {
+        const fallback = await applyPostVisibilityFilters(supabase
+          .from('posts')
+          .select(removePaidPostSelectFields(postSelectWithModeration))
+          .eq('id', postId), adultViewer, currentUserIsAdmin ? 'admin' : 'post-detail')
+          .maybeSingle()
+
+        postData = fallback.data as typeof postData
+        postError = fallback.error
+      }
+
       if (postError && isMissingPostModerationColumnError(postError)) {
         const fallback = await applyPostVisibilityFilters(supabase
           .from('posts')
@@ -241,12 +308,23 @@ export default function PostPage() {
 
         postData = fallback.data as typeof postData
         postError = fallback.error
+
+        if (postError && isMissingPaidPostColumnError(postError)) {
+          const paidFallback = await applyPostVisibilityFilters(supabase
+            .from('posts')
+            .select(removePaidPostSelectFields(postSelectFallback))
+            .eq('id', postId), adultViewer, currentUserIsAdmin ? 'admin' : 'post-detail')
+            .maybeSingle()
+
+          postData = paidFallback.data as typeof postData
+          postError = paidFallback.error
+        }
       }
 
       if (postError && isMissingCommunityColumnError(postError)) {
         const fallback = await applyPostVisibilityFilters(supabase
           .from('posts')
-          .select(postSelectWithModeration.replace(POST_SELECT_COMMUNITY_FIELDS, ''))
+          .select(removePaidPostSelectFields(postSelectWithModeration).replace(POST_SELECT_COMMUNITY_FIELDS, ''))
           .eq('id', postId), adultViewer, currentUserIsAdmin ? 'admin' : 'post-detail')
           .maybeSingle()
 
@@ -315,6 +393,42 @@ export default function PostPage() {
         setPost(normalizedPost)
         setPermissionDenied(true)
         setMessage('Você não tem permissão para visualizar esta publicação.')
+        setLoading(false)
+        return
+      }
+
+      let paidUnlocked = !isPaidPost(normalizedPost) || currentUserIsAdmin || normalizedPost.user_id === currentUserId
+
+      if (!paidUnlocked && currentUserId) {
+        const { data: unlock, error: unlockError } = await supabase
+          .from('paid_post_unlocks')
+          .select('id')
+          .eq('post_id', normalizedPost.id)
+          .eq('buyer_id', currentUserId)
+          .maybeSingle()
+
+        if (!unlockError && unlock) {
+          paidUnlocked = true
+        } else if (unlockError && !isMissingPaidPostColumnError(unlockError)) {
+          console.warn('Nao foi possivel verificar desbloqueio de post pago:', unlockError.message)
+        }
+      }
+
+      normalizedPost.paid_unlocked = paidUnlocked
+
+      if (isPaidPost(normalizedPost) && !paidUnlocked) {
+        setPost(sanitizeLockedPaidPostForClient({
+          ...normalizedPost,
+          media: [],
+          paid_unlocked: false,
+        }, currentUserId, false))
+
+        await Promise.all([
+          loadLikes(),
+          loadReposts(),
+          currentUserId ? loadBookmarks(currentUserId) : Promise.resolve(),
+        ])
+
         setLoading(false)
         return
       }
@@ -922,6 +1036,7 @@ export default function PostPage() {
               onEdit={() => router.push(`/post/${post.id}`)}
               onDelete={handleDeletePost}
               onReport={handleReportPost}
+              onPaidPostUnlocked={refreshPaidPostContent}
             />
 
             {!canInteract && (

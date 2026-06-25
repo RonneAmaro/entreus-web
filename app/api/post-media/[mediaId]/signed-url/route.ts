@@ -1,6 +1,8 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { BLOCKED_CONTENT_MESSAGE, canViewAdultContent, isAdultPost } from '@/lib/content-access'
+import { isAdminRole } from '@/lib/admin'
+import { isMissingPaidPostColumnError, isPaidPost } from '@/lib/paid-posts'
 import { createR2GetSignedUrl, R2_SIGNED_GET_EXPIRATION_SECONDS } from '@/lib/r2/signed-url'
 
 export const runtime = 'nodejs'
@@ -35,17 +37,32 @@ export async function GET(request: Request, context: { params: Promise<{ mediaId
 
   const { data: post, error: postError } = await supabase
     .from('posts')
-    .select('id, community_type, content_rating, category')
+    .select('id, user_id, community_type, content_rating, category, is_paid, price_itacash')
     .eq('id', media.post_id)
     .maybeSingle()
-  if (postError || !post) return unavailable()
+  let safePost = post
+  let safePostError = postError
+
+  if (safePostError && isMissingPaidPostColumnError(safePostError)) {
+    const fallback = await supabase
+      .from('posts')
+      .select('id, user_id, community_type, content_rating, category')
+      .eq('id', media.post_id)
+      .maybeSingle()
+
+    safePost = fallback.data as typeof safePost
+    safePostError = fallback.error
+  }
+
+  if (safePostError || !safePost) return unavailable()
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('is_minor, wants_18_plus, age_verification_status, parental_consent_status')
+    .select('role, is_minor, wants_18_plus, age_verification_status, parental_consent_status')
     .eq('id', user.id)
     .maybeSingle()
-  const isAdult = isAdultPost(post) || media.access_level === 'adult_private'
+  const isAdmin = isAdminRole(profile?.role)
+  const isAdult = isAdultPost(safePost) || media.access_level === 'adult_private'
   if (isAdult && !canViewAdultContent(profile ? {
     isMinor: profile.is_minor,
     wants18Plus: profile.wants_18_plus,
@@ -53,7 +70,22 @@ export async function GET(request: Request, context: { params: Promise<{ mediaId
     parentalConsentStatus: profile.parental_consent_status,
   } : null)) return unavailable()
 
-  if (media.access_level !== 'adult_private' || media.storage_provider !== 'r2' || !media.storage_bucket || !media.storage_key) return unavailable()
+  const signedAccessLevel = media.access_level === 'adult_private' || media.access_level === 'protected'
+
+  if (!signedAccessLevel || media.storage_provider !== 'r2' || !media.storage_bucket || !media.storage_key) return unavailable()
+
+  const requiresPaidUnlock = media.access_level === 'protected' || isPaidPost(safePost)
+
+  if (requiresPaidUnlock && safePost.user_id !== user.id && !isAdmin) {
+    const { data: unlock, error: unlockError } = await supabase
+      .from('paid_post_unlocks')
+      .select('id')
+      .eq('post_id', safePost.id)
+      .eq('buyer_id', user.id)
+      .maybeSingle()
+
+    if (unlockError || !unlock) return unavailable()
+  }
 
   try {
     const url = await createR2GetSignedUrl({
