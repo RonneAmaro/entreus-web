@@ -10,12 +10,14 @@ import {
   BarChart3,
   Bookmark,
   Coins,
+  Eye,
   Heart,
   Loader2,
   MessageCircle,
   Repeat2,
   Send,
   ShieldAlert,
+  TrendingUp,
   Users,
   Wallet,
 } from 'lucide-react'
@@ -30,6 +32,13 @@ import {
 } from '@/lib/creator-dashboard'
 import { summarizeCreatorTips, type CreatorTipRecentItem } from '@/lib/creator-tips'
 import { summarizePaidPostUnlocks, type PaidPostTransactionRow } from '@/lib/paid-posts'
+import {
+  isMissingPostAnalyticsSchemaError,
+  rankPostsByEngagement,
+  rankPostsByViews,
+  summarizePostViewRows,
+  type PostViewRow,
+} from '@/lib/post-analytics'
 
 type CurrentProfile = {
   username: string | null
@@ -49,7 +58,12 @@ type QueryResult<T> = {
   error: { message?: string } | null
 }
 
+type CountedQueryResult<T> = QueryResult<T> & {
+  count?: number | null
+}
+
 const EMPTY_QUERY: QueryResult<PostReference> = { data: [], error: null }
+const EMPTY_VIEW_QUERY: CountedQueryResult<PostViewRow> = { data: [], error: null, count: 0 }
 
 function isMissingPostColumnError(error: { message?: string } | null | undefined) {
   const message = (error?.message || '').toLowerCase()
@@ -147,6 +161,13 @@ export default function CreatorDashboardPage() {
     count: undefined as number | undefined,
     recentUnlocks: [] as ReturnType<typeof summarizePaidPostUnlocks>['recentUnlocks'],
   })
+  const [viewActivity, setViewActivity] = useState({
+    available: false,
+    total: 0,
+    last7: 0,
+    last30: 0,
+    viewsByPostId: {} as Record<string, number>,
+  })
   const [interactionsByPostId, setInteractionsByPostId] = useState<Record<string, number>>({})
 
   const loadDashboard = useCallback(async () => {
@@ -219,7 +240,7 @@ export default function CreatorDashboardPage() {
         .in('post_id', postIds) as unknown as Promise<QueryResult<T>>
     }
 
-    const [likesResult, commentsResult, repostsResult, savesResult, followersResult, tipsResult, paidPostsResult, walletResult] = await Promise.all([
+    const [likesResult, commentsResult, repostsResult, savesResult, followersResult, tipsResult, paidPostsResult, walletResult, viewsResult] = await Promise.all([
       postReferences('likes'),
       postReferences('comments'),
       postReferences('reposts'),
@@ -247,6 +268,15 @@ export default function CreatorDashboardPage() {
         .select('balance')
         .eq('user_id', user.id)
         .maybeSingle(),
+      postIds.length === 0
+        ? Promise.resolve(EMPTY_VIEW_QUERY)
+        : supabase
+          .from('post_views')
+          .select('post_id, created_at', { count: 'exact' })
+          .eq('creator_id', user.id)
+          .in('post_id', postIds)
+          .order('created_at', { ascending: false })
+          .limit(10000) as unknown as Promise<CountedQueryResult<PostViewRow>>,
     ])
 
     const likes = metricFromQuery(likesResult, (rows) => rows.length)
@@ -258,6 +288,7 @@ export default function CreatorDashboardPage() {
     const paidPostsSummary = paidPostsResult.error ? null : summarizePaidPostUnlocks((paidPostsResult.data || []) as PaidPostTransactionRow[])
     const supports = tipsSummary?.totalReceived
     const walletBalance = walletResult.error ? undefined : Math.max(0, Number((walletResult.data as WalletRow | null)?.balance) || 0)
+    const viewsSummary = viewsResult.error ? null : summarizePostViewRows((viewsResult.data || []) as PostViewRow[])
 
     setMetrics({ likes, comments, reposts, saves, followers, supports, walletBalance })
     setTipActivity({
@@ -269,6 +300,13 @@ export default function CreatorDashboardPage() {
       count: paidPostsSummary?.unlockCount,
       recentUnlocks: paidPostsSummary?.recentUnlocks || [],
     })
+    setViewActivity({
+      available: !viewsResult.error,
+      total: viewsResult.error ? 0 : Math.max(viewsSummary?.total || 0, viewsResult.count || 0),
+      last7: viewsSummary?.last7 || 0,
+      last30: viewsSummary?.last30 || 0,
+      viewsByPostId: viewsSummary?.viewsByPostId || {},
+    })
     setInteractionsByPostId(
       mergeInteractionCounts(
         countReferences((likesResult.data || []) as PostReference[]),
@@ -277,6 +315,10 @@ export default function CreatorDashboardPage() {
         countReferences((savesResult.data || []) as PostReference[]),
       ),
     )
+
+    if (viewsResult.error && !isMissingPostAnalyticsSchemaError(viewsResult.error)) {
+      setMessage((current) => current || 'Metricas de visualizacao estao indisponiveis no momento.')
+    }
 
     if ([likesResult, commentsResult, repostsResult, savesResult].some((result) => result.error)) {
       setMessage('Algumas métricas de interação estão indisponíveis no momento. Seus posts continuam seguros e privados neste painel.')
@@ -308,13 +350,31 @@ export default function CreatorDashboardPage() {
       followers: metrics.followers,
       supportsReceived: metrics.supports,
       walletBalance: metrics.walletBalance,
+      views: viewActivity.available ? viewActivity.total : undefined,
       interactionsByPostId,
     }),
-    [interactionsByPostId, metrics, posts],
+    [interactionsByPostId, metrics, posts, viewActivity.available, viewActivity.total],
+  )
+
+  const topViewedPosts = useMemo(
+    () => viewActivity.available
+      ? rankPostsByViews(posts, viewActivity.viewsByPostId, interactionsByPostId, 5)
+      : [],
+    [interactionsByPostId, posts, viewActivity.available, viewActivity.viewsByPostId],
+  )
+
+  const topEngagementByViewPosts = useMemo(
+    () => viewActivity.available
+      ? rankPostsByEngagement(posts, viewActivity.viewsByPostId, interactionsByPostId, 5)
+      : [],
+    [interactionsByPostId, posts, viewActivity.available, viewActivity.viewsByPostId],
   )
 
   const statCards = [
     { label: 'Posts publicados', metric: creatorMetric(summary.posts), icon: BarChart3, tone: 'bg-blue-500/15 text-blue-200' },
+    { label: 'Visualizacoes', metric: creatorMetric(viewActivity.available ? viewActivity.total : undefined), icon: Eye, tone: 'bg-emerald-500/15 text-emerald-200', unavailableLabel: 'Disponivel apos aplicar a migration de analytics.' },
+    { label: 'Views 7 dias', metric: creatorMetric(viewActivity.available ? viewActivity.last7 : undefined), icon: TrendingUp, tone: 'bg-lime-500/15 text-lime-200', unavailableLabel: 'Disponivel apos aplicar a migration de analytics.' },
+    { label: 'Views 30 dias', metric: creatorMetric(viewActivity.available ? viewActivity.last30 : undefined), icon: BarChart3, tone: 'bg-sky-500/15 text-sky-200', unavailableLabel: 'Disponivel apos aplicar a migration de analytics.' },
     { label: 'Curtidas recebidas', metric: summary.likes, icon: Heart, tone: 'bg-rose-500/15 text-rose-200', unavailableLabel: 'Disponível quando a leitura de interações responder.' },
     { label: 'Comentários recebidos', metric: summary.comments, icon: MessageCircle, tone: 'bg-emerald-500/15 text-emerald-200', unavailableLabel: 'Disponível quando a leitura de interações responder.' },
     { label: 'Seguidores', metric: summary.followers, icon: Users, tone: 'bg-violet-500/15 text-violet-200', unavailableLabel: 'Disponível quando a lista de seguidores responder.' },
@@ -539,6 +599,54 @@ export default function CreatorDashboardPage() {
                       </div>
                     ))}
                   </div>
+                </article>
+              </section>
+            )}
+
+            {summary.posts > 0 && (
+              <section className="grid gap-6 xl:grid-cols-2">
+                <article className="rounded-[2rem] border border-white/10 bg-zinc-950/90 p-5 shadow-xl shadow-black/20 ring-1 ring-white/5">
+                  <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-300">Visualizacoes</p>
+                  <h2 className="mt-2 text-2xl font-black">Top por views</h2>
+                  {!viewActivity.available ? (
+                    <p className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm leading-6 text-zinc-400">Aplique a migration do Pacote 39 para liberar views autorizadas no painel.</p>
+                  ) : topViewedPosts.some((item) => item.views > 0) ? (
+                    <div className="mt-4 space-y-3">
+                      {topViewedPosts.filter((item) => item.views > 0).map((post) => (
+                        <div key={post.id} className="flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-black/30 p-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-bold text-zinc-100">Publicacao em {labelCommunity(post.community)}</p>
+                            <p className="mt-1 text-xs text-zinc-500">{formatDate(post.createdAt)} - {labelRating(post.rating)}</p>
+                          </div>
+                          <span className="shrink-0 rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-black text-emerald-200">{formatNumber(post.views)} views</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm leading-6 text-zinc-400">Nenhuma view autorizada registrada ainda.</p>
+                  )}
+                </article>
+
+                <article className="rounded-[2rem] border border-white/10 bg-zinc-950/90 p-5 shadow-xl shadow-black/20 ring-1 ring-white/5">
+                  <p className="text-xs font-black uppercase tracking-[0.18em] text-amber-300">Engajamento</p>
+                  <h2 className="mt-2 text-2xl font-black">Taxa por post</h2>
+                  {!viewActivity.available ? (
+                    <p className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm leading-6 text-zinc-400">A taxa por post aparece quando a migration de analytics estiver aplicada.</p>
+                  ) : topEngagementByViewPosts.some((item) => item.engagementRate.available) ? (
+                    <div className="mt-4 space-y-3">
+                      {topEngagementByViewPosts.filter((item) => item.engagementRate.available).map((post) => (
+                        <div key={post.id} className="flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-black/30 p-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-bold text-zinc-100">Publicacao em {labelCommunity(post.community)}</p>
+                            <p className="mt-1 text-xs text-zinc-500">{formatNumber(post.interactions)} interacoes - {formatNumber(post.views)} views</p>
+                          </div>
+                          <span className="shrink-0 rounded-full bg-amber-500/10 px-2.5 py-1 text-xs font-black text-amber-200">{post.engagementRate.value.toLocaleString('pt-BR')}%</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm leading-6 text-zinc-400">A taxa aparece quando houver views e interacoes no mesmo post.</p>
+                  )}
                 </article>
               </section>
             )}

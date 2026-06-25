@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
@@ -80,6 +80,10 @@ type Comment = {
   profiles: Profile | null
 }
 
+type CommentRow = Omit<Comment, 'profiles'> & {
+  profiles: Profile | Profile[] | null
+}
+
 type Like = {
   id: string
   post_id: string
@@ -118,6 +122,33 @@ function removePaidPostSelectFields(selectFields: string) {
   return selectFields.replace(POST_SELECT_PAID_FIELDS, '')
 }
 
+async function recordAuthorizedPostView(targetPostId: string) {
+  try {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+
+    if (!session?.access_token) return
+
+    const response = await fetch('/api/analytics/post-view', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ postId: targetPostId, source: 'post' }),
+    })
+
+    if (!response.ok && process.env.NODE_ENV === 'development') {
+      console.warn('[PostAnalytics] post view was not counted:', response.status)
+    }
+  } catch (error) {
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('[PostAnalytics] failed to record post view:', error)
+    }
+  }
+}
+
 export default function PostPage() {
   const params = useParams()
   const router = useRouter()
@@ -140,6 +171,7 @@ export default function PostPage() {
   const [canInteract, setCanInteract] = useState(false)
   const [permissionDenied, setPermissionDenied] = useState(false)
   const [moderationHiddenDenied, setModerationHiddenDenied] = useState(false)
+  const recordedPostViewsRef = useRef<Set<string>>(new Set())
 
   async function loadPostMediaRows(targetPostId: string) {
     const { data: mediaData, error: mediaError } = await supabase
@@ -460,6 +492,30 @@ export default function PostPage() {
     loadPostPage()
   }, [postId])
 
+  useEffect(() => {
+    if (loading || !loggedUserId || !post || permissionDenied || moderationHiddenDenied) return
+
+    const isAdmin = isAdminRole(currentProfile?.role)
+    const paidLocked = isPaidPost(post) && !post.paid_unlocked && post.user_id !== loggedUserId && !isAdmin
+
+    if (paidLocked || recordedPostViewsRef.current.has(post.id)) return
+
+    recordedPostViewsRef.current.add(post.id)
+    void recordAuthorizedPostView(post.id)
+  }, [
+    currentProfile?.role,
+    loading,
+    loggedUserId,
+    moderationHiddenDenied,
+    permissionDenied,
+    post,
+    post?.id,
+    post?.is_paid,
+    post?.paid_unlocked,
+    post?.price_itacash,
+    post?.user_id,
+  ])
+
   async function checkCanSeePost(targetPost: Post, currentUserId: string) {
     if (targetPost.visibility === 'public') return true
     if (!currentUserId) return false
@@ -509,7 +565,7 @@ export default function PostPage() {
       return
     }
 
-    const normalizedComments = (data || []).map((comment: any) => ({
+    const normalizedComments = ((data || []) as CommentRow[]).map((comment) => ({
       ...comment,
       profiles: Array.isArray(comment.profiles)
         ? comment.profiles[0] || null
