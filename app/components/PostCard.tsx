@@ -14,6 +14,7 @@ import PostMoreMenu from './PostMoreMenu'
 import UserBadges from './UserBadges'
 import UserTierBadge from './UserTierBadge'
 import UserTierFrame, { getUserTierSurfaceClassName } from './UserTierFrame'
+import ItaCashAmount from './ItaCashAmount'
 import TranslatePostButton from './TranslatePostButton'
 import { useLanguage } from './LanguageProvider'
 import { isModeratedHidden, type ModeratedPostFields } from '@/lib/post-moderation'
@@ -580,7 +581,7 @@ export default function PostCard({
 
         {postPaid && (
           <span className="rounded-full border border-cyan-200 bg-cyan-50 px-2 py-1 text-xs font-semibold text-cyan-700 dark:border-cyan-900/60 dark:bg-cyan-950/30 dark:text-cyan-200">
-            {postPaidUnlocked ? 'Desbloqueado' : `${postPrice} ItaCash`}
+            {postPaidUnlocked ? 'Desbloqueado' : <ItaCashAmount amount={postPrice} size="xs" />}
           </span>
         )}
 
@@ -622,7 +623,7 @@ export default function PostCard({
             <div className="min-w-0 flex-1">
               <h3 className="font-black">Post pago</h3>
               <p className="mt-1 text-sm leading-6 text-cyan-900/75 dark:text-cyan-100/75">
-                Desbloqueie por {postPrice} ItaCash para ver o conteudo e as midias.
+                Desbloqueie por <ItaCashAmount amount={postPrice} size="sm" className="mx-1" /> para ver o conteudo e as midias.
               </p>
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <button

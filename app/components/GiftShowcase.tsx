@@ -16,6 +16,7 @@ import {
   Trophy,
   type LucideIcon,
 } from 'lucide-react'
+import ItaCashAmount from './ItaCashAmount'
 
 export type GiftShowcaseItem = {
   id: string
@@ -226,7 +227,7 @@ export default function GiftShowcase({
                 </div>
 
                 <span className="shrink-0 rounded-full bg-blue-500/10 px-2.5 py-1 text-xs font-black text-blue-100">
-                  {item.price_paid_itacash} ItaCash
+                  <ItaCashAmount amount={item.price_paid_itacash} size="xs" />
                 </span>
               </div>
 

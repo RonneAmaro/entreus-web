@@ -18,6 +18,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import ItaCashAmount from './ItaCashAmount'
 
 type DigitalGift = {
   id: string
@@ -163,7 +164,7 @@ function GiftFeaturedPreview({ gift }: { gift: DigitalGift }) {
         </div>
 
         <span className="shrink-0 rounded-full bg-blue-500/10 px-3 py-1.5 text-sm font-black text-blue-100 ring-1 ring-blue-300/15">
-          {gift.price_itacash} ItaCash
+          <ItaCashAmount amount={gift.price_itacash} size="sm" />
         </span>
       </div>
     </div>
@@ -360,7 +361,7 @@ export default function GiftModal({
                     <span className="block truncate font-black">{gift.name}</span>
                     <span className="mt-1 block truncate text-xs text-zinc-400">{categoryLabel(gift.category)}</span>
                     <span className="mt-2 inline-flex rounded-full bg-blue-500/10 px-2.5 py-1 text-xs font-black text-blue-100">
-                      {gift.price_itacash} ItaCash
+                      <ItaCashAmount amount={gift.price_itacash} size="xs" />
                     </span>
                   </span>
                 </button>

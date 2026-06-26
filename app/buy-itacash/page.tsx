@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import AppSidebar from '../components/AppSidebar'
 import MobileNavigation from '../components/MobileNavigation'
+import ItaCashAmount from '../components/ItaCashAmount'
 import {
   ArrowLeft,
   CheckCircle2,
@@ -488,8 +489,10 @@ export default function BuyItaCashPage() {
             <div className="mt-5 grid gap-3 sm:grid-cols-3">
               <div className="rounded-3xl border border-white/10 bg-zinc-950/75 p-4 ring-1 ring-white/5">
                 <p className="text-xs font-black uppercase tracking-[0.2em] text-zinc-500">Conversao</p>
-                <p className="mt-2 text-2xl font-black">10 = R$ 1,00</p>
-                <p className="text-sm text-zinc-400">ItaCash</p>
+                <p className="mt-2 flex flex-wrap items-center gap-2 text-2xl font-black">
+                  <ItaCashAmount amount={10} size="lg" />
+                  <span>= R$ 1,00</span>
+                </p>
               </div>
               <div className="rounded-3xl border border-blue-300/20 bg-blue-500/10 p-4 ring-1 ring-blue-300/10">
                 <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-200/70">Taxa EntreUS</p>
@@ -827,14 +830,19 @@ export default function BuyItaCashPage() {
               </span>
               <div>
                 <h2 className="text-lg font-black">Resumo</h2>
-                <p className="text-sm text-zinc-500">10 ItaCash = R$ 1,00</p>
+                <p className="flex flex-wrap items-center gap-1.5 text-sm text-zinc-500">
+                  <ItaCashAmount amount={10} size="xs" />
+                  <span>= R$ 1,00</span>
+                </p>
               </div>
             </div>
 
             <div className="mt-5 space-y-3 text-sm">
               <div className="flex items-center justify-between">
                 <span className="text-zinc-400">ItaCash</span>
-                <strong>{amountItacash}</strong>
+                <strong>
+                  <ItaCashAmount amount={amountItacash} size="sm" />
+                </strong>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-zinc-400">Metodo</span>

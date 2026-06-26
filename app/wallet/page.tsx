@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import AppSidebar from '../components/AppSidebar'
 import MobileNavigation from '../components/MobileNavigation'
+import ItaCashAmount from '../components/ItaCashAmount'
 import {
   ArrowDownLeft,
   ArrowLeft,
@@ -649,8 +650,7 @@ export default function WalletPage() {
               <div className="relative overflow-hidden rounded-3xl border border-blue-300/25 bg-blue-500/15 p-5 shadow-xl shadow-blue-950/20 ring-1 ring-blue-300/10">
                 <span className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-blue-400/20 blur-2xl" />
                 <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-200/70">Disponivel</p>
-                <p className="relative mt-3 text-4xl font-black">{availableBalance}</p>
-                <p className="text-sm font-bold text-blue-100/70">ItaCash</p>
+                <ItaCashAmount amount={availableBalance} size="xl" className="relative mt-3 text-blue-50" valueClassName="text-4xl" />
               </div>
               <div className="rounded-3xl border border-white/10 bg-zinc-950/70 p-5 ring-1 ring-white/5">
                 <p className="text-xs font-black uppercase tracking-[0.2em] text-zinc-500">Aproximado</p>
@@ -659,7 +659,7 @@ export default function WalletPage() {
               </div>
               <div className="rounded-3xl border border-white/10 bg-zinc-950/70 p-5 ring-1 ring-white/5">
                 <p className="text-xs font-black uppercase tracking-[0.2em] text-zinc-500">Bloqueado</p>
-                <p className="mt-3 text-2xl font-black">{lockedBalance}</p>
+                <ItaCashAmount amount={lockedBalance} size="lg" className="mt-3" />
                 <p className="text-sm text-zinc-400">Reservado</p>
               </div>
             </div>
@@ -680,7 +680,7 @@ export default function WalletPage() {
                   </span>
                   <div>
                     <p className="text-sm font-bold text-blue-100/80">Moeda interna</p>
-                    <p className="text-3xl font-black">{availableBalance} ItaCash</p>
+                    <ItaCashAmount amount={availableBalance} size="xl" valueClassName="text-3xl" />
                   </div>
                 </div>
                 <p className="mt-4 text-sm leading-6 text-zinc-300">
@@ -761,7 +761,7 @@ export default function WalletPage() {
 
                           <div>
                             <p className="text-[11px] font-black uppercase tracking-[0.16em] text-zinc-500">Quantidade</p>
-                            <p className="mt-1 font-black text-white">{request.amount_itacash} ItaCash</p>
+                            <ItaCashAmount amount={request.amount_itacash} size="sm" className="mt-1 text-white" />
                           </div>
 
                           <div>
@@ -809,7 +809,7 @@ export default function WalletPage() {
                           <div>
                             <p className="font-black text-white">
                               {order.amount_itacash && order.amount_itacash > 0
-                                ? `${order.amount_itacash} ItaCash`
+                                ? <ItaCashAmount amount={order.amount_itacash} size="sm" className="text-white" />
                                 : 'Compra de ItaCash'}
                             </p>
                             <p className="mt-1 text-xs font-semibold text-zinc-500">{formatDate(order.created_at)}</p>

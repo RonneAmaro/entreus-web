@@ -28,6 +28,7 @@ import {
 import AppSidebar from '../components/AppSidebar'
 import MobileNavigation from '../components/MobileNavigation'
 import { CreatorChecklist, CreatorDashboardStats } from '../components/CreatorDashboardStats'
+import ItaCashAmount from '../components/ItaCashAmount'
 import { supabase } from '@/lib/supabase'
 import {
   summarizeCreatorDashboard,
@@ -533,7 +534,16 @@ export default function CreatorDashboardPage() {
     { label: 'Comentários recebidos', metric: summary.comments, icon: MessageCircle, tone: 'bg-emerald-500/15 text-emerald-200', unavailableLabel: 'Disponível quando a leitura de interações responder.' },
     { label: 'Seguidores', metric: summary.followers, icon: Users, tone: 'bg-violet-500/15 text-violet-200', unavailableLabel: 'Disponível quando a lista de seguidores responder.' },
     { label: 'Engajamento estimado', metric: summary.engagementRate, icon: BarChart3, tone: 'bg-amber-500/15 text-amber-200', suffix: summary.engagementRate.available ? '%' : '', unavailableLabel: 'Analytics de visualizações ainda está em preparação.' },
-    { label: 'Apoios recebidos', metric: summary.supports, icon: Coins, tone: 'bg-cyan-500/15 text-cyan-200', suffix: summary.supports.available ? ' ItaCash' : '', unavailableLabel: 'Mostra apenas apoios ItaCash já registrados.' },
+    {
+      label: 'Apoios recebidos',
+      metric: summary.supports,
+      icon: Coins,
+      tone: 'bg-cyan-500/15 text-cyan-200',
+      renderValue: summary.supports.available
+        ? <ItaCashAmount amount={summary.supports.value} size="lg" className="text-white" valueClassName="text-2xl" />
+        : undefined,
+      unavailableLabel: 'Mostra apenas apoios ItaCash já registrados.',
+    },
   ]
 
   const checklist = [
@@ -661,7 +671,7 @@ export default function CreatorDashboardPage() {
                   {summary.walletBalance.available ? (
                     <div className="mt-4 rounded-2xl border border-cyan-300/20 bg-cyan-500/10 p-4">
                       <p className="text-xs font-black uppercase tracking-[0.14em] text-cyan-100/70">Saldo ItaCash da carteira</p>
-                      <p className="mt-2 text-2xl font-black text-cyan-50">{formatNumber(summary.walletBalance.value)} ItaCash</p>
+                      <ItaCashAmount amount={summary.walletBalance.value} size="lg" className="mt-2 text-cyan-50" valueClassName="text-2xl" />
                       <p className="mt-2 text-xs leading-5 text-cyan-100/70">Equivalente aproximado: {formatBRL(convertItaCashToBrl(summary.walletBalance.value))}. Saques pendentes ja reduzem este saldo.</p>
                     </div>
                   ) : (
@@ -671,7 +681,7 @@ export default function CreatorDashboardPage() {
                     <div className="mt-4 grid gap-3 sm:grid-cols-2">
                       <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
                         <p className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Total recebido</p>
-                        <p className="mt-2 text-xl font-black text-white">{formatNumber(summary.supports.value)} ItaCash</p>
+                        <ItaCashAmount amount={summary.supports.value} size="lg" className="mt-2 text-white" valueClassName="text-xl" />
                       </div>
                       <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
                         <p className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Apoios recebidos</p>
@@ -687,7 +697,7 @@ export default function CreatorDashboardPage() {
                       <div className="mt-3 space-y-2">
                         {tipActivity.recentTips.map((tip) => (
                           <div key={tip.id} className="flex items-center justify-between gap-3 rounded-xl bg-white/5 px-3 py-2 text-sm">
-                            <span className="font-bold text-zinc-100">{formatNumber(tip.amount)} ItaCash</span>
+                            <ItaCashAmount amount={tip.amount} size="sm" className="text-zinc-100" />
                             <span className="shrink-0 text-xs text-zinc-500">{formatDate(tip.createdAt)}</span>
                           </div>
                         ))}
@@ -703,7 +713,7 @@ export default function CreatorDashboardPage() {
                         <div className="mt-3 grid gap-3 sm:grid-cols-2">
                           <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
                             <p className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Total recebido</p>
-                            <p className="mt-2 text-xl font-black text-white">{formatNumber(paidPostActivity.total)} ItaCash</p>
+                            <ItaCashAmount amount={paidPostActivity.total} size="lg" className="mt-2 text-white" valueClassName="text-xl" />
                           </div>
                           <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
                             <p className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Desbloqueios</p>
@@ -714,7 +724,7 @@ export default function CreatorDashboardPage() {
                           <div className="mt-3 space-y-2">
                             {paidPostActivity.recentUnlocks.map((unlock) => (
                               <div key={unlock.id} className="flex items-center justify-between gap-3 rounded-xl bg-white/5 px-3 py-2 text-sm">
-                                <span className="font-bold text-zinc-100">{formatNumber(unlock.amount)} ItaCash</span>
+                                <ItaCashAmount amount={unlock.amount} size="sm" className="text-zinc-100" />
                                 <span className="shrink-0 text-xs text-zinc-500">{formatDate(unlock.createdAt)}</span>
                               </div>
                             ))}
@@ -736,7 +746,7 @@ export default function CreatorDashboardPage() {
                         <p className="text-xs font-black uppercase tracking-[0.14em] text-emerald-100/70">Saque</p>
                         <h3 className="mt-1 text-xl font-black">Solicitar saque manual</h3>
                         <p className="mt-1 text-sm leading-6 text-emerald-50/75">
-                          Minimo: {formatNumber(MIN_WITHDRAWAL_ITACASH)} ItaCash = {formatBRL(MIN_WITHDRAWAL_BRL)}. Pagamento Pix manual pelo admin.
+                          Minimo: <ItaCashAmount amount={MIN_WITHDRAWAL_ITACASH} size="sm" className="mx-1" /> = {formatBRL(MIN_WITHDRAWAL_BRL)}. Pagamento Pix manual pelo admin.
                         </p>
                       </div>
                     </div>
@@ -744,19 +754,19 @@ export default function CreatorDashboardPage() {
                     <div className="mt-4 grid gap-3 sm:grid-cols-2">
                       <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
                         <p className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Disponivel</p>
-                        <p className="mt-2 text-xl font-black">{formatNumber(walletBalanceValue)} ItaCash</p>
+                        <ItaCashAmount amount={walletBalanceValue} size="lg" className="mt-2" valueClassName="text-xl" />
                         <p className="mt-1 text-xs text-zinc-400">{formatBRL(convertItaCashToBrl(walletBalanceValue))}</p>
                       </div>
                       <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
                         <p className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Conversao</p>
-                        <p className="mt-2 text-xl font-black">{ITACASH_PER_BRL} ItaCash</p>
+                        <ItaCashAmount amount={ITACASH_PER_BRL} size="lg" className="mt-2" valueClassName="text-xl" />
                         <p className="mt-1 text-xs text-zinc-400">R$ 1,00</p>
                       </div>
                     </div>
 
                     {!canSubmitWithdrawal && (
                       <p className="mt-4 rounded-2xl border border-amber-300/20 bg-amber-500/10 p-3 text-sm font-semibold leading-6 text-amber-100">
-                        Você precisa ter pelo menos 1000 ItaCash (R$ 100,00) para solicitar saque.
+                        Voce precisa ter pelo menos <ItaCashAmount amount={MIN_WITHDRAWAL_ITACASH} size="sm" className="mx-1" /> ({formatBRL(MIN_WITHDRAWAL_BRL)}) para solicitar saque.
                       </p>
                     )}
 
@@ -837,7 +847,7 @@ export default function CreatorDashboardPage() {
                             <div key={withdrawal.id} className="rounded-2xl border border-white/10 bg-black/30 p-3 text-sm">
                               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                                 <div>
-                                  <p className="font-black text-white">{formatNumber(withdrawal.amount_itacash)} ItaCash</p>
+                                  <ItaCashAmount amount={withdrawal.amount_itacash} size="sm" className="text-white" />
                                   <p className="mt-1 text-xs text-zinc-500">{formatBRL(Number(withdrawal.amount_brl) || 0)} - {formatDate(withdrawal.created_at)}</p>
                                 </div>
                                 <span className={`inline-flex w-fit items-center gap-1 rounded-full px-2.5 py-1 text-xs font-black ring-1 ${withdrawalStatusClass(withdrawal.status)}`}>
@@ -953,7 +963,7 @@ export default function CreatorDashboardPage() {
                 <div className="mt-5 grid gap-3 sm:grid-cols-3">
                   <div className="rounded-2xl bg-black/30 p-4"><Repeat2 className="h-5 w-5 text-violet-200" /><p className="mt-3 text-xl font-black">{summary.reposts.available ? formatNumber(summary.reposts.value) : '—'}</p><p className="mt-1 text-xs text-zinc-500">Reposts</p></div>
                   <div className="rounded-2xl bg-black/30 p-4"><Bookmark className="h-5 w-5 text-amber-200" /><p className="mt-3 text-xl font-black">{summary.saves.available ? formatNumber(summary.saves.value) : '—'}</p><p className="mt-1 text-xs text-zinc-500">Salvos</p></div>
-                  <div className="rounded-2xl bg-black/30 p-4"><Coins className="h-5 w-5 text-cyan-200" /><p className="mt-3 text-xl font-black">{summary.supports.available ? `${formatNumber(summary.supports.value)} ItaCash` : '—'}</p><p className="mt-1 text-xs text-zinc-500">Apoios</p></div>
+                  <div className="rounded-2xl bg-black/30 p-4"><Coins className="h-5 w-5 text-cyan-200" /><p className="mt-3 text-xl font-black">{summary.supports.available ? <ItaCashAmount amount={summary.supports.value} size="lg" valueClassName="text-xl" /> : '—'}</p><p className="mt-1 text-xs text-zinc-500">Apoios</p></div>
                 </div>
                 <p className="mt-5 text-sm leading-6 text-zinc-500">Não carregamos conteúdo, mídia, URLs de storage ou dados de outros criadores neste painel.</p>
               </article>

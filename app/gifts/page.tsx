@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import AppSidebar from '../components/AppSidebar'
 import MobileNavigation from '../components/MobileNavigation'
+import ItaCashAmount from '../components/ItaCashAmount'
 import {
   ArrowLeft,
   CheckCircle2,
@@ -181,7 +182,7 @@ function GiftModalPreview({ gift }: { gift: DigitalGift }) {
         </div>
 
         <span className="shrink-0 rounded-full bg-blue-500/10 px-3 py-1.5 text-sm font-black text-blue-100 ring-1 ring-blue-300/15">
-          {gift.price_itacash} ItaCash
+          <ItaCashAmount amount={gift.price_itacash} size="sm" />
         </span>
       </div>
     </div>
@@ -485,7 +486,10 @@ export default function GiftsPage() {
                 <p className="text-sm font-bold text-blue-100/70">presentes ativos</p>
               </div>
               <div className="rounded-3xl border border-white/10 bg-zinc-950/70 p-5 ring-1 ring-white/5">
-                <p className="text-2xl font-black">10 = R$ 1</p>
+                <p className="flex flex-wrap items-center gap-2 text-2xl font-black">
+                  <ItaCashAmount amount={10} size="lg" />
+                  <span>= R$ 1</span>
+                </p>
                 <p className="text-sm text-zinc-400">referencia ItaCash</p>
               </div>
               <div className="rounded-3xl border border-white/10 bg-zinc-950/70 p-5 ring-1 ring-white/5">
@@ -569,9 +573,7 @@ export default function GiftsPage() {
 
                         <div className="mt-5 rounded-2xl border border-blue-300/15 bg-blue-500/10 p-4 ring-1 ring-blue-300/10">
                           <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-200/70">Preco</p>
-                          <p className="mt-1 text-3xl font-black text-blue-100">
-                            {gift.price_itacash} <span className="text-base text-blue-200/70">ItaCash</span>
-                          </p>
+                          <ItaCashAmount amount={gift.price_itacash} size="xl" className="mt-1 text-blue-100" valueClassName="text-3xl" />
                         </div>
 
                         <button
@@ -605,7 +607,7 @@ export default function GiftsPage() {
                 <div className="min-w-0">
                   <p className="text-sm font-black uppercase tracking-[0.22em] text-blue-300">Enviar presente</p>
                   <h2 className="mt-2 text-2xl font-black">{selectedGift.name}</h2>
-                  <p className="mt-1 text-sm text-zinc-400">{selectedGift.price_itacash} ItaCash</p>
+                  <ItaCashAmount amount={selectedGift.price_itacash} size="sm" className="mt-1 text-zinc-300" />
                 </div>
                 <button
                   type="button"

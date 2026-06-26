@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react'
 import { Award, Sparkles } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { sortBadgeIconInputs } from '@/lib/badge-icons'
+import UserBadgeIcon from './UserBadgeIcon'
 
 type Badge = {
   id: string
@@ -77,7 +79,7 @@ export default function UserBadgesPanel({
         })
         .filter((badge): badge is Badge => !!badge)
 
-      setBadges(normalizedBadges)
+      setBadges(sortBadgeIconInputs(normalizedBadges))
       setLoading(false)
     }
 
@@ -106,14 +108,6 @@ export default function UserBadgesPanel({
     if (slug === 'vip') return 'border-blue-200 bg-blue-50/80 dark:border-blue-900/60 dark:bg-blue-950/20'
     if (slug === 'community') return 'border-cyan-200 bg-cyan-50/80 dark:border-cyan-900/60 dark:bg-cyan-950/20'
     return 'border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950'
-  }
-
-  function getBadgeIconClass(slug: string) {
-    if (slug === 'elder') return 'border-amber-200 bg-white shadow-sm shadow-amber-500/15 dark:border-amber-800 dark:bg-black'
-    if (slug === 'vip_premium') return 'border-fuchsia-200 bg-white shadow-sm shadow-fuchsia-500/15 dark:border-fuchsia-800 dark:bg-black'
-    if (slug === 'vip') return 'border-blue-200 bg-white shadow-sm shadow-blue-500/15 dark:border-blue-800 dark:bg-black'
-    if (slug === 'community') return 'border-cyan-200 bg-white shadow-sm shadow-cyan-500/15 dark:border-cyan-800 dark:bg-black'
-    return 'border-zinc-200 bg-white dark:border-zinc-700 dark:bg-black'
   }
 
   return (
@@ -173,13 +167,12 @@ export default function UserBadgesPanel({
                 title={badgeDescription}
               >
                 <div className="flex items-center gap-3">
-                  <div className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border p-2 ${getBadgeIconClass(badge.slug)}`}>
-                    <img
-                      src={badge.icon || `/badges/${badge.slug}.png`}
-                      alt={`Selo ${badgeTitle}`}
-                      className="h-full w-full object-contain"
-                    />
-                  </div>
+                  <UserBadgeIcon
+                    badge={badge}
+                    size="profile"
+                    className="h-14 w-14 rounded-2xl"
+                    title={`Selo ${badgeTitle}`}
+                  />
 
                   <div className="min-w-0">
                     <h3 className="truncate font-semibold text-zinc-950 dark:text-white">

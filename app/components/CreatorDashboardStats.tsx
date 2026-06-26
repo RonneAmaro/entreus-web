@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import { CheckCircle2, Circle } from 'lucide-react'
 import type { CreatorMetric } from '@/lib/creator-dashboard'
@@ -8,6 +9,7 @@ type StatCard = {
   icon: LucideIcon
   tone: string
   suffix?: string
+  renderValue?: ReactNode
   unavailableLabel?: string
 }
 
@@ -34,7 +36,7 @@ export function CreatorDashboardStats({ items }: { items: StatCard[] }) {
               <div className="min-w-0">
                 <p className="text-xs font-black uppercase tracking-[0.16em] text-zinc-500">{item.label}</p>
                 <p className="mt-3 truncate text-2xl font-black text-white">
-                  {formatMetric(item.metric, item.suffix)}
+                  {item.metric.available && item.renderValue ? item.renderValue : formatMetric(item.metric, item.suffix)}
                 </p>
                 {!item.metric.available && item.unavailableLabel && (
                   <p className="mt-2 text-xs leading-5 text-zinc-500">{item.unavailableLabel}</p>

@@ -14,6 +14,7 @@ import SensitiveContent from '../components/SensitiveContent'
 import UserBadges from '../components/UserBadges'
 import UserTierBadge from '../components/UserTierBadge'
 import UserTierFrame, { getUserTierSurfaceClassName } from '../components/UserTierFrame'
+import ItaCashAmount from '../components/ItaCashAmount'
 import TranslatePostButton from '../components/TranslatePostButton'
 import Link from 'next/link'
 import {
@@ -4271,7 +4272,7 @@ function FeedContent() {
 
                       {postPaid && (
                         <span className="rounded-full bg-cyan-50 px-2.5 py-1 text-xs font-bold text-cyan-700 ring-1 ring-cyan-200/80 dark:bg-cyan-950/30 dark:text-cyan-200 dark:ring-cyan-900/60">
-                          {postPaidUnlocked ? 'Desbloqueado' : `${postPrice} ItaCash`}
+                          {postPaidUnlocked ? 'Desbloqueado' : <ItaCashAmount amount={postPrice} size="xs" />}
                         </span>
                       )}
 
@@ -4303,7 +4304,7 @@ function FeedContent() {
                           <div className="min-w-0 flex-1">
                             <h3 className="font-black">Post pago</h3>
                             <p className="mt-1 text-sm leading-6 text-cyan-900/75 dark:text-cyan-100/75">
-                              Desbloqueie por {postPrice} ItaCash para ver o conteudo e as midias.
+                              Desbloqueie por <ItaCashAmount amount={postPrice} size="sm" className="mx-1" /> para ver o conteudo e as midias.
                             </p>
                             <div className="mt-3 flex flex-wrap items-center gap-2">
                               <button

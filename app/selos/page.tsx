@@ -1,11 +1,11 @@
 import type { Metadata } from 'next'
-import Image from 'next/image'
 import {
   COMMUNITY_BADGE_INITIAL_VALIDITY_DAYS,
   COMMUNITY_BADGE_MIN_SCORE,
   COMMUNITY_BADGE_SCORE_RULES,
 } from '@/lib/community-badge-rules'
 import InstitutionalPageLayout from '../components/InstitutionalPageLayout'
+import UserBadgeIcon from '../components/UserBadgeIcon'
 
 export const metadata: Metadata = {
   title: 'Selos EntreUS',
@@ -15,7 +15,7 @@ export const metadata: Metadata = {
 const badges = [
   {
     name: 'Selo Comunidade',
-    image: '/badges/comunidade.png',
+    slug: 'community',
     description:
       'Reconhecimento para usuarios participativos que fortalecem a EntreUS com presenca real, conversas saudaveis e engajamento positivo.',
     benefits: [
@@ -33,7 +33,7 @@ const badges = [
   },
   {
     name: 'Selo VIP',
-    image: '/badges/vip-premium.png',
+    slug: 'vip',
     description:
       'Identidade premium para usuarios pagantes, com acesso a beneficios exclusivos conforme o plano ativo.',
     benefits: [
@@ -45,7 +45,7 @@ const badges = [
   },
   {
     name: 'Selo VIP Premium',
-    image: '/badges/vip-premium.png',
+    slug: 'vip_premium',
     description:
       'Destaque premium mais forte para apoiadores e usuarios com reconhecimento especial dentro da EntreUS.',
     benefits: [
@@ -57,7 +57,7 @@ const badges = [
   },
   {
     name: 'Selo Anciao',
-    image: '/badges/anciao.png',
+    slug: 'elder',
     description:
       'Selo vitalicio e limitado a 100 unidades, pensado para membros fundadores e vozes especiais da comunidade.',
     benefits: [
@@ -84,12 +84,11 @@ export default function SelosPage() {
           >
             <div className="grid gap-5 p-5 sm:grid-cols-[8.5rem_1fr] sm:items-center">
               <div className="mx-auto flex h-32 w-32 items-center justify-center rounded-[1.5rem] border border-blue-300/20 bg-black/35 p-3 shadow-xl shadow-blue-950/20 ring-1 ring-white/10 sm:mx-0">
-                <Image
-                  src={badge.image}
-                  alt={badge.name}
-                  width={128}
-                  height={128}
-                  className="h-full w-full object-contain"
+                <UserBadgeIcon
+                  badge={{ slug: badge.slug, name: badge.name.replace(/^Selo\s+/, '') }}
+                  size="profile"
+                  className="h-full w-full rounded-[1.25rem]"
+                  title={badge.name}
                 />
               </div>
 
