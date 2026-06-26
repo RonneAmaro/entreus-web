@@ -5,7 +5,7 @@ import MobileNavigation from '../components/MobileNavigation'
 import BrandHeader from '../components/BrandHeader'
 import UserBadges from '../components/UserBadges'
 import Link from 'next/link'
-import { AlertTriangle, Award, Bell, CheckCheck, CheckCircle2, Coins, Gift, Heart, MessageCircle, Repeat2, UserPlus } from 'lucide-react'
+import { AlertTriangle, Award, Banknote, Bell, CheckCheck, CheckCircle2, Coins, Gift, Heart, MessageCircle, Repeat2, UserPlus } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
@@ -27,6 +27,7 @@ type Notification = {
   comment_id: string | null
   user_gift_id: string | null
   itacash_purchase_request_id: string | null
+  creator_withdrawal_request_id: string | null
   badge_id?: string | null
   amount: number | null
   read: boolean | null
@@ -78,6 +79,13 @@ type ItaCashPurchaseRequestSummary = {
   rejection_reason: string | null
 }
 
+type CreatorWithdrawalRequestSummary = {
+  id: string
+  amount_itacash: number
+  status: string
+  rejection_reason: string | null
+}
+
 type BadgeSummary = {
   id: string
   slug: string
@@ -91,6 +99,7 @@ type NotificationView = Notification & {
   comment: CommentSummary | null
   gift: GiftSummary | null
   itacashPurchaseRequest: ItaCashPurchaseRequestSummary | null
+  creatorWithdrawalRequest: CreatorWithdrawalRequestSummary | null
   badge: BadgeSummary | null
 }
 
@@ -112,6 +121,9 @@ function getNotificationIcon(type: string) {
   if (isPromotionalItaCashNotification(type)) return <Coins className="h-5 w-5 text-blue-500" />
   if (type === 'itacash_purchase_approved') return <CheckCircle2 className="h-5 w-5 text-emerald-500" />
   if (type === 'itacash_purchase_rejected') return <AlertTriangle className="h-5 w-5 text-red-500" />
+  if (type === 'withdrawal_requested') return <Banknote className="h-5 w-5 text-amber-500" />
+  if (type === 'withdrawal_paid') return <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+  if (type === 'withdrawal_rejected') return <AlertTriangle className="h-5 w-5 text-red-500" />
   if (type === 'post_hidden' || type === 'moderation_warning') return <AlertTriangle className="h-5 w-5 text-amber-500" />
   if (type === 'badge_awarded') return <Award className="h-5 w-5 text-blue-500" />
 
@@ -119,7 +131,10 @@ function getNotificationIcon(type: string) {
 }
 
 function getNotificationAmount(notification: NotificationView) {
-  const value = notification.amount || notification.itacashPurchaseRequest?.amount_itacash || 0
+  const value = notification.amount ||
+    notification.itacashPurchaseRequest?.amount_itacash ||
+    notification.creatorWithdrawalRequest?.amount_itacash ||
+    0
   return Number.isFinite(value) && value > 0 ? value : null
 }
 
@@ -133,8 +148,14 @@ function isItaCashPurchaseStatusNotification(type: string) {
   return type === 'itacash_purchase_approved' || type === 'itacash_purchase_rejected'
 }
 
+function isWithdrawalStatusNotification(type: string) {
+  return type === 'withdrawal_requested' || type === 'withdrawal_paid' || type === 'withdrawal_rejected'
+}
+
 function isItaCashFinancialNotification(type: string) {
-  return isPromotionalItaCashNotification(type) || isItaCashPurchaseStatusNotification(type)
+  return isPromotionalItaCashNotification(type) ||
+    isItaCashPurchaseStatusNotification(type) ||
+    isWithdrawalStatusNotification(type)
 }
 
 function isModerationNotification(type: string) {
@@ -166,6 +187,30 @@ function getItaCashNotificationText(notification: NotificationView) {
     const baseMessage = amount
       ? `Sua compra de ${amount} ItaCash foi recusada.`
       : 'Sua compra de ItaCash foi recusada.'
+
+    return reason ? `${baseMessage} Motivo: ${reason}` : baseMessage
+  }
+
+  if (notification.type === 'withdrawal_requested') {
+    const amount = getNotificationAmount(notification)
+    return amount
+      ? `Sua solicitacao de saque de ${amount} ItaCash foi enviada.`
+      : 'Sua solicitacao de saque foi enviada.'
+  }
+
+  if (notification.type === 'withdrawal_paid') {
+    const amount = getNotificationAmount(notification)
+    return amount
+      ? `Seu saque de ${amount} ItaCash foi marcado como pago.`
+      : 'Seu saque foi marcado como pago.'
+  }
+
+  if (notification.type === 'withdrawal_rejected') {
+    const amount = getNotificationAmount(notification)
+    const reason = notification.creatorWithdrawalRequest?.rejection_reason?.trim()
+    const baseMessage = amount
+      ? `Seu saque de ${amount} ItaCash foi recusado e estornado.`
+      : 'Seu saque foi recusado e estornado.'
 
     return reason ? `${baseMessage} Motivo: ${reason}` : baseMessage
   }
@@ -223,6 +268,9 @@ function getNotificationActionTextView(notification: NotificationView) {
       : 'Sua compra de ItaCash foi recusada.'
 
     return reason ? `${baseMessage} Motivo: ${reason}` : baseMessage
+  }
+  if (isWithdrawalStatusNotification(notification.type)) {
+    return getItaCashNotificationText(notification)
   }
 
   return getNotificationActionText(notification.type)
@@ -350,12 +398,12 @@ export default function NotificationsPage() {
 
     let { data, error } = await supabase
       .from('notifications')
-      .select('id, user_id, actor_id, type, post_id, comment_id, user_gift_id, itacash_purchase_request_id, badge_id, amount, read, created_at')
+      .select('id, user_id, actor_id, type, post_id, comment_id, user_gift_id, itacash_purchase_request_id, creator_withdrawal_request_id, badge_id, amount, read, created_at')
       .eq('user_id', currentUserId)
       .order('created_at', { ascending: false })
       .limit(60)
 
-    if (error && (error.message.includes('itacash_purchase_request_id') || error.message.includes('badge_id'))) {
+    if (error && (error.message.includes('itacash_purchase_request_id') || error.message.includes('creator_withdrawal_request_id') || error.message.includes('badge_id'))) {
       console.warn('[Notifications] Optional notification columns unavailable, loading base notifications:', error.message)
       const fallback = await supabase
         .from('notifications')
@@ -365,10 +413,11 @@ export default function NotificationsPage() {
         .limit(60)
 
       data = (fallback.data || []).map((item) => ({
-        ...item,
-        itacash_purchase_request_id: null,
-        badge_id: null,
-      }))
+          ...item,
+          itacash_purchase_request_id: null,
+          creator_withdrawal_request_id: null,
+          badge_id: null,
+        }))
       error = fallback.error
     }
 
@@ -399,6 +448,10 @@ export default function NotificationsPage() {
       new Set(rawNotifications.map((item) => item.itacash_purchase_request_id).filter(Boolean))
     ) as string[]
 
+    const creatorWithdrawalRequestIds = Array.from(
+      new Set(rawNotifications.map((item) => item.creator_withdrawal_request_id).filter(Boolean))
+    ) as string[]
+
     const badgeIds = Array.from(
       new Set(rawNotifications.map((item) => item.badge_id).filter(Boolean))
     ) as string[]
@@ -408,6 +461,7 @@ export default function NotificationsPage() {
     let commentsById: Record<string, CommentSummary> = {}
     let giftsById: Record<string, GiftSummary> = {}
     let purchaseRequestsById: Record<string, ItaCashPurchaseRequestSummary> = {}
+    let withdrawalRequestsById: Record<string, CreatorWithdrawalRequestSummary> = {}
     let badgesById: Record<string, BadgeSummary> = {}
 
     if (actorIds.length > 0) {
@@ -513,6 +567,25 @@ export default function NotificationsPage() {
       )
     }
 
+    if (creatorWithdrawalRequestIds.length > 0) {
+      const { data: withdrawalRequestsData, error: withdrawalRequestsError } = await supabase
+        .from('creator_withdrawal_requests')
+        .select('id, amount_itacash, status, rejection_reason')
+        .in('id', creatorWithdrawalRequestIds)
+
+      if (withdrawalRequestsError) {
+        console.error('Erro ao carregar saques das notificacoes:', withdrawalRequestsError.message)
+      }
+
+      withdrawalRequestsById = ((withdrawalRequestsData || []) as CreatorWithdrawalRequestSummary[]).reduce(
+        (acc, request) => {
+          acc[request.id] = request
+          return acc
+        },
+        {} as Record<string, CreatorWithdrawalRequestSummary>
+      )
+    }
+
     if (badgeIds.length > 0) {
       const { data: badgesData, error: badgesError } = await supabase
         .from('badges')
@@ -540,6 +613,9 @@ export default function NotificationsPage() {
       gift: item.user_gift_id ? giftsById[item.user_gift_id] || null : null,
       itacashPurchaseRequest: item.itacash_purchase_request_id
         ? purchaseRequestsById[item.itacash_purchase_request_id] || null
+        : null,
+      creatorWithdrawalRequest: item.creator_withdrawal_request_id
+        ? withdrawalRequestsById[item.creator_withdrawal_request_id] || null
         : null,
       badge: item.badge_id ? badgesById[item.badge_id] || null : null,
     }))
@@ -818,6 +894,18 @@ export default function NotificationsPage() {
 
                     {notification.type === 'itacash_purchase_rejected' && (
                       <p className="mt-3 rounded-xl bg-red-100 px-3 py-2 text-sm font-semibold text-red-800 dark:bg-red-950/40 dark:text-red-100">
+                        {getItaCashNotificationText(notification)}
+                      </p>
+                    )}
+
+                    {isWithdrawalStatusNotification(notification.type) && (
+                      <p className={`mt-3 rounded-xl px-3 py-2 text-sm font-semibold ${
+                        notification.type === 'withdrawal_rejected'
+                          ? 'bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-100'
+                          : notification.type === 'withdrawal_paid'
+                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100'
+                            : 'bg-amber-100 text-amber-900 dark:bg-amber-950/40 dark:text-amber-100'
+                      }`}>
                         {getItaCashNotificationText(notification)}
                       </p>
                     )}

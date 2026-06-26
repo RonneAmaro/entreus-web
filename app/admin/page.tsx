@@ -10,6 +10,7 @@ import {
   Bug,
   CheckCircle2,
   Coins,
+  Banknote,
   DatabaseZap,
   Flag,
   FileArchive,
@@ -46,6 +47,12 @@ const adminCards = [
     description: 'Aprovar ou recusar solicitacoes manuais de compra de ItaCash.',
     href: '/admin/itacash-purchases',
     icon: Coins,
+  },
+  {
+    title: 'Saques de criadores',
+    description: 'Revisar solicitacoes de saque manual e registrar Pix pago ou recusado.',
+    href: '/admin/creator-withdrawals',
+    icon: Banknote,
   },
   {
     title: 'Credito Promocional',

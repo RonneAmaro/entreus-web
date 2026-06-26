@@ -121,6 +121,8 @@ const transactionLabels: Record<string, string> = {
   paid_post_received: 'Post pago recebido',
   purchase_confirmed: 'Compra de ItaCash',
   promotional_credit: 'Credito promocional',
+  withdrawal_requested: 'Saque solicitado',
+  withdrawal_refunded: 'Saque estornado',
   refund: 'Reembolso',
   adjustment: 'Ajuste',
 }
@@ -458,6 +460,22 @@ export default function WalletPage() {
       }
     }
 
+    if (transaction.type === 'withdrawal_requested') {
+      return {
+        title: 'Saque solicitado',
+        detail: transaction.description || 'Valor debitado para saque manual',
+        tone: 'out',
+      }
+    }
+
+    if (transaction.type === 'withdrawal_refunded') {
+      return {
+        title: 'Saque estornado',
+        detail: transaction.description || 'Valor devolvido apos recusa do saque',
+        tone: 'in',
+      }
+    }
+
     if (transaction.type === 'purchase_confirmed') {
       const isPaymentOrder = transaction.reference_type === 'payment_order'
 
@@ -679,7 +697,7 @@ export default function WalletPage() {
               <ShieldAlert className="h-5 w-5" />
               Aviso importante
             </div>
-            ItaCash e credito interno da plataforma, nao e moeda oficial, nao e investimento financeiro e nao possui saque ou compra real neste pacote.
+            ItaCash e credito interno da plataforma, nao e moeda oficial e nao e investimento financeiro. Saques de criadores sao manuais e o Pix e pago fora da plataforma pelo administrador.
           </div>
 
           <div className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">

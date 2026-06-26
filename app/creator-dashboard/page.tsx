@@ -1,15 +1,18 @@
 'use client'
 
 import Link from 'next/link'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import {
   ArrowLeft,
   BadgeCheck,
+  Banknote,
   BarChart3,
   Bookmark,
+  CheckCircle2,
   Coins,
+  Clock,
   Eye,
   Heart,
   Loader2,
@@ -20,6 +23,7 @@ import {
   TrendingUp,
   Users,
   Wallet,
+  XCircle,
 } from 'lucide-react'
 import AppSidebar from '../components/AppSidebar'
 import MobileNavigation from '../components/MobileNavigation'
@@ -39,6 +43,18 @@ import {
   summarizePostViewRows,
   type PostViewRow,
 } from '@/lib/post-analytics'
+import {
+  ITACASH_PER_BRL,
+  MIN_WITHDRAWAL_BRL,
+  MIN_WITHDRAWAL_ITACASH,
+  PIX_KEY_TYPES,
+  canRequestWithdrawal,
+  convertItaCashToBrl,
+  formatWithdrawalStatus,
+  validateWithdrawalRequestPayload,
+  type CreatorWithdrawalStatus,
+  type PixKeyType,
+} from '@/lib/creator-withdrawals'
 
 type CurrentProfile = {
   username: string | null
@@ -52,6 +68,18 @@ type CurrentProfile = {
 type PostReference = { post_id: string | null }
 type TipRow = { id: string | null; amount: number | null; created_at: string | null; metadata: Record<string, unknown> | null }
 type WalletRow = { balance: number | null }
+type CreatorWithdrawalRow = {
+  id: string
+  amount_itacash: number
+  amount_brl: number
+  pix_key: string
+  pix_key_type: PixKeyType
+  holder_name: string
+  status: CreatorWithdrawalStatus
+  rejection_reason: string | null
+  created_at: string
+  paid_at: string | null
+}
 
 type QueryResult<T> = {
   data: T[] | null
@@ -64,6 +92,13 @@ type CountedQueryResult<T> = QueryResult<T> & {
 
 const EMPTY_QUERY: QueryResult<PostReference> = { data: [], error: null }
 const EMPTY_VIEW_QUERY: CountedQueryResult<PostViewRow> = { data: [], error: null, count: 0 }
+const PIX_KEY_TYPE_LABELS: Record<PixKeyType, string> = {
+  cpf: 'CPF',
+  email: 'E-mail',
+  phone: 'Telefone',
+  random: 'Aleatoria',
+  cnpj: 'CNPJ',
+}
 
 function isMissingPostColumnError(error: { message?: string } | null | undefined) {
   const message = (error?.message || '').toLowerCase()
@@ -105,6 +140,26 @@ function formatDate(value: string | null) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return 'Data indisponível'
   return date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
+function formatBRL(value: number) {
+  return value.toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  })
+}
+
+function withdrawalStatusClass(status: CreatorWithdrawalStatus) {
+  if (status === 'paid') return 'bg-emerald-500/10 text-emerald-200 ring-emerald-300/15'
+  if (status === 'rejected') return 'bg-red-500/10 text-red-200 ring-red-300/15'
+  if (status === 'cancelled') return 'bg-zinc-500/10 text-zinc-300 ring-white/10'
+  return 'bg-amber-500/10 text-amber-100 ring-amber-300/15'
+}
+
+function withdrawalStatusIcon(status: CreatorWithdrawalStatus) {
+  if (status === 'paid') return <CheckCircle2 className="h-3.5 w-3.5" />
+  if (status === 'rejected') return <XCircle className="h-3.5 w-3.5" />
+  return <Clock className="h-3.5 w-3.5" />
 }
 
 function labelCommunity(value: string) {
@@ -161,6 +216,15 @@ export default function CreatorDashboardPage() {
     count: undefined as number | undefined,
     recentUnlocks: [] as ReturnType<typeof summarizePaidPostUnlocks>['recentUnlocks'],
   })
+  const [withdrawals, setWithdrawals] = useState<CreatorWithdrawalRow[]>([])
+  const [withdrawalForm, setWithdrawalForm] = useState({
+    amountItacash: '',
+    pixKey: '',
+    pixKeyType: 'cpf' as PixKeyType,
+    holderName: '',
+  })
+  const [withdrawalSubmitting, setWithdrawalSubmitting] = useState(false)
+  const [withdrawalMessage, setWithdrawalMessage] = useState('')
   const [viewActivity, setViewActivity] = useState({
     available: false,
     total: 0,
@@ -169,6 +233,36 @@ export default function CreatorDashboardPage() {
     viewsByPostId: {} as Record<string, number>,
   })
   const [interactionsByPostId, setInteractionsByPostId] = useState<Record<string, number>>({})
+
+  const loadWithdrawals = useCallback(async () => {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+
+    if (!session?.access_token) {
+      setWithdrawals([])
+      return
+    }
+
+    const response = await fetch('/api/creator-withdrawals', {
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
+      },
+    })
+    const data = (await response.json().catch(() => null)) as {
+      ok?: boolean
+      withdrawals?: CreatorWithdrawalRow[]
+      error?: string
+    } | null
+
+    if (!response.ok || !data?.ok) {
+      setWithdrawals([])
+      setWithdrawalMessage(data?.error || 'Nao foi possivel carregar solicitacoes de saque.')
+      return
+    }
+
+    setWithdrawals(data.withdrawals || [])
+  }, [])
 
   const loadDashboard = useCallback(async () => {
     setLoading(true)
@@ -324,8 +418,9 @@ export default function CreatorDashboardPage() {
       setMessage('Algumas métricas de interação estão indisponíveis no momento. Seus posts continuam seguros e privados neste painel.')
     }
 
+    await loadWithdrawals()
     setLoading(false)
-  }, [router])
+  }, [loadWithdrawals, router])
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -338,6 +433,65 @@ export default function CreatorDashboardPage() {
   async function handleLogout() {
     await supabase.auth.signOut()
     router.push('/login')
+  }
+
+  async function handleWithdrawalSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setWithdrawalMessage('')
+
+    const availableBalance = metrics.walletBalance === undefined ? null : metrics.walletBalance
+    const validation = validateWithdrawalRequestPayload({
+      amountItacash: withdrawalForm.amountItacash,
+      pixKey: withdrawalForm.pixKey,
+      pixKeyType: withdrawalForm.pixKeyType,
+      holderName: withdrawalForm.holderName,
+      availableBalance,
+    })
+
+    if (!validation.ok) {
+      setWithdrawalMessage(validation.message)
+      return
+    }
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+
+    if (!session?.access_token) {
+      setWithdrawalMessage('Entre na sua conta para solicitar saque.')
+      return
+    }
+
+    setWithdrawalSubmitting(true)
+    const response = await fetch('/api/creator-withdrawals', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify(validation.value),
+    })
+    const data = (await response.json().catch(() => null)) as {
+      ok?: boolean
+      message?: string
+      error?: string
+    } | null
+
+    setWithdrawalSubmitting(false)
+
+    if (!response.ok || !data?.ok) {
+      setWithdrawalMessage(data?.error || 'Nao foi possivel solicitar saque agora.')
+      return
+    }
+
+    setWithdrawalForm((current) => ({
+      amountItacash: '',
+      pixKey: '',
+      pixKeyType: current.pixKeyType,
+      holderName: '',
+    }))
+    setWithdrawalMessage(data.message || 'Solicitacao de saque enviada.')
+    await loadDashboard()
   }
 
   const summary = useMemo(
@@ -391,6 +545,13 @@ export default function CreatorDashboardPage() {
     { label: 'Verificação 18+ para conteúdo adulto', complete: profile?.age_verification_status === 'approved', description: 'Opcional; exigida apenas para publicar na área adulta.' },
     { label: 'Pronto para monetizacao', complete: Boolean(profile?.username && profile?.avatar_url && summary.posts > 0), description: 'Gorjetas e posts pagos com ItaCash ja podem aparecer no painel; saques terao pacote proprio.' },
   ]
+
+  const walletBalanceValue = summary.walletBalance.available ? summary.walletBalance.value : 0
+  const canSubmitWithdrawal = summary.walletBalance.available && canRequestWithdrawal(walletBalanceValue)
+  const withdrawalPreviewAmount = Number(withdrawalForm.amountItacash)
+  const withdrawalPreviewBrl = Number.isFinite(withdrawalPreviewAmount)
+    ? convertItaCashToBrl(withdrawalPreviewAmount)
+    : 0
 
   return (
     <main className="min-h-screen overflow-x-hidden bg-black text-white">
@@ -458,15 +619,16 @@ export default function CreatorDashboardPage() {
           <div className="mt-6 space-y-6">
             <CreatorDashboardStats items={statCards} />
 
-            {summary.posts === 0 ? (
+            {summary.posts === 0 && (
               <section className="rounded-[2rem] border border-blue-300/20 bg-blue-500/10 p-7 text-center ring-1 ring-blue-300/10">
                 <Send className="mx-auto h-9 w-9 text-blue-200" />
                 <h2 className="mt-4 text-2xl font-black">Publique seu primeiro conteúdo</h2>
                 <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-blue-100/75">Depois da primeira publicação, você verá aqui o resumo de conteúdo e as interações recebidas.</p>
                 <Link href="/feed#post-composer" className="mt-5 inline-flex rounded-full bg-white px-5 py-2.5 text-sm font-black text-black transition hover:bg-blue-50">Criar publicação</Link>
               </section>
-            ) : (
-              <section className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(20rem,0.65fr)]">
+            )}
+
+            <section className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(20rem,0.65fr)]">
                 <article className="rounded-[2rem] border border-white/10 bg-zinc-950/90 p-5 shadow-xl shadow-black/20 ring-1 ring-white/5">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
@@ -500,7 +662,7 @@ export default function CreatorDashboardPage() {
                     <div className="mt-4 rounded-2xl border border-cyan-300/20 bg-cyan-500/10 p-4">
                       <p className="text-xs font-black uppercase tracking-[0.14em] text-cyan-100/70">Saldo ItaCash da carteira</p>
                       <p className="mt-2 text-2xl font-black text-cyan-50">{formatNumber(summary.walletBalance.value)} ItaCash</p>
-                      <p className="mt-2 text-xs leading-5 text-cyan-100/70">Consulta somente leitura; não representa saldo disponível para saque.</p>
+                      <p className="mt-2 text-xs leading-5 text-cyan-100/70">Equivalente aproximado: {formatBRL(convertItaCashToBrl(summary.walletBalance.value))}. Saques pendentes ja reduzem este saldo.</p>
                     </div>
                   ) : (
                     <p className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-zinc-400">Carteira ItaCash indisponível no momento.</p>
@@ -565,13 +727,140 @@ export default function CreatorDashboardPage() {
                       <p className="mt-3 text-sm leading-6 text-cyan-100/75">Recebimentos por posts pagos ficam disponiveis depois da migration aplicada.</p>
                     )}
                   </div>
-                  <ul className="mt-4 space-y-2 text-sm text-zinc-300">
-                    <li>Solicitação de saque — em preparação</li>
-                  </ul>
+                  <div className="mt-4 rounded-2xl border border-emerald-300/20 bg-emerald-500/10 p-4">
+                    <div className="flex items-start gap-3">
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/15 text-emerald-100">
+                        <Banknote className="h-5 w-5" />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-xs font-black uppercase tracking-[0.14em] text-emerald-100/70">Saque</p>
+                        <h3 className="mt-1 text-xl font-black">Solicitar saque manual</h3>
+                        <p className="mt-1 text-sm leading-6 text-emerald-50/75">
+                          Minimo: {formatNumber(MIN_WITHDRAWAL_ITACASH)} ItaCash = {formatBRL(MIN_WITHDRAWAL_BRL)}. Pagamento Pix manual pelo admin.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
+                        <p className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Disponivel</p>
+                        <p className="mt-2 text-xl font-black">{formatNumber(walletBalanceValue)} ItaCash</p>
+                        <p className="mt-1 text-xs text-zinc-400">{formatBRL(convertItaCashToBrl(walletBalanceValue))}</p>
+                      </div>
+                      <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
+                        <p className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Conversao</p>
+                        <p className="mt-2 text-xl font-black">{ITACASH_PER_BRL} ItaCash</p>
+                        <p className="mt-1 text-xs text-zinc-400">R$ 1,00</p>
+                      </div>
+                    </div>
+
+                    {!canSubmitWithdrawal && (
+                      <p className="mt-4 rounded-2xl border border-amber-300/20 bg-amber-500/10 p-3 text-sm font-semibold leading-6 text-amber-100">
+                        Você precisa ter pelo menos 1000 ItaCash (R$ 100,00) para solicitar saque.
+                      </p>
+                    )}
+
+                    {withdrawalMessage && (
+                      <p className="mt-4 rounded-2xl border border-blue-300/20 bg-blue-500/10 p-3 text-sm font-semibold leading-6 text-blue-100">
+                        {withdrawalMessage}
+                      </p>
+                    )}
+
+                    <form onSubmit={handleWithdrawalSubmit} className="mt-4 grid gap-3">
+                      <label className="block">
+                        <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Valor em ItaCash</span>
+                        <input
+                          type="number"
+                          min={MIN_WITHDRAWAL_ITACASH}
+                          step={1}
+                          value={withdrawalForm.amountItacash}
+                          onChange={(event) => setWithdrawalForm((current) => ({ ...current, amountItacash: event.target.value }))}
+                          className="mt-2 w-full rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm font-semibold text-white outline-none transition focus:border-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                          disabled={!summary.walletBalance.available || withdrawalSubmitting}
+                        />
+                        <span className="mt-1 block text-xs text-zinc-500">
+                          Previa: {formatBRL(withdrawalPreviewBrl > 0 ? withdrawalPreviewBrl : 0)}
+                        </span>
+                      </label>
+
+                      <div className="grid gap-3 sm:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
+                        <label className="block">
+                          <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Tipo Pix</span>
+                          <select
+                            value={withdrawalForm.pixKeyType}
+                            onChange={(event) => setWithdrawalForm((current) => ({ ...current, pixKeyType: event.target.value as PixKeyType }))}
+                            className="mt-2 w-full rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm font-semibold text-white outline-none transition focus:border-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                            disabled={!summary.walletBalance.available || withdrawalSubmitting}
+                          >
+                            {PIX_KEY_TYPES.map((type) => (
+                              <option key={type} value={type}>{PIX_KEY_TYPE_LABELS[type]}</option>
+                            ))}
+                          </select>
+                        </label>
+
+                        <label className="block">
+                          <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Chave Pix</span>
+                          <input
+                            value={withdrawalForm.pixKey}
+                            onChange={(event) => setWithdrawalForm((current) => ({ ...current, pixKey: event.target.value }))}
+                            className="mt-2 w-full rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm font-semibold text-white outline-none transition focus:border-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                            disabled={!summary.walletBalance.available || withdrawalSubmitting}
+                          />
+                        </label>
+                      </div>
+
+                      <label className="block">
+                        <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Nome do titular</span>
+                        <input
+                          value={withdrawalForm.holderName}
+                          onChange={(event) => setWithdrawalForm((current) => ({ ...current, holderName: event.target.value }))}
+                          className="mt-2 w-full rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm font-semibold text-white outline-none transition focus:border-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                          disabled={!summary.walletBalance.available || withdrawalSubmitting}
+                        />
+                      </label>
+
+                      <button
+                        type="submit"
+                        disabled={!canSubmitWithdrawal || withdrawalSubmitting}
+                        className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-black text-black transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {withdrawalSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Banknote className="h-4 w-4" />}
+                        Solicitar saque
+                      </button>
+                    </form>
+
+                    <div className="mt-5 border-t border-white/10 pt-4">
+                      <p className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Solicitacoes recentes</p>
+                      {withdrawals.length > 0 ? (
+                        <div className="mt-3 space-y-2">
+                          {withdrawals.slice(0, 5).map((withdrawal) => (
+                            <div key={withdrawal.id} className="rounded-2xl border border-white/10 bg-black/30 p-3 text-sm">
+                              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                <div>
+                                  <p className="font-black text-white">{formatNumber(withdrawal.amount_itacash)} ItaCash</p>
+                                  <p className="mt-1 text-xs text-zinc-500">{formatBRL(Number(withdrawal.amount_brl) || 0)} - {formatDate(withdrawal.created_at)}</p>
+                                </div>
+                                <span className={`inline-flex w-fit items-center gap-1 rounded-full px-2.5 py-1 text-xs font-black ring-1 ${withdrawalStatusClass(withdrawal.status)}`}>
+                                  {withdrawalStatusIcon(withdrawal.status)}
+                                  {formatWithdrawalStatus(withdrawal.status)}
+                                </span>
+                              </div>
+                              {withdrawal.rejection_reason && (
+                                <p className="mt-2 rounded-xl bg-red-500/10 px-3 py-2 text-xs font-semibold leading-5 text-red-100 ring-1 ring-red-300/15">
+                                  Motivo: {withdrawal.rejection_reason}
+                                </p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="mt-3 text-sm leading-6 text-emerald-50/75">Nenhuma solicitacao de saque registrada ainda.</p>
+                      )}
+                    </div>
+                  </div>
                   <Link href="/wallet" className="mt-5 inline-flex items-center gap-2 text-sm font-black text-cyan-200 hover:text-cyan-100"><Wallet className="h-4 w-4" />Abrir carteira</Link>
                 </article>
               </section>
-            )}
 
             {summary.posts > 0 && (
               <section className="grid gap-6 xl:grid-cols-2">
