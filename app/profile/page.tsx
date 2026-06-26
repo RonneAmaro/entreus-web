@@ -22,7 +22,8 @@ import {
   type ModeratedPostFields,
 } from '@/lib/post-moderation'
 import { resolveUserTier } from '@/lib/user-tiers'
-import { isMissingPaidPostColumnError, sanitizeLockedPaidPostForClient } from '@/lib/paid-posts'
+import { isMissingPaidPostColumnError } from '@/lib/paid-posts'
+import { loadAuthorizedPostContent } from '@/lib/authorized-post-content-client'
 import {
   getEffectiveProfileThemeKey,
   getProfileTheme,
@@ -734,34 +735,12 @@ export default function ProfilePage() {
     setReposts(normalizedReposts)
   }
 
-  async function loadPaidUnlockIdsForPosts(currentUserId: string, postIds: string[]) {
-    if (!currentUserId || postIds.length === 0) return new Set<string>()
-
-    const { data, error } = await supabase
-      .from('paid_post_unlocks')
-      .select('post_id')
-      .eq('buyer_id', currentUserId)
-      .in('post_id', postIds)
-
-    if (error) {
-      if (!isMissingPaidPostColumnError(error)) {
-        console.warn('Nao foi possivel carregar desbloqueios de posts pagos do perfil:', error.message)
-      }
-      return new Set<string>()
-    }
-
-    return new Set((data || []).map((row) => row.post_id).filter(Boolean) as string[])
-  }
-
   async function loadProfileActivity(currentUserId: string, currentProfileData: Profile) {
     const postSelectWithModeration = `
         id,
-        content,
         category,
         created_at,
         user_id,
-        image_url,
-        video_url,
         visibility,
         is_sensitive,
         ${POST_SELECT_PAID_FIELDS}
@@ -777,12 +756,9 @@ export default function ProfilePage() {
       `
     const postSelectFallback = `
         id,
-        content,
         category,
         created_at,
         user_id,
-        image_url,
-        video_url,
         visibility,
         is_sensitive,
         ${POST_SELECT_PAID_FIELDS}
@@ -852,6 +828,9 @@ export default function ProfilePage() {
     const ownPosts = (ownPostsData || [])
       .map((post: any) => ({
         ...post,
+        content: null,
+        image_url: null,
+        video_url: null,
         visibility: (post.visibility || 'public') as VisibilityType,
         is_sensitive: post.is_sensitive || false,
         profiles: Array.isArray(post.profiles)
@@ -906,6 +885,9 @@ export default function ProfilePage() {
       repostedPosts = (repostedPostsData || [])
         .map((post: any) => ({
           ...post,
+          content: null,
+          image_url: null,
+          video_url: null,
           visibility: (post.visibility || 'public') as VisibilityType,
           is_sensitive: post.is_sensitive || false,
           profiles: Array.isArray(post.profiles)
@@ -923,38 +905,26 @@ export default function ProfilePage() {
 
     const allPosts = Array.from(allPostsMap.values())
     const allPostIds = allPosts.map((post) => post.id)
-    const paidUnlockedIds = await loadPaidUnlockIdsForPosts(currentUserId, allPostIds)
+    let authorizedPostsById = new Map<string, Post>()
 
-    let mediaByPost: Record<string, PostMedia[]> = {}
-
-    if (allPostIds.length > 0) {
-      const { data: mediaData, error: mediaError } = await supabase
-        .from('post_media')
-        .select('id, post_id, user_id, media_url, media_type, position, created_at, access_level')
-        .in('post_id', allPostIds)
-        .order('position', { ascending: true })
-
-      if (mediaError) {
-        console.error('Erro ao carregar mídias do perfil:', mediaError.message)
-      }
-
-      mediaByPost = ((mediaData || []) as PostMedia[]).reduce(
-        (acc, mediaItem) => {
-          if (!acc[mediaItem.post_id]) acc[mediaItem.post_id] = []
-          acc[mediaItem.post_id].push(mediaItem)
-          return acc
-        },
-        {} as Record<string, PostMedia[]>
-      )
+    try {
+      const authorizedContent = await loadAuthorizedPostContent<Post>(allPostIds, 'public-list')
+      authorizedPostsById = authorizedContent.postsById
+    } catch (authorizedError) {
+      console.error('Erro ao carregar conteudo autorizado do perfil:', authorizedError)
     }
 
     const normalizedPosts = allPosts.map((post) => {
-      const paidUnlocked = post.user_id === currentUserId || paidUnlockedIds.has(post.id)
-      return sanitizeLockedPaidPostForClient({
+      const authorizedPost = authorizedPostsById.get(post.id)
+
+      return {
         ...post,
-        media: mediaByPost[post.id] || [],
-        paid_unlocked: paidUnlocked,
-      }, currentUserId, paidUnlocked)
+        content: authorizedPost?.content ?? null,
+        image_url: authorizedPost?.image_url ?? null,
+        video_url: authorizedPost?.video_url ?? null,
+        media: authorizedPost?.media || [],
+        paid_unlocked: Boolean(authorizedPost?.paid_unlocked),
+      }
     })
 
     setPosts(normalizedPosts)

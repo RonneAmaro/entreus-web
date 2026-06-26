@@ -77,12 +77,12 @@ import {
 } from '@/lib/post-classification'
 import { normalizePostClassification } from '@/lib/content-access'
 import { applyPostVisibilityFilters } from '@/lib/post-visibility'
+import { loadAuthorizedPostContent } from '@/lib/authorized-post-content-client'
 import {
   getPaidPostErrorMessage,
   getPaidPostPrice,
   isMissingPaidPostColumnError,
   isPaidPost,
-  sanitizeLockedPaidPostForClient,
   validatePaidPostPrice,
 } from '@/lib/paid-posts'
 
@@ -170,7 +170,6 @@ type FeedHighlight = {
   position: number | null
   posts?: {
     id: string
-    content: string | null
   } | null
   community_challenges?: {
     slug: string
@@ -1050,7 +1049,7 @@ function FeedContent() {
 
     const { data, error } = await supabase
       .from('feed_highlights')
-      .select('id, post_id, challenge_id, title, description, position, posts(id, content), community_challenges(slug, title)')
+      .select('id, post_id, challenge_id, title, description, position, posts(id), community_challenges(slug, title)')
       .eq('is_active', true)
       .lte('starts_at', now)
       .or(`ends_at.is.null,ends_at.gte.${now}`)
@@ -1199,25 +1198,6 @@ function FeedContent() {
     return normalizedReposts
   }
 
-  async function loadPaidUnlockIdsForPosts(currentUserId: string, postIds: string[]) {
-    if (!currentUserId || postIds.length === 0) return new Set<string>()
-
-    const { data, error } = await supabase
-      .from('paid_post_unlocks')
-      .select('post_id')
-      .eq('buyer_id', currentUserId)
-      .in('post_id', postIds)
-
-    if (error) {
-      if (!isMissingPaidPostColumnError(error)) {
-        console.warn('Nao foi possivel carregar desbloqueios de posts pagos:', error.message)
-      }
-      return new Set<string>()
-    }
-
-    return new Set((data || []).map((row) => row.post_id).filter(Boolean) as string[])
-  }
-
   function canSeePost(post: Post, currentUserId: string, currentFollows: Follow[]) {
     if (post.user_id === currentUserId) return true
     if (post.visibility === 'public') return true
@@ -1257,12 +1237,9 @@ function FeedContent() {
 
     const postSelectWithModeration = `
         id,
-        content,
         category,
         created_at,
         user_id,
-        image_url,
-        video_url,
         visibility,
         is_sensitive,
         ${POST_SELECT_COMMUNITY_FIELDS}
@@ -1281,12 +1258,9 @@ function FeedContent() {
       `
     const postSelectFallback = `
         id,
-        content,
         category,
         created_at,
         user_id,
-        image_url,
-        video_url,
         visibility,
         is_sensitive,
         ${POST_SELECT_COMMUNITY_FIELDS}
@@ -1395,6 +1369,9 @@ function FeedContent() {
 
     const rawPosts = fetchedRows.map((post: any) => ({
       ...post,
+      content: null,
+      image_url: null,
+      video_url: null,
       visibility: (post.visibility || 'public') as VisibilityType,
       is_sensitive: post.is_sensitive || false,
       community_type: normalizeCommunity(post.community_type),
@@ -1405,41 +1382,32 @@ function FeedContent() {
     })) as Post[]
 
     const postIds = rawPosts.map((post) => post.id)
-    const paidUnlockedIds = await loadPaidUnlockIdsForPosts(currentUserId, postIds)
+    let authorizedPostsById = new Map<string, Post>()
+
+    try {
+      const authorizedContent = await loadAuthorizedPostContent<Post>(
+        postIds,
+        communityFilter === 'general' ? 'general-feed' : 'public-list',
+      )
+      authorizedPostsById = authorizedContent.postsById
+    } catch (authorizedError) {
+      console.error('Erro ao carregar conteudo autorizado dos posts:', authorizedError)
+    }
 
     await loadTierBadgeSlugs(rawPosts.map((post) => post.user_id))
 
-    let mediaByPost: Record<string, PostMedia[]> = {}
-
-    if (postIds.length > 0) {
-      const { data: mediaData, error: mediaError } = await supabase
-        .from('post_media')
-        .select('id, post_id, user_id, media_url, media_type, position, created_at, access_level')
-        .in('post_id', postIds)
-        .order('position', { ascending: true })
-
-      if (mediaError) {
-        console.error('Erro ao carregar mídias dos posts:', mediaError.message)
-      }
-
-      mediaByPost = ((mediaData || []) as PostMedia[]).reduce(
-        (acc, mediaItem) => {
-          if (!acc[mediaItem.post_id]) acc[mediaItem.post_id] = []
-          acc[mediaItem.post_id].push(mediaItem)
-          return acc
-        },
-        {} as Record<string, PostMedia[]>
-      )
-    }
-
     const normalizedPosts = rawPosts
       .map((post) => {
-        const paidUnlocked = post.user_id === currentUserId || paidUnlockedIds.has(post.id)
-        return sanitizeLockedPaidPostForClient({
+        const authorizedPost = authorizedPostsById.get(post.id)
+
+        return {
           ...post,
-          media: mediaByPost[post.id] || [],
-          paid_unlocked: paidUnlocked,
-        }, currentUserId, paidUnlocked)
+          content: authorizedPost?.content ?? null,
+          image_url: authorizedPost?.image_url ?? null,
+          video_url: authorizedPost?.video_url ?? null,
+          media: authorizedPost?.media || [],
+          paid_unlocked: Boolean(authorizedPost?.paid_unlocked),
+        }
       })
       .filter((post) => !currentBlockedIds.includes(post.user_id))
       .filter((post) => !isModeratedHidden(post))
@@ -4793,7 +4761,6 @@ function FeedContent() {
                             'Post em destaque'
                           const description =
                             highlight.description ||
-                            highlight.posts?.content ||
                             'Selecionado pelos desafios da comunidade.'
 
                           return (

@@ -23,7 +23,8 @@ import {
 } from '@/lib/post-classification'
 import { canViewAdultContent } from '@/lib/content-access'
 import { applyPostVisibilityFilters } from '@/lib/post-visibility'
-import { isMissingPaidPostColumnError, sanitizeLockedPaidPostForClient } from '@/lib/paid-posts'
+import { isMissingPaidPostColumnError } from '@/lib/paid-posts'
+import { loadAuthorizedPostContent } from '@/lib/authorized-post-content-client'
 
 
 function getDateLocale(language: string) {
@@ -387,25 +388,6 @@ export default function SavedPage() {
     )
   }
 
-  async function loadPaidUnlockIdsForPosts(currentUserId: string, postIds: string[]) {
-    if (!currentUserId || postIds.length === 0) return new Set<string>()
-
-    const { data, error } = await supabase
-      .from('paid_post_unlocks')
-      .select('post_id')
-      .eq('buyer_id', currentUserId)
-      .in('post_id', postIds)
-
-    if (error) {
-      if (!isMissingPaidPostColumnError(error)) {
-        console.warn('Nao foi possivel carregar desbloqueios de posts pagos salvos:', error.message)
-      }
-      return new Set<string>()
-    }
-
-    return new Set((data || []).map((row) => row.post_id).filter(Boolean) as string[])
-  }
-
   async function loadSavedPosts(
     currentUserId: string,
     currentBookmarks: SavedBookmark[],
@@ -422,12 +404,9 @@ export default function SavedPage() {
 
     const selectWithModeration = `
         id,
-        content,
         category,
         created_at,
         user_id,
-        image_url,
-        video_url,
         visibility,
         is_sensitive,
         ${POST_SELECT_COMMUNITY_FIELDS}
@@ -444,12 +423,9 @@ export default function SavedPage() {
       `
     const selectFallback = `
         id,
-        content,
         category,
         created_at,
         user_id,
-        image_url,
-        video_url,
         visibility,
         is_sensitive,
         ${POST_SELECT_COMMUNITY_FIELDS}
@@ -533,6 +509,9 @@ export default function SavedPage() {
 
     const rawPosts = (data || []).map((post: any) => ({
       ...post,
+      content: null,
+      image_url: null,
+      video_url: null,
       visibility: (post.visibility || 'public') as VisibilityType,
       is_sensitive: post.is_sensitive || false,
       community_type: normalizeCommunity(post.community_type),
@@ -558,30 +537,14 @@ export default function SavedPage() {
       .filter((post) => canSeePost(post, currentUserId, currentFollows))
 
     const visiblePostIds = visiblePosts.map((post) => post.id)
-    const paidUnlockedIds = await loadPaidUnlockIdsForPosts(currentUserId, visiblePostIds)
-    let mediaByPost: Record<string, PostMedia[]> = {}
+    let authorizedPostsById = new Map<string, Post>()
 
-    if (visiblePostIds.length > 0) {
-      const { data: mediaData, error: mediaError } = await supabase
-        .from('post_media')
-        .select('id, post_id, user_id, media_url, media_type, position, created_at, access_level')
-        .in('post_id', visiblePostIds)
-        .order('position', { ascending: true })
-
-      if (mediaError) {
-        console.error(t('saved.messages.loadSavedMediaError'), mediaError.message)
-      }
-
-      mediaByPost = ((mediaData || []) as PostMedia[]).reduce(
-        (acc, mediaItem) => {
-          if (!acc[mediaItem.post_id]) acc[mediaItem.post_id] = []
-          acc[mediaItem.post_id].push(mediaItem)
-          return acc
-        },
-        {} as Record<string, PostMedia[]>
-      )
+    try {
+      const authorizedContent = await loadAuthorizedPostContent<Post>(visiblePostIds, 'saved')
+      authorizedPostsById = authorizedContent.postsById
+    } catch (authorizedError) {
+      console.error('Erro ao carregar conteudo autorizado dos salvos:', authorizedError)
     }
-
     const bookmarkOrder = new Map<string, number>()
 
     currentBookmarks.forEach((bookmark, index) => {
@@ -590,12 +553,16 @@ export default function SavedPage() {
 
     const normalizedPosts = visiblePosts
       .map((post) => {
-        const paidUnlocked = post.user_id === currentUserId || paidUnlockedIds.has(post.id)
-        return sanitizeLockedPaidPostForClient({
+        const authorizedPost = authorizedPostsById.get(post.id)
+
+        return {
           ...post,
-          media: mediaByPost[post.id] || [],
-          paid_unlocked: paidUnlocked,
-        }, currentUserId, paidUnlocked)
+          content: authorizedPost?.content ?? null,
+          image_url: authorizedPost?.image_url ?? null,
+          video_url: authorizedPost?.video_url ?? null,
+          media: authorizedPost?.media || [],
+          paid_unlocked: Boolean(authorizedPost?.paid_unlocked),
+        }
       })
       .sort((a, b) => {
         const orderA = bookmarkOrder.get(a.id) ?? 999999

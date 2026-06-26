@@ -20,7 +20,8 @@ import {
 } from '@/lib/post-classification'
 import { canViewAdultContent } from '@/lib/content-access'
 import { applyPostVisibilityFilters } from '@/lib/post-visibility'
-import { isMissingPaidPostColumnError, isPaidPost, sanitizeLockedPaidPostForClient } from '@/lib/paid-posts'
+import { isMissingPaidPostColumnError, isPaidPost } from '@/lib/paid-posts'
+import { loadAuthorizedPostContent } from '@/lib/authorized-post-content-client'
 
 type VisibilityType = 'public' | 'followers' | 'private'
 
@@ -173,36 +174,13 @@ export default function PostPage() {
   const [moderationHiddenDenied, setModerationHiddenDenied] = useState(false)
   const recordedPostViewsRef = useRef<Set<string>>(new Set())
 
-  async function loadPostMediaRows(targetPostId: string) {
-    const { data: mediaData, error: mediaError } = await supabase
-      .from('post_media')
-      .select('id, post_id, user_id, media_url, media_type, position, created_at, access_level')
-      .eq('post_id', targetPostId)
-      .order('position', { ascending: true })
-
-    if (mediaError) {
-      console.error('Erro ao carregar midias:', mediaError.message)
-      return []
-    }
-
-    return (mediaData || []) as PostMedia[]
-  }
-
   async function refreshPaidPostContent(targetPostId: string) {
-    const { data: postData, error: postError } = await supabase
-      .from('posts')
-      .select('content, image_url, video_url')
-      .eq('id', targetPostId)
-      .maybeSingle()
-    const media = await loadPostMediaRows(targetPostId)
-
-    if (postError) {
-      console.warn('Nao foi possivel recarregar conteudo do post pago:', postError.message)
-    }
+    const authorizedContent = await loadAuthorizedPostContent<Post>([targetPostId], 'post-detail')
+    const postData = authorizedContent.postsById.get(targetPostId)
 
     setPost((current) =>
       current && current.id === targetPostId
-        ? { ...current, ...(postData || {}), media, paid_unlocked: true }
+        ? { ...current, ...(postData || {}), paid_unlocked: Boolean(postData?.paid_unlocked) }
         : current,
     )
 
@@ -275,12 +253,9 @@ export default function PostPage() {
 
       const postSelectWithModeration = `
           id,
-          content,
           category,
           created_at,
           user_id,
-          image_url,
-          video_url,
           visibility,
           is_sensitive,
           ${POST_SELECT_COMMUNITY_FIELDS}
@@ -297,12 +272,9 @@ export default function PostPage() {
         `
       const postSelectFallback = `
           id,
-          content,
           category,
           created_at,
           user_id,
-          image_url,
-          video_url,
           visibility,
           is_sensitive,
           ${POST_SELECT_COMMUNITY_FIELDS}
@@ -378,6 +350,9 @@ export default function PostPage() {
 
       const normalizedPost = {
         ...postData,
+        content: null,
+        image_url: null,
+        video_url: null,
         visibility: (postData.visibility || 'public') as VisibilityType,
         is_sensitive: postData.is_sensitive || false,
         community_type: normalizeCommunity(postData.community_type),
@@ -429,31 +404,43 @@ export default function PostPage() {
         return
       }
 
-      let paidUnlocked = !isPaidPost(normalizedPost) || currentUserIsAdmin || normalizedPost.user_id === currentUserId
-
-      if (!paidUnlocked && currentUserId) {
-        const { data: unlock, error: unlockError } = await supabase
-          .from('paid_post_unlocks')
-          .select('id')
-          .eq('post_id', normalizedPost.id)
-          .eq('buyer_id', currentUserId)
-          .maybeSingle()
-
-        if (!unlockError && unlock) {
-          paidUnlocked = true
-        } else if (unlockError && !isMissingPaidPostColumnError(unlockError)) {
-          console.warn('Nao foi possivel verificar desbloqueio de post pago:', unlockError.message)
-        }
+      const authorizedContent = await loadAuthorizedPostContent<Post>(
+        [normalizedPost.id],
+        currentUserIsAdmin ? 'admin' : 'post-detail',
+      )
+      const authorizedPost = authorizedContent.postsById.get(normalizedPost.id)
+      const access = authorizedContent.accessByPostId.get(normalizedPost.id)
+      const finalPost = {
+        ...normalizedPost,
+        content: authorizedPost?.content ?? null,
+        image_url: authorizedPost?.image_url ?? null,
+        video_url: authorizedPost?.video_url ?? null,
+        media: authorizedPost?.media || [],
+        paid_unlocked: Boolean(authorizedPost?.paid_unlocked),
       }
 
-      normalizedPost.paid_unlocked = paidUnlocked
+      if (access && !access.visible) {
+        setPost(finalPost)
+        setPermissionDenied(true)
+        setMessage(
+          access.reason === 'moderation'
+            ? 'Este conteudo foi ocultado pela moderacao.'
+            : 'Voce nao tem permissao para visualizar esta publicacao.',
+        )
+        setLoading(false)
+        return
+      }
 
-      if (isPaidPost(normalizedPost) && !paidUnlocked) {
-        setPost(sanitizeLockedPaidPostForClient({
-          ...normalizedPost,
-          media: [],
-          paid_unlocked: false,
-        }, currentUserId, false))
+      if (access?.reason === 'adult') {
+        setPost(finalPost)
+        setPermissionDenied(true)
+        setMessage('Este conteudo nao esta disponivel para sua conta.')
+        setLoading(false)
+        return
+      }
+
+      if (access?.reason === 'paywall') {
+        setPost(finalPost)
 
         await Promise.all([
           loadLikes(),
@@ -465,19 +452,7 @@ export default function PostPage() {
         return
       }
 
-      const { data: mediaData, error: mediaError } = await supabase
-        .from('post_media')
-        .select('id, post_id, user_id, media_url, media_type, position, created_at, access_level')
-        .eq('post_id', postId)
-        .order('position', { ascending: true })
-
-      if (mediaError) {
-        console.error('Erro ao carregar mídias:', mediaError.message)
-      }
-
-      normalizedPost.media = (mediaData || []) as PostMedia[]
-
-      setPost(normalizedPost)
+      setPost(finalPost)
 
       await Promise.all([
         loadComments(),
