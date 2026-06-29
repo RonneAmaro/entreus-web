@@ -6,6 +6,10 @@ export function toggleMeetOptionsMenu(isOpen: boolean) {
   return !isOpen
 }
 
+export function isMeetOptionsMenuEscapeKey(key: string) {
+  return key === 'Escape'
+}
+
 type MeetOptionsMenuBoundary = Pick<Node, 'contains'>
 
 export function isInsideMeetOptionsMenuTarget({
@@ -14,8 +18,8 @@ export function isInsideMeetOptionsMenuTarget({
   menu,
 }: {
   target: EventTarget | null
-  button: MeetOptionsMenuBoundary | null
-  menu: MeetOptionsMenuBoundary | null
+  button?: MeetOptionsMenuBoundary | null
+  menu?: MeetOptionsMenuBoundary | null
 }) {
   if (!target) return false
 
@@ -29,8 +33,24 @@ export function shouldCloseMeetOptionsMenu({
   menu,
 }: {
   target: EventTarget | null
-  button: MeetOptionsMenuBoundary | null
-  menu: MeetOptionsMenuBoundary | null
+  button?: MeetOptionsMenuBoundary | null
+  menu?: MeetOptionsMenuBoundary | null
 }) {
   return !isInsideMeetOptionsMenuTarget({ target, button, menu })
+}
+
+export function getMeetOptionsMenuOutsideAction({
+  target,
+  button,
+  menu,
+  ignoreNextOutsideClick,
+}: {
+  target: EventTarget | null
+  button: MeetOptionsMenuBoundary | null
+  menu: MeetOptionsMenuBoundary | null
+  ignoreNextOutsideClick: boolean
+}): 'ignore' | 'close' {
+  if (ignoreNextOutsideClick) return 'ignore'
+
+  return shouldCloseMeetOptionsMenu({ target, button, menu }) ? 'close' : 'ignore'
 }

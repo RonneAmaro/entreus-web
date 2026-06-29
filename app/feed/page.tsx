@@ -85,6 +85,7 @@ import {
   sanitizeLockedPaidPostForClient,
   validatePaidPostPrice,
 } from '@/lib/paid-posts'
+import { claimSubmitGuard, releaseSubmitGuard, type SubmitGuard } from '@/lib/post-submit-guard'
 
 type VisibilityType = 'public' | 'followers' | 'private'
 type ComposerSubmitData = {
@@ -849,6 +850,8 @@ function FeedContent() {
 
   const [uploadingPostImage, setUploadingPostImage] = useState(false)
   const [uploadingPostVideo, setUploadingPostVideo] = useState(false)
+  const [creatingPost, setCreatingPost] = useState(false)
+  const createPostGuardRef = useRef<SubmitGuard>({ current: false })
 
   const [posts, setPosts] = useState<Post[]>([])
   const [comments, setComments] = useState<Comment[]>([])
@@ -2717,186 +2720,195 @@ function FeedContent() {
     isPaid = false,
     priceItacash = null,
   }: ComposerSubmitData) {
-    const finalMediaFiles =
-      mediaFiles.length > 0
-        ? mediaFiles
-        : ([imageFile, videoFile].filter(Boolean) as File[])
+    if (!claimSubmitGuard(createPostGuardRef.current)) return false
 
-    if (!content.trim() && finalMediaFiles.length === 0) {
-      setMessage(t('feed.messages.emptyPost'))
-      return false
-    }
+    setCreatingPost(true)
 
-    if (finalMediaFiles.length > 5) {
-      setMessage(t('feed.messages.maxMediaPost'))
-      return false
-    }
+    try {
+      const finalMediaFiles =
+        mediaFiles.length > 0
+          ? mediaFiles
+          : ([imageFile, videoFile].filter(Boolean) as File[])
 
-    const { communityType: normalizedCommunity, contentRating: normalizedRating } =
-      normalizePostClassification(communityType, contentRating, category)
-
-    if (
-      isAdultCommunityOrRating(normalizedCommunity, normalizedRating, category) &&
-      !canAccessAdult18Plus
-    ) {
-      setMessage('Area 18+ exige verificacao de idade aprovada.')
-      return false
-    }
-
-    const paidPriceValidation = isPaid
-      ? validatePaidPostPrice(priceItacash)
-      : ({ ok: true as const, value: null })
-
-    if (!paidPriceValidation.ok) {
-      setMessage(getPaidPostErrorMessage(paidPriceValidation.reason))
-      return false
-    }
-
-    setMessage('')
-
-    const isAdultPost = normalizedRating === 'adult_18plus'
-    const mediaAccessLevel: FeedPostMediaAccessLevel = isAdultPost
-      ? 'adult_private'
-      : isPaid
-        ? 'protected'
-        : 'public'
-    const uploadedMedia: {
-      url: string | null
-      type: 'image' | 'video' | 'gif'
-      storageProvider: string
-      storageBucket: string
-      storageKey: string
-      accessLevel: FeedPostMediaAccessLevel
-    }[] = []
-
-    for (const file of finalMediaFiles) {
-      const uploaded = await uploadMediaFile(file, mediaAccessLevel)
-
-      if (!uploaded) {
+      if (!content.trim() && finalMediaFiles.length === 0) {
+        setMessage(t('feed.messages.emptyPost'))
         return false
       }
 
-      uploadedMedia.push(uploaded)
-    }
-
-    const firstImage = mediaAccessLevel === 'public' ? uploadedMedia.find((item) => item.type === 'image' || item.type === 'gif')?.url || null : null
-    const firstVideo = mediaAccessLevel === 'public' ? uploadedMedia.find((item) => item.type === 'video')?.url || null : null
-
-    console.info('[FeedUpload] Salvando post apos upload:', {
-      mediaCount: uploadedMedia.length,
-      mediaTypes: uploadedMedia.map((item) => item.type),
-      hasImage: Boolean(firstImage),
-      hasVideo: Boolean(firstVideo),
-      step: 'database-post-save',
-    })
-
-    const postPayload = {
-      user_id: userId,
-      content: content.trim() || null,
-      category,
-      community_type: normalizedCommunity,
-      content_rating: normalizedRating,
-      image_url: firstImage,
-      video_url: firstVideo,
-      visibility,
-      is_sensitive: category === '18plus' || normalizedRating !== 'safe',
-      is_paid: isPaid,
-      price_itacash: isPaid ? paidPriceValidation.value : null,
-    }
-
-    let { data: insertedPost, error } = await supabase
-      .from('posts')
-      .insert(postPayload)
-      .select('id')
-      .single()
-
-    if (error && isMissingCommunityColumnError(error)) {
-      const { community_type, content_rating, ...legacyPayload } = postPayload
-      const legacyResult = await supabase
-        .from('posts')
-        .insert(legacyPayload)
-        .select('id')
-        .single()
-
-      insertedPost = legacyResult.data
-      error = legacyResult.error
-    }
-
-    if (error && isMissingPaidPostColumnError(error)) {
-      if (isPaid) {
-        setMessage('Posts pagos precisam da migration aplicada no Supabase.')
+      if (finalMediaFiles.length > 5) {
+        setMessage(t('feed.messages.maxMediaPost'))
         return false
       }
 
-      const { is_paid, price_itacash, ...legacyPayload } = postPayload
-      const legacyResult = await supabase
-        .from('posts')
-        .insert(legacyPayload)
-        .select('id')
-        .single()
+      const { communityType: normalizedCommunity, contentRating: normalizedRating } =
+        normalizePostClassification(communityType, contentRating, category)
 
-      insertedPost = legacyResult.data
-      error = legacyResult.error
-    }
+      if (
+        isAdultCommunityOrRating(normalizedCommunity, normalizedRating, category) &&
+        !canAccessAdult18Plus
+      ) {
+        setMessage('Area 18+ exige verificacao de idade aprovada.')
+        return false
+      }
 
-    if (error) {
-      console.error('[FeedUpload] Falha ao salvar post apos upload:', {
+      const paidPriceValidation = isPaid
+        ? validatePaidPostPrice(priceItacash)
+        : ({ ok: true as const, value: null })
+
+      if (!paidPriceValidation.ok) {
+        setMessage(getPaidPostErrorMessage(paidPriceValidation.reason))
+        return false
+      }
+
+      setMessage('')
+
+      const isAdultPost = normalizedRating === 'adult_18plus'
+      const mediaAccessLevel: FeedPostMediaAccessLevel = isAdultPost
+        ? 'adult_private'
+        : isPaid
+          ? 'protected'
+          : 'public'
+      const uploadedMedia: {
+        url: string | null
+        type: 'image' | 'video' | 'gif'
+        storageProvider: string
+        storageBucket: string
+        storageKey: string
+        accessLevel: FeedPostMediaAccessLevel
+      }[] = []
+
+      for (const file of finalMediaFiles) {
+        const uploaded = await uploadMediaFile(file, mediaAccessLevel)
+
+        if (!uploaded) {
+          return false
+        }
+
+        uploadedMedia.push(uploaded)
+      }
+
+      const firstImage = mediaAccessLevel === 'public' ? uploadedMedia.find((item) => item.type === 'image' || item.type === 'gif')?.url || null : null
+      const firstVideo = mediaAccessLevel === 'public' ? uploadedMedia.find((item) => item.type === 'video')?.url || null : null
+
+      console.info('[FeedUpload] Salvando post apos upload:', {
         mediaCount: uploadedMedia.length,
         mediaTypes: uploadedMedia.map((item) => item.type),
+        hasImage: Boolean(firstImage),
+        hasVideo: Boolean(firstVideo),
         step: 'database-post-save',
-        error: error.message,
       })
-      setMessage(GENERIC_PUBLISH_FAILURE_MESSAGE)
-      return false
-    }
 
-    if (insertedPost?.id && uploadedMedia.length > 0) {
-      const mediaRows = uploadedMedia.map((item, index) => ({
-        post_id: insertedPost.id,
+      const postPayload = {
         user_id: userId,
-        media_url: item.accessLevel === 'public' ? item.url : null,
-        media_type: item.type,
-        position: index,
-        storage_provider: item.storageProvider,
-        storage_bucket: item.storageBucket,
-        storage_key: item.storageKey,
-        access_level: item.accessLevel,
-      }))
+        content: content.trim() || null,
+        category,
+        community_type: normalizedCommunity,
+        content_rating: normalizedRating,
+        image_url: firstImage,
+        video_url: firstVideo,
+        visibility,
+        is_sensitive: category === '18plus' || normalizedRating !== 'safe',
+        is_paid: isPaid,
+        price_itacash: isPaid ? paidPriceValidation.value : null,
+      }
 
-      const { error: mediaError } = await supabase
-        .from('post_media')
-        .insert(mediaRows)
+      let { data: insertedPost, error } = await supabase
+        .from('posts')
+        .insert(postPayload)
+        .select('id')
+        .single()
 
-      if (mediaError) {
-        console.error('[FeedUpload] Falha ao salvar midias do post:', {
+      if (error && isMissingCommunityColumnError(error)) {
+        const { community_type, content_rating, ...legacyPayload } = postPayload
+        const legacyResult = await supabase
+          .from('posts')
+          .insert(legacyPayload)
+          .select('id')
+          .single()
+
+        insertedPost = legacyResult.data
+        error = legacyResult.error
+      }
+
+      if (error && isMissingPaidPostColumnError(error)) {
+        if (isPaid) {
+          setMessage('Posts pagos precisam da migration aplicada no Supabase.')
+          return false
+        }
+
+        const { is_paid, price_itacash, ...legacyPayload } = postPayload
+        const legacyResult = await supabase
+          .from('posts')
+          .insert(legacyPayload)
+          .select('id')
+          .single()
+
+        insertedPost = legacyResult.data
+        error = legacyResult.error
+      }
+
+      if (error) {
+        console.error('[FeedUpload] Falha ao salvar post apos upload:', {
+          mediaCount: uploadedMedia.length,
+          mediaTypes: uploadedMedia.map((item) => item.type),
+          step: 'database-post-save',
+          error: error.message,
+        })
+        setMessage(GENERIC_PUBLISH_FAILURE_MESSAGE)
+        return false
+      }
+
+      if (insertedPost?.id && uploadedMedia.length > 0) {
+        const mediaRows = uploadedMedia.map((item, index) => ({
+          post_id: insertedPost.id,
+          user_id: userId,
+          media_url: item.accessLevel === 'public' ? item.url : null,
+          media_type: item.type,
+          position: index,
+          storage_provider: item.storageProvider,
+          storage_bucket: item.storageBucket,
+          storage_key: item.storageKey,
+          access_level: item.accessLevel,
+        }))
+
+        const { error: mediaError } = await supabase
+          .from('post_media')
+          .insert(mediaRows)
+
+        if (mediaError) {
+          console.error('[FeedUpload] Falha ao salvar midias do post:', {
+            postId: insertedPost.id,
+            mediaCount: mediaRows.length,
+            mediaTypes: mediaRows.map((item) => item.media_type),
+            step: 'database-media-save',
+            error: mediaError.message,
+          })
+          setMessage(PARTIAL_MEDIA_SAVE_FAILURE_MESSAGE)
+
+          await reloadInitialFeed()
+          await loadBookmarks(userId)
+
+          return false
+        }
+
+        console.info('[FeedUpload] Midias do post salvas:', {
           postId: insertedPost.id,
           mediaCount: mediaRows.length,
           mediaTypes: mediaRows.map((item) => item.media_type),
           step: 'database-media-save',
-          error: mediaError.message,
         })
-        setMessage(PARTIAL_MEDIA_SAVE_FAILURE_MESSAGE)
-
-        await reloadInitialFeed()
-        await loadBookmarks(userId)
-
-        return false
       }
 
-      console.info('[FeedUpload] Midias do post salvas:', {
-        postId: insertedPost.id,
-        mediaCount: mediaRows.length,
-        mediaTypes: mediaRows.map((item) => item.media_type),
-        step: 'database-media-save',
-      })
+      setMessage(t('feed.messages.publishedSuccess'))
+
+      await reloadInitialFeed()
+      await loadBookmarks(userId)
+
+      return true
+    } finally {
+      releaseSubmitGuard(createPostGuardRef.current)
+      setCreatingPost(false)
     }
-
-    setMessage(t('feed.messages.publishedSuccess'))
-
-    await reloadInitialFeed()
-    await loadBookmarks(userId)
-
-    return true
   }
 
   async function handleDeletePost(postId: string) {
@@ -4018,7 +4030,7 @@ function FeedContent() {
                 videoUploadLimitBytes={videoUploadLimit.maxSizeBytes}
                 userTier={videoUploadLimit.tier}
                 canAccessAdult18Plus={canAccessAdult18Plus}
-                submitting={uploadingPostImage || uploadingPostVideo}
+                submitting={creatingPost || uploadingPostImage || uploadingPostVideo}
                 onSubmit={handleCreatePost}
               />
 

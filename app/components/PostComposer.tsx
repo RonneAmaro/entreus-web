@@ -54,6 +54,7 @@ import {
 } from '@/lib/post-classification'
 import { isLegacyAdultCategory, normalizePostClassification } from '@/lib/content-access'
 import { getPaidPostErrorMessage, validatePaidPostPrice } from '@/lib/paid-posts'
+import { claimSubmitGuard, releaseSubmitGuard, type SubmitGuard } from '@/lib/post-submit-guard'
 
 type VisibilityType = 'public' | 'followers' | 'private'
 
@@ -294,6 +295,7 @@ export default function PostComposer({
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const mediaRef = useRef<MediaPreview[]>([])
   const mediaReplacementIdRef = useRef<string | null>(null)
+  const submitGuardRef = useRef<SubmitGuard>({ current: false })
 
   const [content, setContent] = useState('')
   const [category, setCategory] = useState('cotidiano')
@@ -313,6 +315,8 @@ export default function PostComposer({
   const [portalElement, setPortalElement] = useState<HTMLElement | null>(null)
   const [isOptimizingVideo, setIsOptimizingVideo] = useState(false)
   const [pendingVideoCompression, setPendingVideoCompression] = useState<PendingVideoCompression | null>(null)
+  const [submitLocked, setSubmitLocked] = useState(false)
+  const isSubmitting = submitting || submitLocked
 
   const selectedCategory = useMemo(() => {
     return CATEGORY_OPTIONS.find((item) => item.value === category)
@@ -766,7 +770,7 @@ export default function PostComposer({
   }
 
   async function handleAiAssist(mode: AiAssistMode) {
-    if (activeAiMode || submitting) return
+    if (activeAiMode || isSubmitting) return
 
     const text = content.trim()
     const genericError = AI_GENERIC_ERRORS[mode]
@@ -873,80 +877,94 @@ export default function PostComposer({
   }
 
   async function handleSubmit() {
-    const trimmedContent = content.trim()
+    if (isSubmitting || !claimSubmitGuard(submitGuardRef.current)) return
 
-    if (isOptimizingVideo) {
-      setMediaFeedback({
-        type: 'info',
-        message: 'Otimizando video...',
+    setSubmitLocked(true)
+
+    try {
+      const trimmedContent = content.trim()
+
+      if (isOptimizingVideo) {
+        setMediaFeedback({
+          type: 'info',
+          message: 'Otimizando video...',
+        })
+        return
+      }
+
+      if (!trimmedContent && media.length === 0) {
+        setError(t('postComposer.errors.empty'))
+        return
+      }
+
+      setError('')
+
+      const imageFile = media.find((item) => item.type === 'image')?.file || null
+      const videoFile = media.find((item) => item.type === 'video')?.file || null
+      const mediaFiles = media.map((item) => item.file)
+      const resolvedClassification = normalizePostClassification(
+        communityType,
+        resolveContentRating(communityType, contentRating),
+        category,
+      )
+
+      if (resolvedClassification.contentRating === 'adult_18plus' && !canAccessAdult18Plus) {
+        setError('Area 18+ exige verificacao de idade aprovada.')
+        return
+      }
+
+      const paidPriceValidation = isPaidPost
+        ? validatePaidPostPrice(paidPostPrice)
+        : ({ ok: true as const, value: null })
+
+      if (!paidPriceValidation.ok) {
+        setError(getPaidPostErrorMessage(paidPriceValidation.reason))
+        return
+      }
+
+      const result = await onSubmit({
+        content: trimmedContent,
+        category,
+        communityType: resolvedClassification.communityType,
+        contentRating: resolvedClassification.contentRating,
+        visibility,
+        imageFile,
+        videoFile,
+        mediaFiles,
+        isPaid: isPaidPost,
+        priceItacash: paidPriceValidation.value,
       })
-      return
+
+      if (result === false) return
+
+      setContent('')
+      setCategory('cotidiano')
+      setCommunityType('general')
+      setContentRating('safe')
+      setVisibility('public')
+      setIsPaidPost(false)
+      setPaidPostPrice('')
+      setError('')
+      setShowEmojiPicker(false)
+      setShowMediaMenu(false)
+      setMediaFeedback(null)
+      setAiFeedback(null)
+      setPendingVideoCompression(null)
+      setIsModalOpen(false)
+      setMedia((current) => {
+        current.forEach((item) => URL.revokeObjectURL(item.url))
+        return []
+      })
+    } finally {
+      releaseSubmitGuard(submitGuardRef.current)
+      setSubmitLocked(false)
     }
-
-    if (!trimmedContent && media.length === 0) {
-      setError(t('postComposer.errors.empty'))
-      return
-    }
-
-    setError('')
-
-    const imageFile = media.find((item) => item.type === 'image')?.file || null
-    const videoFile = media.find((item) => item.type === 'video')?.file || null
-    const mediaFiles = media.map((item) => item.file)
-    const resolvedClassification = normalizePostClassification(
-      communityType,
-      resolveContentRating(communityType, contentRating),
-      category,
-    )
-
-    if (resolvedClassification.contentRating === 'adult_18plus' && !canAccessAdult18Plus) {
-      setError('Area 18+ exige verificacao de idade aprovada.')
-      return
-    }
-
-    const paidPriceValidation = isPaidPost
-      ? validatePaidPostPrice(paidPostPrice)
-      : ({ ok: true as const, value: null })
-
-    if (!paidPriceValidation.ok) {
-      setError(getPaidPostErrorMessage(paidPriceValidation.reason))
-      return
-    }
-
-    const result = await onSubmit({
-      content: trimmedContent,
-      category,
-      communityType: resolvedClassification.communityType,
-      contentRating: resolvedClassification.contentRating,
-      visibility,
-      imageFile,
-      videoFile,
-      mediaFiles,
-      isPaid: isPaidPost,
-      priceItacash: paidPriceValidation.value,
-    })
-
-    if (result === false) return
-
-    setContent('')
-    setCommunityType('general')
-    setContentRating('safe')
-    setIsPaidPost(false)
-    setPaidPostPrice('')
-    setShowEmojiPicker(false)
-    setShowMediaMenu(false)
-    setMediaFeedback(null)
-    setIsModalOpen(false)
-    setMedia((current) => {
-      current.forEach((item) => URL.revokeObjectURL(item.url))
-      return []
-    })
   }
 
   const trimmedContentLength = content.trim().length
   const canPublish = (trimmedContentLength > 0 || media.length > 0) && !isOptimizingVideo
   const canUseAi =
-    trimmedContentLength >= AI_MIN_TEXT_LENGTH && !submitting && !activeAiMode
+    trimmedContentLength >= AI_MIN_TEXT_LENGTH && !isSubmitting && !activeAiMode
   const getAiButtonTitle = (mode: AiAssistMode) => {
     if (activeAiMode === mode) return AI_LOADING_LABELS[mode]
     if (activeAiMode) return 'Aguarde a outra acao da IA terminar.'
@@ -1043,11 +1061,11 @@ export default function PostComposer({
 
               <button
                 type="button"
-                disabled={submitting || !canPublish}
+                disabled={isSubmitting || !canPublish}
                 onClick={handleSubmit}
                 className="rounded-full bg-blue-600 px-4 py-2 text-sm font-black text-white shadow-sm shadow-blue-600/20 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-zinc-300 disabled:text-zinc-600 dark:disabled:bg-zinc-800 dark:disabled:text-zinc-500"
               >
-                {isOptimizingVideo ? 'Otimizando...' : submitting ? t('postComposer.posting') : t('postComposer.post')}
+                {isOptimizingVideo ? 'Otimizando...' : isSubmitting ? t('postComposer.posting') : t('postComposer.post')}
               </button>
             </div>
 
@@ -1633,12 +1651,12 @@ export default function PostComposer({
 
                 <button
                   type="button"
-                  disabled={submitting || !canPublish}
+                  disabled={isSubmitting || !canPublish}
                   onClick={handleSubmit}
                   className="flex h-10 w-full items-center justify-center gap-2 rounded-full bg-zinc-900 px-6 text-sm font-bold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-black sm:w-auto sm:min-w-[110px]"
                 >
                   {isOptimizingVideo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                  {isOptimizingVideo ? 'Otimizando...' : submitting ? t('postComposer.posting') : t('postComposer.post')}
+                  {isOptimizingVideo ? 'Otimizando...' : isSubmitting ? t('postComposer.posting') : t('postComposer.post')}
                 </button>
               </div>
 

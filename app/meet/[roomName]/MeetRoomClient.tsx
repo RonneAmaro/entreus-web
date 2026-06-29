@@ -3,7 +3,8 @@
 import { supabase } from '@/lib/supabase'
 import {
   MEET_RECORDING_MENU_ITEM,
-  shouldCloseMeetOptionsMenu,
+  getMeetOptionsMenuOutsideAction,
+  isMeetOptionsMenuEscapeKey,
   toggleMeetOptionsMenu,
 } from '@/lib/meet-options-menu'
 import {
@@ -60,7 +61,8 @@ import {
 import { ConnectionState as LiveKitConnectionState, Track } from 'livekit-client'
 import Image from 'next/image'
 import Link from 'next/link'
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type SyntheticEvent } from 'react'
+import { createPortal } from 'react-dom'
 
 type TokenResponse =
   | {
@@ -608,10 +610,12 @@ function PortugueseConference({
   const [recordingActionError, setRecordingActionError] = useState<string | null>(null)
   const [compactLayout, setCompactLayout] = useState(false)
   const [inviteFeedback, setInviteFeedback] = useState<InviteFeedback>('idle')
+  const [moreMenuPortalHost, setMoreMenuPortalHost] = useState<Element | null>(null)
   const [handNotice, setHandNotice] = useState<string | null>(null)
   const [connectionNotice, setConnectionNotice] = useState<string | null>(null)
   const [timeWarningMinimized, setTimeWarningMinimized] = useState(false)
   const reactionMenuRef = useRef<HTMLDivElement | null>(null)
+  const moreMenuButtonRef = useRef<HTMLButtonElement | null>(null)
   const moreMenuRef = useRef<HTMLDivElement | null>(null)
   const chatEmojiPanelRef = useRef<HTMLDivElement | null>(null)
   const chatAttachmentInputRef = useRef<HTMLInputElement | null>(null)
@@ -620,7 +624,8 @@ function PortugueseConference({
   const seenParticipantsRef = useRef<Set<string>>(new Set())
   const participantsInitializedRef = useRef(false)
   const timeWarningPlayedRef = useRef(false)
-  const moreButtonRef = useRef<HTMLButtonElement | null>(null)
+  const ignoreNextMoreMenuOutsideEventRef = useRef(false)
+  const moreMenuOpenGuardTimerRef = useRef<number | null>(null)
   const localDisplayName = normalizeDisplayName(participantName) || 'Participante'
   const showTimeWarning = typeof secondsLeft === 'number' && secondsLeft > 0 && secondsLeft <= 60
   const pendingRequestCount = isModerator ? pendingRequests.length : 0
@@ -747,31 +752,52 @@ function PortugueseConference({
   }, [showChatEmojiPanel, showReactions])
 
   useEffect(() => {
+    function syncMoreMenuPortalHost() {
+      setMoreMenuPortalHost(document.fullscreenElement ?? document.body)
+    }
+
+    syncMoreMenuPortalHost()
+    document.addEventListener('fullscreenchange', syncMoreMenuPortalHost)
+    return () => document.removeEventListener('fullscreenchange', syncMoreMenuPortalHost)
+  }, [])
+
+  useEffect(() => {
     if (!showMoreMenu) return
 
-    function handleOptionsMenuPointerDown(event: PointerEvent) {
-      if (
-        shouldCloseMeetOptionsMenu({
-          target: event.target,
-          button: moreButtonRef.current,
-          menu: moreMenuRef.current,
-        })
-      ) {
+    function handleOptionsMenuDocumentClick(event: MouseEvent) {
+      const action = getMeetOptionsMenuOutsideAction({
+        target: event.target,
+        button: moreMenuButtonRef.current,
+        menu: moreMenuRef.current,
+        ignoreNextOutsideClick: ignoreNextMoreMenuOutsideEventRef.current,
+      })
+
+      ignoreNextMoreMenuOutsideEventRef.current = false
+
+      if (action === 'close') {
         setShowMoreMenu(false)
       }
     }
 
     function handleOptionsMenuKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') setShowMoreMenu(false)
+      if (isMeetOptionsMenuEscapeKey(event.key)) setShowMoreMenu(false)
     }
 
-    document.addEventListener('pointerdown', handleOptionsMenuPointerDown)
+    document.addEventListener('click', handleOptionsMenuDocumentClick)
     document.addEventListener('keydown', handleOptionsMenuKeyDown)
     return () => {
-      document.removeEventListener('pointerdown', handleOptionsMenuPointerDown)
+      document.removeEventListener('click', handleOptionsMenuDocumentClick)
       document.removeEventListener('keydown', handleOptionsMenuKeyDown)
     }
   }, [showMoreMenu])
+
+  useEffect(() => {
+    return () => {
+      if (moreMenuOpenGuardTimerRef.current !== null) {
+        window.clearTimeout(moreMenuOpenGuardTimerRef.current)
+      }
+    }
+  }, [])
 
   useEffect(() => {
     if (floatingReactions.length === 0) return
@@ -1007,8 +1033,37 @@ function PortugueseConference({
     setShowMoreMenu(false)
   }
 
+  function armMoreMenuOpenGuard() {
+    ignoreNextMoreMenuOutsideEventRef.current = true
+
+    if (moreMenuOpenGuardTimerRef.current !== null) {
+      window.clearTimeout(moreMenuOpenGuardTimerRef.current)
+    }
+
+    moreMenuOpenGuardTimerRef.current = window.setTimeout(() => {
+      ignoreNextMoreMenuOutsideEventRef.current = false
+      moreMenuOpenGuardTimerRef.current = null
+    }, 0)
+  }
+
+  function stopMoreMenuEvent(event: SyntheticEvent) {
+    event.stopPropagation()
+    const nativeEvent = event.nativeEvent as Event & { stopImmediatePropagation?: () => void }
+    nativeEvent.stopImmediatePropagation?.()
+  }
+
   function toggleMoreMenu() {
-    setShowMoreMenu((current) => toggleMeetOptionsMenu(current))
+    setShowMoreMenu((current) => {
+      const next = toggleMeetOptionsMenu(current)
+
+      if (next) {
+        armMoreMenuOpenGuard()
+      } else {
+        ignoreNextMoreMenuOutsideEventRef.current = false
+      }
+
+      return next
+    })
     setShowReactions(false)
   }
 
@@ -1491,10 +1546,13 @@ function PortugueseConference({
 
               <div className="relative">
                 <button
-                  ref={moreButtonRef}
+                  ref={moreMenuButtonRef}
                   type="button"
-                  onPointerDown={(event) => event.stopPropagation()}
-                  onClick={toggleMoreMenu}
+                  onClick={(event) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    toggleMoreMenu()
+                  }}
                   className={showMoreMenu ? activeIconButtonClass : iconButtonClass}
                   aria-label="Mais opções"
                   aria-haspopup="menu"
@@ -1504,15 +1562,18 @@ function PortugueseConference({
                 >
                   <MoreHorizontal className="h-5 w-5" />
                 </button>
-                {showMoreMenu ? (
-                  <>
-                    <button
-                      type="button"
-                      aria-label="Fechar menu"
-                      onClick={() => setShowMoreMenu(false)}
-                      className="fixed inset-0 z-40 bg-black/45 backdrop-blur-sm sm:hidden"
-                    />
-                    <div id="meet-options-menu" ref={moreMenuRef} role="menu" aria-label="Mais opções da sala" onPointerDown={(event) => event.stopPropagation()} className="fixed inset-x-0 bottom-0 z-50 max-h-[86vh] overflow-y-auto rounded-t-[2rem] border border-blue-200/10 bg-[linear-gradient(180deg,rgba(10,18,34,0.98),rgba(2,6,23,0.98))] p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] text-sm shadow-2xl shadow-black/60 ring-1 ring-blue-200/10 backdrop-blur-2xl sm:absolute sm:bottom-14 sm:right-0 sm:inset-x-auto sm:max-h-[min(76vh,620px)] sm:w-[22rem] sm:rounded-3xl sm:p-3">
+                {showMoreMenu && moreMenuPortalHost
+                  ? createPortal(
+                    <div
+                      id="meet-options-menu"
+                      ref={moreMenuRef}
+                      role="menu"
+                      aria-label="Mais opções da sala"
+                      onPointerDown={stopMoreMenuEvent}
+                      onMouseDown={stopMoreMenuEvent}
+                      onClick={stopMoreMenuEvent}
+                      className="fixed bottom-[calc(6rem+env(safe-area-inset-bottom))] left-3 right-3 z-[9999] max-h-[min(78vh,620px)] overflow-y-auto rounded-3xl border border-blue-200/10 bg-[linear-gradient(180deg,rgba(10,18,34,0.98),rgba(2,6,23,0.98))] p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] text-sm shadow-2xl shadow-black/60 ring-1 ring-blue-200/10 backdrop-blur-2xl sm:bottom-[88px] sm:left-1/2 sm:right-auto sm:w-[22rem] sm:-translate-x-1/2 sm:p-3"
+                    >
                       <div className="mx-auto mb-4 h-1.5 w-11 rounded-full bg-blue-100/25 sm:hidden" />
 
                       <div className="mb-4 flex items-start justify-between gap-3 px-1 sm:mb-3">
@@ -1712,9 +1773,10 @@ function PortugueseConference({
                           <span>Fechar</span>
                         </button>
                       </div>
-                    </div>
-                  </>
-                ) : null}
+                    </div>,
+                    moreMenuPortalHost,
+                  )
+                  : null}
               </div>
 
               <DisconnectButton className="!m-0 inline-flex !h-11 !min-h-0 !w-11 shrink-0 items-center justify-center !rounded-full !border !border-red-300/50 !bg-red-600/95 !p-0 !text-white text-white shadow-md shadow-red-950/25 transition hover:!border-red-100/70 hover:!bg-red-500 focus:outline-none focus:ring-2 focus:ring-red-100/45 sm:!h-11 sm:!w-12" title="Sair">
