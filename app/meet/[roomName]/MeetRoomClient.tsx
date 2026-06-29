@@ -3,7 +3,6 @@
 import { supabase } from '@/lib/supabase'
 import {
   MEET_RECORDING_MENU_ITEM,
-  getMeetOptionsMenuOutsideAction,
   isMeetOptionsMenuEscapeKey,
   toggleMeetOptionsMenu,
 } from '@/lib/meet-options-menu'
@@ -61,7 +60,7 @@ import {
 import { ConnectionState as LiveKitConnectionState, Track } from 'livekit-client'
 import Image from 'next/image'
 import Link from 'next/link'
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type SyntheticEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type SyntheticEvent } from 'react'
 import { createPortal } from 'react-dom'
 
 type TokenResponse =
@@ -624,8 +623,6 @@ function PortugueseConference({
   const seenParticipantsRef = useRef<Set<string>>(new Set())
   const participantsInitializedRef = useRef(false)
   const timeWarningPlayedRef = useRef(false)
-  const ignoreNextMoreMenuOutsideEventRef = useRef(false)
-  const moreMenuOpenGuardTimerRef = useRef<number | null>(null)
   const localDisplayName = normalizeDisplayName(participantName) || 'Participante'
   const showTimeWarning = typeof secondsLeft === 'number' && secondsLeft > 0 && secondsLeft <= 60
   const pendingRequestCount = isModerator ? pendingRequests.length : 0
@@ -752,52 +749,15 @@ function PortugueseConference({
   }, [showChatEmojiPanel, showReactions])
 
   useEffect(() => {
-    function syncMoreMenuPortalHost() {
-      setMoreMenuPortalHost(document.fullscreenElement ?? document.body)
-    }
-
-    syncMoreMenuPortalHost()
-    document.addEventListener('fullscreenchange', syncMoreMenuPortalHost)
-    return () => document.removeEventListener('fullscreenchange', syncMoreMenuPortalHost)
+    setMoreMenuPortalHost(document.body)
   }, [])
 
   useEffect(() => {
     if (!showMoreMenu) return
 
-    function handleOptionsMenuDocumentClick(event: MouseEvent) {
-      const action = getMeetOptionsMenuOutsideAction({
-        target: event.target,
-        button: moreMenuButtonRef.current,
-        menu: moreMenuRef.current,
-        ignoreNextOutsideClick: ignoreNextMoreMenuOutsideEventRef.current,
-      })
-
-      ignoreNextMoreMenuOutsideEventRef.current = false
-
-      if (action === 'close') {
-        setShowMoreMenu(false)
-      }
-    }
-
-    function handleOptionsMenuKeyDown(event: KeyboardEvent) {
-      if (isMeetOptionsMenuEscapeKey(event.key)) setShowMoreMenu(false)
-    }
-
-    document.addEventListener('click', handleOptionsMenuDocumentClick)
-    document.addEventListener('keydown', handleOptionsMenuKeyDown)
-    return () => {
-      document.removeEventListener('click', handleOptionsMenuDocumentClick)
-      document.removeEventListener('keydown', handleOptionsMenuKeyDown)
-    }
+    const timer = window.setTimeout(() => moreMenuRef.current?.focus(), 0)
+    return () => window.clearTimeout(timer)
   }, [showMoreMenu])
-
-  useEffect(() => {
-    return () => {
-      if (moreMenuOpenGuardTimerRef.current !== null) {
-        window.clearTimeout(moreMenuOpenGuardTimerRef.current)
-      }
-    }
-  }, [])
 
   useEffect(() => {
     if (floatingReactions.length === 0) return
@@ -1033,37 +993,19 @@ function PortugueseConference({
     setShowMoreMenu(false)
   }
 
-  function armMoreMenuOpenGuard() {
-    ignoreNextMoreMenuOutsideEventRef.current = true
-
-    if (moreMenuOpenGuardTimerRef.current !== null) {
-      window.clearTimeout(moreMenuOpenGuardTimerRef.current)
-    }
-
-    moreMenuOpenGuardTimerRef.current = window.setTimeout(() => {
-      ignoreNextMoreMenuOutsideEventRef.current = false
-      moreMenuOpenGuardTimerRef.current = null
-    }, 0)
-  }
-
   function stopMoreMenuEvent(event: SyntheticEvent) {
     event.stopPropagation()
-    const nativeEvent = event.nativeEvent as Event & { stopImmediatePropagation?: () => void }
-    nativeEvent.stopImmediatePropagation?.()
+  }
+
+  function handleMoreMenuKeyDown(event: ReactKeyboardEvent) {
+    if (!showMoreMenu || !isMeetOptionsMenuEscapeKey(event.key)) return
+
+    event.stopPropagation()
+    setShowMoreMenu(false)
   }
 
   function toggleMoreMenu() {
-    setShowMoreMenu((current) => {
-      const next = toggleMeetOptionsMenu(current)
-
-      if (next) {
-        armMoreMenuOpenGuard()
-      } else {
-        ignoreNextMoreMenuOutsideEventRef.current = false
-      }
-
-      return next
-    })
+    setShowMoreMenu((current) => toggleMeetOptionsMenu(current))
     setShowReactions(false)
   }
 
@@ -1207,7 +1149,10 @@ function PortugueseConference({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[radial-gradient(circle_at_top,#0b1d3b_0%,#020617_42%,#000_100%)] text-white">
+    <div
+      className="flex h-full min-h-0 flex-col overflow-hidden bg-[radial-gradient(circle_at_top,#0b1d3b_0%,#020617_42%,#000_100%)] text-white"
+      onKeyDownCapture={handleMoreMenuKeyDown}
+    >
       <header className="z-20 flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-blue-400/10 bg-black/45 px-3 py-2 backdrop-blur-xl sm:px-5">
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-blue-300/25 bg-white/5 shadow-lg shadow-blue-950/30 ring-1 ring-white/10">
@@ -1553,6 +1498,7 @@ function PortugueseConference({
                     event.stopPropagation()
                     toggleMoreMenu()
                   }}
+                  onKeyDown={handleMoreMenuKeyDown}
                   className={showMoreMenu ? activeIconButtonClass : iconButtonClass}
                   aria-label="Mais opções"
                   aria-haspopup="menu"
@@ -1568,16 +1514,20 @@ function PortugueseConference({
                       id="meet-options-menu"
                       ref={moreMenuRef}
                       role="menu"
+                      tabIndex={-1}
                       aria-label="Mais opções da sala"
+                      data-state="open"
                       onPointerDown={stopMoreMenuEvent}
                       onMouseDown={stopMoreMenuEvent}
                       onClick={stopMoreMenuEvent}
-                      className="fixed bottom-[calc(6rem+env(safe-area-inset-bottom))] left-3 right-3 z-[9999] max-h-[min(78vh,620px)] overflow-y-auto rounded-3xl border border-blue-200/10 bg-[linear-gradient(180deg,rgba(10,18,34,0.98),rgba(2,6,23,0.98))] p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] text-sm shadow-2xl shadow-black/60 ring-1 ring-blue-200/10 backdrop-blur-2xl sm:bottom-[88px] sm:left-1/2 sm:right-auto sm:w-[22rem] sm:-translate-x-1/2 sm:p-3"
+                      onKeyDown={handleMoreMenuKeyDown}
+                      className="fixed bottom-[calc(6rem+env(safe-area-inset-bottom))] left-3 right-3 z-[9999] max-h-[min(78vh,620px)] overflow-y-auto rounded-3xl border-2 border-emerald-300/80 bg-[linear-gradient(180deg,rgba(6,24,20,0.99),rgba(2,6,23,0.99))] p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] text-sm shadow-2xl shadow-emerald-950/60 outline-none ring-2 ring-emerald-200/35 backdrop-blur-2xl sm:bottom-[88px] sm:left-1/2 sm:right-auto sm:w-[22rem] sm:-translate-x-1/2 sm:p-3"
                     >
                       <div className="mx-auto mb-4 h-1.5 w-11 rounded-full bg-blue-100/25 sm:hidden" />
 
                       <div className="mb-4 flex items-start justify-between gap-3 px-1 sm:mb-3">
                         <div>
+                          <p className="mb-1 text-[11px] font-black uppercase tracking-[0.16em] text-emerald-200">Menu aberto</p>
                           <p className="text-base font-black text-white">Mais opções</p>
                           <p className="mt-1 text-xs text-zinc-400">Sala {roomName} · {secondsLeft === null ? '--:--' : formatSeconds(secondsLeft)}</p>
                         </div>
