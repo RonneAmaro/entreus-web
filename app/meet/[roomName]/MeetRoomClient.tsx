@@ -4,7 +4,6 @@ import { supabase } from '@/lib/supabase'
 import {
   MEET_RECORDING_MENU_ITEM,
   isMeetOptionsMenuEscapeKey,
-  toggleMeetOptionsMenu,
 } from '@/lib/meet-options-menu'
 import {
   getMeetRecordingParticipantNotice,
@@ -60,8 +59,7 @@ import {
 import { ConnectionState as LiveKitConnectionState, Track } from 'livekit-client'
 import Image from 'next/image'
 import Link from 'next/link'
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type SyntheticEvent } from 'react'
-import { createPortal } from 'react-dom'
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
 
 type TokenResponse =
   | {
@@ -600,7 +598,7 @@ function PortugueseConference({
   const [chatAttachmentError, setChatAttachmentError] = useState<string | null>(null)
   const [showReactions, setShowReactions] = useState(false)
   const [floatingReactions, setFloatingReactions] = useState<ReactionMessage[]>([])
-  const [showMoreMenu, setShowMoreMenu] = useState(false)
+  const [isMeetMoreOptionsOpen, setIsMeetMoreOptionsOpen] = useState(false)
   const [activeRecording, setActiveRecording] = useState<PublicMeetRecording | null>(null)
   const [recordings, setRecordings] = useState<PublicMeetRecording[]>([])
   const [canManageRecordings, setCanManageRecordings] = useState(false)
@@ -609,13 +607,10 @@ function PortugueseConference({
   const [recordingActionError, setRecordingActionError] = useState<string | null>(null)
   const [compactLayout, setCompactLayout] = useState(false)
   const [inviteFeedback, setInviteFeedback] = useState<InviteFeedback>('idle')
-  const [moreMenuPortalHost, setMoreMenuPortalHost] = useState<Element | null>(null)
   const [handNotice, setHandNotice] = useState<string | null>(null)
   const [connectionNotice, setConnectionNotice] = useState<string | null>(null)
   const [timeWarningMinimized, setTimeWarningMinimized] = useState(false)
   const reactionMenuRef = useRef<HTMLDivElement | null>(null)
-  const moreMenuButtonRef = useRef<HTMLButtonElement | null>(null)
-  const moreMenuRef = useRef<HTMLDivElement | null>(null)
   const chatEmojiPanelRef = useRef<HTMLDivElement | null>(null)
   const chatAttachmentInputRef = useRef<HTMLInputElement | null>(null)
   const seenHandsRef = useRef<Set<string>>(new Set())
@@ -747,17 +742,6 @@ function PortugueseConference({
       document.removeEventListener('keydown', handleDocumentKeyDown)
     }
   }, [showChatEmojiPanel, showReactions])
-
-  useEffect(() => {
-    setMoreMenuPortalHost(document.body)
-  }, [])
-
-  useEffect(() => {
-    if (!showMoreMenu) return
-
-    const timer = window.setTimeout(() => moreMenuRef.current?.focus(), 0)
-    return () => window.clearTimeout(timer)
-  }, [showMoreMenu])
 
   useEffect(() => {
     if (floatingReactions.length === 0) return
@@ -979,7 +963,7 @@ function PortugueseConference({
 
     setFloatingReactions((current) => [...current, reaction].slice(-8))
     setShowReactions(false)
-    setShowMoreMenu(false)
+    setIsMeetMoreOptionsOpen(false)
     try {
       await send(encodeMeetDataMessage(reaction), { reliable: false, topic: MEET_DATA_TOPIC })
     } catch (reactionError) {
@@ -990,22 +974,18 @@ function PortugueseConference({
   const openPanel = (panel: Exclude<SidePanel, null>) => {
     setSidePanel((current) => (current === panel ? null : panel))
     setShowReactions(false)
-    setShowMoreMenu(false)
-  }
-
-  function stopMoreMenuEvent(event: SyntheticEvent) {
-    event.stopPropagation()
+    setIsMeetMoreOptionsOpen(false)
   }
 
   function handleMoreMenuKeyDown(event: ReactKeyboardEvent) {
-    if (!showMoreMenu || !isMeetOptionsMenuEscapeKey(event.key)) return
+    if (!isMeetMoreOptionsOpen || !isMeetOptionsMenuEscapeKey(event.key)) return
 
     event.stopPropagation()
-    setShowMoreMenu(false)
+    setIsMeetMoreOptionsOpen(false)
   }
 
   function toggleMoreMenu() {
-    setShowMoreMenu((current) => toggleMeetOptionsMenu(current))
+    setIsMeetMoreOptionsOpen((current) => !current)
     setShowReactions(false)
   }
 
@@ -1017,7 +997,7 @@ function PortugueseConference({
 
     setRecordingActionError(null)
     setShowRecordingConfirmation(true)
-    setShowMoreMenu(false)
+    setIsMeetMoreOptionsOpen(false)
   }
 
   async function confirmRecordingStart() {
@@ -1489,9 +1469,8 @@ function PortugueseConference({
                 <Hand className="h-5 w-5" />
               </button>
 
-              <div className="relative">
+              <div className="relative flex flex-col items-center">
                 <button
-                  ref={moreMenuButtonRef}
                   type="button"
                   onClick={(event) => {
                     event.preventDefault()
@@ -1499,39 +1478,32 @@ function PortugueseConference({
                     toggleMoreMenu()
                   }}
                   onKeyDown={handleMoreMenuKeyDown}
-                  className={showMoreMenu ? activeIconButtonClass : iconButtonClass}
+                  className={isMeetMoreOptionsOpen ? activeIconButtonClass : iconButtonClass}
                   aria-label="Mais opções"
                   aria-haspopup="menu"
-                  aria-expanded={showMoreMenu}
+                  aria-expanded={isMeetMoreOptionsOpen}
                   aria-controls="meet-options-menu"
                   title="Mais opções"
                 >
                   <MoreHorizontal className="h-5 w-5" />
                 </button>
-                {showMoreMenu && moreMenuPortalHost
-                  ? createPortal(
+                {isMeetMoreOptionsOpen ? (
                     <div
                       id="meet-options-menu"
-                      ref={moreMenuRef}
                       role="menu"
-                      tabIndex={-1}
                       aria-label="Mais opções da sala"
                       data-state="open"
-                      onPointerDown={stopMoreMenuEvent}
-                      onMouseDown={stopMoreMenuEvent}
-                      onClick={stopMoreMenuEvent}
                       onKeyDown={handleMoreMenuKeyDown}
-                      className="fixed bottom-[calc(6rem+env(safe-area-inset-bottom))] left-3 right-3 z-[9999] max-h-[min(78vh,620px)] overflow-y-auto rounded-3xl border-2 border-emerald-300/80 bg-[linear-gradient(180deg,rgba(6,24,20,0.99),rgba(2,6,23,0.99))] p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] text-sm shadow-2xl shadow-emerald-950/60 outline-none ring-2 ring-emerald-200/35 backdrop-blur-2xl sm:bottom-[88px] sm:left-1/2 sm:right-auto sm:w-[22rem] sm:-translate-x-1/2 sm:p-3"
+                      className="fixed bottom-[calc(5.25rem+env(safe-area-inset-bottom))] left-3 right-3 z-[9999] max-h-[min(72vh,36rem)] overflow-y-auto rounded-3xl border border-blue-200/15 bg-black/90 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] text-sm shadow-2xl shadow-black/55 outline-none ring-1 ring-blue-100/10 sm:absolute sm:bottom-14 sm:left-1/2 sm:right-auto sm:w-[24rem] sm:-translate-x-1/2 sm:p-3"
                     >
                       <div className="mx-auto mb-4 h-1.5 w-11 rounded-full bg-blue-100/25 sm:hidden" />
 
                       <div className="mb-4 flex items-start justify-between gap-3 px-1 sm:mb-3">
                         <div>
-                          <p className="mb-1 text-[11px] font-black uppercase tracking-[0.16em] text-emerald-200">Menu aberto</p>
                           <p className="text-base font-black text-white">Mais opções</p>
                           <p className="mt-1 text-xs text-zinc-400">Sala {roomName} · {secondsLeft === null ? '--:--' : formatSeconds(secondsLeft)}</p>
                         </div>
-                        <button type="button" onClick={() => setShowMoreMenu(false)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/[0.07] text-zinc-200 transition hover:bg-blue-500/15" aria-label="Fechar menu" title="Fechar menu">
+                        <button type="button" onClick={() => setIsMeetMoreOptionsOpen(false)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/[0.07] text-zinc-200 transition hover:bg-blue-500/15" aria-label="Fechar menu" title="Fechar menu">
                           <X className="h-4 w-4" />
                         </button>
                       </div>
@@ -1548,14 +1520,14 @@ function PortugueseConference({
                       </div>
 
                       <div className="grid grid-cols-2 gap-2">
-                        <button type="button" onClick={() => { onToggleHand(); setShowMoreMenu(false) }} className={handRaised ? `${sheetActionClass} border-amber-300/25 bg-amber-300/15 text-amber-50` : sheetActionClass} aria-label={handRaised ? 'Baixar mão' : 'Levantar mão'} title={handRaised ? 'Baixar mão' : 'Levantar mão'}>
+                        <button type="button" onClick={() => { onToggleHand(); setIsMeetMoreOptionsOpen(false) }} className={handRaised ? `${sheetActionClass} border-amber-300/25 bg-amber-300/15 text-amber-50` : sheetActionClass} aria-label={handRaised ? 'Baixar mão' : 'Levantar mão'} title={handRaised ? 'Baixar mão' : 'Levantar mão'}>
                           <span className={handRaised ? 'flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-300/20 text-amber-50 ring-1 ring-amber-200/20' : sheetIconClass}>
                             <Hand className="h-5 w-5" />
                           </span>
                           <span>{handRaised ? 'Baixar mão' : 'Levantar mão'}</span>
                         </button>
 
-                        <TrackToggle source={Track.Source.ScreenShare} showIcon={false} className={sheetActionClass} onChange={(enabled) => { setScreenShareEnabled(enabled); setShowMoreMenu(false) }} aria-label={screenShareEnabled ? 'Parar apresentação' : 'Apresentar'} title={screenShareEnabled ? 'Parar apresentação' : 'Apresentar'}>
+                        <TrackToggle source={Track.Source.ScreenShare} showIcon={false} className={sheetActionClass} onChange={(enabled) => { setScreenShareEnabled(enabled); setIsMeetMoreOptionsOpen(false) }} aria-label={screenShareEnabled ? 'Parar apresentação' : 'Apresentar'} title={screenShareEnabled ? 'Parar apresentação' : 'Apresentar'}>
                           <span className={sheetIconClass}>
                             <MonitorUp className="h-5 w-5" />
                           </span>
@@ -1576,35 +1548,35 @@ function PortugueseConference({
                           <span>Participantes</span>
                         </button>
 
-                        <button type="button" onClick={() => void copyRoomLink().then(() => setShowMoreMenu(false))} className={sheetActionClass}>
+                        <button type="button" onClick={() => void copyRoomLink().then(() => setIsMeetMoreOptionsOpen(false))} className={sheetActionClass}>
                           <span className={sheetIconClass}>
                             <Copy className="h-5 w-5" />
                           </span>
                           <span>{inviteFeedback === 'copied' ? 'Link copiado' : 'Copiar link'}</span>
                         </button>
 
-                        <button type="button" onClick={() => void shareRoom().then(() => setShowMoreMenu(false))} className={sheetActionClass}>
+                        <button type="button" onClick={() => void shareRoom().then(() => setIsMeetMoreOptionsOpen(false))} className={sheetActionClass}>
                           <span className={sheetIconClass}>
                             <Share2 className="h-5 w-5" />
                           </span>
                           <span>Compartilhar</span>
                         </button>
 
-                        <button type="button" onClick={() => { onToggleSoundAlerts(); setShowMoreMenu(false) }} className={sheetActionClass}>
+                        <button type="button" onClick={() => { onToggleSoundAlerts(); setIsMeetMoreOptionsOpen(false) }} className={sheetActionClass}>
                           <span className={sheetIconClass}>
                             {soundAlertsEnabled ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5" />}
                           </span>
                           <span>{soundAlertsEnabled ? 'Sons ligados' : 'Sons desligados'}</span>
                         </button>
 
-                        <button type="button" onClick={() => { setCompactLayout((current) => !current); setShowMoreMenu(false) }} className={sheetActionClass}>
+                        <button type="button" onClick={() => { setCompactLayout((current) => !current); setIsMeetMoreOptionsOpen(false) }} className={sheetActionClass}>
                           <span className={sheetIconClass}>
                             <LayoutGrid className="h-5 w-5" />
                           </span>
                           <span>Layout</span>
                         </button>
 
-                        <button type="button" onClick={() => { void document.documentElement.requestFullscreen?.(); setShowMoreMenu(false) }} className={sheetActionClass}>
+                        <button type="button" onClick={() => { void document.documentElement.requestFullscreen?.(); setIsMeetMoreOptionsOpen(false) }} className={sheetActionClass}>
                           <span className={sheetIconClass}>
                             <Maximize className="h-5 w-5" />
                           </span>
@@ -1620,6 +1592,7 @@ function PortugueseConference({
                             Boolean(activeRecording && activeRecording.status !== 'recording')
                           }
                           onClick={() => {
+                            setIsMeetMoreOptionsOpen(false)
                             if (activeRecording?.status === 'recording') {
                               void stopRecording()
                               return
@@ -1684,7 +1657,10 @@ function PortugueseConference({
                                     <button
                                       type="button"
                                       disabled={recordingAction !== 'idle'}
-                                      onClick={() => void downloadRecording(recording)}
+                                      onClick={() => {
+                                        setIsMeetMoreOptionsOpen(false)
+                                        void downloadRecording(recording)
+                                      }}
                                       title={recording.retentionExpiresAt ? `Download disponível até ${new Date(recording.retentionExpiresAt).toLocaleDateString('pt-BR')}` : 'Download seguro'}
                                       className="inline-flex min-h-9 shrink-0 items-center gap-1 rounded-full border border-blue-300/25 bg-blue-500/15 px-3 text-xs font-bold text-blue-50 transition hover:bg-blue-500/25 disabled:cursor-not-allowed disabled:opacity-55"
                                     >
@@ -1710,23 +1686,21 @@ function PortugueseConference({
                       </div>
 
                       <div className="mt-3 grid grid-cols-2 gap-2">
-                        <DisconnectButton className={sheetDangerActionClass} title="Sair da sala">
+                        <DisconnectButton className={sheetDangerActionClass} title="Sair da sala" onClick={() => setIsMeetMoreOptionsOpen(false)}>
                           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-500/25 text-white ring-1 ring-red-100/25">
                             <PhoneOff className="h-5 w-5 stroke-[2.8]" />
                           </span>
                           <span>Sair da sala</span>
                         </DisconnectButton>
-                        <button type="button" onClick={() => setShowMoreMenu(false)} className={sheetActionClass}>
+                        <button type="button" onClick={() => setIsMeetMoreOptionsOpen(false)} className={sheetActionClass}>
                           <span className={sheetIconClass}>
                             <X className="h-5 w-5" />
                           </span>
                           <span>Fechar</span>
                         </button>
                       </div>
-                    </div>,
-                    moreMenuPortalHost,
-                  )
-                  : null}
+                    </div>
+                  ) : null}
               </div>
 
               <DisconnectButton className="!m-0 inline-flex !h-11 !min-h-0 !w-11 shrink-0 items-center justify-center !rounded-full !border !border-red-300/50 !bg-red-600/95 !p-0 !text-white text-white shadow-md shadow-red-950/25 transition hover:!border-red-100/70 hover:!bg-red-500 focus:outline-none focus:ring-2 focus:ring-red-100/45 sm:!h-11 sm:!w-12" title="Sair">

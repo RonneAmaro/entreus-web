@@ -13,3 +13,7 @@ export function isMeetOptionsMenuEscapeKey(key: string) {
 export function shouldKeepMeetOptionsMenuOpenAfterOutsideInteraction() {
   return true
 }
+
+export function shouldCloseMeetOptionsMenuAfterAction() {
+  return true
+}
