@@ -82,9 +82,9 @@ import {
   getPaidPostPrice,
   isMissingPaidPostColumnError,
   isPaidPost,
-  sanitizeLockedPaidPostForClient,
   validatePaidPostPrice,
 } from '@/lib/paid-posts'
+import { protectPostForViewer } from '@/lib/protected-post-access'
 import { claimSubmitGuard, releaseSubmitGuard, type SubmitGuard } from '@/lib/post-submit-guard'
 
 type VisibilityType = 'public' | 'followers' | 'private'
@@ -1438,11 +1438,25 @@ function FeedContent() {
     const normalizedPosts = rawPosts
       .map((post) => {
         const paidUnlocked = post.user_id === currentUserId || paidUnlockedIds.has(post.id)
-        return sanitizeLockedPaidPostForClient({
-          ...post,
-          media: mediaByPost[post.id] || [],
-          paid_unlocked: paidUnlocked,
-        }, currentUserId, paidUnlocked)
+        return protectPostForViewer({
+          post: {
+            ...post,
+            media: mediaByPost[post.id] || [],
+            paid_unlocked: paidUnlocked,
+          },
+          viewerId: currentUserId,
+          viewerProfile: {
+            isMinor: currentProfile?.is_minor,
+            wants18Plus: currentProfile?.wants_18_plus,
+            ageVerificationStatus: currentProfile?.age_verification_status,
+          },
+          hasPaidUnlock: paidUnlocked,
+          isFollowingAuthor: currentFollows.some(
+            (follow) =>
+              follow.follower_id === currentUserId &&
+              follow.following_id === post.user_id,
+          ),
+        })
       })
       .filter((post) => !currentBlockedIds.includes(post.user_id))
       .filter((post) => !isModeratedHidden(post))

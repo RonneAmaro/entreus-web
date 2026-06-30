@@ -36,7 +36,8 @@ import {
 } from "@/lib/post-classification";
 import { canViewAdultContent } from "@/lib/content-access";
 import { applyPostVisibilityFilters } from "@/lib/post-visibility";
-import { isMissingPaidPostColumnError, sanitizeLockedPaidPostForClient } from "@/lib/paid-posts";
+import { isMissingPaidPostColumnError } from "@/lib/paid-posts";
+import { protectPostForViewer } from "@/lib/protected-post-access";
 
 type VisibilityType = "public" | "followers" | "private";
 type ProfileTab = "posts" | "replies" | "media";
@@ -1021,11 +1022,21 @@ export default function PublicProfilePage() {
 
     const normalizedPosts = allPosts.map((post) => {
       const paidUnlocked = post.user_id === currentUserId || paidUnlockedIds.has(post.id);
-      return sanitizeLockedPaidPostForClient({
-        ...post,
-        media: mediaByPost[post.id] || [],
-        paid_unlocked: paidUnlocked,
-      }, currentUserId, paidUnlocked);
+      return protectPostForViewer({
+        post: {
+          ...post,
+          media: mediaByPost[post.id] || [],
+          paid_unlocked: paidUnlocked,
+        },
+        viewerId: currentUserId,
+        viewerProfile: {
+          isMinor: viewerProfile?.is_minor,
+          wants18Plus: viewerProfile?.wants_18_plus,
+          ageVerificationStatus: viewerProfile?.age_verification_status,
+        },
+        hasPaidUnlock: paidUnlocked,
+        isFollowingAuthor: post.user_id === profileData.id ? currentIsFollowing : false,
+      });
     });
 
     setPosts(normalizedPosts);

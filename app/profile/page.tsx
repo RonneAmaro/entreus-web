@@ -22,7 +22,8 @@ import {
   type ModeratedPostFields,
 } from '@/lib/post-moderation'
 import { resolveUserTier } from '@/lib/user-tiers'
-import { isMissingPaidPostColumnError, sanitizeLockedPaidPostForClient } from '@/lib/paid-posts'
+import { isMissingPaidPostColumnError } from '@/lib/paid-posts'
+import { protectPostForViewer } from '@/lib/protected-post-access'
 import {
   getEffectiveProfileThemeKey,
   getProfileTheme,
@@ -86,6 +87,8 @@ type Post = ModeratedPostFields & {
   video_url: string | null
   visibility: VisibilityType
   is_sensitive: boolean | null
+  community_type?: string | null
+  content_rating?: string | null
   is_paid?: boolean | null
   price_itacash?: number | null
   paid_unlocked?: boolean
@@ -155,6 +158,10 @@ const PROFILE_SELECT_FALLBACK =
 const POST_SELECT_PAID_FIELDS = `
         is_paid,
         price_itacash,
+`
+const POST_SELECT_COMMUNITY_FIELDS = `
+        community_type,
+        content_rating,
 `
 
 function isMissingProfileThemeColumnError(error: { message?: string } | null) {
@@ -764,6 +771,7 @@ export default function ProfilePage() {
         video_url,
         visibility,
         is_sensitive,
+        ${POST_SELECT_COMMUNITY_FIELDS}
         ${POST_SELECT_PAID_FIELDS}
         moderation_status,
         moderated_at,
@@ -785,6 +793,7 @@ export default function ProfilePage() {
         video_url,
         visibility,
         is_sensitive,
+        ${POST_SELECT_COMMUNITY_FIELDS}
         ${POST_SELECT_PAID_FIELDS}
         profiles (
           username,
@@ -854,6 +863,8 @@ export default function ProfilePage() {
         ...post,
         visibility: (post.visibility || 'public') as VisibilityType,
         is_sensitive: post.is_sensitive || false,
+        community_type: post.community_type || 'general',
+        content_rating: post.content_rating || 'safe',
         profiles: Array.isArray(post.profiles)
           ? post.profiles[0] || null
           : post.profiles,
@@ -908,6 +919,8 @@ export default function ProfilePage() {
           ...post,
           visibility: (post.visibility || 'public') as VisibilityType,
           is_sensitive: post.is_sensitive || false,
+          community_type: post.community_type || 'general',
+          content_rating: post.content_rating || 'safe',
           profiles: Array.isArray(post.profiles)
             ? post.profiles[0] || null
             : post.profiles,
@@ -950,11 +963,21 @@ export default function ProfilePage() {
 
     const normalizedPosts = allPosts.map((post) => {
       const paidUnlocked = post.user_id === currentUserId || paidUnlockedIds.has(post.id)
-      return sanitizeLockedPaidPostForClient({
-        ...post,
-        media: mediaByPost[post.id] || [],
-        paid_unlocked: paidUnlocked,
-      }, currentUserId, paidUnlocked)
+      return protectPostForViewer({
+        post: {
+          ...post,
+          media: mediaByPost[post.id] || [],
+          paid_unlocked: paidUnlocked,
+        },
+        viewerId: currentUserId,
+        viewerProfile: {
+          isMinor: currentProfileData.is_minor,
+          wants18Plus: currentProfileData.wants_18_plus,
+          ageVerificationStatus: currentProfileData.age_verification_status,
+          parentalConsentStatus: currentProfileData.parental_consent_status,
+        },
+        hasPaidUnlock: paidUnlocked,
+      })
     })
 
     setPosts(normalizedPosts)

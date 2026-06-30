@@ -20,7 +20,8 @@ import {
 } from '@/lib/post-classification'
 import { canViewAdultContent } from '@/lib/content-access'
 import { applyPostVisibilityFilters } from '@/lib/post-visibility'
-import { isMissingPaidPostColumnError, isPaidPost, sanitizeLockedPaidPostForClient } from '@/lib/paid-posts'
+import { isMissingPaidPostColumnError, isPaidPost } from '@/lib/paid-posts'
+import { protectPostForViewer } from '@/lib/protected-post-access'
 
 type VisibilityType = 'public' | 'followers' | 'private'
 
@@ -390,7 +391,13 @@ export default function PostPage() {
       const isHiddenByModeration = isModeratedHidden(normalizedPost)
 
       if (isHiddenByModeration && !currentUserIsAdmin) {
-        setPost(normalizedPost)
+        setPost(protectPostForViewer({
+          post: normalizedPost,
+          viewerId: currentUserId,
+          viewerProfile: adultViewer,
+          isAdmin: currentUserIsAdmin,
+          hasPaidUnlock: false,
+        }))
         setPermissionDenied(true)
         setModerationHiddenDenied(true)
         setMessage('Este conteudo foi ocultado pela moderacao.')
@@ -405,6 +412,7 @@ export default function PostPage() {
           normalizedPost.category,
         ) &&
         !currentUserIsAdmin &&
+        normalizedPost.user_id !== currentUserId &&
         !canViewCommunity(
           adultViewer,
           normalizedPost.community_type,
@@ -412,7 +420,13 @@ export default function PostPage() {
           normalizedPost.category,
         )
       ) {
-        setPost(normalizedPost)
+        setPost(protectPostForViewer({
+          post: normalizedPost,
+          viewerId: currentUserId,
+          viewerProfile: adultViewer,
+          isAdmin: currentUserIsAdmin,
+          hasPaidUnlock: false,
+        }))
         setPermissionDenied(true)
         setMessage('Este conteudo nao esta disponivel para sua conta.')
         setLoading(false)
@@ -422,7 +436,14 @@ export default function PostPage() {
       const canSee = await checkCanSeePost(normalizedPost, currentUserId)
 
       if (!canSee) {
-        setPost(normalizedPost)
+        setPost(protectPostForViewer({
+          post: normalizedPost,
+          viewerId: currentUserId,
+          viewerProfile: adultViewer,
+          isAdmin: currentUserIsAdmin,
+          canViewVisibility: false,
+          hasPaidUnlock: false,
+        }))
         setPermissionDenied(true)
         setMessage('Você não tem permissão para visualizar esta publicação.')
         setLoading(false)
@@ -449,11 +470,18 @@ export default function PostPage() {
       normalizedPost.paid_unlocked = paidUnlocked
 
       if (isPaidPost(normalizedPost) && !paidUnlocked) {
-        setPost(sanitizeLockedPaidPostForClient({
-          ...normalizedPost,
-          media: [],
-          paid_unlocked: false,
-        }, currentUserId, false))
+        setPost(protectPostForViewer({
+          post: {
+            ...normalizedPost,
+            media: [],
+            paid_unlocked: false,
+          },
+          viewerId: currentUserId,
+          viewerProfile: adultViewer,
+          isAdmin: currentUserIsAdmin,
+          canViewVisibility: true,
+          hasPaidUnlock: false,
+        }))
 
         await Promise.all([
           loadLikes(),

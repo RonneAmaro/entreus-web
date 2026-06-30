@@ -23,7 +23,8 @@ import {
 } from '@/lib/post-classification'
 import { canViewAdultContent } from '@/lib/content-access'
 import { applyPostVisibilityFilters } from '@/lib/post-visibility'
-import { isMissingPaidPostColumnError, sanitizeLockedPaidPostForClient } from '@/lib/paid-posts'
+import { isMissingPaidPostColumnError } from '@/lib/paid-posts'
+import { protectPostForViewer } from '@/lib/protected-post-access'
 
 
 function getDateLocale(language: string) {
@@ -591,11 +592,25 @@ export default function SavedPage() {
     const normalizedPosts = visiblePosts
       .map((post) => {
         const paidUnlocked = post.user_id === currentUserId || paidUnlockedIds.has(post.id)
-        return sanitizeLockedPaidPostForClient({
-          ...post,
-          media: mediaByPost[post.id] || [],
-          paid_unlocked: paidUnlocked,
-        }, currentUserId, paidUnlocked)
+        return protectPostForViewer({
+          post: {
+            ...post,
+            media: mediaByPost[post.id] || [],
+            paid_unlocked: paidUnlocked,
+          },
+          viewerId: currentUserId,
+          viewerProfile: {
+            isMinor: viewerProfile?.is_minor,
+            wants18Plus: viewerProfile?.wants_18_plus,
+            ageVerificationStatus: viewerProfile?.age_verification_status,
+          },
+          hasPaidUnlock: paidUnlocked,
+          isFollowingAuthor: currentFollows.some(
+            (follow) =>
+              follow.follower_id === currentUserId &&
+              follow.following_id === post.user_id,
+          ),
+        })
       })
       .sort((a, b) => {
         const orderA = bookmarkOrder.get(a.id) ?? 999999
