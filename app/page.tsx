@@ -63,6 +63,13 @@ export default function HomePage() {
                   Entrar
                 </Link>
               </div>
+
+              <Link
+                href="/convite"
+                className="mt-5 text-sm font-medium text-zinc-500 underline-offset-4 transition hover:text-zinc-200 hover:underline"
+              >
+                Conhecer a EntreUS
+              </Link>
             </div>
 
           </div>

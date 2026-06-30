@@ -11,6 +11,7 @@ const publicRoutes = [
   '/safety',
   '/contact',
   '/help',
+  '/convite',
   '/meet',
   '/selos',
   '/vip-plus',
