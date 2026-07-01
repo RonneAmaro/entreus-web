@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import PostCard from '@/app/components/PostCard'
+import RichTextLinks from '@/app/components/RichTextLinks'
 import { isAdminRole } from '@/lib/admin'
 import {
   isMissingPostModerationColumnError,
@@ -1237,9 +1238,10 @@ export default function PostPage() {
                             </p>
                           </Link>
 
-                          <p className="mt-2 break-words text-sm text-zinc-800 dark:text-zinc-200">
-                            {comment.content}
-                          </p>
+                          <RichTextLinks
+                            text={comment.content}
+                            className="mt-2 whitespace-pre-wrap break-words text-sm text-zinc-800 dark:text-zinc-200"
+                          />
 
                           <p className="mt-2 text-xs text-zinc-500">
                             {new Date(comment.created_at).toLocaleString('pt-BR')}

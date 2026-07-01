@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Camera, ExternalLink, Link2, Play } from 'lucide-react'
 import { detectExternalEmbed, type ExternalEmbed } from '@/lib/external-embeds'
+import RichTextLinks from './RichTextLinks'
 
 type LinkPreviewProps = {
   content: string | null
@@ -541,33 +542,7 @@ export function LinkedPostText({
   content: string
   className?: string
 }) {
-  const urlRegex = /(https?:\/\/[^\s<]+)/gi
-  const parts = content.split(urlRegex)
-
-  return (
-    <p className={className}>
-      {parts.map((part, index) => {
-        if (!part.match(urlRegex)) return part
-
-        const url = cleanUrl(part)
-        const trailingPunctuation = getTrailingPunctuation(part)
-
-        return (
-          <span key={`${url}-${index}`}>
-            <a
-              href={url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="rounded-md font-medium text-blue-600 underline decoration-blue-400/40 underline-offset-4 transition hover:bg-blue-50 hover:text-blue-700 hover:decoration-blue-600 dark:text-blue-300 dark:hover:bg-blue-950/40 dark:hover:text-blue-200"
-            >
-              {url}
-            </a>
-            {trailingPunctuation}
-          </span>
-        )
-      })}
-    </p>
-  )
+  return <RichTextLinks text={content} className={className} />
 }
 
 export default function LinkPreview({

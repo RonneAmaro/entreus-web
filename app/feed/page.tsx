@@ -70,6 +70,7 @@ import {
   getPostCommunityLabel as getCommunityLabel,
   getSafePostCommunity as normalizeCommunity,
   getSafePostContentRating as normalizeContentRating,
+  isPostCommunityType,
   isAdultPostClassification as isAdultCommunityOrRating,
   type PostCommunityFilter as CommunityFilter,
   type PostCommunityType as CommunityType,
@@ -86,6 +87,7 @@ import {
 } from '@/lib/paid-posts'
 import { protectPostForViewer } from '@/lib/protected-post-access'
 import { claimSubmitGuard, releaseSubmitGuard, type SubmitGuard } from '@/lib/post-submit-guard'
+import { resolveCommunityFilterSlug } from '@/lib/rich-text-links'
 
 type VisibilityType = 'public' | 'followers' | 'private'
 type ComposerSubmitData = {
@@ -829,6 +831,7 @@ function FeedContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const highlightedPostId = searchParams.get('post') || ''
+  const communityParam = searchParams.get('community') || searchParams.get('comunidade') || ''
   const { theme, setTheme } = useTheme()
   const { t, language } = useLanguage()
   const localTexts = getLocalFeedTexts(language)
@@ -931,6 +934,16 @@ function FeedContent() {
     }),
     [currentProfile],
   )
+
+  useEffect(() => {
+    if (!communityParam) return
+
+    const requestedCommunity = resolveCommunityFilterSlug(communityParam)
+    if (!isPostCommunityType(requestedCommunity)) return
+    if (!allowedCommunityFilters.includes(requestedCommunity)) return
+
+    setCommunityFilter((current) => (current === requestedCommunity ? current : requestedCommunity))
+  }, [allowedCommunityFilters, communityParam])
 
   useEffect(() => {
     setMounted(true)
@@ -3747,9 +3760,10 @@ function FeedContent() {
                   </div>
 
                   {replyModalPost.content && (
-                    <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-zinc-800 dark:text-zinc-200">
-                      {replyModalPost.content}
-                    </p>
+                    <LinkedPostText
+                      content={replyModalPost.content}
+                      className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-zinc-800 dark:text-zinc-200"
+                    />
                   )}
 
                   <p className="mt-2 text-xs text-zinc-500">
@@ -4655,9 +4669,10 @@ function FeedContent() {
                                       </div>
                                     </div>
                                   ) : (
-                                    <p className="mt-2 break-words text-zinc-800 dark:text-zinc-200">
-                                      {comment.content}
-                                    </p>
+                                    <LinkedPostText
+                                      content={comment.content}
+                                      className="mt-2 whitespace-pre-wrap break-words text-zinc-800 dark:text-zinc-200"
+                                    />
                                   )}
 
                                   {!isEditingThisComment && comment.media && comment.media.length > 0 && (
