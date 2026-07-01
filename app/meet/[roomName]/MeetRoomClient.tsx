@@ -2,8 +2,10 @@
 
 import { supabase } from '@/lib/supabase'
 import {
-  MEET_RECORDING_MENU_ITEM,
-  isMeetOptionsMenuEscapeKey,
+  MEET_OPTIONS_PANEL_ID,
+  MEET_RECORDING_PANEL_ITEM,
+  isMeetOptionsPanelEscapeKey,
+  toggleMeetOptionsPanel,
 } from '@/lib/meet-options-menu'
 import {
   getMeetRecordingParticipantNotice,
@@ -59,7 +61,7 @@ import {
 import { ConnectionState as LiveKitConnectionState, Track } from 'livekit-client'
 import Image from 'next/image'
 import Link from 'next/link'
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
 type TokenResponse =
   | {
@@ -717,31 +719,16 @@ function PortugueseConference({
   }, [connectionNotice, connectionState])
 
   useEffect(() => {
-    function handleDocumentPointerDown(event: PointerEvent) {
-      const target = event.target as Node
-
-      if (showReactions && reactionMenuRef.current && !reactionMenuRef.current.contains(target)) {
-        setShowReactions(false)
-      }
-
-      if (showChatEmojiPanel && chatEmojiPanelRef.current && !chatEmojiPanelRef.current.contains(target)) {
-        setShowChatEmojiPanel(false)
-      }
-    }
-
     function handleDocumentKeyDown(event: KeyboardEvent) {
-      if (event.key !== 'Escape') return
+      if (!isMeetOptionsPanelEscapeKey(event.key)) return
       setShowReactions(false)
       setShowChatEmojiPanel(false)
+      setIsMeetMoreOptionsOpen(false)
     }
 
-    document.addEventListener('pointerdown', handleDocumentPointerDown)
     document.addEventListener('keydown', handleDocumentKeyDown)
-    return () => {
-      document.removeEventListener('pointerdown', handleDocumentPointerDown)
-      document.removeEventListener('keydown', handleDocumentKeyDown)
-    }
-  }, [showChatEmojiPanel, showReactions])
+    return () => document.removeEventListener('keydown', handleDocumentKeyDown)
+  }, [])
 
   useEffect(() => {
     if (floatingReactions.length === 0) return
@@ -963,7 +950,6 @@ function PortugueseConference({
 
     setFloatingReactions((current) => [...current, reaction].slice(-8))
     setShowReactions(false)
-    setIsMeetMoreOptionsOpen(false)
     try {
       await send(encodeMeetDataMessage(reaction), { reliable: false, topic: MEET_DATA_TOPIC })
     } catch (reactionError) {
@@ -974,19 +960,10 @@ function PortugueseConference({
   const openPanel = (panel: Exclude<SidePanel, null>) => {
     setSidePanel((current) => (current === panel ? null : panel))
     setShowReactions(false)
-    setIsMeetMoreOptionsOpen(false)
   }
 
-  function handleMoreMenuKeyDown(event: ReactKeyboardEvent) {
-    if (!isMeetMoreOptionsOpen || !isMeetOptionsMenuEscapeKey(event.key)) return
-
-    event.stopPropagation()
-    setIsMeetMoreOptionsOpen(false)
-  }
-
-  function toggleMoreMenu() {
-    setIsMeetMoreOptionsOpen((current) => !current)
-    setShowReactions(false)
+  function toggleMoreOptionsPanel() {
+    setIsMeetMoreOptionsOpen((current) => toggleMeetOptionsPanel(current))
   }
 
   function requestRecordingStart() {
@@ -997,7 +974,6 @@ function PortugueseConference({
 
     setRecordingActionError(null)
     setShowRecordingConfirmation(true)
-    setIsMeetMoreOptionsOpen(false)
   }
 
   async function confirmRecordingStart() {
@@ -1100,6 +1076,29 @@ function PortugueseConference({
     }
   }
 
+  const recordingControlDisabled =
+    recordingAction !== 'idle' ||
+    !canControlRecording ||
+    Boolean(activeRecording && activeRecording.status !== 'recording')
+  const recordingControlLabel =
+    activeRecording?.status === 'recording'
+      ? 'Parar gravação'
+      : activeRecording
+        ? getMeetRecordingStatusLabel(activeRecording.status)
+        : MEET_RECORDING_PANEL_ITEM.label
+  const recordingControlTitle = canControlRecording
+    ? recordingControlLabel
+    : 'Somente o anfitrião ou administrador pode gravar.'
+
+  function toggleRecordingControl() {
+    if (activeRecording?.status === 'recording') {
+      void stopRecording()
+      return
+    }
+
+    requestRecordingStart()
+  }
+
   const iconButtonClass =
     'relative !m-0 inline-flex !h-11 !min-h-0 !w-11 shrink-0 items-center justify-center !rounded-full !border !border-white/5 !bg-white/[0.07] !p-0 text-blue-50 shadow-sm shadow-black/20 ring-1 ring-blue-200/5 transition hover:!bg-blue-500/20 hover:ring-blue-200/20 focus:outline-none focus:ring-2 focus:ring-blue-300/35 data-[lk-enabled=false]:!bg-black/25 data-[lk-enabled=false]:!text-zinc-500 sm:!h-11 sm:!w-11'
   const activeIconButtonClass =
@@ -1131,7 +1130,6 @@ function PortugueseConference({
   return (
     <div
       className="flex h-full min-h-0 flex-col overflow-hidden bg-[radial-gradient(circle_at_top,#0b1d3b_0%,#020617_42%,#000_100%)] text-white"
-      onKeyDownCapture={handleMoreMenuKeyDown}
     >
       <header className="z-20 flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-blue-400/10 bg-black/45 px-3 py-2 backdrop-blur-xl sm:px-5">
         <div className="flex min-w-0 items-center gap-3">
@@ -1435,6 +1433,18 @@ function PortugueseConference({
               <TrackToggle source={Track.Source.Camera} showIcon={false} className={iconButtonClass} onChange={setCameraEnabled} aria-label={cameraEnabled ? 'Desativar câmera' : 'Ativar câmera'} title={cameraEnabled ? 'Desativar câmera' : 'Ativar câmera'}>
                 <Video className="h-5 w-5" />
               </TrackToggle>
+              {canControlRecording ? (
+                <button
+                  type="button"
+                  onClick={toggleRecordingControl}
+                  disabled={recordingControlDisabled}
+                  className={activeRecording?.status === 'recording' ? activeIconButtonClass : iconButtonClass}
+                  aria-label={recordingControlLabel}
+                  title={recordingControlTitle}
+                >
+                  <Circle className={`h-5 w-5 ${activeRecording?.status === 'recording' ? 'fill-red-400 text-red-400' : ''}`} />
+                </button>
+              ) : null}
               <TrackToggle source={Track.Source.ScreenShare} showIcon={false} className={`${secondaryDesktopControlClass} ${iconButtonClass}`} onChange={setScreenShareEnabled} aria-label={screenShareEnabled ? 'Parar compartilhamento' : 'Compartilhar tela'} title={screenShareEnabled ? 'Parar compartilhamento' : 'Compartilhar tela'}>
                 <MonitorUp className="h-5 w-5" />
               </TrackToggle>
@@ -1475,218 +1485,217 @@ function PortugueseConference({
                   onClick={(event) => {
                     event.preventDefault()
                     event.stopPropagation()
-                    toggleMoreMenu()
+                    toggleMoreOptionsPanel()
                   }}
-                  onKeyDown={handleMoreMenuKeyDown}
                   className={isMeetMoreOptionsOpen ? activeIconButtonClass : iconButtonClass}
                   aria-label="Mais opções"
-                  aria-haspopup="menu"
+                  aria-haspopup="dialog"
                   aria-expanded={isMeetMoreOptionsOpen}
-                  aria-controls="meet-options-menu"
+                  aria-controls={MEET_OPTIONS_PANEL_ID}
                   title="Mais opções"
                 >
                   <MoreHorizontal className="h-5 w-5" />
                 </button>
-                {isMeetMoreOptionsOpen ? (
+              </div>
+
+              <DisconnectButton className="!m-0 inline-flex !h-11 !min-h-0 !w-11 shrink-0 items-center justify-center !rounded-full !border !border-red-300/50 !bg-red-600/95 !p-0 !text-white text-white shadow-md shadow-red-950/25 transition hover:!border-red-100/70 hover:!bg-red-500 focus:outline-none focus:ring-2 focus:ring-red-100/45 sm:!h-11 sm:!w-12" title="Sair">
+                <PhoneOff className="h-5 w-5 text-white stroke-[2.9]" />
+              </DisconnectButton>
+            </div>
+          </div>
+
+          {isMeetMoreOptionsOpen ? (
                     <div
-                      id="meet-options-menu"
-                      role="menu"
-                      aria-label="Mais opções da sala"
+                      id={MEET_OPTIONS_PANEL_ID}
+                      role="dialog"
+                      aria-labelledby="meet-options-panel-title"
+                      aria-modal="false"
                       data-state="open"
-                      onKeyDown={handleMoreMenuKeyDown}
-                      className="fixed bottom-[calc(5.25rem+env(safe-area-inset-bottom))] left-3 right-3 z-[9999] max-h-[min(72vh,36rem)] overflow-y-auto rounded-3xl border border-blue-200/15 bg-black/90 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] text-sm shadow-2xl shadow-black/55 outline-none ring-1 ring-blue-100/10 sm:absolute sm:bottom-14 sm:left-1/2 sm:right-auto sm:w-[24rem] sm:-translate-x-1/2 sm:p-3"
+                      className="fixed bottom-0 left-3 right-3 z-[9999] max-h-[min(78vh,42rem)] overflow-y-auto rounded-t-3xl border border-blue-200/15 bg-black/95 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] text-sm shadow-2xl shadow-black/60 outline-none ring-1 ring-blue-100/10 sm:bottom-24 sm:left-auto sm:right-5 sm:w-[28rem] sm:rounded-3xl sm:p-3 lg:right-8"
                     >
                       <div className="mx-auto mb-4 h-1.5 w-11 rounded-full bg-blue-100/25 sm:hidden" />
 
                       <div className="mb-4 flex items-start justify-between gap-3 px-1 sm:mb-3">
                         <div>
-                          <p className="text-base font-black text-white">Mais opções</p>
+                          <p id="meet-options-panel-title" className="text-base font-black text-white">Mais opções</p>
                           <p className="mt-1 text-xs text-zinc-400">Sala {roomName} · {secondsLeft === null ? '--:--' : formatSeconds(secondsLeft)}</p>
                         </div>
-                        <button type="button" onClick={() => setIsMeetMoreOptionsOpen(false)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/[0.07] text-zinc-200 transition hover:bg-blue-500/15" aria-label="Fechar menu" title="Fechar menu">
+                        <button type="button" onClick={() => setIsMeetMoreOptionsOpen(false)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/[0.07] text-zinc-200 transition hover:bg-blue-500/15" aria-label="Fechar painel" title="Fechar painel">
                           <X className="h-4 w-4" />
                         </button>
                       </div>
 
-                      <div className="mb-3 rounded-3xl border border-blue-300/10 bg-black/25 p-3">
-                        <p className="mb-3 px-1 text-xs font-bold uppercase tracking-[0.14em] text-blue-100/55">Reações</p>
-                        <div className="grid grid-cols-6 gap-1.5">
-                          {QUICK_REACTIONS.map((reaction) => (
-                            <button key={reaction} type="button" onClick={() => void sendReaction(reaction)} className="flex aspect-square items-center justify-center rounded-2xl bg-white/[0.06] text-2xl transition hover:bg-blue-500/15 focus:outline-none focus:ring-2 focus:ring-blue-300/30" aria-label={`Enviar reação ${reaction}`} title={`Enviar reação ${reaction}`}>
-                              {reaction}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2">
-                        <button type="button" onClick={() => { onToggleHand(); setIsMeetMoreOptionsOpen(false) }} className={handRaised ? `${sheetActionClass} border-amber-300/25 bg-amber-300/15 text-amber-50` : sheetActionClass} aria-label={handRaised ? 'Baixar mão' : 'Levantar mão'} title={handRaised ? 'Baixar mão' : 'Levantar mão'}>
-                          <span className={handRaised ? 'flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-300/20 text-amber-50 ring-1 ring-amber-200/20' : sheetIconClass}>
-                            <Hand className="h-5 w-5" />
-                          </span>
-                          <span>{handRaised ? 'Baixar mão' : 'Levantar mão'}</span>
-                        </button>
-
-                        <TrackToggle source={Track.Source.ScreenShare} showIcon={false} className={sheetActionClass} onChange={(enabled) => { setScreenShareEnabled(enabled); setIsMeetMoreOptionsOpen(false) }} aria-label={screenShareEnabled ? 'Parar apresentação' : 'Apresentar'} title={screenShareEnabled ? 'Parar apresentação' : 'Apresentar'}>
-                          <span className={sheetIconClass}>
-                            <MonitorUp className="h-5 w-5" />
-                          </span>
-                          <span>{screenShareEnabled ? 'Parar apresentação' : 'Apresentar'}</span>
-                        </TrackToggle>
-
-                        <button type="button" onClick={() => openPanel('chat')} className={sheetActionClass}>
-                          <span className={sheetIconClass}>
-                            <MessageSquare className="h-5 w-5" />
-                          </span>
-                          <span>Chat</span>
-                        </button>
-
-                        <button type="button" onClick={() => openPanel('participants')} className={sheetActionClass}>
-                          <span className={sheetIconClass}>
-                            <Users className="h-5 w-5" />
-                          </span>
-                          <span>Participantes</span>
-                        </button>
-
-                        <button type="button" onClick={() => void copyRoomLink().then(() => setIsMeetMoreOptionsOpen(false))} className={sheetActionClass}>
-                          <span className={sheetIconClass}>
-                            <Copy className="h-5 w-5" />
-                          </span>
-                          <span>{inviteFeedback === 'copied' ? 'Link copiado' : 'Copiar link'}</span>
-                        </button>
-
-                        <button type="button" onClick={() => void shareRoom().then(() => setIsMeetMoreOptionsOpen(false))} className={sheetActionClass}>
-                          <span className={sheetIconClass}>
-                            <Share2 className="h-5 w-5" />
-                          </span>
-                          <span>Compartilhar</span>
-                        </button>
-
-                        <button type="button" onClick={() => { onToggleSoundAlerts(); setIsMeetMoreOptionsOpen(false) }} className={sheetActionClass}>
-                          <span className={sheetIconClass}>
-                            {soundAlertsEnabled ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5" />}
-                          </span>
-                          <span>{soundAlertsEnabled ? 'Sons ligados' : 'Sons desligados'}</span>
-                        </button>
-
-                        <button type="button" onClick={() => { setCompactLayout((current) => !current); setIsMeetMoreOptionsOpen(false) }} className={sheetActionClass}>
-                          <span className={sheetIconClass}>
-                            <LayoutGrid className="h-5 w-5" />
-                          </span>
-                          <span>Layout</span>
-                        </button>
-
-                        <button type="button" onClick={() => { void document.documentElement.requestFullscreen?.(); setIsMeetMoreOptionsOpen(false) }} className={sheetActionClass}>
-                          <span className={sheetIconClass}>
-                            <Maximize className="h-5 w-5" />
-                          </span>
-                          <span>Tela cheia</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          role="menuitem"
-                          disabled={
-                            recordingAction !== 'idle' ||
-                            !canControlRecording ||
-                            Boolean(activeRecording && activeRecording.status !== 'recording')
-                          }
-                          onClick={() => {
-                            setIsMeetMoreOptionsOpen(false)
-                            if (activeRecording?.status === 'recording') {
-                              void stopRecording()
-                              return
-                            }
-                            requestRecordingStart()
-                          }}
-                          className="col-span-2 flex min-h-16 items-center gap-3 rounded-2xl border border-red-300/25 bg-red-500/10 px-3 py-3 text-left text-sm font-semibold text-red-50 shadow-sm shadow-black/15 transition hover:border-red-200/45 hover:bg-red-500/20 focus:outline-none focus:ring-2 focus:ring-red-300/35 disabled:cursor-not-allowed disabled:opacity-55"
-                        >
-                          <span className={sheetIconClass}>
-                            <Circle className={`h-5 w-5 ${activeRecording?.status === 'recording' ? 'fill-red-400 text-red-400' : ''}`} />
-                          </span>
-                          <span className="min-w-0 flex-1">
-                            <span className="block">
-                              {activeRecording?.status === 'recording'
-                                ? 'Parar gravação'
-                                : activeRecording
-                                  ? getMeetRecordingStatusLabel(activeRecording.status)
-                                  : MEET_RECORDING_MENU_ITEM.label}
+                      <div className="space-y-3">
+                        <section className="rounded-3xl border border-red-300/15 bg-red-500/10 p-3">
+                          <p className="mb-3 px-1 text-xs font-bold uppercase tracking-[0.14em] text-red-100/70">Gravação</p>
+                          <button
+                            type="button"
+                            disabled={recordingControlDisabled}
+                            onClick={toggleRecordingControl}
+                            className="flex min-h-16 w-full items-center gap-3 rounded-2xl border border-red-300/25 bg-red-500/10 px-3 py-3 text-left text-sm font-semibold text-red-50 shadow-sm shadow-black/15 transition hover:border-red-200/45 hover:bg-red-500/20 focus:outline-none focus:ring-2 focus:ring-red-300/35 disabled:cursor-not-allowed disabled:opacity-55"
+                          >
+                            <span className={sheetIconClass}>
+                              <Circle className={`h-5 w-5 ${activeRecording?.status === 'recording' ? 'fill-red-400 text-red-400' : ''}`} />
                             </span>
-                            <span className="mt-0.5 block text-xs font-normal text-red-100/75">
-                              {activeRecording?.status === 'recording'
-                                ? 'Todos os participantes foram avisados.'
-                                : activeRecording
-                                  ? 'Aguarde a conclusão antes de iniciar outra gravação.'
-                                  : canControlRecording
-                                    ? 'Exige consentimento e, quando ativada, usará compressão para economizar armazenamento.'
-                                    : 'Somente o anfitrião ou administrador pode gravar.'}
+                            <span className="min-w-0 flex-1">
+                              <span className="block">{recordingControlLabel}</span>
+                              <span className="mt-0.5 block text-xs font-normal text-red-100/75">
+                                {activeRecording?.status === 'recording'
+                                  ? 'Todos os participantes foram avisados.'
+                                  : activeRecording
+                                    ? 'Aguarde a conclusão antes de iniciar outra gravação.'
+                                    : canControlRecording
+                                      ? 'Exige consentimento e, quando ativada, usará compressão para economizar armazenamento.'
+                                      : 'Somente o anfitrião ou administrador pode gravar.'}
+                              </span>
                             </span>
-                          </span>
-                          <span className="rounded-full border border-red-200/25 bg-black/25 px-2 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-red-100">
-                            {recordingAction === 'starting'
-                              ? 'Iniciando'
-                              : recordingAction === 'stopping'
-                                ? 'Parando'
-                                : activeRecording
-                                  ? getMeetRecordingStatusLabel(activeRecording.status)
-                                  : 'VIP'}
-                          </span>
-                        </button>
+                            <span className="rounded-full border border-red-200/25 bg-black/25 px-2 py-1 text-[10px] font-black uppercase tracking-[0.12em] text-red-100">
+                              {recordingAction === 'starting'
+                                ? 'Iniciando'
+                                : recordingAction === 'stopping'
+                                  ? 'Parando'
+                                  : activeRecording
+                                    ? getMeetRecordingStatusLabel(activeRecording.status)
+                                    : 'VIP'}
+                            </span>
+                          </button>
 
-                        {recordingActionError ? (
-                          <p role="alert" className="col-span-2 rounded-2xl border border-red-300/25 bg-red-950/40 px-3 py-2 text-xs font-semibold leading-5 text-red-100">
-                            {recordingActionError}
-                          </p>
-                        ) : null}
+                          {recordingActionError ? (
+                            <p role="alert" className="mt-2 rounded-2xl border border-red-300/25 bg-red-950/40 px-3 py-2 text-xs font-semibold leading-5 text-red-100">
+                              {recordingActionError}
+                            </p>
+                          ) : null}
 
-                        {recordings.length > 0 ? (
-                          <div className="col-span-2 rounded-3xl border border-blue-300/10 bg-black/25 p-3">
-                            <p className="px-1 text-xs font-bold uppercase tracking-[0.14em] text-blue-100/55">Gravações da sala</p>
-                            <div className="mt-2 space-y-2">
-                              {recordings.slice(0, 5).map((recording) => (
-                                <div key={recording.id} className="flex items-center justify-between gap-3 rounded-2xl border border-white/5 bg-white/[0.04] px-3 py-2">
-                                  <span className="min-w-0">
-                                    <span className="block text-xs font-bold text-zinc-100">{getMeetRecordingStatusLabel(recording.status)}</span>
-                                    <span className="block truncate text-[11px] text-zinc-500">
-                                      {formatTime(Date.parse(recording.createdAt))}
-                                      {recording.durationSeconds !== null ? ` · ${formatSeconds(recording.durationSeconds)}` : ''}
-                                      {recording.retentionExpiresAt ? ` · Disponível até ${new Date(recording.retentionExpiresAt).toLocaleDateString('pt-BR')}` : ''}
+                          {recordings.length > 0 ? (
+                            <div className="mt-3 rounded-3xl border border-blue-300/10 bg-black/25 p-3">
+                              <p className="px-1 text-xs font-bold uppercase tracking-[0.14em] text-blue-100/55">Gravações da sala</p>
+                              <div className="mt-2 space-y-2">
+                                {recordings.slice(0, 5).map((recording) => (
+                                  <div key={recording.id} className="flex items-center justify-between gap-3 rounded-2xl border border-white/5 bg-white/[0.04] px-3 py-2">
+                                    <span className="min-w-0">
+                                      <span className="block text-xs font-bold text-zinc-100">{getMeetRecordingStatusLabel(recording.status)}</span>
+                                      <span className="block truncate text-[11px] text-zinc-500">
+                                        {formatTime(Date.parse(recording.createdAt))}
+                                        {recording.durationSeconds !== null ? ` · ${formatSeconds(recording.durationSeconds)}` : ''}
+                                        {recording.retentionExpiresAt ? ` · Disponível até ${new Date(recording.retentionExpiresAt).toLocaleDateString('pt-BR')}` : ''}
+                                      </span>
                                     </span>
-                                  </span>
-                                  {recording.canDownload ? (
-                                    <button
-                                      type="button"
-                                      disabled={recordingAction !== 'idle'}
-                                      onClick={() => {
-                                        setIsMeetMoreOptionsOpen(false)
-                                        void downloadRecording(recording)
-                                      }}
-                                      title={recording.retentionExpiresAt ? `Download disponível até ${new Date(recording.retentionExpiresAt).toLocaleDateString('pt-BR')}` : 'Download seguro'}
-                                      className="inline-flex min-h-9 shrink-0 items-center gap-1 rounded-full border border-blue-300/25 bg-blue-500/15 px-3 text-xs font-bold text-blue-50 transition hover:bg-blue-500/25 disabled:cursor-not-allowed disabled:opacity-55"
-                                    >
-                                      <Download className="h-3.5 w-3.5" />
-                                      Baixar
-                                    </button>
-                                  ) : null}
-                                </div>
-                              ))}
+                                    {recording.canDownload ? (
+                                      <button
+                                        type="button"
+                                        disabled={recordingAction !== 'idle'}
+                                        onClick={() => void downloadRecording(recording)}
+                                        title={recording.retentionExpiresAt ? `Download disponível até ${new Date(recording.retentionExpiresAt).toLocaleDateString('pt-BR')}` : 'Download seguro'}
+                                        className="inline-flex min-h-9 shrink-0 items-center gap-1 rounded-full border border-blue-300/25 bg-blue-500/15 px-3 text-xs font-bold text-blue-50 transition hover:bg-blue-500/25 disabled:cursor-not-allowed disabled:opacity-55"
+                                      >
+                                        <Download className="h-3.5 w-3.5" />
+                                        Baixar
+                                      </button>
+                                    ) : null}
+                                  </div>
+                                ))}
+                              </div>
                             </div>
-                          </div>
-                        ) : null}
+                          ) : null}
+                        </section>
 
-                        <div className="flex min-h-16 items-center gap-3 rounded-2xl border border-blue-300/10 bg-white/[0.04] px-3 py-3 text-left text-sm text-zinc-300">
-                          <span className={sheetIconClass}>
-                            <Clock3 className="h-5 w-5" />
-                          </span>
-                          <span className="min-w-0">
-                            <span className="block font-semibold text-zinc-100">Informações</span>
-                            <span className="block truncate text-xs text-zinc-500">Sala {roomName}</span>
-                          </span>
-                        </div>
+                        <section className="rounded-3xl border border-blue-300/10 bg-black/25 p-3">
+                          <p className="mb-3 px-1 text-xs font-bold uppercase tracking-[0.14em] text-blue-100/55">Sala</p>
+                          <div className="grid grid-cols-2 gap-2">
+                            <button type="button" onClick={() => openPanel('chat')} className={sheetActionClass}>
+                              <span className={sheetIconClass}>
+                                <MessageSquare className="h-5 w-5" />
+                              </span>
+                              <span>Chat</span>
+                            </button>
+
+                            <button type="button" onClick={() => openPanel('participants')} className={sheetActionClass}>
+                              <span className={sheetIconClass}>
+                                <Users className="h-5 w-5" />
+                              </span>
+                              <span>Participantes</span>
+                            </button>
+
+                            <button type="button" onClick={() => void copyRoomLink()} className={sheetActionClass}>
+                              <span className={sheetIconClass}>
+                                <Copy className="h-5 w-5" />
+                              </span>
+                              <span>{inviteFeedback === 'copied' ? 'Link copiado' : 'Copiar link'}</span>
+                            </button>
+
+                            <button type="button" onClick={() => void shareRoom()} className={sheetActionClass}>
+                              <span className={sheetIconClass}>
+                                <Share2 className="h-5 w-5" />
+                              </span>
+                              <span>Compartilhar</span>
+                            </button>
+                          </div>
+                          <div className="mt-2 flex min-h-16 items-center gap-3 rounded-2xl border border-blue-300/10 bg-white/[0.04] px-3 py-3 text-left text-sm text-zinc-300">
+                            <span className={sheetIconClass}>
+                              <Clock3 className="h-5 w-5" />
+                            </span>
+                            <span className="min-w-0">
+                              <span className="block font-semibold text-zinc-100">Informações</span>
+                              <span className="block truncate text-xs text-zinc-500">Sala {roomName}</span>
+                            </span>
+                          </div>
+                        </section>
+
+                        <section className="rounded-3xl border border-blue-300/10 bg-black/25 p-3">
+                          <p className="mb-3 px-1 text-xs font-bold uppercase tracking-[0.14em] text-blue-100/55">Interação</p>
+                          <div className="grid grid-cols-6 gap-1.5">
+                            {QUICK_REACTIONS.map((reaction) => (
+                              <button key={reaction} type="button" onClick={() => void sendReaction(reaction)} className="flex aspect-square items-center justify-center rounded-2xl bg-white/[0.06] text-2xl transition hover:bg-blue-500/15 focus:outline-none focus:ring-2 focus:ring-blue-300/30" aria-label={`Enviar reação ${reaction}`} title={`Enviar reação ${reaction}`}>
+                                {reaction}
+                              </button>
+                            ))}
+                          </div>
+                          <div className="mt-2 grid grid-cols-2 gap-2">
+                            <button type="button" onClick={onToggleHand} className={handRaised ? `${sheetActionClass} border-amber-300/25 bg-amber-300/15 text-amber-50` : sheetActionClass} aria-label={handRaised ? 'Baixar mão' : 'Levantar mão'} title={handRaised ? 'Baixar mão' : 'Levantar mão'}>
+                              <span className={handRaised ? 'flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-300/20 text-amber-50 ring-1 ring-amber-200/20' : sheetIconClass}>
+                                <Hand className="h-5 w-5" />
+                              </span>
+                              <span>{handRaised ? 'Baixar mão' : 'Levantar mão'}</span>
+                            </button>
+
+                            <button type="button" onClick={onToggleSoundAlerts} className={sheetActionClass}>
+                              <span className={sheetIconClass}>
+                                {soundAlertsEnabled ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5" />}
+                              </span>
+                              <span>{soundAlertsEnabled ? 'Sons ligados' : 'Sons desligados'}</span>
+                            </button>
+                          </div>
+                        </section>
+
+                        <section className="rounded-3xl border border-blue-300/10 bg-black/25 p-3">
+                          <p className="mb-3 px-1 text-xs font-bold uppercase tracking-[0.14em] text-blue-100/55">Visual</p>
+                          <div className="grid grid-cols-2 gap-2">
+                            <TrackToggle source={Track.Source.ScreenShare} showIcon={false} className={sheetActionClass} onChange={setScreenShareEnabled} aria-label={screenShareEnabled ? 'Parar apresentação' : 'Apresentar'} title={screenShareEnabled ? 'Parar apresentação' : 'Apresentar'}>
+                              <span className={sheetIconClass}>
+                                <MonitorUp className="h-5 w-5" />
+                              </span>
+                              <span>{screenShareEnabled ? 'Parar apresentação' : 'Apresentar'}</span>
+                            </TrackToggle>
+
+                            <button type="button" onClick={() => setCompactLayout((current) => !current)} className={sheetActionClass}>
+                              <span className={sheetIconClass}>
+                                <LayoutGrid className="h-5 w-5" />
+                              </span>
+                              <span>Layout</span>
+                            </button>
+
+                            <button type="button" onClick={() => void document.documentElement.requestFullscreen?.()} className={`${sheetActionClass} col-span-2 sm:col-span-1`}>
+                              <span className={sheetIconClass}>
+                                <Maximize className="h-5 w-5" />
+                              </span>
+                              <span>Tela cheia</span>
+                            </button>
+                          </div>
+                        </section>
                       </div>
 
                       <div className="mt-3 grid grid-cols-2 gap-2">
-                        <DisconnectButton className={sheetDangerActionClass} title="Sair da sala" onClick={() => setIsMeetMoreOptionsOpen(false)}>
+                        <DisconnectButton className={sheetDangerActionClass} title="Sair da sala">
                           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-500/25 text-white ring-1 ring-red-100/25">
                             <PhoneOff className="h-5 w-5 stroke-[2.8]" />
                           </span>
@@ -1701,17 +1710,10 @@ function PortugueseConference({
                       </div>
                     </div>
                   ) : null}
-              </div>
-
-              <DisconnectButton className="!m-0 inline-flex !h-11 !min-h-0 !w-11 shrink-0 items-center justify-center !rounded-full !border !border-red-300/50 !bg-red-600/95 !p-0 !text-white text-white shadow-md shadow-red-950/25 transition hover:!border-red-100/70 hover:!bg-red-500 focus:outline-none focus:ring-2 focus:ring-red-100/45 sm:!h-11 sm:!w-12" title="Sair">
-                <PhoneOff className="h-5 w-5 text-white stroke-[2.9]" />
-              </DisconnectButton>
-            </div>
-          </div>
         </main>
 
         {showRecordingConfirmation ? (
-          <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="recording-confirmation-title">
+          <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="recording-confirmation-title">
             <section className="w-full max-w-lg rounded-[2rem] border border-red-300/30 bg-[linear-gradient(145deg,rgba(48,8,16,0.98),rgba(9,12,24,0.98))] p-6 shadow-2xl shadow-black/60 ring-1 ring-red-100/10 sm:p-7">
               <div className="flex h-12 w-12 items-center justify-center rounded-full border border-red-300/35 bg-red-500/15 text-red-100">
                 <Circle className="h-5 w-5 fill-red-400 text-red-400" />

@@ -1,49 +1,52 @@
 import { describe, expect, it } from 'vitest'
 import {
-  MEET_RECORDING_MENU_ITEM,
-  isMeetOptionsMenuEscapeKey,
-  shouldCloseMeetOptionsMenuAfterAction,
-  shouldKeepMeetOptionsMenuOpenAfterOutsideInteraction,
-  toggleMeetOptionsMenu,
+  MEET_OPTIONS_PANEL_ID,
+  MEET_OPTIONS_PANEL_SECTIONS,
+  MEET_RECORDING_PANEL_ITEM,
+  getMeetOptionsPanelActionLabels,
+  isMeetOptionsPanelEscapeKey,
+  shouldCloseMeetOptionsPanelFromCloseButton,
+  shouldKeepMeetOptionsPanelOpenAfterOutsideInteraction,
+  toggleMeetOptionsPanel,
 } from '../../lib/meet-options-menu'
 
-describe('Meet options menu', () => {
+describe('Meet options panel', () => {
   it('toggles open and closed from the three-dot button', () => {
     let isOpen = false
 
-    isOpen = toggleMeetOptionsMenu(isOpen)
+    isOpen = toggleMeetOptionsPanel(isOpen)
     expect(isOpen).toBe(true)
 
-    isOpen = toggleMeetOptionsMenu(isOpen)
+    isOpen = toggleMeetOptionsPanel(isOpen)
     expect(isOpen).toBe(false)
-  })
-
-  it('keeps the menu open after an outside click in this version', () => {
-    let isOpen = true
-
-    if (!shouldKeepMeetOptionsMenuOpenAfterOutsideInteraction()) {
-      isOpen = false
-    }
-
-    expect(isOpen).toBe(true)
   })
 
   it('closes on Escape and ignores other keys', () => {
     let isOpen = true
 
-    if (isMeetOptionsMenuEscapeKey('Escape')) {
+    if (isMeetOptionsPanelEscapeKey('Escape')) {
       isOpen = false
     }
 
     expect(isOpen).toBe(false)
-    expect(isMeetOptionsMenuEscapeKey('Enter')).toBe(false)
-    expect(isMeetOptionsMenuEscapeKey('Esc')).toBe(false)
+    expect(isMeetOptionsPanelEscapeKey('Enter')).toBe(false)
+    expect(isMeetOptionsPanelEscapeKey('Esc')).toBe(false)
   })
 
-  it('closes after a menu action is selected', () => {
+  it('keeps the panel open after an outside click in this version', () => {
     let isOpen = true
 
-    if (shouldCloseMeetOptionsMenuAfterAction()) {
+    if (!shouldKeepMeetOptionsPanelOpenAfterOutsideInteraction()) {
+      isOpen = false
+    }
+
+    expect(isOpen).toBe(true)
+  })
+
+  it('closes from the explicit close button', () => {
+    let isOpen = true
+
+    if (shouldCloseMeetOptionsPanelFromCloseButton()) {
       isOpen = false
     }
 
@@ -51,8 +54,36 @@ describe('Meet options menu', () => {
   })
 
   it('keeps the controlled recording entry point available', () => {
-    expect(MEET_RECORDING_MENU_ITEM).toEqual({
+    expect(MEET_RECORDING_PANEL_ITEM).toEqual({
       label: 'Iniciar gravação',
     })
+  })
+
+  it('lists the stable panel sections and main actions', () => {
+    expect(MEET_OPTIONS_PANEL_ID).toBe('meet-options-panel')
+    expect(MEET_OPTIONS_PANEL_SECTIONS.map((section) => section.title)).toEqual([
+      'Gravação',
+      'Sala',
+      'Interação',
+      'Visual',
+    ])
+    expect(getMeetOptionsPanelActionLabels()).toEqual(
+      expect.arrayContaining([
+        'Iniciar/parar gravação',
+        'Lista/download de gravações',
+        'Copiar link',
+        'Compartilhar',
+        'Chat',
+        'Participantes',
+        'Reações',
+        'Levantar/baixar mão',
+        'Apresentar',
+        'Sons',
+        'Layout',
+        'Tela cheia',
+        'Sair da sala',
+        'Fechar',
+      ]),
+    )
   })
 })
