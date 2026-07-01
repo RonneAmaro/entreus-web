@@ -1,6 +1,6 @@
 import Image from 'next/image'
 import Link from 'next/link'
-import { CreditCard, Heart, ImageIcon, Landmark, QrCode, Scissors, Video, Wand2 } from 'lucide-react'
+import { CreditCard, Heart, ImageIcon, Landmark, Monitor, QrCode, Scissors, Video, Wand2 } from 'lucide-react'
 
 const PIX_DONATION_URL = 'https://nubank.com.br/cobrar/u2kum/69fca421-184d-459c-a125-f760fc56c264'
 const MERCADO_PAGO_DONATION_URL = 'https://link.mercadopago.com.br/entreuslab'
@@ -92,6 +92,30 @@ export default function LabPage() {
 
             <span className="relative mt-5 inline-flex text-sm font-bold text-blue-600 transition group-hover:translate-x-1 group-hover:text-blue-500 dark:text-blue-400">
               Abrir editor
+            </span>
+          </Link>
+
+          <Link
+            href="/lab/screen-recorder"
+            className="group relative overflow-hidden rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm transition duration-300 hover:-translate-y-2 hover:border-emerald-400 hover:shadow-2xl hover:shadow-emerald-600/20 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-emerald-400/70"
+          >
+            <div className="pointer-events-none absolute -right-16 -top-16 h-32 w-32 rounded-full bg-emerald-500/0 blur-3xl transition duration-300 group-hover:bg-emerald-500/25" />
+            <div className="pointer-events-none absolute -bottom-20 -left-20 h-40 w-40 rounded-full bg-cyan-400/0 blur-3xl transition duration-300 group-hover:bg-cyan-400/20" />
+
+            <div className="relative flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600 shadow-sm transition duration-300 group-hover:scale-110 group-hover:bg-emerald-600 group-hover:text-white group-hover:shadow-lg group-hover:shadow-emerald-500/50 dark:bg-emerald-950/40 dark:text-emerald-300">
+              <Monitor className="h-6 w-6 transition duration-300 group-hover:drop-shadow-[0_0_10px_rgba(52,211,153,0.95)]" />
+            </div>
+
+            <h2 className="relative mt-5 text-xl font-black">
+              Gravador de Tela
+            </h2>
+
+            <p className="relative mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-400">
+              Grave aulas, tutoriais e apresentaÃ§Ãµes com tela, Ã¡udio, webcam e download local.
+            </p>
+
+            <span className="relative mt-5 inline-flex text-sm font-bold text-emerald-600 transition group-hover:translate-x-1 group-hover:text-emerald-500 dark:text-emerald-400">
+              Abrir gravador
             </span>
           </Link>
 

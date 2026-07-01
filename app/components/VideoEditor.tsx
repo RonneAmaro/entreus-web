@@ -24,6 +24,11 @@ import {
   X,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import {
+  clearLocalVideoDraft,
+  isSupportedLocalVideoDraftSource,
+  loadLocalVideoDraft,
+} from '@/lib/local-video-drafts'
 
 type VideoFilter = 'normal' | 'mono' | 'sepia' | 'warm'
 
@@ -514,6 +519,7 @@ export default function VideoEditor({ mode = 'publish' }: VideoEditorProps) {
   const [activePhotoId, setActivePhotoId] = useState<string | null>(null)
   const [photoTransition, setPhotoTransition] = useState<PhotoTransition>('fade')
   const [photoMessage, setPhotoMessage] = useState('')
+  const [localDraftMessage, setLocalDraftMessage] = useState('')
 
   function setRenderStage(stage: string, message?: string) {
     renderStageRef.current = stage
@@ -736,10 +742,7 @@ export default function VideoEditor({ mode = 'publish' }: VideoEditorProps) {
     return () => window.clearInterval(timer)
   }, [baseVideoDuration, currentTime, duration, editorMode, isPlaying, photoSlides.length])
 
-  function handleVideoChange(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0]
-    if (!file) return
-
+  function loadVideoFile(file: File, message = '') {
     if (videoUrl) URL.revokeObjectURL(videoUrl)
     imageOverlays.forEach((overlay) => URL.revokeObjectURL(overlay.url))
     imageElementsRef.current.clear()
@@ -766,7 +769,55 @@ export default function VideoEditor({ mode = 'publish' }: VideoEditorProps) {
     setCurrentTime(0)
     syncPreviewAudioTracks(0, false)
     setActivePanel('text')
+    setLocalDraftMessage(message)
   }
+
+  function handleVideoChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    loadVideoFile(file)
+    event.target.value = ''
+  }
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const source = new URLSearchParams(window.location.search).get('source')
+    if (!isSupportedLocalVideoDraftSource(source)) return
+
+    let cancelled = false
+    const messageTimer = window.setTimeout(() => {
+      if (!cancelled) {
+        setLocalDraftMessage('Carregando gravação local do EntreUS Lab...')
+      }
+    }, 0)
+
+    loadLocalVideoDraft(source)
+      .then((file) => {
+        if (cancelled) return
+
+        if (!file) {
+          setLocalDraftMessage('Não encontrei uma gravação local para importar. Baixe o vídeo e selecione manualmente.')
+          return
+        }
+
+        loadVideoFile(file, 'Gravação local importada. O vídeo continua apenas neste navegador.')
+        void clearLocalVideoDraft(source)
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setLocalDraftMessage('Não foi possível importar a gravação local agora. Baixe o vídeo e selecione manualmente.')
+        }
+      })
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(messageTimer)
+    }
+    // Importa apenas uma vez a gravação local indicada pela query string inicial.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   function handlePhotoSlidesChange(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files || [])
@@ -3832,6 +3883,12 @@ export default function VideoEditor({ mode = 'publish' }: VideoEditorProps) {
             </div>
             )}
           </div>
+
+          {localDraftMessage && (
+            <div className="relative z-[65] border-b border-sky-300/15 bg-sky-500/10 px-4 py-2 text-sm font-semibold text-sky-100 sm:px-5">
+              {localDraftMessage}
+            </div>
+          )}
 
           <div className={`relative z-0 flex flex-1 items-center justify-center px-2 py-2 transition-all sm:px-5 sm:py-3 ${hasEditorMedia ? 'min-h-[min(52dvh,34rem)] sm:min-h-[30rem]' : 'min-h-[min(62dvh,34rem)] sm:min-h-[34rem]'}`}>
             <div className={`relative isolate w-full overflow-hidden bg-black shadow-2xl shadow-black/40 ${hasEditorMedia ? 'rounded-xl sm:rounded-[1.25rem]' : 'rounded-[1.25rem] border border-white/10'}`}>
