@@ -1086,9 +1086,6 @@ function PortugueseConference({
       : activeRecording
         ? getMeetRecordingStatusLabel(activeRecording.status)
         : MEET_RECORDING_PANEL_ITEM.label
-  const recordingControlTitle = canControlRecording
-    ? recordingControlLabel
-    : 'Somente o anfitrião ou administrador pode gravar.'
 
   function toggleRecordingControl() {
     if (activeRecording?.status === 'recording') {
@@ -1433,18 +1430,6 @@ function PortugueseConference({
               <TrackToggle source={Track.Source.Camera} showIcon={false} className={iconButtonClass} onChange={setCameraEnabled} aria-label={cameraEnabled ? 'Desativar câmera' : 'Ativar câmera'} title={cameraEnabled ? 'Desativar câmera' : 'Ativar câmera'}>
                 <Video className="h-5 w-5" />
               </TrackToggle>
-              {canControlRecording ? (
-                <button
-                  type="button"
-                  onClick={toggleRecordingControl}
-                  disabled={recordingControlDisabled}
-                  className={activeRecording?.status === 'recording' ? activeIconButtonClass : iconButtonClass}
-                  aria-label={recordingControlLabel}
-                  title={recordingControlTitle}
-                >
-                  <Circle className={`h-5 w-5 ${activeRecording?.status === 'recording' ? 'fill-red-400 text-red-400' : ''}`} />
-                </button>
-              ) : null}
               <TrackToggle source={Track.Source.ScreenShare} showIcon={false} className={`${secondaryDesktopControlClass} ${iconButtonClass}`} onChange={setScreenShareEnabled} aria-label={screenShareEnabled ? 'Parar compartilhamento' : 'Compartilhar tela'} title={screenShareEnabled ? 'Parar compartilhamento' : 'Compartilhar tela'}>
                 <MonitorUp className="h-5 w-5" />
               </TrackToggle>
