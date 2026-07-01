@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type PointerEvent } from 'react'
 import {
   AlertTriangle,
   ArrowLeft,
@@ -16,16 +16,26 @@ import {
   RotateCcw,
   ShieldCheck,
   Square,
+  Undo2,
   Video,
   Volume2,
 } from 'lucide-react'
 import {
+  SCREEN_RECORDER_CANVAS_FALLBACK_MESSAGE,
+  SCREEN_RECORDER_CANVAS_FPS,
   createScreenRecordingFileName,
   formatRecordingDuration,
   getBestScreenRecorderMimeType,
+  getScreenRecorderCanvasSize,
+  getScreenRecorderContainRect,
   getScreenRecorderErrorMessage,
   getScreenRecorderSupport,
+  getWebcamOverlayRect,
+  normalizeScreenRecorderPoint,
+  type ScreenRecorderPoint,
+  type ScreenRecorderSize,
   type ScreenRecorderSupport,
+  type ScreenRecorderWebcamPosition,
 } from '@/lib/screen-recorder'
 import {
   clearOldLocalVideoDrafts,
@@ -36,8 +46,34 @@ import {
 } from '@/lib/local-video-drafts'
 
 type RecorderStatus = 'idle' | 'requesting' | 'recording' | 'paused' | 'stopped' | 'error'
+type MarkerSize = 'thin' | 'medium' | 'thick'
 
-const MARKER_COLORS = ['#f97316', '#22c55e', '#38bdf8', '#ffffff']
+type DrawingStroke = {
+  id: string
+  color: string
+  width: number
+  points: ScreenRecorderPoint[]
+}
+
+const MARKER_COLORS = [
+  { label: 'Vermelho', value: '#ef4444' },
+  { label: 'Amarelo', value: '#facc15' },
+  { label: 'Verde', value: '#22c55e' },
+  { label: 'Azul', value: '#38bdf8' },
+  { label: 'Branco', value: '#ffffff' },
+  { label: 'Preto', value: '#020617' },
+]
+const MARKER_SIZES: { id: MarkerSize; label: string; width: number }[] = [
+  { id: 'thin', label: 'Fina', width: 5 },
+  { id: 'medium', label: 'Média', width: 9 },
+  { id: 'thick', label: 'Grossa', width: 15 },
+]
+const WEBCAM_POSITION_OPTIONS: { id: ScreenRecorderWebcamPosition; label: string }[] = [
+  { id: 'bottom-right', label: 'Inf. direita' },
+  { id: 'bottom-left', label: 'Inf. esquerda' },
+  { id: 'top-right', label: 'Sup. direita' },
+  { id: 'top-left', label: 'Sup. esquerda' },
+]
 
 function stopStream(stream: MediaStream | null) {
   stream?.getTracks().forEach((track) => track.stop())
@@ -46,6 +82,9 @@ function stopStream(stream: MediaStream | null) {
 export default function LabScreenRecorderPage() {
   const screenPreviewRef = useRef<HTMLVideoElement | null>(null)
   const webcamPreviewRef = useRef<HTMLVideoElement | null>(null)
+  const compositeCanvasRef = useRef<HTMLCanvasElement | null>(null)
+  const screenSourceVideoRef = useRef<HTMLVideoElement | null>(null)
+  const webcamSourceVideoRef = useRef<HTMLVideoElement | null>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const screenStreamRef = useRef<MediaStream | null>(null)
   const micStreamRef = useRef<MediaStream | null>(null)
@@ -53,6 +92,10 @@ export default function LabScreenRecorderPage() {
   const recorderStreamRef = useRef<MediaStream | null>(null)
   const audioContextRef = useRef<AudioContext | null>(null)
   const audioSourceNodesRef = useRef<MediaStreamAudioSourceNode[]>([])
+  const animationFrameRef = useRef<number | null>(null)
+  const strokesRef = useRef<DrawingStroke[]>([])
+  const activeStrokeRef = useRef<DrawingStroke | null>(null)
+  const activePointerIdRef = useRef<number | null>(null)
   const chunksRef = useRef<BlobPart[]>([])
   const timerRef = useRef<number | null>(null)
   const startedAtRef = useRef(0)
@@ -72,6 +115,13 @@ export default function LabScreenRecorderPage() {
   const [useMicrophone, setUseMicrophone] = useState(true)
   const [useWebcam, setUseWebcam] = useState(false)
   const [captureScreenAudio, setCaptureScreenAudio] = useState(true)
+  const [isCompositeMode, setIsCompositeMode] = useState(true)
+  const [canvasSize, setCanvasSize] = useState<ScreenRecorderSize>({ width: 1280, height: 720 })
+  const [webcamPosition, setWebcamPosition] = useState<ScreenRecorderWebcamPosition>('bottom-right')
+  const [penEnabled, setPenEnabled] = useState(false)
+  const [selectedMarkerColor, setSelectedMarkerColor] = useState(MARKER_COLORS[0].value)
+  const [selectedMarkerSize, setSelectedMarkerSize] = useState<MarkerSize>('medium')
+  const [strokeCount, setStrokeCount] = useState(0)
   const [screenPreviewStream, setScreenPreviewStream] = useState<MediaStream | null>(null)
   const [webcamPreviewStream, setWebcamPreviewStream] = useState<MediaStream | null>(null)
   const [recordingUrl, setRecordingUrl] = useState('')
@@ -162,7 +212,213 @@ export default function LabScreenRecorderPage() {
     timerRef.current = window.setInterval(syncElapsedTime, 250)
   }
 
+  function stopCompositeLoop() {
+    if (animationFrameRef.current) {
+      window.cancelAnimationFrame(animationFrameRef.current)
+      animationFrameRef.current = null
+    }
+  }
+
+  function detachSourceVideo(video: HTMLVideoElement | null) {
+    if (!video) return
+
+    video.pause()
+    video.srcObject = null
+    video.removeAttribute('src')
+  }
+
+  async function prepareSourceVideo(stream: MediaStream) {
+    const video = document.createElement('video')
+    video.muted = true
+    video.playsInline = true
+    video.srcObject = stream
+
+    await new Promise<void>((resolve) => {
+      if (video.readyState >= HTMLMediaElement.HAVE_METADATA) {
+        resolve()
+        return
+      }
+
+      const timeout = window.setTimeout(resolve, 1200)
+      video.onloadedmetadata = () => {
+        window.clearTimeout(timeout)
+        resolve()
+      }
+    })
+
+    await video.play().catch(() => undefined)
+    return video
+  }
+
+  function addRoundedRectPath(
+    context: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    radius: number,
+  ) {
+    const safeRadius = Math.min(radius, width / 2, height / 2)
+
+    context.beginPath()
+    context.moveTo(x + safeRadius, y)
+    context.lineTo(x + width - safeRadius, y)
+    context.quadraticCurveTo(x + width, y, x + width, y + safeRadius)
+    context.lineTo(x + width, y + height - safeRadius)
+    context.quadraticCurveTo(x + width, y + height, x + width - safeRadius, y + height)
+    context.lineTo(x + safeRadius, y + height)
+    context.quadraticCurveTo(x, y + height, x, y + height - safeRadius)
+    context.lineTo(x, y + safeRadius)
+    context.quadraticCurveTo(x, y, x + safeRadius, y)
+    context.closePath()
+  }
+
+  function drawVideoCover(
+    context: CanvasRenderingContext2D,
+    video: HTMLVideoElement,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+  ) {
+    const sourceWidth = video.videoWidth || width
+    const sourceHeight = video.videoHeight || height
+    const sourceAspectRatio = sourceWidth / sourceHeight
+    const targetAspectRatio = width / height
+    let sx = 0
+    let sy = 0
+    let sw = sourceWidth
+    let sh = sourceHeight
+
+    if (sourceAspectRatio > targetAspectRatio) {
+      sw = sourceHeight * targetAspectRatio
+      sx = (sourceWidth - sw) / 2
+    } else {
+      sh = sourceWidth / targetAspectRatio
+      sy = (sourceHeight - sh) / 2
+    }
+
+    context.drawImage(video, sx, sy, sw, sh, x, y, width, height)
+  }
+
+  function drawStrokes(context: CanvasRenderingContext2D, width: number, height: number) {
+    for (const stroke of strokesRef.current) {
+      if (stroke.points.length === 0) continue
+
+      context.save()
+      context.strokeStyle = stroke.color
+      context.fillStyle = stroke.color
+      context.lineWidth = stroke.width
+      context.lineCap = 'round'
+      context.lineJoin = 'round'
+
+      if (stroke.points.length === 1) {
+        const point = stroke.points[0]
+        context.beginPath()
+        context.arc(point.x * width, point.y * height, stroke.width / 2, 0, Math.PI * 2)
+        context.fill()
+        context.restore()
+        continue
+      }
+
+      context.beginPath()
+      stroke.points.forEach((point, index) => {
+        const x = point.x * width
+        const y = point.y * height
+
+        if (index === 0) {
+          context.moveTo(x, y)
+        } else {
+          context.lineTo(x, y)
+        }
+      })
+      context.stroke()
+      context.restore()
+    }
+  }
+
+  function drawCompositeFrame() {
+    const canvas = compositeCanvasRef.current
+    const context = canvas?.getContext('2d')
+    const screenVideo = screenSourceVideoRef.current
+
+    if (!canvas || !context || !screenVideo) return
+
+    const width = canvas.width
+    const height = canvas.height
+    context.fillStyle = '#020617'
+    context.fillRect(0, 0, width, height)
+
+    if (screenVideo.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+      const screenRect = getScreenRecorderContainRect(
+        {
+          width: screenVideo.videoWidth || width,
+          height: screenVideo.videoHeight || height,
+        },
+        { width, height },
+      )
+      context.drawImage(screenVideo, screenRect.x, screenRect.y, screenRect.width, screenRect.height)
+    }
+
+    const webcamVideo = webcamSourceVideoRef.current
+    if (useWebcam && webcamVideo && webcamVideo.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+      const webcamRect = getWebcamOverlayRect({
+        canvasSize: { width, height },
+        position: webcamPosition,
+        aspectRatio: webcamVideo.videoWidth && webcamVideo.videoHeight
+          ? webcamVideo.videoWidth / webcamVideo.videoHeight
+          : 16 / 9,
+      })
+
+      context.save()
+      context.shadowColor = 'rgba(0, 0, 0, 0.55)'
+      context.shadowBlur = Math.max(10, Math.round(width * 0.012))
+      addRoundedRectPath(context, webcamRect.x, webcamRect.y, webcamRect.width, webcamRect.height, Math.round(webcamRect.width * 0.08))
+      context.fillStyle = '#000000'
+      context.fill()
+      context.clip()
+      drawVideoCover(context, webcamVideo, webcamRect.x, webcamRect.y, webcamRect.width, webcamRect.height)
+      context.restore()
+
+      context.save()
+      context.strokeStyle = 'rgba(255, 255, 255, 0.72)'
+      context.lineWidth = Math.max(2, Math.round(width * 0.0015))
+      addRoundedRectPath(context, webcamRect.x, webcamRect.y, webcamRect.width, webcamRect.height, Math.round(webcamRect.width * 0.08))
+      context.stroke()
+      context.restore()
+    }
+
+    drawStrokes(context, width, height)
+  }
+
+  function startCompositeLoop() {
+    stopCompositeLoop()
+
+    const renderFrame = () => {
+      drawCompositeFrame()
+      animationFrameRef.current = window.requestAnimationFrame(renderFrame)
+    }
+
+    renderFrame()
+  }
+
+  function clearDrawingStrokes() {
+    strokesRef.current = []
+    activeStrokeRef.current = null
+    activePointerIdRef.current = null
+    setStrokeCount(0)
+  }
+
+  function getSelectedMarkerWidth() {
+    return MARKER_SIZES.find((size) => size.id === selectedMarkerSize)?.width || 9
+  }
+
   function cleanupStreams() {
+    stopCompositeLoop()
+    detachSourceVideo(screenSourceVideoRef.current)
+    detachSourceVideo(webcamSourceVideoRef.current)
+    screenSourceVideoRef.current = null
+    webcamSourceVideoRef.current = null
     stopStream(screenStreamRef.current)
     stopStream(micStreamRef.current)
     stopStream(webcamStreamRef.current)
@@ -179,8 +435,12 @@ export default function LabScreenRecorderPage() {
     audioContextRef.current = null
   }
 
-  function buildRecorderStream(displayStream: MediaStream, microphoneStream: MediaStream | null) {
-    const videoTracks = displayStream.getVideoTracks()
+  function buildRecorderStream(
+    visualStream: MediaStream,
+    displayStream: MediaStream,
+    microphoneStream: MediaStream | null,
+  ) {
+    const videoTracks = visualStream.getVideoTracks()
     const audioTracks = [
       ...displayStream.getAudioTracks(),
       ...(microphoneStream ? microphoneStream.getAudioTracks() : []),
@@ -213,6 +473,47 @@ export default function LabScreenRecorderPage() {
     return new MediaStream([...videoTracks, ...destination.stream.getAudioTracks()])
   }
 
+  async function buildVisualRecorderStream(displayStream: MediaStream, cameraStream: MediaStream | null) {
+    const canvas = compositeCanvasRef.current
+
+    if (!canvas || typeof canvas.captureStream !== 'function') {
+      setIsCompositeMode(false)
+      setNoticeMessage(SCREEN_RECORDER_CANVAS_FALLBACK_MESSAGE)
+      setScreenPreviewStream(displayStream)
+      setWebcamPreviewStream(cameraStream)
+      return displayStream
+    }
+
+    setIsCompositeMode(true)
+    setScreenPreviewStream(null)
+    setWebcamPreviewStream(null)
+
+    const screenVideo = await prepareSourceVideo(displayStream)
+    screenSourceVideoRef.current = screenVideo
+
+    if (cameraStream) {
+      webcamSourceVideoRef.current = await prepareSourceVideo(cameraStream)
+    }
+
+    const trackSettings = displayStream.getVideoTracks()[0]?.getSettings()
+    const nextCanvasSize = getScreenRecorderCanvasSize({
+      width: screenVideo.videoWidth || trackSettings?.width || 1280,
+      height: screenVideo.videoHeight || trackSettings?.height || 720,
+    })
+
+    canvas.width = nextCanvasSize.width
+    canvas.height = nextCanvasSize.height
+    setCanvasSize(nextCanvasSize)
+    drawCompositeFrame()
+    startCompositeLoop()
+
+    setNoticeMessage(
+      'Modo composto ativo: webcam e marcações aparecem no vídeo final. A webcam não fica por cima do Windows; ela é embutida na gravação.',
+    )
+
+    return canvas.captureStream(SCREEN_RECORDER_CANVAS_FPS)
+  }
+
   function stopRecording() {
     const recorder = mediaRecorderRef.current
 
@@ -236,8 +537,10 @@ export default function LabScreenRecorderPage() {
     setRecordingUrl('')
     setRecordingFileName('')
     setCanPauseResume(false)
+    setIsCompositeMode(true)
     setElapsedMs(0)
     chunksRef.current = []
+    clearDrawingStrokes()
 
     const currentSupport = getScreenRecorderSupport({
       navigator: window.navigator,
@@ -257,7 +560,6 @@ export default function LabScreenRecorderPage() {
         audio: captureScreenAudio,
       })
       screenStreamRef.current = displayStream
-      setScreenPreviewStream(displayStream)
 
       const microphoneStream = useMicrophone
         ? await navigator.mediaDevices.getUserMedia({
@@ -278,9 +580,9 @@ export default function LabScreenRecorderPage() {
           })
         : null
       webcamStreamRef.current = cameraStream
-      setWebcamPreviewStream(cameraStream)
 
-      const recorderStream = buildRecorderStream(displayStream, microphoneStream)
+      const visualStream = await buildVisualRecorderStream(displayStream, cameraStream)
+      const recorderStream = buildRecorderStream(visualStream, displayStream, microphoneStream)
       recorderStreamRef.current = recorderStream
 
       const mimeType = getBestScreenRecorderMimeType(window.MediaRecorder)
@@ -363,6 +665,7 @@ export default function LabScreenRecorderPage() {
     stopRecording()
     setStatus('idle')
     setCanPauseResume(false)
+    setIsCompositeMode(true)
     setErrorMessage('')
     setNoticeMessage('')
     setEditorMessage('')
@@ -371,6 +674,60 @@ export default function LabScreenRecorderPage() {
     setRecordingFileName('')
     setElapsedMs(0)
     chunksRef.current = []
+    clearDrawingStrokes()
+  }
+
+  function startDrawing(event: PointerEvent<HTMLCanvasElement>) {
+    if (!penEnabled || !isCompositeMode || !isRecording) return
+
+    event.preventDefault()
+    event.currentTarget.setPointerCapture(event.pointerId)
+    const point = normalizeScreenRecorderPoint(event.clientX, event.clientY, event.currentTarget.getBoundingClientRect())
+    const stroke: DrawingStroke = {
+      id: crypto.randomUUID(),
+      color: selectedMarkerColor,
+      width: getSelectedMarkerWidth(),
+      points: [point],
+    }
+
+    strokesRef.current = [...strokesRef.current, stroke]
+    activeStrokeRef.current = stroke
+    activePointerIdRef.current = event.pointerId
+    setStrokeCount(strokesRef.current.length)
+  }
+
+  function continueDrawing(event: PointerEvent<HTMLCanvasElement>) {
+    if (activePointerIdRef.current !== event.pointerId || !activeStrokeRef.current) return
+
+    event.preventDefault()
+    const point = normalizeScreenRecorderPoint(event.clientX, event.clientY, event.currentTarget.getBoundingClientRect())
+    const points = activeStrokeRef.current.points
+    const previousPoint = points[points.length - 1]
+
+    if (previousPoint && Math.hypot(point.x - previousPoint.x, point.y - previousPoint.y) < 0.002) {
+      return
+    }
+
+    activeStrokeRef.current.points = [...points, point]
+  }
+
+  function finishDrawing(event: PointerEvent<HTMLCanvasElement>) {
+    if (activePointerIdRef.current !== event.pointerId) return
+
+    event.preventDefault()
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+    activeStrokeRef.current = null
+    activePointerIdRef.current = null
+    setStrokeCount(strokesRef.current.length)
+  }
+
+  function undoLastStroke() {
+    strokesRef.current = strokesRef.current.slice(0, -1)
+    activeStrokeRef.current = null
+    activePointerIdRef.current = null
+    setStrokeCount(strokesRef.current.length)
   }
 
   async function openInVideoEditor() {
@@ -482,7 +839,7 @@ export default function LabScreenRecorderPage() {
                 <Video className="h-5 w-5 shrink-0 text-emerald-200" />
                 <span className="min-w-0">
                   <span className="block text-sm font-black">Usar webcam</span>
-                  <span className="block text-xs text-zinc-500">Preview local nesta versão</span>
+                  <span className="block text-xs text-zinc-500">Embutida no vídeo final</span>
                 </span>
               </span>
               <input
@@ -493,6 +850,29 @@ export default function LabScreenRecorderPage() {
                 className="h-5 w-5 accent-emerald-400"
               />
             </label>
+
+            {useWebcam && (
+              <div className="rounded-2xl border border-emerald-300/15 bg-emerald-500/10 p-4">
+                <span className="text-sm font-black text-emerald-100">Posição da webcam</span>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  {WEBCAM_POSITION_OPTIONS.map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      disabled={isBusy || isRecording}
+                      onClick={() => setWebcamPosition(option.id)}
+                      className={`h-9 rounded-full border px-3 text-xs font-black transition ${
+                        webcamPosition === option.id
+                          ? 'border-emerald-200 bg-emerald-300 text-zinc-950'
+                          : 'border-white/10 bg-white/5 text-emerald-100 hover:bg-white/10'
+                      } disabled:cursor-not-allowed disabled:opacity-60`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <label className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
               <span className="flex min-w-0 items-center gap-3">
@@ -519,16 +899,30 @@ export default function LabScreenRecorderPage() {
               <div className="mt-3 flex items-center gap-2">
                 <button
                   type="button"
-                  disabled
-                  className="inline-flex h-9 items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 text-xs font-black text-zinc-500"
+                  onClick={() => setPenEnabled((current) => !current)}
+                  className={`inline-flex h-9 items-center gap-2 rounded-full border px-3 text-xs font-black transition ${
+                    penEnabled
+                      ? 'border-cyan-200 bg-cyan-300 text-zinc-950'
+                      : 'border-white/10 bg-white/5 text-zinc-100 hover:bg-white/10'
+                  }`}
                 >
                   <PenLine className="h-4 w-4" />
-                  Caneta
+                  {penEnabled ? 'Caneta ligada' : 'Caneta'}
                 </button>
                 <button
                   type="button"
-                  disabled
-                  className="inline-flex h-9 items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 text-xs font-black text-zinc-500"
+                  onClick={undoLastStroke}
+                  disabled={strokeCount === 0}
+                  className="inline-flex h-9 items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 text-xs font-black text-zinc-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <Undo2 className="h-4 w-4" />
+                  Desfazer
+                </button>
+                <button
+                  type="button"
+                  onClick={clearDrawingStrokes}
+                  disabled={strokeCount === 0}
+                  className="inline-flex h-9 items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 text-xs font-black text-zinc-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   <Eraser className="h-4 w-4" />
                   Limpar
@@ -536,14 +930,39 @@ export default function LabScreenRecorderPage() {
               </div>
               <div className="mt-3 flex gap-2">
                 {MARKER_COLORS.map((color) => (
-                  <span
-                    key={color}
-                    className="h-6 w-6 rounded-full border border-white/20 opacity-50"
-                    style={{ backgroundColor: color }}
+                  <button
+                    key={color.value}
+                    type="button"
+                    onClick={() => setSelectedMarkerColor(color.value)}
+                    className={`h-7 w-7 rounded-full border transition ${
+                      selectedMarkerColor === color.value
+                        ? 'scale-110 border-white ring-2 ring-cyan-300'
+                        : 'border-white/25 hover:scale-105'
+                    }`}
+                    style={{ backgroundColor: color.value }}
+                    aria-label={`Cor ${color.label}`}
                   />
                 ))}
               </div>
-              <p className="mt-3 text-xs leading-5 text-zinc-500">Marcações na tela entram no próximo pacote.</p>
+              <div className="mt-3 grid grid-cols-3 gap-2">
+                {MARKER_SIZES.map((size) => (
+                  <button
+                    key={size.id}
+                    type="button"
+                    onClick={() => setSelectedMarkerSize(size.id)}
+                    className={`h-8 rounded-full border px-2 text-xs font-black transition ${
+                      selectedMarkerSize === size.id
+                        ? 'border-cyan-200 bg-cyan-300 text-zinc-950'
+                        : 'border-white/10 bg-white/5 text-zinc-200 hover:bg-white/10'
+                    }`}
+                  >
+                    {size.label}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-3 text-xs leading-5 text-zinc-500">
+                Desenhe sobre o preview composto durante a gravação para embutir as marcações no vídeo final.
+              </p>
             </div>
 
             <div className="grid gap-2">
@@ -626,19 +1045,37 @@ export default function LabScreenRecorderPage() {
             <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-zinc-950">
               {isRecording || isBusy ? (
                 <div className="relative flex min-h-[22rem] items-center justify-center sm:min-h-[30rem]">
-                  <video
-                    ref={screenPreviewRef}
-                    muted
-                    playsInline
-                    className="h-full max-h-[70vh] w-full object-contain"
-                  />
-                  {useWebcam && webcamPreviewStream && (
-                    <video
-                      ref={webcamPreviewRef}
-                      muted
-                      playsInline
-                      className="absolute bottom-4 right-4 h-28 w-40 rounded-2xl border border-white/20 bg-black object-cover shadow-2xl shadow-black sm:h-36 sm:w-56"
+                  {isCompositeMode ? (
+                    <canvas
+                      ref={compositeCanvasRef}
+                      onPointerDown={startDrawing}
+                      onPointerMove={continueDrawing}
+                      onPointerUp={finishDrawing}
+                      onPointerCancel={finishDrawing}
+                      onPointerLeave={finishDrawing}
+                      className={`h-full max-h-[70vh] w-full touch-none object-contain ${
+                        penEnabled ? 'cursor-crosshair' : 'cursor-default'
+                      }`}
+                      style={{ aspectRatio: `${canvasSize.width} / ${canvasSize.height}` }}
+                      aria-label="Preview composto da gravação"
                     />
+                  ) : (
+                    <>
+                      <video
+                        ref={screenPreviewRef}
+                        muted
+                        playsInline
+                        className="h-full max-h-[70vh] w-full object-contain"
+                      />
+                      {useWebcam && webcamPreviewStream && (
+                        <video
+                          ref={webcamPreviewRef}
+                          muted
+                          playsInline
+                          className="absolute bottom-4 right-4 h-28 w-40 rounded-2xl border border-white/20 bg-black object-cover shadow-2xl shadow-black sm:h-36 sm:w-56"
+                        />
+                      )}
+                    </>
                   )}
                 </div>
               ) : recordingUrl ? (
@@ -661,6 +1098,11 @@ export default function LabScreenRecorderPage() {
                 {isRecording && (
                   <p className="rounded-2xl border border-amber-300/20 bg-amber-500/10 px-4 py-3 font-semibold text-amber-100">
                     Não feche esta aba antes de parar e baixar a gravação.
+                  </p>
+                )}
+                {isRecording && isCompositeMode && (
+                  <p className="rounded-2xl border border-cyan-300/20 bg-cyan-500/10 px-4 py-3 font-semibold text-cyan-100">
+                    Webcam e marcações aparecem no vídeo final quando o modo composto está ativo. A webcam não fica por cima do Windows como app nativo; ela é embutida na gravação.
                   </p>
                 )}
                 {errorMessage && (

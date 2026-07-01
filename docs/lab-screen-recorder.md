@@ -7,8 +7,20 @@ O Gravador de Tela adiciona uma ferramenta local em `/lab/screen-recorder` para 
 1. O usuário abre o EntreUS Lab e acessa **Gravador de Tela**.
 2. Antes de iniciar, escolhe microfone, webcam e áudio da tela/aba quando o navegador oferecer.
 3. O navegador solicita a tela, janela ou aba que será capturada.
-4. Durante a gravação, a página mostra preview, tempo decorrido, pausa/continuação quando suportadas e botão para parar.
+4. Durante a gravação, a página mostra o preview composto, tempo decorrido, pausa/continuação quando suportadas, caneta de marcação e botão para parar.
 5. Ao parar, o vídeo vira um `Blob` local, recebe um `Object URL`, aparece em um player `<video controls>` e pode ser baixado como `.webm`.
+
+## Modo Composto
+
+Quando o navegador permite, o gravador usa um canvas local como fonte visual:
+
+1. desenha a tela capturada no canvas;
+2. desenha a webcam por cima, se estiver ativa;
+3. desenha as marcações da caneta por cima da tela;
+4. grava o canvas com `canvas.captureStream(30)`;
+5. combina o vídeo do canvas com o áudio da tela/aba e do microfone.
+
+Esse modo faz a webcam e as marcações aparecerem no vídeo final. Se `canvas.captureStream()` não estiver disponível, o gravador mantém o fallback seguro: grava a tela normalmente, sem webcam ou marcações embutidas, e mostra um aviso.
 
 ## Privacidade
 
@@ -26,9 +38,14 @@ Quando microfone e áudio da tela estão presentes, a página tenta misturar as 
 
 ## Webcam
 
-Nesta primeira versão, a webcam é opcional e aparece como preview flutuante na página. Ela ainda não é embutida no vídeo final, para preservar um MVP estável sem composição por canvas.
+A webcam é opcional e, no modo composto, é embutida no vídeo final como picture-in-picture. A posição pode ser escolhida antes de iniciar:
 
-Próximo passo possível: compor tela + webcam em canvas e gravar o canvas como vídeo final.
+- inferior direita;
+- inferior esquerda;
+- superior direita;
+- superior esquerda.
+
+A webcam não vira uma janela sempre por cima do Windows como um app nativo. Ela aparece por cima da tela dentro do vídeo gravado.
 
 ## Integração com o editor
 
@@ -42,17 +59,26 @@ Se IndexedDB não estiver disponível, o usuário deve baixar o vídeo e import�
 
 ## Marcações
 
-A interface já reserva espaço para caneta, cores e limpeza, mas nesta rodada elas ficam desabilitadas com o aviso de próximo pacote.
+A caneta desenha sobre o preview composto e as marcações entram no vídeo final. O usuário pode escolher:
+
+- vermelho;
+- amarelo;
+- verde;
+- azul;
+- branco;
+- preto;
+- espessura fina, média ou grossa.
+
+Também há ações para limpar todas as marcações e desfazer o último traço. O desenho usa mouse ou touch/pointer events e guarda os pontos normalizados em memória local do navegador.
 
 Próximos passos planejados:
 
-- caneta com várias cores;
 - setas;
 - marca-texto;
 - círculos;
 - texto;
 - borracha;
-- webcam flutuante embutida no vídeo final.
+- arrastar a webcam diretamente no canvas.
 
 ## Arquivo gerado
 
