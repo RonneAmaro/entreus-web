@@ -1,14 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import {
   SCREEN_RECORDER_CANVAS_FALLBACK_MESSAGE,
+  buildScreenRecordingFileName,
   createScreenRecordingFileName,
   formatRecordingDuration,
   getBestScreenRecorderMimeType,
+  getRecordingExtension,
   getScreenRecorderCanvasSize,
   getScreenRecorderContainRect,
   getScreenRecorderErrorMessage,
   getScreenRecorderSupport,
   getWebcamOverlayRect,
+  isMp4MimeType,
   normalizeScreenRecorderPoint,
 } from '../../lib/screen-recorder'
 
@@ -42,7 +45,15 @@ describe('screen recorder helpers', () => {
     })
   })
 
-  it('chooses the first supported mime type', () => {
+  it('chooses MP4 first when the browser supports it', () => {
+    const supported = new Set(['video/mp4;codecs=h264,aac', 'video/webm;codecs=vp8,opus'])
+
+    expect(getBestScreenRecorderMimeType({ isTypeSupported: (mimeType) => supported.has(mimeType) })).toBe(
+      'video/mp4;codecs=h264,aac',
+    )
+  })
+
+  it('falls back to WebM when MP4 is not supported', () => {
     const supported = new Set(['video/webm;codecs=vp8,opus'])
 
     expect(getBestScreenRecorderMimeType({ isTypeSupported: (mimeType) => supported.has(mimeType) })).toBe(
@@ -50,6 +61,14 @@ describe('screen recorder helpers', () => {
     )
     expect(getBestScreenRecorderMimeType({ isTypeSupported: () => false })).toBe('')
     expect(getBestScreenRecorderMimeType(null)).toBe('')
+  })
+
+  it('maps recording extensions without renaming WebM as MP4', () => {
+    expect(isMp4MimeType('video/mp4;codecs=h264,aac')).toBe(true)
+    expect(isMp4MimeType('video/webm;codecs=vp9,opus')).toBe(false)
+    expect(getRecordingExtension('video/mp4;codecs=avc1.42E01E,mp4a.40.2')).toBe('mp4')
+    expect(getRecordingExtension('video/webm;codecs=vp8,opus')).toBe('webm')
+    expect(getRecordingExtension('')).toBe('webm')
   })
 
   it('formats recording duration for timers', () => {
@@ -61,6 +80,12 @@ describe('screen recorder helpers', () => {
 
   it('creates a friendly screen recording file name', () => {
     expect(createScreenRecordingFileName(new Date(2026, 6, 1, 9, 5))).toBe(
+      'entreus-gravacao-tela-2026-07-01-09-05.webm',
+    )
+    expect(buildScreenRecordingFileName(new Date(2026, 6, 1, 9, 5), 'video/mp4;codecs=h264,aac')).toBe(
+      'entreus-gravacao-tela-2026-07-01-09-05.mp4',
+    )
+    expect(buildScreenRecordingFileName(new Date(2026, 6, 1, 9, 5), 'video/webm;codecs=vp9,opus')).toBe(
       'entreus-gravacao-tela-2026-07-01-09-05.webm',
     )
   })

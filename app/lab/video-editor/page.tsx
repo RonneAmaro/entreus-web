@@ -31,7 +31,7 @@ export default function LabVideoEditorPage() {
             </div>
 
             <p className="mt-4 max-w-3xl text-sm leading-6 text-zinc-400 sm:text-base">
-              Edite, exporte e baixe seu video sem publicar no feed.
+              Edite, exporte em MP4 e baixe seu video sem publicar no feed.
             </p>
           </div>
 
@@ -40,7 +40,7 @@ export default function LabVideoEditorPage() {
               <Download className="h-4 w-4" />
               Modo download
             </div>
-            Renderize no navegador e baixe o arquivo final. Nenhum post sera criado.
+            Renderize no navegador e baixe o arquivo final em MP4. Nenhum post sera criado.
           </div>
         </header>
 

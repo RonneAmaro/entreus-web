@@ -634,8 +634,12 @@ export default function VideoEditor({ mode = 'publish' }: VideoEditorProps) {
   useEffect(() => {
     if (!voiceBlob || !audioFile || musicVolumeTouched) return
 
-    setMusicVolume(0.45)
-    setAudioMessage('Ajuste o volume para a narracao ficar clara.')
+    const timer = window.setTimeout(() => {
+      setMusicVolume(0.45)
+      setAudioMessage('Ajuste o volume para a narracao ficar clara.')
+    }, 0)
+
+    return () => window.clearTimeout(timer)
   }, [audioFile, musicVolumeTouched, voiceBlob])
 
   useEffect(() => {
@@ -668,19 +672,22 @@ export default function VideoEditor({ mode = 'publish' }: VideoEditorProps) {
 
   useEffect(() => {
     if (activeOverlayId && !overlays.some((overlay) => overlay.id === activeOverlayId)) {
-      setActiveOverlayId(null)
+      const timer = window.setTimeout(() => setActiveOverlayId(null), 0)
+      return () => window.clearTimeout(timer)
     }
   }, [activeOverlayId, overlays])
 
   useEffect(() => {
     if (activeStickerId && !stickers.some((sticker) => sticker.id === activeStickerId)) {
-      setActiveStickerId(null)
+      const timer = window.setTimeout(() => setActiveStickerId(null), 0)
+      return () => window.clearTimeout(timer)
     }
   }, [activeStickerId, stickers])
 
   useEffect(() => {
     if (activeImageId && !imageOverlays.some((overlay) => overlay.id === activeImageId)) {
-      setActiveImageId(null)
+      const timer = window.setTimeout(() => setActiveImageId(null), 0)
+      return () => window.clearTimeout(timer)
     }
   }, [activeImageId, imageOverlays])
 
@@ -3805,7 +3812,7 @@ export default function VideoEditor({ mode = 'publish' }: VideoEditorProps) {
     : isDownloadMode
     ? 'Baixar video'
     : 'Publicar'
-  const advanceButtonLabel = isRendering ? publishButtonLabel : isDownloadMode ? 'Exportar video' : 'Avancar'
+  const advanceButtonLabel = isRendering ? publishButtonLabel : isDownloadMode ? 'Exportar MP4' : 'Avancar'
   const selectedLayerTitle = activeOverlay
     ? 'Texto selecionado'
     : activeSticker
@@ -6099,7 +6106,7 @@ export default function VideoEditor({ mode = 'publish' }: VideoEditorProps) {
             <div className="relative z-[121] flex max-h-[calc(100dvh-6rem)] w-full max-w-xl flex-col overflow-hidden rounded-[1.5rem] border border-white/10 bg-zinc-950 text-white shadow-2xl shadow-black/50 ring-1 ring-sky-300/15 sm:max-h-[88dvh]">
               <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
                 <div className="min-w-0">
-                  <p className="text-base font-black">{isDownloadMode ? 'Exportar video' : 'Publicar video'}</p>
+                  <p className="text-base font-black">{isDownloadMode ? 'Exportar MP4' : 'Publicar video'}</p>
                   <p className="mt-0.5 text-xs font-semibold text-zinc-500">
                     {isDownloadMode ? 'Qualidade e download final' : 'Legenda, qualidade e confirmacao final'}
                   </p>

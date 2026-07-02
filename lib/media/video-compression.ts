@@ -37,6 +37,27 @@ export type VideoCompressionOptions = {
   onStage?: (stage: VideoCompressionStage) => void
 }
 
+export type VideoMp4ExportStage = 'preparing' | 'converting'
+
+export type VideoMp4ExportOptions = {
+  outputFileName?: string
+  onStage?: (stage: VideoMp4ExportStage) => void
+}
+
+export type VideoMp4ExportResult =
+  | {
+      ok: true
+      file: File
+      originalSize: number
+      outputSize: number
+      message?: string
+    }
+  | {
+      ok: false
+      reason: 'unsupported' | 'failed'
+      message: string
+    }
+
 type FfmpegRuntime = {
   ffmpeg: FFmpeg
   fetchFile: typeof import('@ffmpeg/util').fetchFile
@@ -58,6 +79,14 @@ let ffmpegRuntimePromise: Promise<FfmpegRuntime> | null = null
 let compressionQueue = Promise.resolve()
 
 export function canAttemptVideoCompression(file: File): boolean {
+  return canUseBrowserFfmpegForVideo(file)
+}
+
+export function canAttemptVideoMp4Export(file: File): boolean {
+  return canUseBrowserFfmpegForVideo(file)
+}
+
+function canUseBrowserFfmpegForVideo(file: File): boolean {
   if (typeof window === 'undefined') return false
   if (typeof File === 'undefined' || !(file instanceof File)) return false
   if (typeof WebAssembly === 'undefined') return false
@@ -122,6 +151,22 @@ export async function compressVideoForPost(
 
   reportCompressionStage(options, 'preparing')
   return enqueueCompression(() => runFfmpegCompression(file, options))
+}
+
+export async function exportVideoToMp4(
+  file: File,
+  options: VideoMp4ExportOptions = {},
+): Promise<VideoMp4ExportResult> {
+  if (!canAttemptVideoMp4Export(file)) {
+    return {
+      ok: false,
+      reason: 'unsupported',
+      message: 'Seu navegador nao permitiu converter este video para MP4.',
+    }
+  }
+
+  reportMp4ExportStage(options, 'preparing')
+  return enqueueCompression(() => runFfmpegMp4Export(file, options))
 }
 
 function enqueueCompression<T>(task: () => Promise<T>) {
@@ -238,7 +283,56 @@ async function runFfmpegCompression(
   }
 }
 
+async function runFfmpegMp4Export(
+  file: File,
+  options: VideoMp4ExportOptions,
+): Promise<VideoMp4ExportResult> {
+  const { ffmpeg, fetchFile } = await getFfmpegRuntime()
+  const inputName = `mp4-export-input-${Date.now()}-${Math.random().toString(36).slice(2)}.${getInputExtension(file)}`
+  const outputName = `mp4-export-output-${Date.now()}-${Math.random().toString(36).slice(2)}.mp4`
+
+  try {
+    await cleanupFfmpegFiles(ffmpeg, [inputName, outputName])
+    await ffmpeg.writeFile(inputName, await fetchFile(file))
+
+    reportMp4ExportStage(options, 'converting')
+    const exitCode = await ffmpeg.exec(buildMp4ExportArgs(inputName, outputName))
+
+    if (exitCode !== 0) {
+      throw new Error('FFmpeg retornou erro ao converter para MP4.')
+    }
+
+    const outputFile = await readMp4File(
+      ffmpeg,
+      outputName,
+      options.outputFileName || getMp4FileName(file.name),
+    )
+
+    return {
+      ok: true,
+      file: outputFile,
+      originalSize: file.size,
+      outputSize: outputFile.size,
+      message: 'Video convertido para MP4.',
+    }
+  } catch {
+    console.warn('[PostVideoCompression] Falha ao converter video para MP4.')
+
+    return {
+      ok: false,
+      reason: 'failed',
+      message: 'Nao foi possivel converter para MP4 neste navegador. Baixe o WebM e tente novamente em outro editor.',
+    }
+  } finally {
+    await cleanupFfmpegFiles(ffmpeg, [inputName, outputName])
+  }
+}
+
 async function readCompressedFile(ffmpeg: FFmpeg, outputName: string, originalFileName: string) {
+  return readMp4File(ffmpeg, outputName, getOptimizedFileName(originalFileName))
+}
+
+async function readMp4File(ffmpeg: FFmpeg, outputName: string, outputFileName: string) {
   const compressedData = await ffmpeg.readFile(outputName)
   const compressedBytes = readFfmpegBytes(compressedData)
 
@@ -247,10 +341,39 @@ async function readCompressedFile(ffmpeg: FFmpeg, outputName: string, originalFi
   }
 
   const compressedBlob = new Blob([compressedBytes as BlobPart], { type: OUTPUT_MIME_TYPE })
-  return new File([compressedBlob], getOptimizedFileName(originalFileName), {
+  return new File([compressedBlob], getMp4FileName(outputFileName), {
     type: OUTPUT_MIME_TYPE,
     lastModified: Date.now(),
   })
+}
+
+function buildMp4ExportArgs(inputName: string, outputName: string) {
+  return [
+    '-y',
+    '-i',
+    inputName,
+    '-map',
+    '0:v:0',
+    '-map',
+    '0:a?',
+    '-c:v',
+    'libx264',
+    '-preset',
+    'veryfast',
+    '-crf',
+    '23',
+    '-pix_fmt',
+    'yuv420p',
+    '-c:a',
+    'aac',
+    '-b:a',
+    '128k',
+    '-movflags',
+    '+faststart',
+    '-f',
+    'mp4',
+    outputName,
+  ]
 }
 
 function buildCompressionArgs(
@@ -315,6 +438,14 @@ function reportCompressionStage(options: VideoCompressionOptions, stage: VideoCo
   }
 }
 
+function reportMp4ExportStage(options: VideoMp4ExportOptions, stage: VideoMp4ExportStage) {
+  try {
+    options.onStage?.(stage)
+  } catch {
+    // UI callbacks must not interrupt the export task.
+  }
+}
+
 function readFfmpegBytes(outputData: Awaited<ReturnType<FFmpeg['readFile']>>) {
   const outputBytes =
     typeof outputData === 'string'
@@ -347,10 +478,18 @@ function getInputExtension(file: File) {
 }
 
 function getOptimizedFileName(fileName: string) {
+  return `${getBaseVideoFileName(fileName) || 'video'}-otimizado.mp4`
+}
+
+function getMp4FileName(fileName: string) {
+  return `${getBaseVideoFileName(fileName) || 'video'}.mp4`
+}
+
+function getBaseVideoFileName(fileName: string) {
   const baseName = fileName
     .replace(/\.[^.]+$/, '')
     .replace(/[^a-z0-9_-]+/gi, '-')
     .replace(/^-+|-+$/g, '')
 
-  return `${baseName || 'video'}-otimizado.mp4`
+  return baseName
 }

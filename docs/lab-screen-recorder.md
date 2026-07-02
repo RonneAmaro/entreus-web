@@ -1,5 +1,7 @@
 # Gravador de Tela do EntreUS Lab
 
+Atualizacao MP4: o gravador agora tenta usar MP4 real quando o navegador suportar `video/mp4` no `MediaRecorder`. Quando o navegador so suportar WebM, o download continua em `.webm` e a UI oferece exportacao MP4 via FFmpeg.wasm quando o ambiente permitir.
+
 O Gravador de Tela adiciona uma ferramenta local em `/lab/screen-recorder` para gravar tela, microfone opcional, webcam opcional, pré-visualizar o resultado e baixar o arquivo no computador.
 
 ## Fluxo

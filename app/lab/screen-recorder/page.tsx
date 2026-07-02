@@ -8,6 +8,7 @@ import {
   Download,
   Eraser,
   ExternalLink,
+  Loader2,
   Mic,
   Monitor,
   Pause,
@@ -23,6 +24,7 @@ import {
 import {
   SCREEN_RECORDER_CANVAS_FALLBACK_MESSAGE,
   SCREEN_RECORDER_CANVAS_FPS,
+  buildScreenRecordingFileName,
   createScreenRecordingFileName,
   formatRecordingDuration,
   getBestScreenRecorderMimeType,
@@ -31,6 +33,7 @@ import {
   getScreenRecorderErrorMessage,
   getScreenRecorderSupport,
   getWebcamOverlayRect,
+  isMp4MimeType,
   normalizeScreenRecorderPoint,
   type ScreenRecorderPoint,
   type ScreenRecorderSize,
@@ -44,6 +47,10 @@ import {
   saveLocalVideoDraft,
   SCREEN_RECORDER_DRAFT_SOURCE,
 } from '@/lib/local-video-drafts'
+import {
+  canAttemptVideoMp4Export,
+  exportVideoToMp4,
+} from '@/lib/media/video-compression'
 
 type RecorderStatus = 'idle' | 'requesting' | 'recording' | 'paused' | 'stopped' | 'error'
 type MarkerSize = 'thin' | 'medium' | 'thick'
@@ -127,10 +134,13 @@ export default function LabScreenRecorderPage() {
   const [recordingUrl, setRecordingUrl] = useState('')
   const [recordingBlob, setRecordingBlob] = useState<Blob | null>(null)
   const [recordingFileName, setRecordingFileName] = useState('')
+  const [recordingMimeType, setRecordingMimeType] = useState('')
   const [elapsedMs, setElapsedMs] = useState(0)
   const [errorMessage, setErrorMessage] = useState('')
   const [noticeMessage, setNoticeMessage] = useState('')
   const [editorMessage, setEditorMessage] = useState('')
+  const [mp4ExportMessage, setMp4ExportMessage] = useState('')
+  const [isExportingMp4, setIsExportingMp4] = useState(false)
 
   useEffect(() => {
     const video = screenPreviewRef.current
@@ -532,10 +542,13 @@ export default function LabScreenRecorderPage() {
     setErrorMessage('')
     setNoticeMessage('')
     setEditorMessage('')
+    setMp4ExportMessage('')
     setStatus('requesting')
     setRecordingBlob(null)
     setRecordingUrl('')
     setRecordingFileName('')
+    setRecordingMimeType('')
+    setIsExportingMp4(false)
     setCanPauseResume(false)
     setIsCompositeMode(true)
     setElapsedMs(0)
@@ -587,11 +600,13 @@ export default function LabScreenRecorderPage() {
 
       const mimeType = getBestScreenRecorderMimeType(window.MediaRecorder)
       const recorder = mimeType ? new MediaRecorder(recorderStream, { mimeType }) : new MediaRecorder(recorderStream)
-      const nextFileName = createScreenRecordingFileName()
+      const activeMimeType = recorder.mimeType || mimeType
+      const nextFileName = buildScreenRecordingFileName(new Date(), activeMimeType || 'video/webm')
 
       mediaRecorderRef.current = recorder
       setCanPauseResume(typeof recorder.pause === 'function' && typeof recorder.resume === 'function')
       setRecordingFileName(nextFileName)
+      setRecordingMimeType(activeMimeType)
 
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
@@ -605,7 +620,9 @@ export default function LabScreenRecorderPage() {
 
       recorder.onstop = () => {
         clearTimer()
-        const blob = new Blob(chunksRef.current, { type: mimeType || 'video/webm' })
+        const finalMimeType = recorder.mimeType || mimeType || 'video/webm'
+        const blob = new Blob(chunksRef.current, { type: finalMimeType })
+        const finalFileName = buildScreenRecordingFileName(new Date(), finalMimeType)
         cleanupStreams()
 
         if (blob.size <= 0) {
@@ -617,6 +634,8 @@ export default function LabScreenRecorderPage() {
         setElapsedMs(getCurrentElapsedMs())
         setRecordingBlob(blob)
         setRecordingUrl(URL.createObjectURL(blob))
+        setRecordingMimeType(finalMimeType)
+        setRecordingFileName(finalFileName)
         setStatus('stopped')
         setNoticeMessage('Gravação pronta para visualizar, baixar ou abrir no editor local.')
       }
@@ -669,9 +688,12 @@ export default function LabScreenRecorderPage() {
     setErrorMessage('')
     setNoticeMessage('')
     setEditorMessage('')
+    setMp4ExportMessage('')
+    setIsExportingMp4(false)
     setRecordingBlob(null)
     setRecordingUrl('')
     setRecordingFileName('')
+    setRecordingMimeType('')
     setElapsedMs(0)
     chunksRef.current = []
     clearDrawingStrokes()
@@ -744,11 +766,65 @@ export default function LabScreenRecorderPage() {
       await saveLocalVideoDraft({
         source: SCREEN_RECORDER_DRAFT_SOURCE,
         blob: recordingBlob,
-        name: recordingFileName || createScreenRecordingFileName(),
+        name: recordingFileName || createScreenRecordingFileName(new Date(), recordingMimeType || recordingBlob.type),
       })
       window.location.assign(getLocalVideoDraftTargetUrl(SCREEN_RECORDER_DRAFT_SOURCE))
     } catch {
       setEditorMessage('Não foi possível abrir direto no editor. Baixe o vídeo e importe manualmente.')
+    }
+  }
+
+  async function exportRecordingAsMp4() {
+    if (!recordingBlob || isExportingMp4) return
+    if (typeof File === 'undefined') {
+      setMp4ExportMessage('Este navegador nao conseguiu preparar a conversao para MP4. Use Baixar WebM como fallback.')
+      return
+    }
+
+    const sourceMimeType = recordingMimeType || recordingBlob.type || 'video/webm'
+    const sourceName = recordingFileName || buildScreenRecordingFileName(new Date(), sourceMimeType)
+    const sourceFile = new File([recordingBlob], sourceName, { type: sourceMimeType })
+    const outputFileName = buildScreenRecordingFileName(new Date(), 'video/mp4')
+
+    if (!canAttemptVideoMp4Export(sourceFile)) {
+      setMp4ExportMessage('Este navegador nao conseguiu converter para MP4 agora. Use Baixar WebM ou abra no editor.')
+      return
+    }
+
+    setIsExportingMp4(true)
+    setMp4ExportMessage('Convertendo para MP4... A conversao pode demorar em videos longos.')
+
+    try {
+      const result = await exportVideoToMp4(sourceFile, {
+        outputFileName,
+        onStage: (stage) => {
+          setMp4ExportMessage(
+            stage === 'preparing'
+              ? 'Preparando conversao para MP4...'
+              : 'Convertendo para MP4... A conversao pode demorar em videos longos.',
+          )
+        },
+      })
+
+      if (!result.ok) {
+        setMp4ExportMessage(result.message)
+        return
+      }
+
+      const downloadUrl = URL.createObjectURL(result.file)
+      const downloadLink = document.createElement('a')
+      downloadLink.href = downloadUrl
+      downloadLink.download = result.file.name
+      downloadLink.rel = 'noreferrer'
+      document.body.appendChild(downloadLink)
+      downloadLink.click()
+      downloadLink.remove()
+      window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 2000)
+      setMp4ExportMessage('MP4 exportado. Se o download nao comecar, tente novamente.')
+    } catch {
+      setMp4ExportMessage('Nao foi possivel converter para MP4 neste navegador. Baixe o WebM como fallback.')
+    } finally {
+      setIsExportingMp4(false)
     }
   }
 
@@ -757,6 +833,8 @@ export default function LabScreenRecorderPage() {
   const canStart = Boolean(support?.isSupported) && !isBusy && !isRecording
   const canPause = status === 'recording' && canPauseResume
   const canResume = status === 'paused' && canPauseResume
+  const isRecordingMp4 = isMp4MimeType(recordingMimeType || recordingBlob?.type)
+  const recordingDownloadLabel = isRecordingMp4 ? 'Baixar MP4' : 'Baixar WebM'
 
   return (
     <main className="min-h-screen bg-zinc-950 px-3 py-5 text-white sm:px-5">
@@ -1093,7 +1171,7 @@ export default function LabScreenRecorderPage() {
               )}
             </div>
 
-            {(errorMessage || noticeMessage || editorMessage || isRecording) && (
+            {(errorMessage || noticeMessage || editorMessage || mp4ExportMessage || isRecording) && (
               <div className="mt-3 grid gap-2 text-sm">
                 {isRecording && (
                   <p className="rounded-2xl border border-amber-300/20 bg-amber-500/10 px-4 py-3 font-semibold text-amber-100">
@@ -1120,19 +1198,42 @@ export default function LabScreenRecorderPage() {
                     {editorMessage}
                   </p>
                 )}
+                {mp4ExportMessage && (
+                  <p className="rounded-2xl border border-cyan-300/20 bg-cyan-500/10 px-4 py-3 font-semibold text-cyan-100">
+                    {mp4ExportMessage}
+                  </p>
+                )}
               </div>
             )}
 
             {recordingBlob && recordingUrl && (
               <div className="mt-4 grid gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-4 sm:grid-cols-3">
+                <div className="text-xs leading-5 text-zinc-400 sm:col-span-3">
+                  <p>MP4 tem melhor compatibilidade com players, celulares e editores.</p>
+                  {!isRecordingMp4 && <p>WebM e o formato nativo de alguns navegadores.</p>}
+                </div>
                 <a
                   href={recordingUrl}
-                  download={recordingFileName || createScreenRecordingFileName()}
+                  download={recordingFileName || createScreenRecordingFileName(new Date(), recordingMimeType || recordingBlob.type)}
                   className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-emerald-400 px-4 text-sm font-black text-zinc-950 transition hover:bg-emerald-300"
                 >
                   <Download className="h-4 w-4" />
+                  <span>{recordingDownloadLabel}</span>
+                  <span className="hidden">
                   Baixar vídeo
+                  </span>
                 </a>
+                {!isRecordingMp4 && (
+                  <button
+                    type="button"
+                    onClick={exportRecordingAsMp4}
+                    disabled={isExportingMp4}
+                    className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-cyan-400 px-4 text-sm font-black text-zinc-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isExportingMp4 ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                    {isExportingMp4 ? 'Convertendo...' : 'Exportar MP4'}
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={openInVideoEditor}

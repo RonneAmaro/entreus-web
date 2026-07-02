@@ -1,9 +1,18 @@
-export const SCREEN_RECORDER_MIME_TYPE_CANDIDATES = [
-  'video/webm;codecs=vp9,opus',
-  'video/webm;codecs=vp8,opus',
-  'video/webm;codecs=h264,opus',
-  'video/webm',
-]
+import {
+  SCREEN_RECORDER_MIME_TYPE_CANDIDATES,
+  buildScreenRecordingFileName,
+  getSupportedRecordingMimeType,
+  type MediaRecorderSupportProbe,
+} from './screen-recorder-formats'
+
+export {
+  SCREEN_RECORDER_MIME_TYPE_CANDIDATES,
+  buildScreenRecordingFileName,
+  getRecordingExtension,
+  getSupportedRecordingMimeType,
+  isMp4MimeType,
+} from './screen-recorder-formats'
+
 export const SCREEN_RECORDER_CANVAS_FPS = 30
 export const SCREEN_RECORDER_CANVAS_FALLBACK_MESSAGE =
   'Seu navegador não liberou gravação composta por canvas. A tela será gravada sem webcam ou marcações embutidas.'
@@ -40,10 +49,6 @@ export type ScreenRecorderRect = ScreenRecorderSize & {
 export type ScreenRecorderPoint = {
   x: number
   y: number
-}
-
-type MediaRecorderSupportProbe = {
-  isTypeSupported?: (mimeType: string) => boolean
 }
 
 type MediaDevicesProbe = {
@@ -129,17 +134,7 @@ export function getBestScreenRecorderMimeType(
   mediaRecorder: MediaRecorderSupportProbe | null | undefined = getDefaultScreenRecorderEnvironment().MediaRecorder,
   candidates = SCREEN_RECORDER_MIME_TYPE_CANDIDATES,
 ) {
-  if (!mediaRecorder?.isTypeSupported) return ''
-
-  for (const mimeType of candidates) {
-    try {
-      if (mediaRecorder.isTypeSupported(mimeType)) return mimeType
-    } catch {
-      continue
-    }
-  }
-
-  return ''
+  return getSupportedRecordingMimeType(mediaRecorder, candidates)
 }
 
 function padDatePart(value: number) {
@@ -159,14 +154,8 @@ export function formatRecordingDuration(milliseconds: number) {
   return `${padDatePart(minutes)}:${padDatePart(seconds)}`
 }
 
-export function createScreenRecordingFileName(date = new Date()) {
-  const year = date.getFullYear()
-  const month = padDatePart(date.getMonth() + 1)
-  const day = padDatePart(date.getDate())
-  const hours = padDatePart(date.getHours())
-  const minutes = padDatePart(date.getMinutes())
-
-  return `entreus-gravacao-tela-${year}-${month}-${day}-${hours}-${minutes}.webm`
+export function createScreenRecordingFileName(date = new Date(), mimeType: unknown = 'video/webm') {
+  return buildScreenRecordingFileName(date, mimeType)
 }
 
 function clampNumber(value: number, min: number, max: number) {
