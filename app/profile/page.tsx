@@ -13,7 +13,8 @@ import PostCard from '../components/PostCard'
 import UserBadges from '../components/UserBadges'
 import UserBadgesPanel from '../components/UserBadgesPanel'
 import UserTierBadge from '../components/UserTierBadge'
-import UserTierFrame, { getUserTierSurfaceClassName } from '../components/UserTierFrame'
+import ProfileAvatarFrame from '../components/ProfileAvatarFrame'
+import { getUserTierSurfaceClassName } from '../components/UserTierFrame'
 import ProfileThemeSelector from '../components/ProfileThemeSelector'
 import { useLanguage } from '../components/LanguageProvider'
 import {
@@ -64,6 +65,9 @@ type ProfileSummary = {
   username: string
   display_name: string | null
   avatar_url: string | null
+  vip_status?: string | null
+  vip_expires_at?: string | null
+  profile_theme?: string | null
 }
 
 type PostMedia = {
@@ -780,7 +784,10 @@ export default function ProfilePage() {
         profiles (
           username,
           display_name,
-          avatar_url
+          avatar_url,
+          vip_status,
+          vip_expires_at,
+          profile_theme
         )
       `
     const postSelectFallback = `
@@ -798,7 +805,10 @@ export default function ProfilePage() {
         profiles (
           username,
           display_name,
-          avatar_url
+          avatar_url,
+          vip_status,
+          vip_expires_at,
+          profile_theme
         )
       `
     const { data: myRepostsData, error: myRepostsError } = await supabase
@@ -1714,7 +1724,11 @@ export default function ProfilePage() {
               <div className="relative z-10 -mt-16 flex flex-col gap-5 sm:-mt-20 sm:flex-row">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
                   <div className="flex flex-col items-center gap-3 sm:items-start">
-                    <UserTierFrame tier={profileTier} className={`relative h-32 w-32 sm:h-40 sm:w-40 ${effectiveProfileTheme.avatarFrameClassName}`}>
+                    <ProfileAvatarFrame
+                      tier={profileTier}
+                      themeKey={effectiveProfileTheme.key}
+                      className="relative h-32 w-32 sm:h-40 sm:w-40"
+                    >
                       <button
                         type="button"
                         onClick={() => avatarPreview && setShowAvatarModal(true)}
@@ -1756,7 +1770,7 @@ export default function ProfilePage() {
                           className="sr-only"
                         />
                       </label>
-                    </UserTierFrame>
+                    </ProfileAvatarFrame>
                   </div>
 
                   <div className="min-w-0 max-w-full pt-3 text-center sm:pt-16 sm:text-left">
@@ -2270,7 +2284,13 @@ export default function ProfilePage() {
                   onDelete={() => handleDeletePost(post.id)}
                   onReport={() => handleReportPost(post.id, post.user_id)}
                   onPaidPostUnlocked={() => profile ? loadProfileActivity(userId, profile) : undefined}
-                  authorTier={post.user_id === userId ? profileTier : 'standard'}
+                  authorTier={post.user_id === userId
+                    ? profileTier
+                    : resolveUserTier({
+                      vipStatus: post.profiles?.vip_status,
+                      vipExpiresAt: post.profiles?.vip_expires_at,
+                    })}
+                  authorProfileTheme={post.user_id === userId ? profile?.profile_theme : post.profiles?.profile_theme}
                 />
               )
             })}

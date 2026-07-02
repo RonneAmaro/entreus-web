@@ -25,6 +25,7 @@ import { canViewAdultContent } from '@/lib/content-access'
 import { applyPostVisibilityFilters } from '@/lib/post-visibility'
 import { isMissingPaidPostColumnError } from '@/lib/paid-posts'
 import { protectPostForViewer } from '@/lib/protected-post-access'
+import { resolveUserTier } from '@/lib/user-tiers'
 
 
 function getDateLocale(language: string) {
@@ -56,6 +57,9 @@ type ProfileSummary = {
   username: string
   display_name: string | null
   avatar_url: string | null
+  vip_status?: string | null
+  vip_expires_at?: string | null
+  profile_theme?: string | null
 }
 
 type PostMedia = {
@@ -440,7 +444,10 @@ export default function SavedPage() {
         profiles (
           username,
           display_name,
-          avatar_url
+          avatar_url,
+          vip_status,
+          vip_expires_at,
+          profile_theme
         )
       `
     const selectFallback = `
@@ -458,7 +465,10 @@ export default function SavedPage() {
         profiles (
           username,
           display_name,
-          avatar_url
+          avatar_url,
+          vip_status,
+          vip_expires_at,
+          profile_theme
         )
       `
 
@@ -1000,6 +1010,11 @@ export default function SavedPage() {
                 onDelete={() => router.push(`/post/${post.id}`)}
                 onReport={() => handleReportPost(post.id, post.user_id)}
                 onPaidPostUnlocked={refreshSavedPosts}
+                authorTier={resolveUserTier({
+                  vipStatus: post.profiles?.vip_status,
+                  vipExpiresAt: post.profiles?.vip_expires_at,
+                })}
+                authorProfileTheme={post.profiles?.profile_theme}
               />
             )
           })}

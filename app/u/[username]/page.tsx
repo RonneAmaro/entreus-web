@@ -12,7 +12,8 @@ import PostCard from "../../components/PostCard";
 import UserBadges from "../../components/UserBadges";
 import UserBadgesPanel from "../../components/UserBadgesPanel";
 import UserTierBadge from "../../components/UserTierBadge";
-import UserTierFrame, { getUserTierSurfaceClassName } from "../../components/UserTierFrame";
+import ProfileAvatarFrame from "../../components/ProfileAvatarFrame";
+import { getUserTierSurfaceClassName } from "../../components/UserTierFrame";
 import StartConversationButton from "../../components/StartConversationButton";
 import GiftModal from "../../components/GiftModal";
 import TipModal from "../../components/TipModal";
@@ -71,6 +72,9 @@ type ProfileSummary = {
   username: string;
   display_name: string | null;
   avatar_url: string | null;
+  vip_status?: string | null;
+  vip_expires_at?: string | null;
+  profile_theme?: string | null;
 };
 
 type PostMedia = {
@@ -736,7 +740,10 @@ export default function PublicProfilePage() {
         profiles (
           username,
           display_name,
-          avatar_url
+          avatar_url,
+          vip_status,
+          vip_expires_at,
+          profile_theme
         )
       `;
     const postSelectFallback = `
@@ -754,7 +761,10 @@ export default function PublicProfilePage() {
         profiles (
           username,
           display_name,
-          avatar_url
+          avatar_url,
+          vip_status,
+          vip_expires_at,
+          profile_theme
         )
       `;
     const { data: repostsData, error: repostsError } = await supabase
@@ -2001,7 +2011,13 @@ export default function PublicProfilePage() {
         onDelete={() => router.push(`/post/${post.id}`)}
         onReport={() => handleReportPost(post.id, post.user_id)}
         onPaidPostUnlocked={refreshPublicProfileActivity}
-        authorTier={post.user_id === profile?.id ? profileTier : 'standard'}
+        authorTier={post.user_id === profile?.id
+          ? profileTier
+          : resolveUserTier({
+            vipStatus: post.profiles?.vip_status,
+            vipExpiresAt: post.profiles?.vip_expires_at,
+          })}
+        authorProfileTheme={post.user_id === profile?.id ? profile?.profile_theme : post.profiles?.profile_theme}
       />
     );
   }
@@ -2221,7 +2237,11 @@ export default function PublicProfilePage() {
             <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
               <div className="flex min-w-0 flex-1 flex-col gap-4 sm:flex-row sm:items-end">
                 <div className="-mt-14 shrink-0 sm:-mt-16">
-                  <UserTierFrame tier={profileTier} className={`h-28 w-28 sm:h-36 sm:w-36 ${effectiveProfileTheme.avatarFrameClassName}`}>
+                  <ProfileAvatarFrame
+                    tier={profileTier}
+                    themeKey={effectiveProfileTheme.key}
+                    className="h-28 w-28 sm:h-36 sm:w-36"
+                  >
                     {profile.avatar_url ? (
                       <button
                         type="button"
@@ -2245,7 +2265,7 @@ export default function PublicProfilePage() {
                         {displayName.charAt(0).toUpperCase()}
                       </div>
                     )}
-                  </UserTierFrame>
+                  </ProfileAvatarFrame>
                 </div>
 
                 <div className="min-w-0 flex-1 pb-1">
@@ -2775,6 +2795,13 @@ export default function PublicProfilePage() {
                     onDelete={() => router.push(`/post/${post.id}`)}
                     onReport={() => handleReportPost(post.id, post.user_id)}
                     onPaidPostUnlocked={refreshPublicProfileActivity}
+                    authorTier={post.user_id === profile?.id
+                      ? profileTier
+                      : resolveUserTier({
+                        vipStatus: post.profiles?.vip_status,
+                        vipExpiresAt: post.profiles?.vip_expires_at,
+                      })}
+                    authorProfileTheme={post.user_id === profile?.id ? profile?.profile_theme : post.profiles?.profile_theme}
                   />
                 );
               })}

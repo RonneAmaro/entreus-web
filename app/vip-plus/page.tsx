@@ -90,8 +90,8 @@ const BADGE_MEDIA = {
 
 const benefits = [
   {
-    title: 'Selo VIP no perfil',
-    description: 'Identidade visual ativa para destacar sua presenca dentro da comunidade.',
+    title: 'Personalizacao visivel no feed',
+    description: 'Destaque seu avatar e seus posts com anel, faixa de cor e temas VIP.',
     icon: BadgeCheck,
   },
   {

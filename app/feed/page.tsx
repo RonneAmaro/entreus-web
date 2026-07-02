@@ -13,7 +13,8 @@ import LinkPreview, { LinkedPostText } from '../components/LinkPreview'
 import SensitiveContent from '../components/SensitiveContent'
 import UserBadges from '../components/UserBadges'
 import UserTierBadge from '../components/UserTierBadge'
-import UserTierFrame, { getUserTierSurfaceClassName } from '../components/UserTierFrame'
+import ProfileAvatarFrame from '../components/ProfileAvatarFrame'
+import { getUserTierSurfaceClassName } from '../components/UserTierFrame'
 import ItaCashAmount from '../components/ItaCashAmount'
 import TranslatePostButton from '../components/TranslatePostButton'
 import Link from 'next/link'
@@ -63,6 +64,7 @@ import {
   resolveVideoUploadLimit,
 } from '@/lib/media/upload-limits'
 import { resolveUserTier } from '@/lib/user-tiers'
+import { getEffectiveProfileTheme } from '@/lib/profile-themes'
 import {
   canViewAdultPostContent as canViewAdult18Plus,
   canViewerSeePostClassification as canViewCommunity,
@@ -126,6 +128,7 @@ type ProfileSummary = {
   avatar_url: string | null
   vip_status?: string | null
   vip_expires_at?: string | null
+  profile_theme?: string | null
 }
 
 type UserTierBadgeRow = UserBadgeRow & {
@@ -1292,7 +1295,8 @@ function FeedContent() {
           display_name,
           avatar_url,
           vip_status,
-          vip_expires_at
+          vip_expires_at,
+          profile_theme
         )
       `
     const postSelectFallback = `
@@ -1312,7 +1316,8 @@ function FeedContent() {
           display_name,
           avatar_url,
           vip_status,
-          vip_expires_at
+          vip_expires_at,
+          profile_theme
         )
       `
 
@@ -4142,6 +4147,7 @@ function FeedContent() {
                   vipExpiresAt: post.profiles?.vip_expires_at,
                   badgeSlugs: tierBadgeSlugsByUserId[post.user_id],
                 })
+                const authorTheme = getEffectiveProfileTheme(post.profiles?.profile_theme, authorTier)
                 const isOwnPost = post.user_id === userId
                 const isBlockedRelation = blockedUserIds.includes(post.user_id)
                 const isFollowingAuthor = followStateMap.get(post.user_id) || false
@@ -4186,8 +4192,15 @@ function FeedContent() {
                     className={`group relative overflow-hidden rounded-[1.65rem] border bg-white/95 p-3.5 shadow-sm shadow-black/5 ring-1 ring-black/5 backdrop-blur-xl transition-all duration-300 before:pointer-events-none before:absolute before:inset-0 before:bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.12),transparent_42%)] before:opacity-0 before:transition-opacity before:duration-300 hover:border-blue-400/50 hover:shadow-2xl hover:shadow-blue-500/10 hover:before:opacity-100 dark:bg-slate-950/85 dark:ring-white/10 sm:rounded-[2rem] sm:p-6 md:hover:-translate-y-1 ${isHighlighted
                         ? 'border-blue-500 ring-2 ring-blue-200 dark:border-blue-400 dark:ring-blue-900'
                         : 'border-zinc-200/70 dark:border-zinc-800/70'
-                      } ${getUserTierSurfaceClassName(authorTier)}`}
+                      } ${getUserTierSurfaceClassName(authorTier)} ${authorTheme.cardClassName}`}
                   >
+                    {authorTheme.postAccentClassName && (
+                      <span
+                        aria-hidden="true"
+                        className={`pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${authorTheme.postAccentClassName}`}
+                      />
+                    )}
+
                     {item.type === 'repost' && (
                       <Link
                         href={`/u/${reposterUsername}`}
@@ -4224,19 +4237,14 @@ function FeedContent() {
                         href={`/u/${authorUsername}`}
                         className="flex min-w-0 items-center gap-3 transition hover:opacity-80"
                       >
-                        <UserTierFrame tier={authorTier} className="h-12 w-12">
-                          {authorAvatar ? (
-                            <img
-                              src={authorAvatar}
-                              alt={authorName}
-                              className="h-full w-full rounded-full border border-zinc-300 object-cover dark:border-zinc-700"
-                            />
-                          ) : (
-                            <span className="flex h-full w-full items-center justify-center rounded-full border border-zinc-300 bg-zinc-100 text-sm font-semibold text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
-                              {authorName.charAt(0).toUpperCase()}
-                            </span>
-                          )}
-                        </UserTierFrame>
+                        <ProfileAvatarFrame
+                          tier={authorTier}
+                          themeKey={authorTheme.key}
+                          avatarUrl={authorAvatar}
+                          name={authorName}
+                          username={authorUsername}
+                          className="h-12 w-12"
+                        />
 
                         <div className="min-w-0">
                           <p className="inline-flex max-w-full items-center gap-1 font-semibold text-black dark:text-white">

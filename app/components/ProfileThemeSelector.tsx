@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { Check, Lock, Sparkles } from 'lucide-react'
 import {
+  PROFILE_THEME_GROUPS,
   PROFILE_THEMES,
   canUseProfileTheme,
   getProfileTheme,
@@ -52,7 +53,7 @@ export default function ProfileThemeSelector({
           </h3>
 
           <p className="mt-1 max-w-2xl text-sm leading-6 text-zinc-500 dark:text-zinc-400">
-            Escolha um template visual predefinido para destacar seu perfil sem perder legibilidade.
+            Esse destaque aparece no seu perfil e nos seus posts. Use cores de torcida para apoiar sua selecao sem perder legibilidade.
           </p>
         </div>
 
@@ -63,7 +64,7 @@ export default function ProfileThemeSelector({
 
       {tier === 'standard' && (
         <div className="mb-4 rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900 dark:border-sky-900/70 dark:bg-sky-950/30 dark:text-sky-100">
-          <p className="font-bold">Personalizacao de perfil e uma vantagem VIP.</p>
+          <p className="font-bold">Cores de torcida sao livres. VIP libera temas com mais brilho e presenca no feed.</p>
           <Link
             href="/vip-plus"
             className="mt-2 inline-flex h-9 items-center justify-center rounded-full bg-sky-600 px-4 text-xs font-black text-white transition hover:bg-sky-700"
@@ -73,65 +74,89 @@ export default function ProfileThemeSelector({
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {PROFILE_THEMES.map((theme) => {
-          const allowed = canUseProfileTheme(tier, theme.key)
-          const selected = selectedTheme === theme.key
-          const saved = savedTheme === theme.key
+      <div className="space-y-5">
+        {PROFILE_THEME_GROUPS.map((group) => {
+          const groupThemes = PROFILE_THEMES.filter((theme) => theme.category === group.category)
 
           return (
-            <button
-              key={theme.key}
-              type="button"
-              onClick={() => allowed && onChange(theme.key)}
-              disabled={!allowed || saving}
-              className={`min-h-36 rounded-2xl border p-3 text-left shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed ${
-                selected
-                  ? 'border-zinc-950 bg-white ring-2 ring-zinc-950/10 dark:border-white dark:bg-zinc-950 dark:ring-white/10'
-                  : 'border-zinc-200 bg-white/80 hover:border-zinc-300 hover:bg-white dark:border-zinc-800 dark:bg-zinc-950/70 dark:hover:border-zinc-700'
-              } ${!allowed ? 'opacity-70' : ''}`}
-            >
-              <div
-                className={`relative mb-3 h-16 overflow-hidden rounded-xl bg-gradient-to-br ${theme.previewClassName}`}
-              >
-                <span className={`absolute bottom-3 left-3 h-3 w-16 rounded-full ${theme.accentClassName}`} />
-                <span className="absolute right-3 top-3 h-8 w-8 rounded-full border-2 border-white/80 bg-white/70 shadow-sm dark:border-black/60 dark:bg-black/40" />
+            <div key={group.category}>
+              <div className="mb-3">
+                <h4 className="text-sm font-black text-zinc-950 dark:text-white">
+                  {group.title}
+                </h4>
+                <p className="mt-1 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+                  {group.description}
+                </p>
               </div>
 
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-sm font-black text-zinc-950 dark:text-white">
-                    {theme.name}
-                  </p>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {groupThemes.map((theme) => {
+                  const allowed = canUseProfileTheme(tier, theme.key)
+                  const selected = selectedTheme === theme.key
+                  const saved = savedTheme === theme.key
 
-                  <p className="mt-1 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
-                    {theme.description}
-                  </p>
-                </div>
+                  return (
+                    <button
+                      key={theme.key}
+                      type="button"
+                      onClick={() => allowed && onChange(theme.key)}
+                      disabled={!allowed || saving}
+                      className={`min-h-40 rounded-2xl border p-3 text-left shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed ${
+                        selected
+                          ? 'border-zinc-950 bg-white ring-2 ring-zinc-950/10 dark:border-white dark:bg-zinc-950 dark:ring-white/10'
+                          : 'border-zinc-200 bg-white/80 hover:border-zinc-300 hover:bg-white dark:border-zinc-800 dark:bg-zinc-950/70 dark:hover:border-zinc-700'
+                      } ${!allowed ? 'opacity-70' : ''}`}
+                    >
+                      <div
+                        className={`relative mb-3 h-20 overflow-hidden rounded-xl bg-gradient-to-br ${theme.previewClassName}`}
+                      >
+                        {theme.postAccentClassName && (
+                          <span className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${theme.postAccentClassName}`} />
+                        )}
+                        <span className="absolute bottom-3 left-3 right-3 h-7 rounded-xl bg-white/70 shadow-sm ring-1 ring-black/5 dark:bg-black/35 dark:ring-white/10">
+                          <span className={`absolute left-2 top-1/2 h-2 w-12 -translate-y-1/2 rounded-full ${theme.accentClassName}`} />
+                        </span>
+                        <span className={`absolute right-3 top-4 h-9 w-9 rounded-full border-2 border-white/80 bg-white/70 shadow-sm ring-2 ring-zinc-200 ring-offset-1 ring-offset-white dark:border-black/60 dark:bg-black/40 dark:ring-zinc-700 dark:ring-offset-zinc-950 ${theme.avatarFrameClassName}`} />
+                      </div>
 
-                {selected ? (
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-zinc-950 text-white dark:bg-white dark:text-black">
-                    <Check className="h-4 w-4" />
-                  </span>
-                ) : !allowed ? (
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-zinc-200 text-zinc-400 dark:border-zinc-800">
-                    <Lock className="h-3.5 w-3.5" />
-                  </span>
-                ) : null}
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-black text-zinc-950 dark:text-white">
+                            {theme.name}
+                          </p>
+
+                          <p className="mt-1 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+                            {theme.description}
+                          </p>
+                        </div>
+
+                        {selected ? (
+                          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-zinc-950 text-white dark:bg-white dark:text-black">
+                            <Check className="h-4 w-4" />
+                          </span>
+                        ) : !allowed ? (
+                          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-zinc-200 text-zinc-400 dark:border-zinc-800">
+                            <Lock className="h-3.5 w-3.5" />
+                          </span>
+                        ) : null}
+                      </div>
+
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <span className="rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-[11px] font-bold text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300">
+                          {allowed ? getProfileThemeAccessLabel(theme) : getLockedLabel(theme.minimumTier)}
+                        </span>
+
+                        {saved && (
+                          <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-bold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200">
+                            Atual
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  )
+                })}
               </div>
-
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <span className="rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-[11px] font-bold text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300">
-                  {allowed ? getProfileThemeAccessLabel(theme) : getLockedLabel(theme.minimumTier)}
-                </span>
-
-                {saved && (
-                  <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-bold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200">
-                    Atual
-                  </span>
-                )}
-              </div>
-            </button>
+            </div>
           )
         })}
       </div>
@@ -143,7 +168,7 @@ export default function ProfileThemeSelector({
               Previa selecionada: {selectedThemeConfig.name}
             </p>
             <p className="mt-1 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
-              O perfil publico usa fallback para o padrao se o beneficio expirar.
+              O perfil publico e o feed usam fallback para o padrao se o beneficio expirar.
             </p>
           </div>
 

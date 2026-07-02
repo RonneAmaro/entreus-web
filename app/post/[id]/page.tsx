@@ -23,6 +23,7 @@ import { canViewAdultContent } from '@/lib/content-access'
 import { applyPostVisibilityFilters } from '@/lib/post-visibility'
 import { isMissingPaidPostColumnError, isPaidPost } from '@/lib/paid-posts'
 import { protectPostForViewer } from '@/lib/protected-post-access'
+import { resolveUserTier } from '@/lib/user-tiers'
 
 type VisibilityType = 'public' | 'followers' | 'private'
 
@@ -30,6 +31,9 @@ type Profile = {
   username: string
   display_name: string | null
   avatar_url: string | null
+  vip_status?: string | null
+  vip_expires_at?: string | null
+  profile_theme?: string | null
 }
 
 type CurrentProfile = {
@@ -294,7 +298,10 @@ export default function PostPage() {
           profiles (
             username,
             display_name,
-            avatar_url
+            avatar_url,
+            vip_status,
+            vip_expires_at,
+            profile_theme
           )
         `
       const postSelectFallback = `
@@ -312,7 +319,10 @@ export default function PostPage() {
           profiles (
             username,
             display_name,
-            avatar_url
+            avatar_url,
+            vip_status,
+            vip_expires_at,
+            profile_theme
           )
         `
 
@@ -1122,6 +1132,11 @@ export default function PostPage() {
               onDelete={handleDeletePost}
               onReport={handleReportPost}
               onPaidPostUnlocked={refreshPaidPostContent}
+              authorTier={resolveUserTier({
+                vipStatus: post.profiles?.vip_status,
+                vipExpiresAt: post.profiles?.vip_expires_at,
+              })}
+              authorProfileTheme={post.profiles?.profile_theme}
             />
 
             {!canInteract && (
