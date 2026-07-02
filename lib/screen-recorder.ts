@@ -46,9 +46,44 @@ export type ScreenRecorderRect = ScreenRecorderSize & {
   y: number
 }
 
+export type ScreenRecorderOverlayLayout = ScreenRecorderRect
+
 export type ScreenRecorderPoint = {
   x: number
   y: number
+}
+
+export type ScreenRecorderOverlayConstraints = Partial<ScreenRecorderSize> & {
+  maxWidth?: number
+  maxHeight?: number
+}
+
+export const SCREEN_RECORDER_DEFAULT_WEBCAM_LAYOUT: ScreenRecorderOverlayLayout = {
+  x: 0.74,
+  y: 0.72,
+  width: 0.22,
+  height: 0.22,
+}
+
+export const SCREEN_RECORDER_DEFAULT_TOOLBAR_LAYOUT: ScreenRecorderOverlayLayout = {
+  x: 0.03,
+  y: 0.18,
+  width: 0.08,
+  height: 0.58,
+}
+
+export const SCREEN_RECORDER_WEBCAM_LAYOUT_CONSTRAINTS: Required<ScreenRecorderOverlayConstraints> = {
+  width: 0.12,
+  height: 0.12,
+  maxWidth: 0.48,
+  maxHeight: 0.56,
+}
+
+export const SCREEN_RECORDER_TOOLBAR_LAYOUT_CONSTRAINTS: Required<ScreenRecorderOverlayConstraints> = {
+  width: 0.06,
+  height: 0.36,
+  maxWidth: 0.18,
+  maxHeight: 0.78,
 }
 
 type MediaDevicesProbe = {
@@ -244,6 +279,42 @@ export function getWebcamOverlayRect({
     y: top ? margin : canvasHeight - height - margin,
     width,
     height,
+  }
+}
+
+export function clampScreenRecorderOverlayLayout(
+  layout: Partial<ScreenRecorderOverlayLayout> | null | undefined,
+  constraints: ScreenRecorderOverlayConstraints = {},
+): ScreenRecorderOverlayLayout {
+  const minWidth = clampNumber(Number(constraints.width ?? 0.06), 0.01, 1)
+  const minHeight = clampNumber(Number(constraints.height ?? 0.06), 0.01, 1)
+  const maxWidth = clampNumber(Number(constraints.maxWidth ?? 1), minWidth, 1)
+  const maxHeight = clampNumber(Number(constraints.maxHeight ?? 1), minHeight, 1)
+  const width = clampNumber(Number(layout?.width), minWidth, maxWidth)
+  const height = clampNumber(Number(layout?.height), minHeight, maxHeight)
+
+  return {
+    x: clampNumber(Number(layout?.x), 0, 1 - width),
+    y: clampNumber(Number(layout?.y), 0, 1 - height),
+    width,
+    height,
+  }
+}
+
+export function getScreenRecorderOverlayRect(
+  layout: Partial<ScreenRecorderOverlayLayout> | null | undefined,
+  canvasSize: ScreenRecorderSize,
+  constraints: ScreenRecorderOverlayConstraints = {},
+): ScreenRecorderRect {
+  const canvasWidth = Math.max(1, Math.round(canvasSize.width))
+  const canvasHeight = Math.max(1, Math.round(canvasSize.height))
+  const safeLayout = clampScreenRecorderOverlayLayout(layout, constraints)
+
+  return {
+    x: Math.round(safeLayout.x * canvasWidth),
+    y: Math.round(safeLayout.y * canvasHeight),
+    width: Math.max(1, Math.round(safeLayout.width * canvasWidth)),
+    height: Math.max(1, Math.round(safeLayout.height * canvasHeight)),
   }
 }
 

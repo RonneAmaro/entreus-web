@@ -40,12 +40,9 @@ Quando microfone e áudio da tela estão presentes, a página tenta misturar as 
 
 ## Webcam
 
-A webcam é opcional e, no modo composto, é embutida no vídeo final como picture-in-picture. A posição pode ser escolhida antes de iniciar:
+A webcam é opcional e, no modo composto, é embutida no vídeo final como picture-in-picture. O overlay pode ser arrastado sobre o preview, redimensionado pelo canto inferior e alternado entre formato retangular arredondado ou circular.
 
-- inferior direita;
-- inferior esquerda;
-- superior direita;
-- superior esquerda.
+A posição, o tamanho e o formato ficam em `localStorage` para manter a preferência local do navegador. Se o modo composto não estiver disponível, a webcam continua aparecendo no preview como fallback visual, mas não entra no arquivo final.
 
 A webcam não vira uma janela sempre por cima do Windows como um app nativo. Ela aparece por cima da tela dentro do vídeo gravado.
 
@@ -61,7 +58,7 @@ Se IndexedDB não estiver disponível, o usuário deve baixar o vídeo e import�
 
 ## Marcações
 
-A caneta desenha sobre o preview composto e as marcações entram no vídeo final. O usuário pode escolher:
+A caneta desenha sobre o preview composto e as marcações entram no vídeo final. Os controles ficam em uma barra flutuante arrastável sobre o preview. O usuário pode escolher:
 
 - vermelho;
 - amarelo;
@@ -71,7 +68,7 @@ A caneta desenha sobre o preview composto e as marcações entram no vídeo fina
 - preto;
 - espessura fina, média ou grossa.
 
-Também há ações para limpar todas as marcações e desfazer o último traço. O desenho usa mouse ou touch/pointer events e guarda os pontos normalizados em memória local do navegador.
+Também há ações para limpar todas as marcações e desfazer o último traço. A posição da barra flutuante fica em `localStorage`. O desenho usa mouse ou touch/pointer events e guarda os pontos normalizados em memória local do navegador.
 
 Próximos passos planejados:
 
@@ -79,8 +76,7 @@ Próximos passos planejados:
 - marca-texto;
 - círculos;
 - texto;
-- borracha;
-- arrastar a webcam diretamente no canvas.
+- borracha por área.
 
 ## Arquivo gerado
 

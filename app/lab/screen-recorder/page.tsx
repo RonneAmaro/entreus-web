@@ -8,7 +8,10 @@ import {
   Download,
   Eraser,
   ExternalLink,
+  Circle,
+  GripVertical,
   Loader2,
+  Maximize2,
   Mic,
   Monitor,
   Pause,
@@ -24,21 +27,26 @@ import {
 import {
   SCREEN_RECORDER_CANVAS_FALLBACK_MESSAGE,
   SCREEN_RECORDER_CANVAS_FPS,
+  SCREEN_RECORDER_DEFAULT_TOOLBAR_LAYOUT,
+  SCREEN_RECORDER_DEFAULT_WEBCAM_LAYOUT,
+  SCREEN_RECORDER_TOOLBAR_LAYOUT_CONSTRAINTS,
+  SCREEN_RECORDER_WEBCAM_LAYOUT_CONSTRAINTS,
   buildScreenRecordingFileName,
+  clampScreenRecorderOverlayLayout,
   createScreenRecordingFileName,
   formatRecordingDuration,
   getBestScreenRecorderMimeType,
   getScreenRecorderCanvasSize,
   getScreenRecorderContainRect,
   getScreenRecorderErrorMessage,
+  getScreenRecorderOverlayRect,
   getScreenRecorderSupport,
-  getWebcamOverlayRect,
   isMp4MimeType,
   normalizeScreenRecorderPoint,
+  type ScreenRecorderOverlayLayout,
   type ScreenRecorderPoint,
   type ScreenRecorderSize,
   type ScreenRecorderSupport,
-  type ScreenRecorderWebcamPosition,
 } from '@/lib/screen-recorder'
 import {
   clearOldLocalVideoDrafts,
@@ -54,12 +62,30 @@ import {
 
 type RecorderStatus = 'idle' | 'requesting' | 'recording' | 'paused' | 'stopped' | 'error'
 type MarkerSize = 'thin' | 'medium' | 'thick'
+type WebcamShape = 'rounded' | 'circle'
+type OverlayTarget = 'webcam' | 'toolbar'
+type OverlayAction = 'move' | 'resize'
 
 type DrawingStroke = {
   id: string
   color: string
   width: number
   points: ScreenRecorderPoint[]
+}
+
+type OverlayInteraction = {
+  target: OverlayTarget
+  action: OverlayAction
+  pointerId: number
+  startClientX: number
+  startClientY: number
+  startLayout: ScreenRecorderOverlayLayout
+}
+
+type StoredOverlaySettings = {
+  webcamLayout?: Partial<ScreenRecorderOverlayLayout>
+  toolbarLayout?: Partial<ScreenRecorderOverlayLayout>
+  webcamShape?: WebcamShape
 }
 
 const MARKER_COLORS = [
@@ -75,18 +101,74 @@ const MARKER_SIZES: { id: MarkerSize; label: string; width: number }[] = [
   { id: 'medium', label: 'Média', width: 9 },
   { id: 'thick', label: 'Grossa', width: 15 },
 ]
-const WEBCAM_POSITION_OPTIONS: { id: ScreenRecorderWebcamPosition; label: string }[] = [
-  { id: 'bottom-right', label: 'Inf. direita' },
-  { id: 'bottom-left', label: 'Inf. esquerda' },
-  { id: 'top-right', label: 'Sup. direita' },
-  { id: 'top-left', label: 'Sup. esquerda' },
-]
+const OVERLAY_SETTINGS_STORAGE_KEY = 'entreus:screen-recorder-overlays:v1'
 
 function stopStream(stream: MediaStream | null) {
   stream?.getTracks().forEach((track) => track.stop())
 }
 
+function getScreenRecorderNow() {
+  return Date.now()
+}
+
+function getStoredOverlaySettings(): StoredOverlaySettings {
+  if (typeof window === 'undefined') return {}
+
+  try {
+    const raw = window.localStorage.getItem(OVERLAY_SETTINGS_STORAGE_KEY)
+    return raw ? JSON.parse(raw) as StoredOverlaySettings : {}
+  } catch {
+    return {}
+  }
+}
+
+function getInitialWebcamLayout() {
+  const stored = getStoredOverlaySettings()
+  const shape = stored.webcamShape === 'circle' ? 'circle' : 'rounded'
+
+  return normalizeWebcamLayoutForShape(
+    stored.webcamLayout || SCREEN_RECORDER_DEFAULT_WEBCAM_LAYOUT,
+    shape,
+  )
+}
+
+function getInitialToolbarLayout() {
+  const stored = getStoredOverlaySettings()
+
+  return clampScreenRecorderOverlayLayout(
+    stored.toolbarLayout || SCREEN_RECORDER_DEFAULT_TOOLBAR_LAYOUT,
+    SCREEN_RECORDER_TOOLBAR_LAYOUT_CONSTRAINTS,
+  )
+}
+
+function getInitialWebcamShape(): WebcamShape {
+  const stored = getStoredOverlaySettings()
+
+  return stored.webcamShape === 'circle' ? 'circle' : 'rounded'
+}
+
+function normalizeWebcamLayoutForShape(
+  layout: Partial<ScreenRecorderOverlayLayout> | null | undefined,
+  shape: WebcamShape,
+): ScreenRecorderOverlayLayout {
+  const safeLayout = clampScreenRecorderOverlayLayout(layout, SCREEN_RECORDER_WEBCAM_LAYOUT_CONSTRAINTS)
+
+  if (shape !== 'circle') return safeLayout
+
+  const size = Math.min(
+    Math.max(safeLayout.width, safeLayout.height),
+    SCREEN_RECORDER_WEBCAM_LAYOUT_CONSTRAINTS.maxWidth,
+    SCREEN_RECORDER_WEBCAM_LAYOUT_CONSTRAINTS.maxHeight,
+  )
+
+  return clampScreenRecorderOverlayLayout(
+    { ...safeLayout, width: size, height: size },
+    SCREEN_RECORDER_WEBCAM_LAYOUT_CONSTRAINTS,
+  )
+}
+
 export default function LabScreenRecorderPage() {
+  const previewStageRef = useRef<HTMLDivElement | null>(null)
   const screenPreviewRef = useRef<HTMLVideoElement | null>(null)
   const webcamPreviewRef = useRef<HTMLVideoElement | null>(null)
   const compositeCanvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -108,6 +190,7 @@ export default function LabScreenRecorderPage() {
   const startedAtRef = useRef(0)
   const pausedAtRef = useRef(0)
   const pausedDurationRef = useRef(0)
+  const overlayInteractionRef = useRef<OverlayInteraction | null>(null)
 
   const [support, setSupport] = useState<ScreenRecorderSupport | null>(() => {
     if (typeof window === 'undefined') return null
@@ -124,7 +207,9 @@ export default function LabScreenRecorderPage() {
   const [captureScreenAudio, setCaptureScreenAudio] = useState(true)
   const [isCompositeMode, setIsCompositeMode] = useState(true)
   const [canvasSize, setCanvasSize] = useState<ScreenRecorderSize>({ width: 1280, height: 720 })
-  const [webcamPosition, setWebcamPosition] = useState<ScreenRecorderWebcamPosition>('bottom-right')
+  const [webcamOverlayLayout, setWebcamOverlayLayout] = useState<ScreenRecorderOverlayLayout>(getInitialWebcamLayout)
+  const [annotationToolbarLayout, setAnnotationToolbarLayout] = useState<ScreenRecorderOverlayLayout>(getInitialToolbarLayout)
+  const [webcamShape, setWebcamShape] = useState<WebcamShape>(getInitialWebcamShape)
   const [penEnabled, setPenEnabled] = useState(false)
   const [selectedMarkerColor, setSelectedMarkerColor] = useState(MARKER_COLORS[0].value)
   const [selectedMarkerSize, setSelectedMarkerSize] = useState<MarkerSize>('medium')
@@ -198,6 +283,21 @@ export default function LabScreenRecorderPage() {
     }
   }, [])
 
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        OVERLAY_SETTINGS_STORAGE_KEY,
+        JSON.stringify({
+          webcamLayout: webcamOverlayLayout,
+          toolbarLayout: annotationToolbarLayout,
+          webcamShape,
+        } satisfies StoredOverlaySettings),
+      )
+    } catch {
+      // Local storage is optional; the recorder still works with in-memory state.
+    }
+  }, [annotationToolbarLayout, webcamOverlayLayout, webcamShape])
+
   function clearTimer() {
     if (timerRef.current) {
       window.clearInterval(timerRef.current)
@@ -208,7 +308,7 @@ export default function LabScreenRecorderPage() {
   function getCurrentElapsedMs() {
     if (!startedAtRef.current) return 0
 
-    const now = pausedAtRef.current || Date.now()
+    const now = pausedAtRef.current || getScreenRecorderNow()
     return Math.max(0, now - startedAtRef.current - pausedDurationRef.current)
   }
 
@@ -311,6 +411,18 @@ export default function LabScreenRecorderPage() {
     context.drawImage(video, sx, sy, sw, sh, x, y, width, height)
   }
 
+  function addWebcamOverlayPath(context: CanvasRenderingContext2D, rect: ScreenRecorderSize & { x: number; y: number }) {
+    if (webcamShape === 'circle') {
+      const radius = Math.min(rect.width, rect.height) / 2
+      context.beginPath()
+      context.arc(rect.x + rect.width / 2, rect.y + rect.height / 2, radius, 0, Math.PI * 2)
+      context.closePath()
+      return
+    }
+
+    addRoundedRectPath(context, rect.x, rect.y, rect.width, rect.height, Math.round(rect.width * 0.08))
+  }
+
   function drawStrokes(context: CanvasRenderingContext2D, width: number, height: number) {
     for (const stroke of strokesRef.current) {
       if (stroke.points.length === 0) continue
@@ -372,18 +484,16 @@ export default function LabScreenRecorderPage() {
 
     const webcamVideo = webcamSourceVideoRef.current
     if (useWebcam && webcamVideo && webcamVideo.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
-      const webcamRect = getWebcamOverlayRect({
-        canvasSize: { width, height },
-        position: webcamPosition,
-        aspectRatio: webcamVideo.videoWidth && webcamVideo.videoHeight
-          ? webcamVideo.videoWidth / webcamVideo.videoHeight
-          : 16 / 9,
-      })
+      const webcamRect = getScreenRecorderOverlayRect(
+        getWebcamLayoutForSize({ width, height }),
+        { width, height },
+        SCREEN_RECORDER_WEBCAM_LAYOUT_CONSTRAINTS,
+      )
 
       context.save()
       context.shadowColor = 'rgba(0, 0, 0, 0.55)'
       context.shadowBlur = Math.max(10, Math.round(width * 0.012))
-      addRoundedRectPath(context, webcamRect.x, webcamRect.y, webcamRect.width, webcamRect.height, Math.round(webcamRect.width * 0.08))
+      addWebcamOverlayPath(context, webcamRect)
       context.fillStyle = '#000000'
       context.fill()
       context.clip()
@@ -393,7 +503,7 @@ export default function LabScreenRecorderPage() {
       context.save()
       context.strokeStyle = 'rgba(255, 255, 255, 0.72)'
       context.lineWidth = Math.max(2, Math.round(width * 0.0015))
-      addRoundedRectPath(context, webcamRect.x, webcamRect.y, webcamRect.width, webcamRect.height, Math.round(webcamRect.width * 0.08))
+      addWebcamOverlayPath(context, webcamRect)
       context.stroke()
       context.restore()
     }
@@ -421,6 +531,173 @@ export default function LabScreenRecorderPage() {
 
   function getSelectedMarkerWidth() {
     return MARKER_SIZES.find((size) => size.id === selectedMarkerSize)?.width || 9
+  }
+
+  function getWebcamLayoutForSize(size: ScreenRecorderSize, layout = webcamOverlayLayout) {
+    const safeLayout = clampScreenRecorderOverlayLayout(layout, SCREEN_RECORDER_WEBCAM_LAYOUT_CONSTRAINTS)
+
+    if (webcamShape !== 'circle') return safeLayout
+
+    const currentPixelWidth = safeLayout.width * size.width
+    const currentPixelHeight = safeLayout.height * size.height
+    const minPixelSize = Math.max(96, Math.min(size.width, size.height) * 0.12)
+    const maxPixelSize = Math.min(size.width * SCREEN_RECORDER_WEBCAM_LAYOUT_CONSTRAINTS.maxWidth, size.height * SCREEN_RECORDER_WEBCAM_LAYOUT_CONSTRAINTS.maxHeight)
+    const pixelSize = Math.min(Math.max(Math.max(currentPixelWidth, currentPixelHeight), minPixelSize), maxPixelSize)
+
+    return clampScreenRecorderOverlayLayout(
+      {
+        ...safeLayout,
+        width: pixelSize / size.width,
+        height: pixelSize / size.height,
+      },
+      SCREEN_RECORDER_WEBCAM_LAYOUT_CONSTRAINTS,
+    )
+  }
+
+  function getPreviewStageSize() {
+    const rect = previewStageRef.current?.getBoundingClientRect()
+
+    if (!rect || rect.width <= 0 || rect.height <= 0) return null
+
+    return {
+      width: rect.width,
+      height: rect.height,
+    }
+  }
+
+  function getOverlayLayout(target: OverlayTarget) {
+    return target === 'webcam' ? webcamOverlayLayout : annotationToolbarLayout
+  }
+
+  function setOverlayLayout(target: OverlayTarget, layout: Partial<ScreenRecorderOverlayLayout>) {
+    if (target === 'webcam') {
+      setWebcamOverlayLayout((current) => {
+        const nextLayout = clampScreenRecorderOverlayLayout(
+          { ...current, ...layout },
+          SCREEN_RECORDER_WEBCAM_LAYOUT_CONSTRAINTS,
+        )
+        const stageSize = getPreviewStageSize()
+
+        return stageSize ? getWebcamLayoutForSize(stageSize, nextLayout) : nextLayout
+      })
+      return
+    }
+
+    setAnnotationToolbarLayout((current) => clampScreenRecorderOverlayLayout(
+      { ...current, ...layout },
+      SCREEN_RECORDER_TOOLBAR_LAYOUT_CONSTRAINTS,
+    ))
+  }
+
+  function startOverlayInteraction(
+    event: PointerEvent<HTMLElement>,
+    target: OverlayTarget,
+    action: OverlayAction,
+  ) {
+    const stageSize = getPreviewStageSize()
+    if (!stageSize) return
+
+    event.preventDefault()
+    event.stopPropagation()
+    event.currentTarget.setPointerCapture(event.pointerId)
+    overlayInteractionRef.current = {
+      target,
+      action,
+      pointerId: event.pointerId,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      startLayout: target === 'webcam'
+        ? getWebcamLayoutForSize(stageSize, getOverlayLayout(target))
+        : getOverlayLayout(target),
+    }
+  }
+
+  function updateOverlayInteraction(event: PointerEvent<HTMLElement>) {
+    const interaction = overlayInteractionRef.current
+    const stageSize = getPreviewStageSize()
+    if (!interaction || interaction.pointerId !== event.pointerId || !stageSize) return
+
+    event.preventDefault()
+    event.stopPropagation()
+
+    const deltaX = event.clientX - interaction.startClientX
+    const deltaY = event.clientY - interaction.startClientY
+
+    if (interaction.action === 'move') {
+      setOverlayLayout(interaction.target, {
+        ...interaction.startLayout,
+        x: interaction.startLayout.x + deltaX / stageSize.width,
+        y: interaction.startLayout.y + deltaY / stageSize.height,
+      })
+      return
+    }
+
+    if (interaction.target !== 'webcam') return
+
+    if (webcamShape === 'circle') {
+      const startPixelSize = Math.max(
+        interaction.startLayout.width * stageSize.width,
+        interaction.startLayout.height * stageSize.height,
+      )
+      const nextPixelSize = Math.max(96, startPixelSize + Math.max(deltaX, deltaY))
+      setOverlayLayout('webcam', {
+        ...interaction.startLayout,
+        width: nextPixelSize / stageSize.width,
+        height: nextPixelSize / stageSize.height,
+      })
+      return
+    }
+
+    setOverlayLayout('webcam', {
+      ...interaction.startLayout,
+      width: interaction.startLayout.width + deltaX / stageSize.width,
+      height: interaction.startLayout.height + deltaY / stageSize.height,
+    })
+  }
+
+  function finishOverlayInteraction(event: PointerEvent<HTMLElement>) {
+    const interaction = overlayInteractionRef.current
+    if (!interaction || interaction.pointerId !== event.pointerId) return
+
+    event.preventDefault()
+    event.stopPropagation()
+
+    const pointerTarget = event.target instanceof HTMLElement ? event.target : event.currentTarget
+    if (pointerTarget.hasPointerCapture(event.pointerId)) {
+      pointerTarget.releasePointerCapture(event.pointerId)
+    } else if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+
+    overlayInteractionRef.current = null
+  }
+
+  function updateWebcamShape(nextShape: WebcamShape) {
+    setWebcamShape(nextShape)
+    setWebcamOverlayLayout((current) => {
+      const stageSize = getPreviewStageSize()
+      const safeLayout = normalizeWebcamLayoutForShape(current, nextShape)
+
+      if (!stageSize || nextShape !== 'circle') return safeLayout
+
+      const pixelSize = Math.max(safeLayout.width * stageSize.width, safeLayout.height * stageSize.height)
+      return clampScreenRecorderOverlayLayout(
+        {
+          ...safeLayout,
+          width: pixelSize / stageSize.width,
+          height: pixelSize / stageSize.height,
+        },
+        SCREEN_RECORDER_WEBCAM_LAYOUT_CONSTRAINTS,
+      )
+    })
+  }
+
+  function resetOverlayLayouts() {
+    setWebcamOverlayLayout(normalizeWebcamLayoutForShape(SCREEN_RECORDER_DEFAULT_WEBCAM_LAYOUT, webcamShape))
+    setAnnotationToolbarLayout(clampScreenRecorderOverlayLayout(
+      SCREEN_RECORDER_DEFAULT_TOOLBAR_LAYOUT,
+      SCREEN_RECORDER_TOOLBAR_LAYOUT_CONSTRAINTS,
+    ))
   }
 
   function cleanupStreams() {
@@ -518,7 +795,7 @@ export default function LabScreenRecorderPage() {
     startCompositeLoop()
 
     setNoticeMessage(
-      'Modo composto ativo: webcam e marcações aparecem no vídeo final. A webcam não fica por cima do Windows; ela é embutida na gravação.',
+      'Modo composto ativo: webcam e marcações aparecem no vídeo final na posição atual do preview. A webcam não fica por cima do Windows; ela é embutida na gravação.',
     )
 
     return canvas.captureStream(SCREEN_RECORDER_CANVAS_FPS)
@@ -644,7 +921,7 @@ export default function LabScreenRecorderPage() {
         track.addEventListener('ended', stopRecording, { once: true })
       })
 
-      startedAtRef.current = Date.now()
+      startedAtRef.current = getScreenRecorderNow()
       pausedAtRef.current = 0
       pausedDurationRef.current = 0
       recorder.start(1000)
@@ -664,7 +941,7 @@ export default function LabScreenRecorderPage() {
     if (!recorder || recorder.state !== 'recording' || typeof recorder.pause !== 'function') return
 
     recorder.pause()
-    pausedAtRef.current = Date.now()
+    pausedAtRef.current = getScreenRecorderNow()
     setStatus('paused')
     syncElapsedTime()
   }
@@ -673,7 +950,7 @@ export default function LabScreenRecorderPage() {
     const recorder = mediaRecorderRef.current
     if (!recorder || recorder.state !== 'paused' || typeof recorder.resume !== 'function') return
 
-    pausedDurationRef.current += pausedAtRef.current ? Date.now() - pausedAtRef.current : 0
+    pausedDurationRef.current += pausedAtRef.current ? getScreenRecorderNow() - pausedAtRef.current : 0
     pausedAtRef.current = 0
     recorder.resume()
     setStatus('recording')
@@ -835,6 +1112,20 @@ export default function LabScreenRecorderPage() {
   const canResume = status === 'paused' && canPauseResume
   const isRecordingMp4 = isMp4MimeType(recordingMimeType || recordingBlob?.type)
   const recordingDownloadLabel = isRecordingMp4 ? 'Baixar MP4' : 'Baixar WebM'
+  const visibleWebcamLayout = getWebcamLayoutForSize(canvasSize)
+  const webcamOverlayStyle = {
+    left: `${visibleWebcamLayout.x * 100}%`,
+    top: `${visibleWebcamLayout.y * 100}%`,
+    width: `${visibleWebcamLayout.width * 100}%`,
+    height: `${visibleWebcamLayout.height * 100}%`,
+  }
+  const toolbarOverlayStyle = {
+    left: `${annotationToolbarLayout.x * 100}%`,
+    top: `${annotationToolbarLayout.y * 100}%`,
+    width: `${annotationToolbarLayout.width * 100}%`,
+    height: `${annotationToolbarLayout.height * 100}%`,
+  }
+  const webcamShapeClassName = webcamShape === 'circle' ? 'rounded-full' : 'rounded-2xl'
 
   return (
     <main className="min-h-screen bg-zinc-950 px-3 py-5 text-white sm:px-5">
@@ -931,24 +1222,42 @@ export default function LabScreenRecorderPage() {
 
             {useWebcam && (
               <div className="rounded-2xl border border-emerald-300/15 bg-emerald-500/10 p-4">
-                <span className="text-sm font-black text-emerald-100">Posição da webcam</span>
+                <span className="text-sm font-black text-emerald-100">Webcam flutuante</span>
                 <div className="mt-3 grid grid-cols-2 gap-2">
-                  {WEBCAM_POSITION_OPTIONS.map((option) => (
-                    <button
-                      key={option.id}
-                      type="button"
-                      disabled={isBusy || isRecording}
-                      onClick={() => setWebcamPosition(option.id)}
-                      className={`h-9 rounded-full border px-3 text-xs font-black transition ${
-                        webcamPosition === option.id
-                          ? 'border-emerald-200 bg-emerald-300 text-zinc-950'
-                          : 'border-white/10 bg-white/5 text-emerald-100 hover:bg-white/10'
-                      } disabled:cursor-not-allowed disabled:opacity-60`}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
+                  {[
+                    { id: 'rounded' as const, label: 'Retangular', icon: Square },
+                    { id: 'circle' as const, label: 'Redonda', icon: Circle },
+                  ].map((option) => {
+                    const Icon = option.icon
+
+                    return (
+                      <button
+                        key={option.id}
+                        type="button"
+                        onClick={() => updateWebcamShape(option.id)}
+                        className={`inline-flex h-9 items-center justify-center gap-1.5 rounded-full border px-3 text-xs font-black transition ${
+                          webcamShape === option.id
+                            ? 'border-emerald-200 bg-emerald-300 text-zinc-950'
+                            : 'border-white/10 bg-white/5 text-emerald-100 hover:bg-white/10'
+                        }`}
+                      >
+                        <Icon className="h-3.5 w-3.5" />
+                        {option.label}
+                      </button>
+                    )
+                  })}
                 </div>
+                <button
+                  type="button"
+                  onClick={resetOverlayLayouts}
+                  className="mt-3 inline-flex h-9 w-full items-center justify-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 text-xs font-black text-emerald-100 transition hover:bg-white/10"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  Reposicionar overlays
+                </button>
+                <p className="mt-3 text-xs leading-5 text-emerald-100/70">
+                  Arraste a webcam no preview e use o canto inferior para redimensionar.
+                </p>
               </div>
             )}
 
@@ -972,75 +1281,20 @@ export default function LabScreenRecorderPage() {
             <div className="rounded-2xl border border-dashed border-white/15 bg-white/[0.03] p-4">
               <div className="flex items-center gap-2 text-sm font-black text-zinc-200">
                 <PenLine className="h-4 w-4" />
-                Marcações
-              </div>
-              <div className="mt-3 flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setPenEnabled((current) => !current)}
-                  className={`inline-flex h-9 items-center gap-2 rounded-full border px-3 text-xs font-black transition ${
-                    penEnabled
-                      ? 'border-cyan-200 bg-cyan-300 text-zinc-950'
-                      : 'border-white/10 bg-white/5 text-zinc-100 hover:bg-white/10'
-                  }`}
-                >
-                  <PenLine className="h-4 w-4" />
-                  {penEnabled ? 'Caneta ligada' : 'Caneta'}
-                </button>
-                <button
-                  type="button"
-                  onClick={undoLastStroke}
-                  disabled={strokeCount === 0}
-                  className="inline-flex h-9 items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 text-xs font-black text-zinc-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  <Undo2 className="h-4 w-4" />
-                  Desfazer
-                </button>
-                <button
-                  type="button"
-                  onClick={clearDrawingStrokes}
-                  disabled={strokeCount === 0}
-                  className="inline-flex h-9 items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 text-xs font-black text-zinc-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  <Eraser className="h-4 w-4" />
-                  Limpar
-                </button>
-              </div>
-              <div className="mt-3 flex gap-2">
-                {MARKER_COLORS.map((color) => (
-                  <button
-                    key={color.value}
-                    type="button"
-                    onClick={() => setSelectedMarkerColor(color.value)}
-                    className={`h-7 w-7 rounded-full border transition ${
-                      selectedMarkerColor === color.value
-                        ? 'scale-110 border-white ring-2 ring-cyan-300'
-                        : 'border-white/25 hover:scale-105'
-                    }`}
-                    style={{ backgroundColor: color.value }}
-                    aria-label={`Cor ${color.label}`}
-                  />
-                ))}
-              </div>
-              <div className="mt-3 grid grid-cols-3 gap-2">
-                {MARKER_SIZES.map((size) => (
-                  <button
-                    key={size.id}
-                    type="button"
-                    onClick={() => setSelectedMarkerSize(size.id)}
-                    className={`h-8 rounded-full border px-2 text-xs font-black transition ${
-                      selectedMarkerSize === size.id
-                        ? 'border-cyan-200 bg-cyan-300 text-zinc-950'
-                        : 'border-white/10 bg-white/5 text-zinc-200 hover:bg-white/10'
-                    }`}
-                  >
-                    {size.label}
-                  </button>
-                ))}
+                Marcações flutuantes
               </div>
               <p className="mt-3 text-xs leading-5 text-zinc-500">
-                Desenhe sobre o preview composto durante a gravação para embutir as marcações no vídeo final.
+                Use a barra escura sobre o preview para ligar a caneta, escolher cores, desfazer ou limpar os traços.
+                Ela tambem pode ser arrastada para perto do ponto que voce estiver gravando.
               </p>
+              <div className="mt-3 flex flex-wrap gap-2 text-xs font-black text-zinc-300">
+                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
+                  {penEnabled ? 'Caneta ligada' : 'Caneta desligada'}
+                </span>
+                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
+                  {strokeCount} traços
+                </span>
+              </div>
             </div>
 
             <div className="grid gap-2">
@@ -1120,7 +1374,13 @@ export default function LabScreenRecorderPage() {
               </span>
             </div>
 
-            <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-zinc-950">
+            <div
+              ref={previewStageRef}
+              className="relative overflow-hidden rounded-2xl border border-white/10 bg-zinc-950"
+              onPointerMove={updateOverlayInteraction}
+              onPointerUp={finishOverlayInteraction}
+              onPointerCancel={finishOverlayInteraction}
+            >
               {isRecording || isBusy ? (
                 <div className="relative flex min-h-[22rem] items-center justify-center sm:min-h-[30rem]">
                   {isCompositeMode ? (
@@ -1145,14 +1405,6 @@ export default function LabScreenRecorderPage() {
                         playsInline
                         className="h-full max-h-[70vh] w-full object-contain"
                       />
-                      {useWebcam && webcamPreviewStream && (
-                        <video
-                          ref={webcamPreviewRef}
-                          muted
-                          playsInline
-                          className="absolute bottom-4 right-4 h-28 w-40 rounded-2xl border border-white/20 bg-black object-cover shadow-2xl shadow-black sm:h-36 sm:w-56"
-                        />
-                      )}
                     </>
                   )}
                 </div>
@@ -1169,6 +1421,142 @@ export default function LabScreenRecorderPage() {
                   </p>
                 </div>
               )}
+
+              {!recordingUrl && (
+                <>
+                  <div
+                    className="absolute z-20 flex min-h-44 min-w-16 flex-col overflow-hidden rounded-2xl border border-white/15 bg-zinc-950/90 shadow-2xl shadow-black/50 ring-1 ring-black/40 backdrop-blur"
+                    style={toolbarOverlayStyle}
+                  >
+                    <button
+                      type="button"
+                      onPointerDown={(event) => startOverlayInteraction(event, 'toolbar', 'move')}
+                      className="inline-flex h-8 cursor-grab items-center justify-center border-b border-white/10 bg-white/5 text-zinc-300 transition hover:bg-white/10 active:cursor-grabbing"
+                      aria-label="Mover barra de marcacoes"
+                      title="Mover barra de marcacoes"
+                    >
+                      <GripVertical className="h-4 w-4" />
+                    </button>
+
+                    <div className="flex flex-1 flex-col items-center gap-2 overflow-y-auto p-2">
+                      <button
+                        type="button"
+                        onClick={() => setPenEnabled((current) => !current)}
+                        className={`inline-flex h-9 w-9 items-center justify-center rounded-full border transition ${
+                          penEnabled
+                            ? 'border-cyan-200 bg-cyan-300 text-zinc-950'
+                            : 'border-white/10 bg-white/5 text-zinc-100 hover:bg-white/10'
+                        }`}
+                        aria-label={penEnabled ? 'Desligar caneta' : 'Ligar caneta'}
+                        aria-pressed={penEnabled}
+                        title={penEnabled ? 'Desligar caneta' : 'Ligar caneta'}
+                      >
+                        <PenLine className="h-4 w-4" />
+                      </button>
+
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {MARKER_COLORS.map((color) => (
+                          <button
+                            key={color.value}
+                            type="button"
+                            onClick={() => setSelectedMarkerColor(color.value)}
+                            className={`h-6 w-6 rounded-full border transition ${
+                              selectedMarkerColor === color.value
+                                ? 'scale-110 border-white ring-2 ring-cyan-300'
+                                : 'border-white/25 hover:scale-105'
+                            }`}
+                            style={{ backgroundColor: color.value }}
+                            aria-label={`Cor ${color.label}`}
+                            title={color.label}
+                          />
+                        ))}
+                      </div>
+
+                      <div className="grid w-full gap-1.5">
+                        {MARKER_SIZES.map((size) => (
+                          <button
+                            key={size.id}
+                            type="button"
+                            onClick={() => setSelectedMarkerSize(size.id)}
+                            className={`inline-flex h-7 items-center justify-center rounded-full border transition ${
+                              selectedMarkerSize === size.id
+                                ? 'border-cyan-200 bg-cyan-300 text-zinc-950'
+                                : 'border-white/10 bg-white/5 text-zinc-100 hover:bg-white/10'
+                            }`}
+                            aria-label={`Tamanho ${size.label}`}
+                            title={size.label}
+                          >
+                            <span
+                              className="w-6 rounded-full bg-current"
+                              style={{ height: Math.max(2, Math.round(size.width / 3)) }}
+                            />
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className="grid w-full grid-cols-2 gap-1.5">
+                        <button
+                          type="button"
+                          onClick={undoLastStroke}
+                          disabled={strokeCount === 0}
+                          className="inline-flex h-8 items-center justify-center rounded-full border border-white/10 bg-white/5 text-zinc-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+                          aria-label="Desfazer ultima marcacao"
+                          title="Desfazer ultima marcacao"
+                        >
+                          <Undo2 className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={clearDrawingStrokes}
+                          disabled={strokeCount === 0}
+                          className="inline-flex h-8 items-center justify-center rounded-full border border-white/10 bg-white/5 text-zinc-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+                          aria-label="Limpar marcacoes"
+                          title="Limpar marcacoes"
+                        >
+                          <Eraser className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {useWebcam && (
+                    <div
+                      className={`absolute z-10 overflow-hidden border border-white/60 shadow-2xl shadow-black/60 ring-1 ring-black/40 ${webcamShapeClassName} ${
+                        isCompositeMode && (isRecording || isBusy) ? 'bg-transparent' : 'bg-black/70'
+                      }`}
+                      style={webcamOverlayStyle}
+                      onPointerDown={(event) => startOverlayInteraction(event, 'webcam', 'move')}
+                      title="Arraste para mover a webcam"
+                    >
+                      {!isCompositeMode && webcamPreviewStream ? (
+                        <video
+                          ref={webcamPreviewRef}
+                          muted
+                          playsInline
+                          className={`h-full w-full object-cover ${webcamShapeClassName}`}
+                        />
+                      ) : !isRecording && !isBusy ? (
+                        <div className={`flex h-full w-full items-center justify-center ${webcamShapeClassName}`}>
+                          <Video className="h-8 w-8 text-emerald-100/80" />
+                        </div>
+                      ) : null}
+
+                      <div className="pointer-events-none absolute left-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/20 bg-black/50 text-white/80 backdrop-blur">
+                        <GripVertical className="h-3.5 w-3.5" />
+                      </div>
+                      <button
+                        type="button"
+                        onPointerDown={(event) => startOverlayInteraction(event, 'webcam', 'resize')}
+                        className="absolute bottom-1.5 right-1.5 inline-flex h-8 w-8 cursor-nwse-resize items-center justify-center rounded-full border border-white/25 bg-black/60 text-white transition hover:bg-black/80"
+                        aria-label="Redimensionar webcam"
+                        title="Redimensionar webcam"
+                      >
+                        <Maximize2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
 
             {(errorMessage || noticeMessage || editorMessage || mp4ExportMessage || isRecording) && (
@@ -1180,7 +1568,7 @@ export default function LabScreenRecorderPage() {
                 )}
                 {isRecording && isCompositeMode && (
                   <p className="rounded-2xl border border-cyan-300/20 bg-cyan-500/10 px-4 py-3 font-semibold text-cyan-100">
-                    Webcam e marcações aparecem no vídeo final quando o modo composto está ativo. A webcam não fica por cima do Windows como app nativo; ela é embutida na gravação.
+                    Webcam e marcações aparecem no vídeo final quando o modo composto está ativo, usando posição e tamanho atuais. A webcam não fica por cima do Windows como app nativo; ela é embutida na gravação.
                   </p>
                 )}
                 {errorMessage && (

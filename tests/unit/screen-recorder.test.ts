@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   SCREEN_RECORDER_CANVAS_FALLBACK_MESSAGE,
+  SCREEN_RECORDER_WEBCAM_LAYOUT_CONSTRAINTS,
   buildScreenRecordingFileName,
+  clampScreenRecorderOverlayLayout,
   createScreenRecordingFileName,
   formatRecordingDuration,
   getBestScreenRecorderMimeType,
@@ -9,6 +11,7 @@ import {
   getScreenRecorderCanvasSize,
   getScreenRecorderContainRect,
   getScreenRecorderErrorMessage,
+  getScreenRecorderOverlayRect,
   getScreenRecorderSupport,
   getWebcamOverlayRect,
   isMp4MimeType,
@@ -124,6 +127,34 @@ describe('screen recorder helpers', () => {
       x: 25,
       y: 25,
       width: 256,
+      height: 144,
+    })
+  })
+
+  it('clamps floating overlay layouts inside the recorder preview', () => {
+    expect(
+      clampScreenRecorderOverlayLayout(
+        { x: 0.95, y: -0.2, width: 0.72, height: 0.04 },
+        SCREEN_RECORDER_WEBCAM_LAYOUT_CONSTRAINTS,
+      ),
+    ).toEqual({
+      x: 0.52,
+      y: 0,
+      width: 0.48,
+      height: 0.12,
+    })
+  })
+
+  it('converts normalized floating overlay layouts to canvas pixels', () => {
+    expect(
+      getScreenRecorderOverlayRect(
+        { x: 0.5, y: 0.25, width: 0.25, height: 0.2 },
+        { width: 1280, height: 720 },
+      ),
+    ).toEqual({
+      x: 640,
+      y: 180,
+      width: 320,
       height: 144,
     })
   })
