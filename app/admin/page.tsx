@@ -9,6 +9,7 @@ import {
   Award,
   Bug,
   CheckCircle2,
+  ClipboardCheck,
   Coins,
   Banknote,
   DatabaseZap,
@@ -110,6 +111,13 @@ const adminCards = [
     description: 'Confira buckets, migrations e pontos criticos antes de liberar usuarios reais.',
     href: '/admin/security-check',
     icon: LockKeyhole,
+    badge: 'manual',
+  },
+  {
+    title: 'Checklist Beta Fechado',
+    description: 'Roteiro manual para validar criadores, monetizacao, 18+, admin, Lab, Meet e mobile.',
+    href: '/admin/beta-checklist',
+    icon: ClipboardCheck,
     badge: 'manual',
   },
   {
