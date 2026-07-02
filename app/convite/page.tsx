@@ -1,225 +1,176 @@
 import type { Metadata } from 'next'
+import type { ReactNode } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import {
+  ArrowRight,
   BadgeCheck,
+  BarChart3,
+  CheckCircle2,
   Coins,
+  Crown,
   Gift,
   HeartHandshake,
-  MessageCircle,
-  Play,
+  LockKeyhole,
   ShieldCheck,
   Sparkles,
   Users,
-  Video,
   WalletCards,
+  type LucideIcon,
 } from 'lucide-react'
 import BadgeVisual from '../components/BadgeVisual'
 import ItaCashAmount from '../components/ItaCashAmount'
 
 export const metadata: Metadata = {
-  title: 'Convite EntreUS',
-  description: 'Conheça a EntreUS: comunidades, ItaCash, selos, presentes digitais e Meet.',
+  title: 'EntreUS para Criadores',
+  description: 'Convite para criadores fundadores da EntreUS: comunidades, ItaCash, gorjetas, posts pagos, selos e dashboard.',
 }
 
-const featureCards = [
+type InfoCard = {
+  title: string
+  description: string
+  icon: LucideIcon
+  note?: string
+}
+
+type BadgeCard = {
+  title: string
+  description: string
+  note: string
+  icon?: LucideIcon
+  slug?: string
+}
+
+const creatorRevenueCards: InfoCard[] = [
   {
-    title: 'Feed e comunidades',
-    description: 'Publique, converse, descubra perfis e acompanhe comunidades com interesses reais.',
-    icon: MessageCircle,
-    accent: 'text-blue-200 bg-blue-500/15 ring-blue-300/20',
-  },
-  {
-    title: 'ItaCash',
-    description: 'A moeda interna que movimenta presentes, gorjetas, posts pagos e experiências dentro da plataforma.',
-    icon: Coins,
-    accent: 'text-cyan-100 bg-cyan-500/15 ring-cyan-300/20',
-  },
-  {
-    title: 'Selos',
-    description: 'Destaques visuais para participação, conquistas, VIP Premium, Ancião e comunidade.',
-    icon: BadgeCheck,
-    accent: 'text-yellow-100 bg-yellow-400/15 ring-yellow-200/25',
-  },
-  {
-    title: 'Presentes digitais',
-    description: 'Uma forma leve de reconhecer criadores, amigos e momentos especiais.',
+    title: 'Gorjetas com ItaCash',
+    description: 'Seguidores podem enviar apoio em ItaCash para reconhecer posts, perfis e momentos importantes.',
     icon: Gift,
-    accent: 'text-pink-100 bg-pink-500/15 ring-pink-300/20',
+    note: 'Disponivel',
   },
   {
-    title: 'EntreUS Meet',
-    description: 'Salas para encontros, aulas, comunidades, criadores e conversas ao vivo.',
-    icon: Video,
-    accent: 'text-emerald-100 bg-emerald-500/15 ring-emerald-300/20',
+    title: 'Posts pagos',
+    description: 'Criadores podem publicar conteudos desbloqueaveis por ItaCash, mantendo as protecoes de conteudo e idade.',
+    icon: LockKeyhole,
+    note: 'Disponivel',
   },
   {
-    title: 'Criadores e monetização',
-    description: 'Recursos para criar, vender experiências, acompanhar resultados e crescer com a comunidade.',
+    title: 'Dashboard do criador',
+    description: 'Acompanhe posts, comunidades, sinais de engajamento, gorjetas e recebimentos ja registrados.',
+    icon: BarChart3,
+    note: 'Em evolucao',
+  },
+  {
+    title: 'Assinaturas futuras',
+    description: 'Uma camada de recorrencia para criadores esta em preparacao e sera comunicada quando estiver pronta.',
     icon: WalletCards,
-    accent: 'text-violet-100 bg-violet-500/15 ring-violet-300/20',
+    note: 'Em preparacao',
   },
 ]
 
-const inviteNavCards = [
-  {
-    title: 'Comunidades',
-    subtitle: 'Encontre sua tribo',
-    href: '#comunidades',
-    icon: Users,
-    active: true,
-    imageSrc: null,
-    accent: 'border-blue-200/30 bg-blue-500/15 text-blue-100 shadow-blue-950/25',
-    iconAccent: 'bg-blue-400/20 text-blue-100 ring-blue-200/25',
-  },
-  {
-    title: 'ItaCash',
-    subtitle: 'Moeda da plataforma',
-    href: '#itacash',
-    icon: Coins,
-    active: false,
-    imageSrc: '/itacash.png',
-    accent: 'border-cyan-200/20 bg-cyan-500/10 text-cyan-100 shadow-cyan-950/20',
-    iconAccent: 'bg-cyan-400/15 text-cyan-100 ring-cyan-200/25',
-  },
-  {
-    title: 'Selos',
-    subtitle: 'Destaque e conquistas',
-    href: '#selos',
-    icon: BadgeCheck,
-    active: false,
-    imageSrc: null,
-    accent: 'border-amber-200/20 bg-amber-500/10 text-amber-100 shadow-amber-950/20',
-    iconAccent: 'bg-amber-400/15 text-amber-100 ring-amber-200/25',
-  },
-  {
-    title: 'Meet',
-    subtitle: 'Salas ao vivo',
-    href: '#meet',
-    icon: Video,
-    active: false,
-    imageSrc: null,
-    accent: 'border-emerald-200/20 bg-emerald-500/10 text-emerald-100 shadow-emerald-950/20',
-    iconAccent: 'bg-emerald-400/15 text-emerald-100 ring-emerald-200/25',
-  },
+const itacashPoints = [
+  'ItaCash e o credito interno usado dentro da EntreUS.',
+  'Usuarios usam ItaCash para apoiar criadores, enviar gorjetas e desbloquear posts pagos.',
+  'Criadores acompanham recebimentos no dashboard e na carteira quando os registros estiverem disponiveis.',
+  'Na fase inicial, solicitacoes de saque e repasse passam por fluxo manual e revisao administrativa.',
 ]
 
-const badgeShowcaseCards = [
+const badgeCards: BadgeCard[] = [
   {
-    title: 'Ancião',
-    slug: 'elder',
-    description: 'Histórico, presença e reconhecimento especial para quem ajuda a construir a comunidade.',
-    cardClassName: 'border-amber-200/25 bg-amber-500/10 shadow-amber-950/25 hover:border-amber-200/45',
-    titleClassName: 'text-amber-100',
+    title: 'Criador fundador',
+    description: 'Identidade para a primeira leva de criadores. O selo visual dedicado fica em preparacao quando ainda nao estiver aplicado.',
+    icon: Sparkles,
+    note: 'Programa fundador',
   },
   {
-    title: 'VIP Premium',
-    slug: 'vip',
-    description: 'Destaque visual e sensação premium nos espaços sociais da EntreUS.',
-    cardClassName: 'border-violet-200/25 bg-blue-500/10 shadow-violet-950/25 hover:border-violet-200/45',
-    titleClassName: 'text-blue-100',
-  },
-  {
-    title: 'Comunidade',
+    title: 'Selo Comunidade',
+    description: 'Destaque para participacao e pertencimento em comunidades da EntreUS.',
     slug: 'community',
-    description: 'Participação, conquistas e pertencimento dentro das redes e grupos.',
-    cardClassName: 'border-cyan-200/25 bg-emerald-500/10 shadow-emerald-950/25 hover:border-cyan-200/45',
-    titleClassName: 'text-emerald-100',
+    note: 'Destaque social',
+  },
+  {
+    title: 'VIP e VIP Premium',
+    description: 'Beneficios visuais e limites maiores em recursos selecionados, quando aplicavel ao plano.',
+    slug: 'vip',
+    note: 'Diferenciacao',
+  },
+  {
+    title: 'Anciao',
+    description: 'Reconhecimento especial para presenca, historico e contribuicao na comunidade.',
+    slug: 'elder',
+    note: 'Credibilidade',
   },
 ]
 
-const badgesLoopVideoExpectedPath = '/videos/selos-entreus-loop.mp4'
-const badgesLoopVideoSrc: string | null = null
-
-const videoBlocks = [
+const safetyCards: InfoCard[] = [
   {
-    title: 'Conheça a EntreUS',
-    description: 'Uma visão rápida da rede e do clima da plataforma.',
-    src: '/intro.mp4',
-    poster: '/logo.png',
+    title: 'Comunidades por nicho',
+    description: 'Criadores publicam nos espacos certos: geral, esportes, geopolitica, militar e areas futuras.',
+    icon: Users,
   },
   {
-    title: 'Como funciona o ItaCash',
-    description: 'Um vídeo explicativo será adicionado aqui.',
+    title: 'Conteudo adulto separado',
+    description: 'Conteudo 18+ fica isolado, classificado e protegido por verificacao de idade.',
+    icon: ShieldCheck,
   },
   {
-    title: 'Selos e comunidades',
-    description: 'Conquistas visuais, status e participação dentro da EntreUS.',
-    src: '/selos-entreus.mp4',
-    poster: '/logo-icon.png',
-  },
-  {
-    title: 'EntreUS Meet',
-    description: 'Chamadas, comunidades, aulas e encontros em tempo real.',
+    title: 'Moderacao e denuncias',
+    description: 'A plataforma preserva regras de seguranca, revisao e reportes para reduzir abuso.',
+    icon: CheckCircle2,
   },
 ]
 
-function PrimaryActions({ center = false }: { center?: boolean }) {
+function ActionLink({
+  href,
+  children,
+  icon: Icon,
+  variant = 'primary',
+}: {
+  href: string
+  children: ReactNode
+  icon: LucideIcon
+  variant?: 'primary' | 'secondary' | 'ghost'
+}) {
+  const className =
+    variant === 'primary'
+      ? 'bg-white text-black shadow-lg shadow-black/20 hover:bg-blue-50'
+      : variant === 'secondary'
+        ? 'border border-white/20 bg-white/[0.08] text-white hover:border-white/45 hover:bg-white/[0.14]'
+        : 'border border-blue-200/25 bg-blue-500/10 text-blue-100 hover:border-blue-200/50 hover:bg-blue-500/15'
+
   return (
-    <div className={`flex w-full flex-col gap-3 sm:w-auto sm:flex-row ${center ? 'justify-center' : ''}`}>
-      <Link
-        href="/signup"
-        className="inline-flex min-h-12 items-center justify-center rounded-full bg-white px-6 py-3 text-sm font-black text-black shadow-lg shadow-black/20 transition hover:bg-blue-50"
-      >
-        Criar minha conta
-      </Link>
-      <Link
-        href="/login"
-        className="inline-flex min-h-12 items-center justify-center rounded-full border border-white/25 bg-white/[0.06] px-6 py-3 text-sm font-black text-white transition hover:border-white/45 hover:bg-white/[0.12]"
-      >
-        Já tenho conta
-      </Link>
-    </div>
+    <Link
+      href={href}
+      className={`inline-flex min-h-12 items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-black transition ${className}`}
+    >
+      <Icon className="h-4 w-4" />
+      {children}
+    </Link>
   )
 }
 
-function VideoBlock({
+function SectionHeader({
+  eyebrow,
   title,
-  description,
-  src,
-  poster,
+  children,
 }: {
+  eyebrow: string
   title: string
-  description: string
-  src?: string
-  poster?: string
+  children: ReactNode
 }) {
   return (
-    <article className="overflow-hidden rounded-lg border border-white/10 bg-white/[0.04] shadow-xl shadow-black/20">
-      <div className="relative aspect-video bg-zinc-950">
-        {src ? (
-          <video
-            className="h-full w-full object-cover"
-            controls
-            preload="metadata"
-            poster={poster}
-          >
-            <source src={src} type="video/mp4" />
-          </video>
-        ) : (
-          <div className="flex h-full w-full flex-col items-center justify-center gap-3 bg-zinc-950 px-5 text-center">
-            <span className="flex h-12 w-12 items-center justify-center rounded-full border border-white/15 bg-white/[0.06] text-blue-100">
-              <Play className="h-5 w-5" />
-            </span>
-            <span className="text-xs font-black uppercase tracking-[0.18em] text-zinc-500">{title}</span>
-            <span className="rounded-full border border-blue-200/20 bg-blue-500/10 px-4 py-2 text-sm font-black uppercase tracking-[0.16em] text-blue-100">
-              Vídeo em breve
-            </span>
-          </div>
-        )}
-      </div>
-      <div className="p-4">
-        <h3 className="text-base font-black text-white">{title}</h3>
-        <p className="mt-2 text-sm leading-6 text-zinc-300">{description}</p>
-      </div>
-    </article>
+    <div className="max-w-3xl">
+      <p className="text-sm font-black uppercase tracking-[0.18em] text-blue-200">{eyebrow}</p>
+      <h2 className="mt-3 text-3xl font-black tracking-normal text-white sm:text-4xl">{title}</h2>
+      <p className="mt-4 text-base leading-7 text-zinc-300">{children}</p>
+    </div>
   )
 }
 
 export default function InvitePage() {
   return (
     <main className="min-h-screen bg-black text-white">
-      <section className="relative flex min-h-[92vh] items-center overflow-hidden px-4 py-8 sm:px-6">
+      <section className="relative flex min-h-[86vh] items-center overflow-hidden px-4 py-8 sm:px-6">
         <video
           className="absolute inset-0 h-full w-full object-cover opacity-45"
           autoPlay
@@ -232,10 +183,10 @@ export default function InvitePage() {
         >
           <source src="/intro.mp4" type="video/mp4" />
         </video>
-        <div className="absolute inset-0 bg-black/70" aria-hidden="true" />
+        <div className="absolute inset-0 bg-black/72" aria-hidden="true" />
 
         <div className="relative z-10 mx-auto w-full max-w-6xl">
-          <header className="mb-16 flex items-center justify-between gap-4">
+          <header className="mb-12 flex items-center justify-between gap-4">
             <Link href="/" className="inline-flex items-center gap-3">
               <Image
                 src="/logo-icon.png"
@@ -261,76 +212,70 @@ export default function InvitePage() {
           <div className="max-w-3xl">
             <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-blue-200/20 bg-white/[0.06] px-4 py-2 text-sm font-bold text-blue-100">
               <Sparkles className="h-4 w-4" />
-              Convite público EntreUS
+              Convite para criadores fundadores
             </div>
 
             <h1 className="text-4xl font-black leading-tight tracking-normal text-white sm:text-6xl lg:text-7xl">
-              Uma comunidade para criar, encontrar e viver experiências digitais com mais presença.
+              EntreUS para Criadores
             </h1>
 
             <p className="mt-5 max-w-2xl text-base leading-7 text-zinc-200 sm:text-xl sm:leading-8">
-              Feed, comunidades, ItaCash, selos, presentes digitais, criadores e Meet em uma plataforma social feita para conexões reais.
+              Uma rede social brasileira por comunidades, feita para criadores publicarem, receberem apoio em ItaCash e crescerem com seguranca.
             </p>
 
-            <div className="mt-8">
-              <PrimaryActions />
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+              <ActionLink href="/creators/apply" icon={HeartHandshake}>
+                Quero ser criador fundador
+              </ActionLink>
+              <ActionLink href="/signup" icon={ArrowRight} variant="secondary">
+                Criar minha conta
+              </ActionLink>
             </div>
           </div>
 
-          <nav className="mt-14 grid max-w-5xl grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-label="Atalhos do convite">
-            {inviteNavCards.map((item) => {
-              const Icon = item.icon
-
-              return (
-                <a
-                  key={item.title}
-                  href={item.href}
-                  aria-current={item.active ? 'true' : undefined}
-                  className={`group flex min-h-24 items-center gap-3 rounded-lg border p-3 text-left shadow-xl transition duration-200 hover:-translate-y-1 hover:bg-white/[0.08] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-200 active:translate-y-0 active:scale-[0.99] ${item.accent}`}
-                >
-                  <span className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-lg ring-1 transition group-hover:scale-105 ${item.iconAccent}`}>
-                    {item.imageSrc ? (
-                      <Image
-                        src={item.imageSrc}
-                        alt=""
-                        width={34}
-                        height={34}
-                        className="h-8 w-8 object-contain"
-                      />
-                    ) : (
-                      <Icon className="h-5 w-5" />
-                    )}
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block text-sm font-black text-white">{item.title}</span>
-                    <span className="mt-1 block text-xs font-semibold leading-5 text-zinc-300">{item.subtitle}</span>
-                  </span>
-                </a>
-              )
-            })}
+          <nav className="mt-12 grid gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-label="Atalhos para criadores">
+            {[
+              ['Ganhar com ItaCash', '#ganhar'],
+              ['Conhecer ItaCash', '#itacash'],
+              ['Ver selos', '#selos'],
+              ['Seguranca 18+', '#seguranca'],
+            ].map(([label, href]) => (
+              <a
+                key={label}
+                href={href}
+                className="rounded-lg border border-white/10 bg-white/[0.055] px-4 py-3 text-sm font-black text-white transition hover:border-blue-200/35 hover:bg-white/[0.1]"
+              >
+                {label}
+              </a>
+            ))}
           </nav>
         </div>
       </section>
 
-      <section id="comunidades" className="scroll-mt-6 border-y border-white/10 bg-zinc-950 px-4 py-14 sm:px-6">
+      <section id="ganhar" className="scroll-mt-6 border-y border-white/10 bg-zinc-950 px-4 py-16 sm:px-6">
         <div className="mx-auto max-w-6xl">
-          <div className="max-w-2xl">
-            <p className="text-sm font-black uppercase tracking-[0.18em] text-blue-200">O que você encontra</p>
-            <h2 className="mt-3 text-3xl font-black tracking-normal text-white sm:text-4xl">
-              Uma rede social com ferramentas para participar, apoiar e criar.
-            </h2>
-          </div>
+          <SectionHeader eyebrow="Monetizacao" title="Como o criador pode ganhar">
+            A EntreUS combina publicacao social, apoio direto e recursos pagos sem prometer renda fixa. O criador decide o que publicar, acompanha sinais no dashboard e usa ItaCash nos fluxos ja existentes.
+          </SectionHeader>
 
-          <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {featureCards.map((feature) => {
-              const Icon = feature.icon
+          <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {creatorRevenueCards.map((card) => {
+              const Icon = card.icon
+
               return (
-                <article key={feature.title} className="rounded-lg border border-white/10 bg-white/[0.045] p-5 shadow-lg shadow-black/15">
-                  <span className={`inline-flex h-11 w-11 items-center justify-center rounded-lg ring-1 ${feature.accent}`}>
-                    <Icon className="h-5 w-5" />
-                  </span>
-                  <h3 className="mt-4 text-lg font-black text-white">{feature.title}</h3>
-                  <p className="mt-2 text-sm leading-6 text-zinc-300">{feature.description}</p>
+                <article key={card.title} className="rounded-lg border border-white/10 bg-white/[0.045] p-5 shadow-lg shadow-black/15">
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="inline-flex h-11 w-11 items-center justify-center rounded-lg bg-blue-500/15 text-blue-100 ring-1 ring-blue-200/20">
+                      <Icon className="h-5 w-5" />
+                    </span>
+                    {card.note && (
+                      <span className="rounded-full border border-white/10 px-2.5 py-1 text-[11px] font-black uppercase tracking-[0.12em] text-zinc-300">
+                        {card.note}
+                      </span>
+                    )}
+                  </div>
+                  <h3 className="mt-4 text-lg font-black text-white">{card.title}</h3>
+                  <p className="mt-2 text-sm leading-6 text-zinc-300">{card.description}</p>
                 </article>
               )
             })}
@@ -341,13 +286,18 @@ export default function InvitePage() {
       <section id="itacash" className="scroll-mt-6 bg-black px-4 py-16 sm:px-6">
         <div className="mx-auto grid max-w-6xl gap-8 lg:grid-cols-[0.95fr_1.05fr] lg:items-center">
           <div>
-            <p className="text-sm font-black uppercase tracking-[0.18em] text-cyan-200">ItaCash</p>
-            <h2 className="mt-3 text-3xl font-black tracking-normal text-white sm:text-4xl">
-              A moeda interna para viver experiências dentro da EntreUS.
-            </h2>
-            <p className="mt-4 text-base leading-7 text-zinc-300">
-              O ItaCash aparece em presentes digitais, gorjetas, posts pagos e experiências da plataforma. Esta página apenas apresenta o recurso; valores e conversões continuam nos fluxos oficiais da EntreUS.
-            </p>
+            <SectionHeader eyebrow="ItaCash" title="Credito interno para apoiar criadores">
+              ItaCash nao e cripto, investimento ou moeda externa. Ele e o credito interno usado em experiencias da EntreUS, como gorjetas, posts pagos e presentes digitais.
+            </SectionHeader>
+
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+              <ActionLink href="/itacash" icon={Coins} variant="ghost">
+                Conhecer ItaCash
+              </ActionLink>
+              <ActionLink href="/creator-dashboard" icon={BarChart3} variant="secondary">
+                Ver dashboard
+              </ActionLink>
+            </div>
           </div>
 
           <div className="rounded-lg border border-cyan-200/15 bg-cyan-500/10 p-5 shadow-xl shadow-cyan-950/20">
@@ -358,170 +308,130 @@ export default function InvitePage() {
                   <ItaCashAmount amount={100} size="xl" className="text-cyan-50" />
                 </div>
               </div>
-              <Coins className="h-16 w-16 text-cyan-100/70" />
+              <Image
+                src="/itacash.png"
+                alt=""
+                width={78}
+                height={78}
+                className="h-16 w-16 object-contain"
+              />
             </div>
-            <div className="mt-6 grid gap-3 sm:grid-cols-3">
-              {['Presentes', 'Gorjetas', 'Posts pagos'].map((item) => (
-                <div key={item} className="rounded-lg border border-white/10 bg-black/35 px-4 py-3 text-sm font-bold text-cyan-50">
-                  {item}
-                </div>
+
+            <ul className="mt-6 grid gap-3">
+              {itacashPoints.map((item) => (
+                <li key={item} className="flex gap-3 rounded-lg border border-white/10 bg-black/35 px-4 py-3 text-sm leading-6 text-cyan-50">
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-cyan-200" />
+                  <span>{item}</span>
+                </li>
               ))}
-            </div>
+            </ul>
           </div>
         </div>
       </section>
 
       <section id="selos" className="scroll-mt-6 bg-zinc-950 px-4 py-16 sm:px-6">
-        <div className="mx-auto grid max-w-6xl gap-8 lg:grid-cols-[1fr_0.9fr] lg:items-center">
-          <div>
-            <p className="text-sm font-black uppercase tracking-[0.18em] text-yellow-200">Selos</p>
-            <h2 className="mt-3 text-3xl font-black tracking-normal text-white sm:text-4xl">
-              Reconhecimento visual para quem participa e deixa marca.
-            </h2>
-            <p className="mt-4 text-base leading-7 text-zinc-300">
-              Selos ajudam a mostrar destaque, participação e conquistas. Eles aparecem em perfis, posts e superfícies sociais da EntreUS.
-            </p>
-          </div>
-
-          <div className="grid gap-4">
-            <article
-              className="overflow-hidden rounded-lg border border-white/10 bg-black/35 shadow-2xl shadow-black/30"
-              data-expected-video-src={badgesLoopVideoExpectedPath}
-            >
-              <div className={`relative bg-gradient-to-br from-zinc-950 via-blue-950/35 to-emerald-950/25 ${badgesLoopVideoSrc ? 'aspect-video' : 'min-h-[23rem] sm:aspect-video sm:min-h-0'}`}>
-                {badgesLoopVideoSrc ? (
-                  <video
-                    className="h-full w-full object-cover"
-                    autoPlay
-                    muted
-                    loop
-                    playsInline
-                    preload="metadata"
-                    aria-label="Vídeo dos selos EntreUS"
-                    title="Vídeo dos selos EntreUS"
-                  >
-                    <source src={badgesLoopVideoSrc} type="video/mp4" />
-                  </video>
-                ) : (
-                  <div className="flex h-full flex-col justify-center gap-4 p-4">
-                    <div className="grid grid-cols-3 gap-2">
-                      {badgeShowcaseCards.map((item) => (
-                        <div key={item.title} className={`flex min-h-28 flex-col items-center justify-center gap-2 rounded-lg border p-3 ${item.cardClassName}`}>
-                          <BadgeVisual slug={item.slug} label={item.title} size="large" mode="static" />
-                          <span className={`text-center text-xs font-black ${item.titleClassName}`}>{item.title}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="rounded-lg border border-white/10 bg-black/35 px-4 py-3 text-center">
-                      <p className="text-sm font-black text-white">Vídeo 16:9 dos selos em breve</p>
-                      <p className="mt-1 text-xs font-semibold text-zinc-400">
-                        Preparado para receber o loop premium dos três selos.
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </article>
-
-            {badgeShowcaseCards.map((item) => (
-              <article
-                key={item.title}
-                className={`flex items-center gap-4 rounded-lg border p-4 shadow-xl transition duration-200 hover:-translate-y-0.5 sm:gap-5 ${item.cardClassName}`}
-              >
-                <BadgeVisual slug={item.slug} label={item.title} size="hero" mode="animated" />
-                <div className="min-w-0">
-                  <h3 className={`text-lg font-black ${item.titleClassName}`}>{item.title}</h3>
-                  <p className="mt-2 text-sm leading-6 text-zinc-200">{item.description}</p>
-                </div>
-              </article>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section id="meet" className="scroll-mt-6 bg-black px-4 py-16 sm:px-6">
-        <div className="mx-auto grid max-w-6xl gap-8 lg:grid-cols-[0.95fr_1.05fr] lg:items-center">
-          <div>
-            <p className="text-sm font-black uppercase tracking-[0.18em] text-emerald-200">EntreUS Meet</p>
-            <h2 className="mt-3 text-3xl font-black tracking-normal text-white sm:text-4xl">
-              Chamadas e encontros dentro da plataforma.
-            </h2>
-            <p className="mt-4 text-base leading-7 text-zinc-300">
-              Meet combina chamadas, chat, participantes e gravação quando disponível. É uma ponte para comunidades, aulas, criadores e encontros ao vivo.
-            </p>
-            <div className="mt-6 grid gap-3 sm:grid-cols-3">
-              {[
-                { label: 'Chat', icon: MessageCircle },
-                { label: 'Participantes', icon: Users },
-                { label: 'Gravação', icon: ShieldCheck },
-              ].map((item) => {
-                const Icon = item.icon
-                return (
-                  <div key={item.label} className="rounded-lg border border-white/10 bg-white/[0.045] p-4 text-sm font-bold text-emerald-50">
-                    <Icon className="mb-3 h-5 w-5 text-emerald-200" />
-                    {item.label}
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-
-          <div className="overflow-hidden rounded-lg border border-emerald-200/15 bg-zinc-950 shadow-xl shadow-black/25">
-            <Image
-              src="/entreus-meet-banner.png"
-              alt="EntreUS Meet"
-              width={1200}
-              height={630}
-              className="h-auto w-full object-cover"
-            />
-          </div>
-        </div>
-      </section>
-
-      <section className="bg-zinc-950 px-4 py-16 sm:px-6">
         <div className="mx-auto max-w-6xl">
-          <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-            <div className="max-w-2xl">
-              <p className="text-sm font-black uppercase tracking-[0.18em] text-pink-200">Vídeos</p>
-              <h2 className="mt-3 text-3xl font-black tracking-normal text-white sm:text-4xl">
-                Demonstrações para campanhas, grupos e novos usuários.
-              </h2>
-            </div>
-            <p className="max-w-sm text-sm leading-6 text-zinc-400">
-              Os blocos sem vídeo real já ficam preparados para receber materiais futuros.
-            </p>
+          <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
+            <SectionHeader eyebrow="Selos e destaque" title="Credibilidade visual para quem participa">
+              Selos ajudam criadores e membros a mostrarem presenca, pertencimento e status. Recursos futuros ficam marcados como em preparacao para manter o convite honesto.
+            </SectionHeader>
+
+            <ActionLink href="/selos" icon={BadgeCheck} variant="ghost">
+              Ver selos
+            </ActionLink>
           </div>
 
-          <div className="mt-8 grid gap-4 md:grid-cols-2">
-            {videoBlocks.map((block) => (
-              <VideoBlock key={block.title} {...block} />
-            ))}
+          <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {badgeCards.map((card) => {
+              const Icon = card.icon || Crown
+
+              return (
+                <article key={card.title} className="rounded-lg border border-white/10 bg-white/[0.045] p-5 shadow-lg shadow-black/15">
+                  <div className="flex min-h-16 items-center justify-between gap-3">
+                    {card.slug ? (
+                      <BadgeVisual slug={card.slug} label={card.title} size="hero" mode="animated" />
+                    ) : (
+                      <span className="inline-flex h-12 w-12 items-center justify-center rounded-lg bg-amber-500/15 text-amber-100 ring-1 ring-amber-200/20">
+                        <Icon className="h-6 w-6" />
+                      </span>
+                    )}
+                    <span className="rounded-full border border-white/10 px-2.5 py-1 text-[11px] font-black uppercase tracking-[0.12em] text-zinc-300">
+                      {card.note}
+                    </span>
+                  </div>
+                  <h3 className="mt-4 text-lg font-black text-white">{card.title}</h3>
+                  <p className="mt-2 text-sm leading-6 text-zinc-300">{card.description}</p>
+                </article>
+              )
+            })}
           </div>
         </div>
       </section>
 
-      <section className="bg-black px-4 py-16 text-center sm:px-6">
+      <section id="seguranca" className="scroll-mt-6 bg-black px-4 py-16 sm:px-6">
+        <div className="mx-auto grid max-w-6xl gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
+          <div>
+            <SectionHeader eyebrow="Seguranca e comunidades" title="Crescer sem misturar tudo no mesmo feed">
+              A plataforma separa nichos, respeita classificacoes e mantem conteudo adulto fora das areas comuns. O objetivo e dar clareza para criadores e protecao para usuarios.
+            </SectionHeader>
+
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+              <ActionLink href="/terms" icon={ShieldCheck} variant="ghost">
+                Termos
+              </ActionLink>
+              <ActionLink href="/privacy" icon={LockKeyhole} variant="secondary">
+                Privacidade
+              </ActionLink>
+            </div>
+          </div>
+
+          <div className="grid gap-3">
+            {safetyCards.map((card) => {
+              const Icon = card.icon
+
+              return (
+                <article key={card.title} className="rounded-lg border border-white/10 bg-white/[0.045] p-5 shadow-lg shadow-black/15">
+                  <span className="inline-flex h-11 w-11 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-100 ring-1 ring-emerald-200/20">
+                    <Icon className="h-5 w-5" />
+                  </span>
+                  <h3 className="mt-4 text-lg font-black text-white">{card.title}</h3>
+                  <p className="mt-2 text-sm leading-6 text-zinc-300">{card.description}</p>
+                </article>
+              )
+            })}
+          </div>
+        </div>
+      </section>
+
+      <section className="border-y border-white/10 bg-zinc-950 px-4 py-16 text-center sm:px-6">
         <div className="mx-auto max-w-3xl">
-          <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full border border-white/15 bg-white/[0.06] text-blue-100">
+          <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-lg border border-white/15 bg-white/[0.06] text-blue-100">
             <HeartHandshake className="h-6 w-6" />
           </div>
           <h2 className="text-3xl font-black tracking-normal text-white sm:text-5xl">
-            Entre para a EntreUS hoje
+            A primeira leva de criadores vai ajudar a moldar a EntreUS
           </h2>
           <p className="mx-auto mt-4 max-w-xl text-base leading-7 text-zinc-300">
-            Crie sua conta, explore comunidades e descubra novas formas de participar, apoiar e criar.
+            Entre, publique com calma, teste os recursos e envie feedback. O programa fundador prioriza aprendizado real antes de promessas grandes demais.
           </p>
-          <div className="mt-8">
-            <PrimaryActions center />
+          <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
+            <ActionLink href="/creators/apply" icon={HeartHandshake}>
+              Quero ser criador fundador
+            </ActionLink>
+            <ActionLink href="/signup" icon={ArrowRight} variant="secondary">
+              Criar minha conta
+            </ActionLink>
           </div>
         </div>
       </section>
 
-      <footer className="border-t border-white/10 bg-zinc-950 px-4 py-8 text-center text-sm text-zinc-400 sm:px-6">
+      <footer className="bg-black px-4 py-8 text-center text-sm text-zinc-400 sm:px-6">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 sm:flex-row">
-          <span>EntreUS - Só Entre Nós</span>
+          <span>EntreUS - So Entre Nos</span>
           <div className="flex flex-wrap justify-center gap-4">
-            <Link href="/" className="hover:text-white">Início</Link>
+            <Link href="/" className="hover:text-white">Inicio</Link>
+            <Link href="/itacash" className="hover:text-white">ItaCash</Link>
+            <Link href="/selos" className="hover:text-white">Selos</Link>
             <Link href="/terms" className="hover:text-white">Termos</Link>
             <Link href="/privacy" className="hover:text-white">Privacidade</Link>
           </div>

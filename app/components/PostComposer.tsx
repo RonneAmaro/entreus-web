@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import {
   Camera,
+  ChevronDown,
   CheckCircle2,
   Coins,
   Globe2,
@@ -16,6 +17,7 @@ import {
   Video,
   Play,
   Send,
+  SlidersHorizontal,
   Smile,
   Sparkles,
   Tag,
@@ -311,8 +313,8 @@ export default function PostComposer({
   const [activeAiMode, setActiveAiMode] = useState<AiAssistMode | null>(null)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [showMediaMenu, setShowMediaMenu] = useState(false)
+  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false)
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const [portalElement, setPortalElement] = useState<HTMLElement | null>(null)
   const [isOptimizingVideo, setIsOptimizingVideo] = useState(false)
   const [pendingVideoCompression, setPendingVideoCompression] = useState<PendingVideoCompression | null>(null)
   const [submitLocked, setSubmitLocked] = useState(false)
@@ -342,10 +344,6 @@ export default function PostComposer({
     return () => {
       mediaRef.current.forEach((item) => URL.revokeObjectURL(item.url))
     }
-  }, [])
-
-  useEffect(() => {
-    setPortalElement(document.body)
   }, [])
 
   useEffect(() => {
@@ -744,6 +742,14 @@ export default function PostComposer({
     setContentRating(resolveContentRating(communityType, nextRating))
   }
 
+  function handlePaidPostToggle(checked: boolean) {
+    setIsPaidPost(checked)
+
+    if (!checked) {
+      setPaidPostPrice('')
+    }
+  }
+
   function insertEmoji(emoji: string) {
     const textarea = textareaRef.current
 
@@ -947,6 +953,7 @@ export default function PostComposer({
       setError('')
       setShowEmojiPicker(false)
       setShowMediaMenu(false)
+      setShowAdvancedOptions(false)
       setMediaFeedback(null)
       setAiFeedback(null)
       setPendingVideoCompression(null)
@@ -965,6 +972,7 @@ export default function PostComposer({
   const canPublish = (trimmedContentLength > 0 || media.length > 0) && !isOptimizingVideo
   const canUseAi =
     trimmedContentLength >= AI_MIN_TEXT_LENGTH && !isSubmitting && !activeAiMode
+  const portalElement = typeof document === 'undefined' ? null : document.body
   const getAiButtonTitle = (mode: AiAssistMode) => {
     if (activeAiMode === mode) return AI_LOADING_LABELS[mode]
     if (activeAiMode) return 'Aguarde a outra acao da IA terminar.'
@@ -1272,38 +1280,10 @@ export default function PostComposer({
           )}
 
           <div className="mt-4 border-t border-zinc-200 pt-3 dark:border-zinc-800">
-            <div className={`mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border px-3 py-2 text-xs leading-5 ${userTier === 'elder'
-              ? 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100'
-              : userTier === 'vip' || userTier === 'vip_premium'
-                ? 'border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-100'
-                : 'border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-100'
-              }`}
-            >
-              <UserTierBadge tier={userTier} />
-              <span>{getVideoTierBenefitMessage(userTier, videoUploadLimitBytes)}</span>
-              {userTier === 'standard' && (
-                <>
-                  <span>VIP libera videos maiores e destaque visual.</span>
-                  <Link href="/vip-plus" className="font-black underline underline-offset-2">
-                    Conhecer VIP
-                  </Link>
-                </>
-              )}
-            </div>
-
-            <div className="mb-3 rounded-2xl border border-zinc-200 bg-zinc-50/80 p-3 dark:border-zinc-800 dark:bg-zinc-950/70">
-              <div className="mb-3">
-                <p className="text-xs font-black uppercase text-zinc-500 dark:text-zinc-400">
-                  Escolha onde seu post deve aparecer.
-                </p>
-                <p className="mt-1 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
-                  Conteudo adulto fica isolado e so aparece para usuarios verificados 18+.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                <label className="block">
-                  <span className="mb-1.5 block text-xs font-bold text-zinc-600 dark:text-zinc-300">
+            <div className="rounded-2xl border border-zinc-200 bg-zinc-50/80 p-3 dark:border-zinc-800 dark:bg-zinc-950/70">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                <label className="block min-w-0 flex-1">
+                  <span className="mb-1.5 block text-xs font-black uppercase text-zinc-500 dark:text-zinc-400">
                     Comunidade
                   </span>
                   <select
@@ -1323,84 +1303,27 @@ export default function PostComposer({
                   </select>
                 </label>
 
-                <label className="block">
-                  <span className="mb-1.5 block text-xs font-bold text-zinc-600 dark:text-zinc-300">
-                    Classificacao
-                  </span>
-                  <select
-                    value={contentRating}
-                    onChange={(event) => handleContentRatingChange(event.target.value)}
-                    disabled={communityType === 'adult_18plus'}
-                    className="h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm font-semibold text-zinc-900 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10 disabled:cursor-not-allowed disabled:opacity-70 dark:border-zinc-800 dark:bg-black dark:text-white"
-                  >
-                    {CONTENT_RATINGS.map((rating) => (
-                      <option
-                        key={rating.key}
-                        value={rating.key}
-                        disabled={rating.requires18Plus && !canAccessAdult18Plus}
-                      >
-                        {rating.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-
-              <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
-                <span className="rounded-full border border-zinc-200 bg-white px-2.5 py-1 font-bold dark:border-zinc-800 dark:bg-black">
-                  {selectedCommunity.label}
-                </span>
-                {selectedCommunity.sensitive && (
-                  <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 font-bold text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
-                    Sensivel
-                  </span>
-                )}
-                {!canAccessAdult18Plus && (
+                <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
                   <span className="rounded-full border border-zinc-200 bg-white px-2.5 py-1 font-bold dark:border-zinc-800 dark:bg-black">
-                    Area 18+ exige verificacao de idade.
+                    Padrao: Geral
                   </span>
-                )}
+                  <span className="rounded-full border border-zinc-200 bg-white px-2.5 py-1 font-bold dark:border-zinc-800 dark:bg-black">
+                    {selectedCommunity.label}
+                  </span>
+                  {selectedCommunity.sensitive && (
+                    <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 font-bold text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+                      Sensivel
+                    </span>
+                  )}
+                </div>
               </div>
+
+              <p className="mt-2 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+                {selectedCommunity.description} Conteudo 18+ exige verificacao de idade aprovada.
+              </p>
             </div>
 
-            <div className="mb-3 rounded-2xl border border-cyan-200 bg-cyan-50/70 p-3 dark:border-cyan-900/60 dark:bg-cyan-950/20">
-              <label className="flex items-start gap-3">
-                <input
-                  type="checkbox"
-                  checked={isPaidPost}
-                  onChange={(event) => setIsPaidPost(event.target.checked)}
-                  className="mt-1 h-4 w-4 rounded border-cyan-300 text-cyan-600 focus:ring-cyan-500"
-                />
-                <span className="min-w-0 flex-1">
-                  <span className="flex items-center gap-2 text-sm font-black text-cyan-900 dark:text-cyan-100">
-                    <Coins className="h-4 w-4" />
-                    Post pago
-                  </span>
-                  <span className="mt-1 block text-xs leading-5 text-cyan-800/75 dark:text-cyan-100/70">
-                    O conteudo e as midias ficam bloqueados ate o usuario desbloquear com ItaCash.
-                  </span>
-                </span>
-              </label>
-
-              {isPaidPost && (
-                <label className="mt-3 block">
-                  <span className="mb-1.5 block text-xs font-bold text-cyan-900 dark:text-cyan-100">
-                    Preco em ItaCash
-                  </span>
-                  <input
-                    type="number"
-                    min={1}
-                    step={1}
-                    value={paidPostPrice}
-                    onChange={(event) => setPaidPostPrice(event.target.value)}
-                    placeholder="Ex.: 25"
-                    className="h-11 w-full rounded-xl border border-cyan-200 bg-white px-3 text-sm font-semibold text-zinc-900 outline-none transition focus:border-cyan-400 focus:ring-4 focus:ring-cyan-500/10 dark:border-cyan-900/60 dark:bg-black dark:text-white"
-                  />
-                </label>
-              )}
-            </div>
-
-            <div className="flex flex-col gap-3">
+            <div className="mt-3 flex flex-col gap-3">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
                   <input
@@ -1438,16 +1361,17 @@ export default function PostComposer({
                       type="button"
                       onClick={() => setShowMediaMenu((current) => !current)}
                       disabled={isOptimizingVideo}
-                      className={`flex h-10 w-10 items-center justify-center rounded-full transition ${
+                      className={`inline-flex h-10 items-center justify-center gap-2 rounded-full border px-3 text-sm font-bold transition ${
                         showMediaMenu
-                          ? 'bg-blue-50 text-blue-600 ring-1 ring-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:ring-blue-500/30'
-                          : 'text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/30'
+                          ? 'border-blue-200 bg-blue-50 text-blue-700 ring-1 ring-blue-200 dark:border-blue-500/30 dark:bg-blue-950/40 dark:text-blue-200'
+                          : 'border-zinc-200 bg-white text-blue-600 hover:bg-blue-50 dark:border-zinc-800 dark:bg-black dark:text-blue-300 dark:hover:bg-blue-950/30'
                       } disabled:cursor-not-allowed disabled:opacity-50`}
                       title="Adicionar midia"
                       aria-label="Adicionar midia"
                       aria-expanded={showMediaMenu}
                     >
-                      <ImagePlus className="h-5 w-5" />
+                      <ImagePlus className="h-4 w-4" />
+                      Midia
                     </button>
 
                     {showMediaMenu && (
@@ -1500,10 +1424,10 @@ export default function PostComposer({
                     <button
                       type="button"
                       onClick={() => setShowEmojiPicker((current) => !current)}
-                      className={`flex h-10 w-10 items-center justify-center rounded-full transition ${
+                      className={`flex h-10 w-10 items-center justify-center rounded-full border transition ${
                         showEmojiPicker
-                          ? 'bg-blue-50 text-blue-600 ring-1 ring-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:ring-blue-500/30'
-                          : 'text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/30'
+                          ? 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-500/30 dark:bg-blue-950/40 dark:text-blue-200'
+                          : 'border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-black dark:text-zinc-300 dark:hover:bg-zinc-900'
                       }`}
                       title="Adicionar emoji"
                       aria-label="Adicionar emoji"
@@ -1560,93 +1484,15 @@ export default function PostComposer({
 
                   <button
                     type="button"
-                    onClick={() => handleAiAssist('improve_post')}
-                    disabled={!canUseAi}
-                    className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-full border border-violet-200 bg-violet-50 px-3 text-xs font-bold text-violet-700 transition hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-violet-900/60 dark:bg-violet-950/30 dark:text-violet-200 dark:hover:bg-violet-950/50"
-                    aria-label="Melhorar texto com IA da EntreUS"
-                    aria-describedby="ai-assistance-note"
-                    title={getAiButtonTitle('improve_post')}
+                    onClick={() => setShowAdvancedOptions((current) => !current)}
+                    className="inline-flex h-10 items-center justify-center gap-2 rounded-full border border-zinc-200 bg-white px-3 text-sm font-bold text-zinc-700 transition hover:bg-zinc-50 dark:border-zinc-800 dark:bg-black dark:text-zinc-200 dark:hover:bg-zinc-900"
+                    aria-expanded={showAdvancedOptions}
+                    aria-controls="composer-advanced-options"
                   >
-                    {activeAiMode === 'improve_post' ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Sparkles className="h-4 w-4" />
-                    )}
-                    <span>
-                      {activeAiMode === 'improve_post'
-                        ? AI_LOADING_LABELS.improve_post
-                        : 'Melhorar com IA'}
-                    </span>
+                    <SlidersHorizontal className="h-4 w-4" />
+                    Opcoes avancadas
+                    <ChevronDown className={`h-4 w-4 transition ${showAdvancedOptions ? 'rotate-180' : ''}`} />
                   </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleAiAssist('suggest_caption')}
-                    disabled={!canUseAi}
-                    className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-full border border-violet-200/80 bg-white px-3 text-xs font-bold text-violet-700 transition hover:bg-violet-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-violet-900/60 dark:bg-zinc-950 dark:text-violet-200 dark:hover:bg-violet-950/30"
-                    aria-label="Sugerir legenda com IA da EntreUS"
-                    aria-describedby="ai-assistance-note"
-                    title={getAiButtonTitle('suggest_caption')}
-                  >
-                    {activeAiMode === 'suggest_caption' ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <MessageSquareText className="h-4 w-4" />
-                    )}
-                    <span>
-                      {activeAiMode === 'suggest_caption'
-                        ? AI_LOADING_LABELS.suggest_caption
-                        : 'Sugerir legenda'}
-                    </span>
-                  </button>
-
-                  <div
-                    className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-200 text-zinc-600 transition hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900"
-                    title={selectedCategory ? t(selectedCategory.labelKey) : t('postComposer.category')}
-                  >
-                    <select
-                      value={category}
-                      onChange={(event) => handleCategoryChange(event.target.value)}
-                      className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                      title={t('postComposer.category')}
-                      aria-label={t('postComposer.category')}
-                    >
-                      {CATEGORY_OPTIONS.map((item) => (
-                        <option
-                          key={item.value}
-                          value={item.value}
-                          disabled={isLegacyAdultCategory(item.value) && !canAccessAdult18Plus}
-                        >
-                          {t(item.labelKey)}
-                        </option>
-                      ))}
-                    </select>
-
-                    <Tag className="pointer-events-none h-4 w-4" />
-                  </div>
-
-                  <div
-                    className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-zinc-200 text-zinc-600 transition hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900"
-                    title={selectedVisibility ? t(selectedVisibility.labelKey) : t('postComposer.privacy')}
-                  >
-                    <select
-                      value={visibility}
-                      onChange={(event) => setVisibility(event.target.value as VisibilityType)}
-                      className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                      title={t('postComposer.privacy')}
-                      aria-label={t('postComposer.privacy')}
-                    >
-                      {VISIBILITY_OPTIONS.map((item) => (
-                        <option key={item.value} value={item.value}>
-                          {t(item.labelKey)}
-                        </option>
-                      ))}
-                    </select>
-
-                    <span className="pointer-events-none">
-                      {selectedVisibility?.icon}
-                    </span>
-                  </div>
                 </div>
 
                 <button
@@ -1660,21 +1506,6 @@ export default function PostComposer({
                 </button>
               </div>
 
-              <div
-                id="ai-assistance-note"
-                className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-violet-200/70 bg-violet-50/60 px-3 py-2 text-[11px] leading-5 text-violet-700 dark:border-violet-900/50 dark:bg-violet-950/20 dark:text-violet-200"
-              >
-                <Sparkles className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                <span>A IA apenas sugere melhorias e legendas. Revise antes de publicar.</span>
-                <Link
-                  href="/help/ia"
-                  className="font-bold underline decoration-violet-300 underline-offset-2 transition hover:text-violet-900 dark:decoration-violet-700 dark:hover:text-white"
-                  aria-label="Saiba mais sobre a IA da EntreUS"
-                >
-                  Saiba mais
-                </Link>
-              </div>
-
               <div className="flex flex-wrap items-center gap-2 pl-1 text-xs text-zinc-500 dark:text-zinc-500">
                 <span>{t('postComposer.mediaCounter').replace('{current}', String(media.length)).replace('{max}', String(MAX_MEDIA_FILES))}</span>
                 {contentRating === 'adult_18plus' && (
@@ -1682,8 +1513,221 @@ export default function PostComposer({
                     Conteudo adulto fica isolado e protegido por verificacao 18+.
                   </span>
                 )}
+                {isPaidPost && (
+                  <span className="rounded-full border border-cyan-200 bg-cyan-50 px-2 py-1 font-bold text-cyan-800 dark:border-cyan-900/60 dark:bg-cyan-950/30 dark:text-cyan-200">
+                    Post pago ativo
+                  </span>
+                )}
               </div>
             </div>
+
+            {showAdvancedOptions && (
+              <div
+                id="composer-advanced-options"
+                className="mt-3 rounded-2xl border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-black"
+              >
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="flex items-center gap-2 text-sm font-black text-zinc-900 dark:text-white">
+                      <SlidersHorizontal className="h-4 w-4" />
+                      Opcoes avancadas
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+                      Use quando precisar monetizar, mudar a classificacao ou ajustar a visibilidade.
+                    </p>
+                  </div>
+                  <span className="rounded-full border border-zinc-200 px-2.5 py-1 text-xs font-bold text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
+                    {selectedVisibility ? t(selectedVisibility.labelKey) : t('postComposer.privacy')}
+                  </span>
+                </div>
+
+                <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <label className="block">
+                    <span className="mb-1.5 block text-xs font-bold text-zinc-600 dark:text-zinc-300">
+                      Categoria
+                    </span>
+                    <select
+                      value={category}
+                      onChange={(event) => handleCategoryChange(event.target.value)}
+                      className="h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm font-semibold text-zinc-900 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                      title={selectedCategory ? t(selectedCategory.labelKey) : t('postComposer.category')}
+                      aria-label={t('postComposer.category')}
+                    >
+                      {CATEGORY_OPTIONS.map((item) => (
+                        <option
+                          key={item.value}
+                          value={item.value}
+                          disabled={isLegacyAdultCategory(item.value) && !canAccessAdult18Plus}
+                        >
+                          {t(item.labelKey)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="block">
+                    <span className="mb-1.5 block text-xs font-bold text-zinc-600 dark:text-zinc-300">
+                      Visibilidade
+                    </span>
+                    <select
+                      value={visibility}
+                      onChange={(event) => setVisibility(event.target.value as VisibilityType)}
+                      className="h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm font-semibold text-zinc-900 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                      title={t('postComposer.privacy')}
+                      aria-label={t('postComposer.privacy')}
+                    >
+                      {VISIBILITY_OPTIONS.map((item) => (
+                        <option key={item.value} value={item.value}>
+                          {t(item.labelKey)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="block">
+                    <span className="mb-1.5 block text-xs font-bold text-zinc-600 dark:text-zinc-300">
+                      Classificacao
+                    </span>
+                    <select
+                      value={contentRating}
+                      onChange={(event) => handleContentRatingChange(event.target.value)}
+                      disabled={communityType === 'adult_18plus'}
+                      className="h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm font-semibold text-zinc-900 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10 disabled:cursor-not-allowed disabled:opacity-70 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                    >
+                      {CONTENT_RATINGS.map((rating) => (
+                        <option
+                          key={rating.key}
+                          value={rating.key}
+                          disabled={rating.requires18Plus && !canAccessAdult18Plus}
+                        >
+                          {rating.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+
+                <div className="mt-3 rounded-2xl border border-cyan-200 bg-cyan-50/70 p-3 dark:border-cyan-900/60 dark:bg-cyan-950/20">
+                  <label className="flex items-start gap-3">
+                    <input
+                      type="checkbox"
+                      checked={isPaidPost}
+                      onChange={(event) => handlePaidPostToggle(event.target.checked)}
+                      className="mt-1 h-4 w-4 rounded border-cyan-300 text-cyan-600 focus:ring-cyan-500"
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-2 text-sm font-black text-cyan-900 dark:text-cyan-100">
+                        <Coins className="h-4 w-4" />
+                        Post pago
+                      </span>
+                      <span className="mt-1 block text-xs leading-5 text-cyan-800/75 dark:text-cyan-100/70">
+                        Usuarios pagarao ItaCash para desbloquear este post.
+                      </span>
+                    </span>
+                  </label>
+
+                  {isPaidPost && (
+                    <label className="mt-3 block">
+                      <span className="mb-1.5 block text-xs font-bold text-cyan-900 dark:text-cyan-100">
+                        Preco em ItaCash
+                      </span>
+                      <input
+                        type="number"
+                        min={1}
+                        step={1}
+                        value={paidPostPrice}
+                        onChange={(event) => setPaidPostPrice(event.target.value)}
+                        placeholder="Ex.: 25"
+                        className="h-11 w-full rounded-xl border border-cyan-200 bg-white px-3 text-sm font-semibold text-zinc-900 outline-none transition focus:border-cyan-400 focus:ring-4 focus:ring-cyan-500/10 dark:border-cyan-900/60 dark:bg-black dark:text-white"
+                      />
+                      <span className="mt-1.5 block text-xs leading-5 text-cyan-800/75 dark:text-cyan-100/70">
+                        Informe um valor inteiro positivo. O conteudo e a midia ficam bloqueados ate o desbloqueio.
+                      </span>
+                    </label>
+                  )}
+                </div>
+
+                <div className={`mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border px-3 py-2 text-xs leading-5 ${userTier === 'elder'
+                  ? 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100'
+                  : userTier === 'vip' || userTier === 'vip_premium'
+                    ? 'border-sky-200 bg-sky-50 text-sky-800 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-100'
+                    : 'border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-100'
+                  }`}
+                >
+                  <UserTierBadge tier={userTier} />
+                  <span>{getVideoTierBenefitMessage(userTier, videoUploadLimitBytes)}</span>
+                  {userTier === 'standard' && (
+                    <>
+                      <span>VIP libera videos maiores e destaque visual.</span>
+                      <Link href="/vip-plus" className="font-black underline underline-offset-2">
+                        Conhecer VIP
+                      </Link>
+                    </>
+                  )}
+                </div>
+
+                <div className="mt-3 rounded-2xl border border-violet-200/70 bg-violet-50/60 p-3 dark:border-violet-900/50 dark:bg-violet-950/20">
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <button
+                      type="button"
+                      onClick={() => handleAiAssist('improve_post')}
+                      disabled={!canUseAi}
+                      className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-full border border-violet-200 bg-white px-3 text-xs font-bold text-violet-700 transition hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-violet-900/60 dark:bg-zinc-950 dark:text-violet-200 dark:hover:bg-violet-950/50"
+                      aria-label="Melhorar texto com IA da EntreUS"
+                      aria-describedby="ai-assistance-note"
+                      title={getAiButtonTitle('improve_post')}
+                    >
+                      {activeAiMode === 'improve_post' ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Sparkles className="h-4 w-4" />
+                      )}
+                      <span>
+                        {activeAiMode === 'improve_post'
+                          ? AI_LOADING_LABELS.improve_post
+                          : 'Melhorar com IA'}
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleAiAssist('suggest_caption')}
+                      disabled={!canUseAi}
+                      className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-full border border-violet-200/80 bg-white px-3 text-xs font-bold text-violet-700 transition hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-violet-900/60 dark:bg-zinc-950 dark:text-violet-200 dark:hover:bg-violet-950/30"
+                      aria-label="Sugerir legenda com IA da EntreUS"
+                      aria-describedby="ai-assistance-note"
+                      title={getAiButtonTitle('suggest_caption')}
+                    >
+                      {activeAiMode === 'suggest_caption' ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <MessageSquareText className="h-4 w-4" />
+                      )}
+                      <span>
+                        {activeAiMode === 'suggest_caption'
+                          ? AI_LOADING_LABELS.suggest_caption
+                          : 'Sugerir legenda'}
+                      </span>
+                    </button>
+                  </div>
+
+                  <div
+                    id="ai-assistance-note"
+                    className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] leading-5 text-violet-700 dark:text-violet-200"
+                  >
+                    <Sparkles className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                    <span>A IA apenas sugere melhorias e legendas. Revise antes de publicar.</span>
+                    <Link
+                      href="/help/ia"
+                      className="font-bold underline decoration-violet-300 underline-offset-2 transition hover:text-violet-900 dark:decoration-violet-700 dark:hover:text-white"
+                      aria-label="Saiba mais sobre a IA da EntreUS"
+                    >
+                      Saiba mais
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
