@@ -9,7 +9,7 @@ O Gravador de Tela adiciona uma ferramenta local em `/lab/screen-recorder` para 
 1. O usuário abre o EntreUS Lab e acessa **Gravador de Tela**.
 2. Antes de iniciar, escolhe microfone, webcam e áudio da tela/aba quando o navegador oferecer.
 3. O navegador solicita a tela, janela ou aba que será capturada.
-4. Durante a gravação, a página mostra o preview composto, tempo decorrido, pausa/continuação quando suportadas, caneta de marcação e botão para parar.
+4. Durante a gravação, a página mostra o preview composto, tempo decorrido, pausa/continuação quando suportadas, barra compacta de marcações e botão para parar.
 5. Ao parar, o vídeo vira um `Blob` local, recebe um `Object URL`, aparece em um player `<video controls>` e pode ser baixado como `.webm`.
 
 ## Modo Composto
@@ -18,11 +18,11 @@ Quando o navegador permite, o gravador usa um canvas local como fonte visual:
 
 1. desenha a tela capturada no canvas;
 2. desenha a webcam por cima, se estiver ativa;
-3. desenha as marcações da caneta por cima da tela;
+3. desenha as marcações por cima da tela;
 4. grava o canvas com `canvas.captureStream(30)`;
 5. combina o vídeo do canvas com o áudio da tela/aba e do microfone.
 
-Esse modo faz a webcam e as marcações aparecerem no vídeo final. Se `canvas.captureStream()` não estiver disponível, o gravador mantém o fallback seguro: grava a tela normalmente, sem webcam ou marcações embutidas, e mostra um aviso.
+Esse modo faz a webcam e as marcações aparecerem no vídeo final, usando posição, tamanho e formato atuais dos overlays no preview. Se `canvas.captureStream()` não estiver disponível, o gravador mantém o fallback seguro: grava a tela normalmente, sem webcam ou marcações embutidas, e mostra um aviso.
 
 ## Privacidade
 
@@ -44,7 +44,22 @@ A webcam é opcional e, no modo composto, é embutida no vídeo final como pictu
 
 A posição, o tamanho e o formato ficam em `localStorage` para manter a preferência local do navegador. Se o modo composto não estiver disponível, a webcam continua aparecendo no preview como fallback visual, mas não entra no arquivo final.
 
-A webcam não vira uma janela sempre por cima do Windows como um app nativo. Ela aparece por cima da tela dentro do vídeo gravado.
+A webcam não vira uma janela sempre por cima do Windows como um app nativo. Ela aparece no preview do EntreUS e é embutida no arquivo final quando o modo composto está ativo.
+
+## Limite do overlay web
+
+No navegador, webcam e marcações aparecem dentro do preview do EntreUS e entram no vídeo final no modo composto. Quando a aba do EntreUS é minimizada ou outra janela do Windows fica por cima, esses overlays web não continuam flutuando sobre o sistema inteiro.
+
+Isso é uma limitação de segurança do navegador: uma página web não pode criar uma janela transparente sempre no topo por cima de outros aplicativos do Windows.
+
+Para overlay global será necessário um pacote futuro separado: **EntreUS Recorder Desktop**, usando Electron ou Tauri.
+
+Recursos planejados para esse pacote desktop:
+
+- janela transparente sempre no topo;
+- anotações sobre qualquer app;
+- webcam global;
+- captura da área de trabalho com overlays globais.
 
 ## Integração com o editor
 
@@ -58,7 +73,19 @@ Se IndexedDB não estiver disponível, o usuário deve baixar o vídeo e import�
 
 ## Marcações
 
-A caneta desenha sobre o preview composto e as marcações entram no vídeo final. Os controles ficam em uma barra flutuante arrastável sobre o preview. O usuário pode escolher:
+As marcações desenham sobre o preview composto e entram no vídeo final. Os controles ficam em uma barra flutuante compacta e arrastável sobre o preview, com:
+
+- mover/cursor;
+- lápis;
+- texto;
+- círculo;
+- retângulo;
+- desfazer;
+- limpar.
+
+Ao clicar no lápis, a página mostra um popover pequeno com cores e slider de espessura. O slider vai da esquerda para a direita: fino para grosso.
+
+O usuário pode escolher:
 
 - vermelho;
 - amarelo;
@@ -66,16 +93,14 @@ A caneta desenha sobre o preview composto e as marcações entram no vídeo fina
 - azul;
 - branco;
 - preto;
-- espessura fina, média ou grossa.
+- espessura por slider.
 
-Também há ações para limpar todas as marcações e desfazer o último traço. A posição da barra flutuante fica em `localStorage`. O desenho usa mouse ou touch/pointer events e guarda os pontos normalizados em memória local do navegador.
+Também há ações para limpar todas as marcações e desfazer o último objeto desenhado. A posição da barra flutuante fica em `localStorage`. O desenho usa mouse ou touch/pointer events e guarda pontos normalizados em memória local do navegador.
 
 Próximos passos planejados:
 
 - setas;
 - marca-texto;
-- círculos;
-- texto;
 - borracha por área.
 
 ## Arquivo gerado

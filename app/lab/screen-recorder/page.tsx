@@ -14,17 +14,20 @@ import {
   Maximize2,
   Mic,
   Monitor,
+  MousePointer2,
   Pause,
   PenLine,
   Play,
   RotateCcw,
   ShieldCheck,
   Square,
+  Type,
   Undo2,
   Video,
   Volume2,
 } from 'lucide-react'
 import {
+  SCREEN_RECORDER_DEFAULT_ANNOTATION_TOOL,
   SCREEN_RECORDER_CANVAS_FALLBACK_MESSAGE,
   SCREEN_RECORDER_CANVAS_FPS,
   SCREEN_RECORDER_DEFAULT_TOOLBAR_LAYOUT,
@@ -42,11 +45,15 @@ import {
   getScreenRecorderOverlayRect,
   getScreenRecorderSupport,
   isMp4MimeType,
+  isScreenRecorderDrawingTool,
   normalizeScreenRecorderPoint,
+  normalizeScreenRecorderWebcamShape,
+  type ScreenRecorderAnnotationTool,
   type ScreenRecorderOverlayLayout,
   type ScreenRecorderPoint,
   type ScreenRecorderSize,
   type ScreenRecorderSupport,
+  type ScreenRecorderWebcamShape,
 } from '@/lib/screen-recorder'
 import {
   clearOldLocalVideoDrafts,
@@ -61,17 +68,36 @@ import {
 } from '@/lib/media/video-compression'
 
 type RecorderStatus = 'idle' | 'requesting' | 'recording' | 'paused' | 'stopped' | 'error'
-type MarkerSize = 'thin' | 'medium' | 'thick'
-type WebcamShape = 'rounded' | 'circle'
 type OverlayTarget = 'webcam' | 'toolbar'
 type OverlayAction = 'move' | 'resize'
 
-type DrawingStroke = {
+type PenAnnotation = {
   id: string
+  type: 'pen'
   color: string
   width: number
   points: ScreenRecorderPoint[]
 }
+
+type ShapeAnnotation = {
+  id: string
+  type: 'circle' | 'rectangle'
+  color: string
+  width: number
+  start: ScreenRecorderPoint
+  end: ScreenRecorderPoint
+}
+
+type TextAnnotation = {
+  id: string
+  type: 'text'
+  color: string
+  width: number
+  point: ScreenRecorderPoint
+  text: string
+}
+
+type DrawingAnnotation = PenAnnotation | ShapeAnnotation | TextAnnotation
 
 type OverlayInteraction = {
   target: OverlayTarget
@@ -85,7 +111,7 @@ type OverlayInteraction = {
 type StoredOverlaySettings = {
   webcamLayout?: Partial<ScreenRecorderOverlayLayout>
   toolbarLayout?: Partial<ScreenRecorderOverlayLayout>
-  webcamShape?: WebcamShape
+  webcamShape?: ScreenRecorderWebcamShape
 }
 
 const MARKER_COLORS = [
@@ -96,11 +122,9 @@ const MARKER_COLORS = [
   { label: 'Branco', value: '#ffffff' },
   { label: 'Preto', value: '#020617' },
 ]
-const MARKER_SIZES: { id: MarkerSize; label: string; width: number }[] = [
-  { id: 'thin', label: 'Fina', width: 5 },
-  { id: 'medium', label: 'Média', width: 9 },
-  { id: 'thick', label: 'Grossa', width: 15 },
-]
+const MARKER_WIDTH_MIN = 3
+const MARKER_WIDTH_MAX = 18
+const MARKER_WIDTH_DEFAULT = 9
 const OVERLAY_SETTINGS_STORAGE_KEY = 'entreus:screen-recorder-overlays:v1'
 
 function stopStream(stream: MediaStream | null) {
@@ -116,7 +140,10 @@ function getStoredOverlaySettings(): StoredOverlaySettings {
 
   try {
     const raw = window.localStorage.getItem(OVERLAY_SETTINGS_STORAGE_KEY)
-    return raw ? JSON.parse(raw) as StoredOverlaySettings : {}
+    if (!raw) return {}
+
+    const parsed: unknown = JSON.parse(raw)
+    return parsed && typeof parsed === 'object' ? parsed as StoredOverlaySettings : {}
   } catch {
     return {}
   }
@@ -124,7 +151,7 @@ function getStoredOverlaySettings(): StoredOverlaySettings {
 
 function getInitialWebcamLayout() {
   const stored = getStoredOverlaySettings()
-  const shape = stored.webcamShape === 'circle' ? 'circle' : 'rounded'
+  const shape = normalizeScreenRecorderWebcamShape(stored.webcamShape)
 
   return normalizeWebcamLayoutForShape(
     stored.webcamLayout || SCREEN_RECORDER_DEFAULT_WEBCAM_LAYOUT,
@@ -141,15 +168,15 @@ function getInitialToolbarLayout() {
   )
 }
 
-function getInitialWebcamShape(): WebcamShape {
+function getInitialWebcamShape(): ScreenRecorderWebcamShape {
   const stored = getStoredOverlaySettings()
 
-  return stored.webcamShape === 'circle' ? 'circle' : 'rounded'
+  return normalizeScreenRecorderWebcamShape(stored.webcamShape)
 }
 
 function normalizeWebcamLayoutForShape(
   layout: Partial<ScreenRecorderOverlayLayout> | null | undefined,
-  shape: WebcamShape,
+  shape: ScreenRecorderWebcamShape,
 ): ScreenRecorderOverlayLayout {
   const safeLayout = clampScreenRecorderOverlayLayout(layout, SCREEN_RECORDER_WEBCAM_LAYOUT_CONSTRAINTS)
 
@@ -182,8 +209,8 @@ export default function LabScreenRecorderPage() {
   const audioContextRef = useRef<AudioContext | null>(null)
   const audioSourceNodesRef = useRef<MediaStreamAudioSourceNode[]>([])
   const animationFrameRef = useRef<number | null>(null)
-  const strokesRef = useRef<DrawingStroke[]>([])
-  const activeStrokeRef = useRef<DrawingStroke | null>(null)
+  const annotationsRef = useRef<DrawingAnnotation[]>([])
+  const activeAnnotationRef = useRef<DrawingAnnotation | null>(null)
   const activePointerIdRef = useRef<number | null>(null)
   const chunksRef = useRef<BlobPart[]>([])
   const timerRef = useRef<number | null>(null)
@@ -209,11 +236,14 @@ export default function LabScreenRecorderPage() {
   const [canvasSize, setCanvasSize] = useState<ScreenRecorderSize>({ width: 1280, height: 720 })
   const [webcamOverlayLayout, setWebcamOverlayLayout] = useState<ScreenRecorderOverlayLayout>(getInitialWebcamLayout)
   const [annotationToolbarLayout, setAnnotationToolbarLayout] = useState<ScreenRecorderOverlayLayout>(getInitialToolbarLayout)
-  const [webcamShape, setWebcamShape] = useState<WebcamShape>(getInitialWebcamShape)
-  const [penEnabled, setPenEnabled] = useState(false)
+  const [webcamShape, setWebcamShape] = useState<ScreenRecorderWebcamShape>(getInitialWebcamShape)
+  const [selectedAnnotationTool, setSelectedAnnotationTool] = useState<ScreenRecorderAnnotationTool>(
+    SCREEN_RECORDER_DEFAULT_ANNOTATION_TOOL,
+  )
+  const [isPenOptionsOpen, setIsPenOptionsOpen] = useState(false)
   const [selectedMarkerColor, setSelectedMarkerColor] = useState(MARKER_COLORS[0].value)
-  const [selectedMarkerSize, setSelectedMarkerSize] = useState<MarkerSize>('medium')
-  const [strokeCount, setStrokeCount] = useState(0)
+  const [selectedMarkerWidth, setSelectedMarkerWidth] = useState(MARKER_WIDTH_DEFAULT)
+  const [annotationCount, setAnnotationCount] = useState(0)
   const [screenPreviewStream, setScreenPreviewStream] = useState<MediaStream | null>(null)
   const [webcamPreviewStream, setWebcamPreviewStream] = useState<MediaStream | null>(null)
   const [recordingUrl, setRecordingUrl] = useState('')
@@ -303,6 +333,10 @@ export default function LabScreenRecorderPage() {
       window.clearInterval(timerRef.current)
       timerRef.current = null
     }
+  }
+
+  function appendNoticeMessage(message: string) {
+    setNoticeMessage((current) => current ? `${current} ${message}` : message)
   }
 
   function getCurrentElapsedMs() {
@@ -423,39 +457,116 @@ export default function LabScreenRecorderPage() {
     addRoundedRectPath(context, rect.x, rect.y, rect.width, rect.height, Math.round(rect.width * 0.08))
   }
 
-  function drawStrokes(context: CanvasRenderingContext2D, width: number, height: number) {
-    for (const stroke of strokesRef.current) {
-      if (stroke.points.length === 0) continue
+  function drawPenAnnotation(
+    context: CanvasRenderingContext2D,
+    annotation: PenAnnotation,
+    width: number,
+    height: number,
+  ) {
+    if (annotation.points.length === 0) return
 
-      context.save()
-      context.strokeStyle = stroke.color
-      context.fillStyle = stroke.color
-      context.lineWidth = stroke.width
-      context.lineCap = 'round'
-      context.lineJoin = 'round'
+    context.save()
+    context.strokeStyle = annotation.color
+    context.fillStyle = annotation.color
+    context.lineWidth = annotation.width
+    context.lineCap = 'round'
+    context.lineJoin = 'round'
 
-      if (stroke.points.length === 1) {
-        const point = stroke.points[0]
-        context.beginPath()
-        context.arc(point.x * width, point.y * height, stroke.width / 2, 0, Math.PI * 2)
-        context.fill()
-        context.restore()
-        continue
-      }
-
+    if (annotation.points.length === 1) {
+      const point = annotation.points[0]
       context.beginPath()
-      stroke.points.forEach((point, index) => {
-        const x = point.x * width
-        const y = point.y * height
-
-        if (index === 0) {
-          context.moveTo(x, y)
-        } else {
-          context.lineTo(x, y)
-        }
-      })
-      context.stroke()
+      context.arc(point.x * width, point.y * height, annotation.width / 2, 0, Math.PI * 2)
+      context.fill()
       context.restore()
+      return
+    }
+
+    context.beginPath()
+    annotation.points.forEach((point, index) => {
+      const x = point.x * width
+      const y = point.y * height
+
+      if (index === 0) {
+        context.moveTo(x, y)
+      } else {
+        context.lineTo(x, y)
+      }
+    })
+    context.stroke()
+    context.restore()
+  }
+
+  function drawShapeAnnotation(
+    context: CanvasRenderingContext2D,
+    annotation: ShapeAnnotation,
+    width: number,
+    height: number,
+  ) {
+    const startX = annotation.start.x * width
+    const startY = annotation.start.y * height
+    const endX = annotation.end.x * width
+    const endY = annotation.end.y * height
+    const left = Math.min(startX, endX)
+    const top = Math.min(startY, endY)
+    const shapeWidth = Math.abs(endX - startX)
+    const shapeHeight = Math.abs(endY - startY)
+
+    context.save()
+    context.strokeStyle = annotation.color
+    context.lineWidth = annotation.width
+    context.lineCap = 'round'
+    context.lineJoin = 'round'
+
+    if (annotation.type === 'rectangle') {
+      context.strokeRect(left, top, shapeWidth, shapeHeight)
+    } else {
+      context.beginPath()
+      context.ellipse(
+        left + shapeWidth / 2,
+        top + shapeHeight / 2,
+        Math.max(1, shapeWidth / 2),
+        Math.max(1, shapeHeight / 2),
+        0,
+        0,
+        Math.PI * 2,
+      )
+      context.stroke()
+    }
+
+    context.restore()
+  }
+
+  function drawTextAnnotation(
+    context: CanvasRenderingContext2D,
+    annotation: TextAnnotation,
+    width: number,
+    height: number,
+  ) {
+    const x = annotation.point.x * width
+    const y = annotation.point.y * height
+    const fontSize = Math.max(18, annotation.width * 3)
+
+    context.save()
+    context.font = `700 ${fontSize}px sans-serif`
+    context.textBaseline = 'top'
+    context.lineJoin = 'round'
+    context.lineWidth = Math.max(3, annotation.width / 2)
+    context.strokeStyle = 'rgba(0, 0, 0, 0.72)'
+    context.fillStyle = annotation.color
+    context.strokeText(annotation.text, x, y)
+    context.fillText(annotation.text, x, y)
+    context.restore()
+  }
+
+  function drawAnnotations(context: CanvasRenderingContext2D, width: number, height: number) {
+    for (const annotation of annotationsRef.current) {
+      if (annotation.type === 'pen') {
+        drawPenAnnotation(context, annotation, width, height)
+      } else if (annotation.type === 'text') {
+        drawTextAnnotation(context, annotation, width, height)
+      } else {
+        drawShapeAnnotation(context, annotation, width, height)
+      }
     }
   }
 
@@ -508,7 +619,7 @@ export default function LabScreenRecorderPage() {
       context.restore()
     }
 
-    drawStrokes(context, width, height)
+    drawAnnotations(context, width, height)
   }
 
   function startCompositeLoop() {
@@ -522,15 +633,15 @@ export default function LabScreenRecorderPage() {
     renderFrame()
   }
 
-  function clearDrawingStrokes() {
-    strokesRef.current = []
-    activeStrokeRef.current = null
+  function clearAnnotations() {
+    annotationsRef.current = []
+    activeAnnotationRef.current = null
     activePointerIdRef.current = null
-    setStrokeCount(0)
+    setAnnotationCount(0)
   }
 
   function getSelectedMarkerWidth() {
-    return MARKER_SIZES.find((size) => size.id === selectedMarkerSize)?.width || 9
+    return Math.min(Math.max(selectedMarkerWidth, MARKER_WIDTH_MIN), MARKER_WIDTH_MAX)
   }
 
   function getWebcamLayoutForSize(size: ScreenRecorderSize, layout = webcamOverlayLayout) {
@@ -672,7 +783,7 @@ export default function LabScreenRecorderPage() {
     overlayInteractionRef.current = null
   }
 
-  function updateWebcamShape(nextShape: WebcamShape) {
+  function updateWebcamShape(nextShape: ScreenRecorderWebcamShape) {
     setWebcamShape(nextShape)
     setWebcamOverlayLayout((current) => {
       const stageSize = getPreviewStageSize()
@@ -698,6 +809,8 @@ export default function LabScreenRecorderPage() {
       SCREEN_RECORDER_DEFAULT_TOOLBAR_LAYOUT,
       SCREEN_RECORDER_TOOLBAR_LAYOUT_CONSTRAINTS,
     ))
+    setSelectedAnnotationTool(SCREEN_RECORDER_DEFAULT_ANNOTATION_TOOL)
+    setIsPenOptionsOpen(false)
   }
 
   function cleanupStreams() {
@@ -710,6 +823,7 @@ export default function LabScreenRecorderPage() {
     stopStream(micStreamRef.current)
     stopStream(webcamStreamRef.current)
     stopStream(recorderStreamRef.current)
+    mediaRecorderRef.current = null
     screenStreamRef.current = null
     micStreamRef.current = null
     webcamStreamRef.current = null
@@ -742,7 +856,7 @@ export default function LabScreenRecorderPage() {
       (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
 
     if (!AudioContextConstructor) {
-      setNoticeMessage('Seu navegador não conseguiu misturar os áudios. A gravação usará apenas uma fonte de áudio.')
+      appendNoticeMessage('Seu navegador não conseguiu misturar os áudios. A gravação usará apenas uma fonte de áudio.')
       return new MediaStream([...videoTracks, audioTracks[0]])
     }
 
@@ -765,7 +879,7 @@ export default function LabScreenRecorderPage() {
 
     if (!canvas || typeof canvas.captureStream !== 'function') {
       setIsCompositeMode(false)
-      setNoticeMessage(SCREEN_RECORDER_CANVAS_FALLBACK_MESSAGE)
+      appendNoticeMessage(SCREEN_RECORDER_CANVAS_FALLBACK_MESSAGE)
       setScreenPreviewStream(displayStream)
       setWebcamPreviewStream(cameraStream)
       return displayStream
@@ -794,7 +908,7 @@ export default function LabScreenRecorderPage() {
     drawCompositeFrame()
     startCompositeLoop()
 
-    setNoticeMessage(
+    appendNoticeMessage(
       'Modo composto ativo: webcam e marcações aparecem no vídeo final na posição atual do preview. A webcam não fica por cima do Windows; ela é embutida na gravação.',
     )
 
@@ -811,6 +925,32 @@ export default function LabScreenRecorderPage() {
 
     clearTimer()
     cleanupStreams()
+  }
+
+  async function requestOptionalMediaStream({
+    enabled,
+    constraints,
+    unavailableMessage,
+    failureMessage,
+  }: {
+    enabled: boolean
+    constraints: MediaStreamConstraints
+    unavailableMessage: string
+    failureMessage: string
+  }) {
+    if (!enabled) return null
+
+    if (typeof navigator.mediaDevices.getUserMedia !== 'function') {
+      appendNoticeMessage(unavailableMessage)
+      return null
+    }
+
+    try {
+      return await navigator.mediaDevices.getUserMedia(constraints)
+    } catch {
+      appendNoticeMessage(failureMessage)
+      return null
+    }
   }
 
   async function startRecording() {
@@ -830,7 +970,7 @@ export default function LabScreenRecorderPage() {
     setIsCompositeMode(true)
     setElapsedMs(0)
     chunksRef.current = []
-    clearDrawingStrokes()
+    clearAnnotations()
 
     const currentSupport = getScreenRecorderSupport({
       navigator: window.navigator,
@@ -849,27 +989,42 @@ export default function LabScreenRecorderPage() {
         video: true,
         audio: captureScreenAudio,
       })
+      if (displayStream.getVideoTracks().length === 0) {
+        throw new DOMException('Nenhuma faixa de vídeo foi selecionada.', 'NotFoundError')
+      }
       screenStreamRef.current = displayStream
 
-      const microphoneStream = useMicrophone
-        ? await navigator.mediaDevices.getUserMedia({
-            audio: {
-              echoCancellation: true,
-              noiseSuppression: true,
-            },
-          })
-        : null
+      const microphoneStream = await requestOptionalMediaStream({
+        enabled: useMicrophone,
+        constraints: {
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+          },
+        },
+        unavailableMessage: 'Microfone indisponível neste navegador; a gravação continuará sem microfone.',
+        failureMessage: 'Microfone bloqueado ou indisponível; a gravação continuará sem microfone.',
+      })
       micStreamRef.current = microphoneStream
+      if (useMicrophone && !microphoneStream) {
+        setUseMicrophone(false)
+      }
 
-      const cameraStream = useWebcam
-        ? await navigator.mediaDevices.getUserMedia({
-            video: {
-              width: { ideal: 640 },
-              height: { ideal: 360 },
-            },
-          })
-        : null
+      const cameraStream = await requestOptionalMediaStream({
+        enabled: useWebcam,
+        constraints: {
+          video: {
+            width: { ideal: 640 },
+            height: { ideal: 360 },
+          },
+        },
+        unavailableMessage: 'Webcam indisponível neste navegador; a gravação continuará sem webcam.',
+        failureMessage: 'Webcam bloqueada ou indisponível; a gravação continuará sem webcam.',
+      })
       webcamStreamRef.current = cameraStream
+      if (useWebcam && !cameraStream) {
+        setUseWebcam(false)
+      }
 
       const visualStream = await buildVisualRecorderStream(displayStream, cameraStream)
       const recorderStream = buildRecorderStream(visualStream, displayStream, microphoneStream)
@@ -892,7 +1047,8 @@ export default function LabScreenRecorderPage() {
       }
 
       recorder.onerror = (event) => {
-        setErrorMessage(getScreenRecorderErrorMessage(event))
+        const recorderError = 'error' in event ? event.error : event
+        setErrorMessage(getScreenRecorderErrorMessage(recorderError))
       }
 
       recorder.onstop = () => {
@@ -930,6 +1086,8 @@ export default function LabScreenRecorderPage() {
     } catch (error) {
       clearTimer()
       cleanupStreams()
+      mediaRecorderRef.current = null
+      chunksRef.current = []
       setStatus('error')
       setCanPauseResume(false)
       setErrorMessage(getScreenRecorderErrorMessage(error))
@@ -973,41 +1131,83 @@ export default function LabScreenRecorderPage() {
     setRecordingMimeType('')
     setElapsedMs(0)
     chunksRef.current = []
-    clearDrawingStrokes()
+    clearAnnotations()
+  }
+
+  function addAnnotation(annotation: DrawingAnnotation) {
+    annotationsRef.current = [...annotationsRef.current, annotation]
+    setAnnotationCount(annotationsRef.current.length)
   }
 
   function startDrawing(event: PointerEvent<HTMLCanvasElement>) {
-    if (!penEnabled || !isCompositeMode || !isRecording) return
+    if (!isScreenRecorderDrawingTool(selectedAnnotationTool) || !isCompositeMode || !isRecording) return
 
-    event.preventDefault()
-    event.currentTarget.setPointerCapture(event.pointerId)
     const point = normalizeScreenRecorderPoint(event.clientX, event.clientY, event.currentTarget.getBoundingClientRect())
-    const stroke: DrawingStroke = {
-      id: crypto.randomUUID(),
-      color: selectedMarkerColor,
-      width: getSelectedMarkerWidth(),
-      points: [point],
-    }
 
-    strokesRef.current = [...strokesRef.current, stroke]
-    activeStrokeRef.current = stroke
-    activePointerIdRef.current = event.pointerId
-    setStrokeCount(strokesRef.current.length)
-  }
+    if (selectedAnnotationTool === 'text') {
+      event.preventDefault()
+      const text = window.prompt('Texto da marcação')?.trim()
+      if (!text) return
 
-  function continueDrawing(event: PointerEvent<HTMLCanvasElement>) {
-    if (activePointerIdRef.current !== event.pointerId || !activeStrokeRef.current) return
-
-    event.preventDefault()
-    const point = normalizeScreenRecorderPoint(event.clientX, event.clientY, event.currentTarget.getBoundingClientRect())
-    const points = activeStrokeRef.current.points
-    const previousPoint = points[points.length - 1]
-
-    if (previousPoint && Math.hypot(point.x - previousPoint.x, point.y - previousPoint.y) < 0.002) {
+      addAnnotation({
+        id: crypto.randomUUID(),
+        type: 'text',
+        color: selectedMarkerColor,
+        width: getSelectedMarkerWidth(),
+        point,
+        text,
+      })
       return
     }
 
-    activeStrokeRef.current.points = [...points, point]
+    event.preventDefault()
+    event.currentTarget.setPointerCapture(event.pointerId)
+
+    const annotation: DrawingAnnotation = selectedAnnotationTool === 'pen'
+      ? {
+          id: crypto.randomUUID(),
+          type: 'pen',
+          color: selectedMarkerColor,
+          width: getSelectedMarkerWidth(),
+          points: [point],
+        }
+      : {
+          id: crypto.randomUUID(),
+          type: selectedAnnotationTool,
+          color: selectedMarkerColor,
+          width: getSelectedMarkerWidth(),
+          start: point,
+          end: point,
+        }
+
+    annotationsRef.current = [...annotationsRef.current, annotation]
+    activeAnnotationRef.current = annotation
+    activePointerIdRef.current = event.pointerId
+    setAnnotationCount(annotationsRef.current.length)
+  }
+
+  function continueDrawing(event: PointerEvent<HTMLCanvasElement>) {
+    const annotation = activeAnnotationRef.current
+    if (activePointerIdRef.current !== event.pointerId || !annotation) return
+
+    event.preventDefault()
+    const point = normalizeScreenRecorderPoint(event.clientX, event.clientY, event.currentTarget.getBoundingClientRect())
+
+    if (annotation.type === 'pen') {
+      const points = annotation.points
+      const previousPoint = points[points.length - 1]
+
+      if (previousPoint && Math.hypot(point.x - previousPoint.x, point.y - previousPoint.y) < 0.002) {
+        return
+      }
+
+      annotation.points = [...points, point]
+      return
+    }
+
+    if (annotation.type === 'circle' || annotation.type === 'rectangle') {
+      annotation.end = point
+    }
   }
 
   function finishDrawing(event: PointerEvent<HTMLCanvasElement>) {
@@ -1017,16 +1217,16 @@ export default function LabScreenRecorderPage() {
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId)
     }
-    activeStrokeRef.current = null
+    activeAnnotationRef.current = null
     activePointerIdRef.current = null
-    setStrokeCount(strokesRef.current.length)
+    setAnnotationCount(annotationsRef.current.length)
   }
 
-  function undoLastStroke() {
-    strokesRef.current = strokesRef.current.slice(0, -1)
-    activeStrokeRef.current = null
+  function undoLastAnnotation() {
+    annotationsRef.current = annotationsRef.current.slice(0, -1)
+    activeAnnotationRef.current = null
     activePointerIdRef.current = null
-    setStrokeCount(strokesRef.current.length)
+    setAnnotationCount(annotationsRef.current.length)
   }
 
   async function openInVideoEditor() {
@@ -1126,6 +1326,19 @@ export default function LabScreenRecorderPage() {
     height: `${annotationToolbarLayout.height * 100}%`,
   }
   const webcamShapeClassName = webcamShape === 'circle' ? 'rounded-full' : 'rounded-2xl'
+  const annotationToolButtons = [
+    { tool: 'cursor', label: 'Mover/cursor', icon: MousePointer2 },
+    { tool: 'pen', label: 'Lápis', icon: PenLine },
+    { tool: 'text', label: 'Texto', icon: Type },
+    { tool: 'circle', label: 'Círculo', icon: Circle },
+    { tool: 'rectangle', label: 'Retângulo', icon: Square },
+  ] satisfies { tool: ScreenRecorderAnnotationTool; label: string; icon: typeof MousePointer2 }[]
+  const penOptionsPlacementClassName = annotationToolbarLayout.y > 0.58 ? 'bottom-full mb-2' : 'top-full mt-2'
+  const penOptionsAlignClassName = annotationToolbarLayout.x > 0.42 ? 'right-0' : 'left-10'
+  const markerWidthPreviewStyle = {
+    height: `${Math.max(2, Math.round(selectedMarkerWidth / 2))}px`,
+    width: `${Math.max(18, selectedMarkerWidth * 2)}px`,
+  }
 
   return (
     <main className="min-h-screen bg-zinc-950 px-3 py-5 text-white sm:px-5">
@@ -1284,18 +1497,22 @@ export default function LabScreenRecorderPage() {
                 Marcações flutuantes
               </div>
               <p className="mt-3 text-xs leading-5 text-zinc-500">
-                Use a barra escura sobre o preview para ligar a caneta, escolher cores, desfazer ou limpar os traços.
-                Ela tambem pode ser arrastada para perto do ponto que voce estiver gravando.
+                Use a barra compacta sobre o preview para cursor, lápis, texto, círculo, retângulo, desfazer e limpar.
+                Ela também pode ser arrastada para perto do ponto que você estiver gravando.
               </p>
               <div className="mt-3 flex flex-wrap gap-2 text-xs font-black text-zinc-300">
                 <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
-                  {penEnabled ? 'Caneta ligada' : 'Caneta desligada'}
+                  {selectedAnnotationTool === 'cursor' ? 'Cursor ativo' : 'Marcação ativa'}
                 </span>
                 <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1">
-                  {strokeCount} traços
+                  {annotationCount} marcações
                 </span>
               </div>
             </div>
+
+            <p className="rounded-2xl border border-cyan-300/15 bg-cyan-500/10 px-4 py-3 text-xs leading-5 text-cyan-100/80">
+              No navegador, webcam e marcações aparecem no preview e no vídeo final. Para sobrepor em qualquer janela do Windows, será necessário o futuro EntreUS Recorder Desktop.
+            </p>
 
             <div className="grid gap-2">
               {!isRecording ? (
@@ -1392,7 +1609,7 @@ export default function LabScreenRecorderPage() {
                       onPointerCancel={finishDrawing}
                       onPointerLeave={finishDrawing}
                       className={`h-full max-h-[70vh] w-full touch-none object-contain ${
-                        penEnabled ? 'cursor-crosshair' : 'cursor-default'
+                        isScreenRecorderDrawingTool(selectedAnnotationTool) ? 'cursor-crosshair' : 'cursor-default'
                       }`}
                       style={{ aspectRatio: `${canvasSize.width} / ${canvasSize.height}` }}
                       aria-label="Preview composto da gravação"
@@ -1425,98 +1642,115 @@ export default function LabScreenRecorderPage() {
               {!recordingUrl && (
                 <>
                   <div
-                    className="absolute z-20 flex min-h-44 min-w-16 flex-col overflow-hidden rounded-2xl border border-white/15 bg-zinc-950/90 shadow-2xl shadow-black/50 ring-1 ring-black/40 backdrop-blur"
+                    className="absolute z-20 flex min-h-12 items-center gap-1.5 overflow-visible rounded-2xl border border-white/15 bg-zinc-950/90 p-1.5 shadow-2xl shadow-black/50 ring-1 ring-black/40 backdrop-blur"
                     style={toolbarOverlayStyle}
                   >
                     <button
                       type="button"
                       onPointerDown={(event) => startOverlayInteraction(event, 'toolbar', 'move')}
-                      className="inline-flex h-8 cursor-grab items-center justify-center border-b border-white/10 bg-white/5 text-zinc-300 transition hover:bg-white/10 active:cursor-grabbing"
+                      className="inline-flex h-9 w-8 shrink-0 cursor-grab items-center justify-center rounded-xl border border-white/10 bg-white/5 text-zinc-300 transition hover:bg-white/10 active:cursor-grabbing"
                       aria-label="Mover barra de marcacoes"
                       title="Mover barra de marcacoes"
                     >
                       <GripVertical className="h-4 w-4" />
                     </button>
 
-                    <div className="flex flex-1 flex-col items-center gap-2 overflow-y-auto p-2">
-                      <button
-                        type="button"
-                        onClick={() => setPenEnabled((current) => !current)}
-                        className={`inline-flex h-9 w-9 items-center justify-center rounded-full border transition ${
-                          penEnabled
-                            ? 'border-cyan-200 bg-cyan-300 text-zinc-950'
-                            : 'border-white/10 bg-white/5 text-zinc-100 hover:bg-white/10'
-                        }`}
-                        aria-label={penEnabled ? 'Desligar caneta' : 'Ligar caneta'}
-                        aria-pressed={penEnabled}
-                        title={penEnabled ? 'Desligar caneta' : 'Ligar caneta'}
-                      >
-                        <PenLine className="h-4 w-4" />
-                      </button>
+                    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+                      {annotationToolButtons.map((button) => {
+                        const Icon = button.icon
+                        const isActive = selectedAnnotationTool === button.tool
 
-                      <div className="grid grid-cols-2 gap-1.5">
-                        {MARKER_COLORS.map((color) => (
+                        return (
                           <button
-                            key={color.value}
+                            key={button.tool}
                             type="button"
-                            onClick={() => setSelectedMarkerColor(color.value)}
-                            className={`h-6 w-6 rounded-full border transition ${
-                              selectedMarkerColor === color.value
-                                ? 'scale-110 border-white ring-2 ring-cyan-300'
-                                : 'border-white/25 hover:scale-105'
-                            }`}
-                            style={{ backgroundColor: color.value }}
-                            aria-label={`Cor ${color.label}`}
-                            title={color.label}
-                          />
-                        ))}
-                      </div>
+                            onClick={() => {
+                              if (button.tool === 'pen') {
+                                setSelectedAnnotationTool('pen')
+                                setIsPenOptionsOpen((current) => selectedAnnotationTool === 'pen' ? !current : true)
+                                return
+                              }
 
-                      <div className="grid w-full gap-1.5">
-                        {MARKER_SIZES.map((size) => (
-                          <button
-                            key={size.id}
-                            type="button"
-                            onClick={() => setSelectedMarkerSize(size.id)}
-                            className={`inline-flex h-7 items-center justify-center rounded-full border transition ${
-                              selectedMarkerSize === size.id
+                              setSelectedAnnotationTool(button.tool)
+                              setIsPenOptionsOpen(false)
+                            }}
+                            className={`inline-flex h-9 w-9 items-center justify-center rounded-xl border transition ${
+                              isActive
                                 ? 'border-cyan-200 bg-cyan-300 text-zinc-950'
                                 : 'border-white/10 bg-white/5 text-zinc-100 hover:bg-white/10'
                             }`}
-                            aria-label={`Tamanho ${size.label}`}
-                            title={size.label}
+                            aria-label={button.label}
+                            aria-pressed={isActive}
+                            title={button.label}
                           >
-                            <span
-                              className="w-6 rounded-full bg-current"
-                              style={{ height: Math.max(2, Math.round(size.width / 3)) }}
-                            />
+                            <Icon className="h-4 w-4" />
                           </button>
-                        ))}
-                      </div>
+                        )
+                      })}
 
-                      <div className="grid w-full grid-cols-2 gap-1.5">
-                        <button
-                          type="button"
-                          onClick={undoLastStroke}
-                          disabled={strokeCount === 0}
-                          className="inline-flex h-8 items-center justify-center rounded-full border border-white/10 bg-white/5 text-zinc-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
-                          aria-label="Desfazer ultima marcacao"
-                          title="Desfazer ultima marcacao"
-                        >
-                          <Undo2 className="h-4 w-4" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={clearDrawingStrokes}
-                          disabled={strokeCount === 0}
-                          className="inline-flex h-8 items-center justify-center rounded-full border border-white/10 bg-white/5 text-zinc-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
-                          aria-label="Limpar marcacoes"
-                          title="Limpar marcacoes"
-                        >
-                          <Eraser className="h-4 w-4" />
-                        </button>
-                      </div>
+                      <span className="mx-0.5 h-7 w-px bg-white/10" />
+
+                      <button
+                        type="button"
+                        onClick={undoLastAnnotation}
+                        disabled={annotationCount === 0}
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-zinc-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+                        aria-label="Desfazer ultima marcacao"
+                        title="Desfazer ultima marcacao"
+                      >
+                        <Undo2 className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={clearAnnotations}
+                        disabled={annotationCount === 0}
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-zinc-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+                        aria-label="Limpar marcacoes"
+                        title="Limpar marcacoes"
+                      >
+                        <Eraser className="h-4 w-4" />
+                      </button>
                     </div>
+
+                    {isPenOptionsOpen && selectedAnnotationTool === 'pen' && (
+                      <div
+                        className={`absolute ${penOptionsPlacementClassName} ${penOptionsAlignClassName} w-56 rounded-2xl border border-white/15 bg-zinc-950/95 p-3 shadow-2xl shadow-black/50 ring-1 ring-black/40 backdrop-blur`}
+                      >
+                        <div className="grid grid-cols-6 gap-1.5">
+                          {MARKER_COLORS.map((color) => (
+                            <button
+                              key={color.value}
+                              type="button"
+                              onClick={() => setSelectedMarkerColor(color.value)}
+                              className={`h-7 w-7 rounded-full border transition ${
+                                selectedMarkerColor === color.value
+                                  ? 'scale-110 border-white ring-2 ring-cyan-300'
+                                  : 'border-white/25 hover:scale-105'
+                              }`}
+                              style={{ backgroundColor: color.value }}
+                              aria-label={`Cor ${color.label}`}
+                              title={color.label}
+                            />
+                          ))}
+                        </div>
+
+                        <div className="mt-3 grid gap-2">
+                          <div className="flex h-7 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-cyan-100">
+                            <span className="rounded-full bg-current" style={markerWidthPreviewStyle} />
+                          </div>
+                          <input
+                            type="range"
+                            min={MARKER_WIDTH_MIN}
+                            max={MARKER_WIDTH_MAX}
+                            value={selectedMarkerWidth}
+                            onChange={(event) => setSelectedMarkerWidth(Number(event.target.value))}
+                            className="w-full accent-cyan-300"
+                            aria-label="Espessura do lápis"
+                            title="Espessura do lápis"
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {useWebcam && (

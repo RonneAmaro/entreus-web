@@ -67,9 +67,9 @@ export const SCREEN_RECORDER_DEFAULT_WEBCAM_LAYOUT: ScreenRecorderOverlayLayout 
 
 export const SCREEN_RECORDER_DEFAULT_TOOLBAR_LAYOUT: ScreenRecorderOverlayLayout = {
   x: 0.03,
-  y: 0.18,
-  width: 0.08,
-  height: 0.58,
+  y: 0.04,
+  width: 0.62,
+  height: 0.14,
 }
 
 export const SCREEN_RECORDER_WEBCAM_LAYOUT_CONSTRAINTS: Required<ScreenRecorderOverlayConstraints> = {
@@ -80,11 +80,27 @@ export const SCREEN_RECORDER_WEBCAM_LAYOUT_CONSTRAINTS: Required<ScreenRecorderO
 }
 
 export const SCREEN_RECORDER_TOOLBAR_LAYOUT_CONSTRAINTS: Required<ScreenRecorderOverlayConstraints> = {
-  width: 0.06,
-  height: 0.36,
-  maxWidth: 0.18,
-  maxHeight: 0.78,
+  width: 0.42,
+  height: 0.12,
+  maxWidth: 0.92,
+  maxHeight: 0.26,
 }
+
+export const SCREEN_RECORDER_ANNOTATION_TOOLS = [
+  'cursor',
+  'pen',
+  'text',
+  'circle',
+  'rectangle',
+] as const
+
+export type ScreenRecorderAnnotationTool = (typeof SCREEN_RECORDER_ANNOTATION_TOOLS)[number]
+
+export const SCREEN_RECORDER_DEFAULT_ANNOTATION_TOOL: ScreenRecorderAnnotationTool = 'cursor'
+
+export const SCREEN_RECORDER_WEBCAM_SHAPES = ['rounded', 'circle'] as const
+
+export type ScreenRecorderWebcamShape = (typeof SCREEN_RECORDER_WEBCAM_SHAPES)[number]
 
 type MediaDevicesProbe = {
   getDisplayMedia?: unknown
@@ -146,6 +162,11 @@ export function getScreenRecorderSupport(
   const hasUserMedia = isFunction(mediaDevices?.getUserMedia)
   const hasMediaRecorder = Boolean(environment.MediaRecorder)
   const hasCanvasCapture = isFunction(environment.canvas?.captureStream)
+  const requiredMissing = [
+    ...(!hasMediaDevices ? ['mediaDevices'] : []),
+    ...(!hasDisplayMedia ? ['getDisplayMedia'] : []),
+    ...(!hasMediaRecorder ? ['MediaRecorder'] : []),
+  ]
   const missing = [
     ...(!hasMediaDevices ? ['mediaDevices'] : []),
     ...(!hasDisplayMedia ? ['getDisplayMedia'] : []),
@@ -160,9 +181,19 @@ export function getScreenRecorderSupport(
     hasMediaRecorder,
     hasCanvasCapture,
     isCompositeSupported: hasDisplayMedia && hasMediaRecorder && hasCanvasCapture,
-    isSupported: missing.length === 0,
+    isSupported: requiredMissing.length === 0,
     missing,
   }
+}
+
+export function isScreenRecorderDrawingTool(
+  tool: ScreenRecorderAnnotationTool,
+): tool is Exclude<ScreenRecorderAnnotationTool, typeof SCREEN_RECORDER_DEFAULT_ANNOTATION_TOOL> {
+  return tool !== SCREEN_RECORDER_DEFAULT_ANNOTATION_TOOL
+}
+
+export function normalizeScreenRecorderWebcamShape(value: unknown): ScreenRecorderWebcamShape {
+  return value === 'circle' ? 'circle' : 'rounded'
 }
 
 export function getBestScreenRecorderMimeType(

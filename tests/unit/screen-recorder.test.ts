@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   SCREEN_RECORDER_CANVAS_FALLBACK_MESSAGE,
+  SCREEN_RECORDER_DEFAULT_ANNOTATION_TOOL,
+  SCREEN_RECORDER_DEFAULT_TOOLBAR_LAYOUT,
   SCREEN_RECORDER_WEBCAM_LAYOUT_CONSTRAINTS,
+  SCREEN_RECORDER_TOOLBAR_LAYOUT_CONSTRAINTS,
   buildScreenRecordingFileName,
   clampScreenRecorderOverlayLayout,
   createScreenRecordingFileName,
@@ -14,7 +17,9 @@ import {
   getScreenRecorderOverlayRect,
   getScreenRecorderSupport,
   getWebcamOverlayRect,
+  isScreenRecorderDrawingTool,
   isMp4MimeType,
+  normalizeScreenRecorderWebcamShape,
   normalizeScreenRecorderPoint,
 } from '../../lib/screen-recorder'
 
@@ -45,6 +50,26 @@ describe('screen recorder helpers', () => {
       isSupported: false,
       isCompositeSupported: false,
       missing: ['mediaDevices', 'getDisplayMedia', 'getUserMedia', 'MediaRecorder'],
+    })
+  })
+
+  it('keeps microphone and webcam capture optional for basic recording support', () => {
+    expect(
+      getScreenRecorderSupport({
+        navigator: {
+          mediaDevices: {
+            getDisplayMedia: () => undefined,
+          },
+        },
+        MediaRecorder: { isTypeSupported: () => true },
+        canvas: { captureStream: () => undefined },
+      }),
+    ).toMatchObject({
+      hasDisplayMedia: true,
+      hasUserMedia: false,
+      hasMediaRecorder: true,
+      isSupported: true,
+      missing: ['getUserMedia'],
     })
   })
 
@@ -143,6 +168,68 @@ describe('screen recorder helpers', () => {
       width: 0.48,
       height: 0.12,
     })
+  })
+
+  it('clamps the annotation toolbar inside the recorder preview', () => {
+    expect(
+      clampScreenRecorderOverlayLayout(
+        { x: -0.5, y: 0.95, width: 2, height: 2 },
+        SCREEN_RECORDER_TOOLBAR_LAYOUT_CONSTRAINTS,
+      ),
+    ).toEqual({
+      x: 0,
+      y: 0.74,
+      width: 0.92,
+      height: 0.26,
+    })
+
+    expect(
+      clampScreenRecorderOverlayLayout(
+        SCREEN_RECORDER_DEFAULT_TOOLBAR_LAYOUT,
+        SCREEN_RECORDER_TOOLBAR_LAYOUT_CONSTRAINTS,
+      ),
+    ).toEqual(SCREEN_RECORDER_DEFAULT_TOOLBAR_LAYOUT)
+  })
+
+  it('applies webcam minimum and maximum layout sizes', () => {
+    const layout = clampScreenRecorderOverlayLayout(
+      { x: 0.9, y: 0.9, width: 0.02, height: 0.99 },
+      SCREEN_RECORDER_WEBCAM_LAYOUT_CONSTRAINTS,
+    )
+
+    expect(layout).toMatchObject({
+      x: 0.88,
+      width: 0.12,
+      height: 0.56,
+    })
+    expect(layout.y).toBeCloseTo(0.44)
+  })
+
+  it('falls back when a stored overlay layout is invalid', () => {
+    expect(
+      clampScreenRecorderOverlayLayout(
+        { x: Number.NaN, y: Number.POSITIVE_INFINITY, width: Number.NaN, height: Number.NEGATIVE_INFINITY },
+        SCREEN_RECORDER_TOOLBAR_LAYOUT_CONSTRAINTS,
+      ),
+    ).toEqual({
+      x: 0,
+      y: 0,
+      width: 0.42,
+      height: 0.12,
+    })
+  })
+
+  it('normalizes webcam shape settings', () => {
+    expect(normalizeScreenRecorderWebcamShape('circle')).toBe('circle')
+    expect(normalizeScreenRecorderWebcamShape('rounded')).toBe('rounded')
+    expect(normalizeScreenRecorderWebcamShape('square')).toBe('rounded')
+    expect(normalizeScreenRecorderWebcamShape(null)).toBe('rounded')
+  })
+
+  it('keeps the default annotation tool passive for recording', () => {
+    expect(SCREEN_RECORDER_DEFAULT_ANNOTATION_TOOL).toBe('cursor')
+    expect(isScreenRecorderDrawingTool(SCREEN_RECORDER_DEFAULT_ANNOTATION_TOOL)).toBe(false)
+    expect(isScreenRecorderDrawingTool('pen')).toBe(true)
   })
 
   it('converts normalized floating overlay layouts to canvas pixels', () => {
