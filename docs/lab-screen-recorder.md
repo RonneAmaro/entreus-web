@@ -24,6 +24,21 @@ Quando o navegador permite, o gravador usa um canvas local como fonte visual:
 
 Esse modo faz a webcam e as marcações aparecerem no vídeo final, usando posição, tamanho e formato atuais dos overlays no preview. Se `canvas.captureStream()` não estiver disponível, o gravador mantém o fallback seguro: grava a tela normalmente, sem webcam ou marcações embutidas, e mostra um aviso.
 
+Quando não há webcam nem ferramenta de marcação ativa no início, o gravador pode usar o stream bruto da tela. Esse modo simples tende a depender menos da renderização do preview do EntreUS e pode ser mais estável quando a janela não está em foco. Para usar webcam ou marcações no vídeo final, o gravador precisa usar o stream composto.
+
+## Janela minimizada e congelamento visual
+
+No modo composto, a trilha visual depende de um canvas local e de um loop de desenho. Quando a janela ou aba do EntreUS fica oculta, minimizada ou fortemente limitada pelo navegador, `requestAnimationFrame`, timers e desenho em canvas podem ser pausados ou reduzidos. Nessa situação, o áudio pode continuar porque vem de tracks de mídia independentes, enquanto a parte visual do canvas pode congelar ou atualizar muito lentamente.
+
+O gravador tenta reduzir o impacto usando `requestAnimationFrame` enquanto a página está visível e um fallback com timer em FPS reduzido quando `document.hidden` está ativo. Ainda assim, o navegador não garante renderização contínua com janela minimizada.
+
+Recomendações:
+
+- não minimize o EntreUS durante gravações com webcam ou marcações;
+- para gravar outros aplicativos, prefira escolher **Tela inteira** ou **Janela** em vez de capturar somente a aba do EntreUS;
+- mantenha a janela do EntreUS visível em um canto ou segundo monitor quando usar overlays;
+- use gravação simples da tela quando não precisar de webcam ou marcações.
+
 ## Privacidade
 
 - A gravação acontece no navegador do usuário.
@@ -51,6 +66,8 @@ A webcam não vira uma janela sempre por cima do Windows como um app nativo. Ela
 No navegador, webcam e marcações aparecem dentro do preview do EntreUS e entram no vídeo final no modo composto. Quando a aba do EntreUS é minimizada ou outra janela do Windows fica por cima, esses overlays web não continuam flutuando sobre o sistema inteiro.
 
 Isso é uma limitação de segurança do navegador: uma página web não pode criar uma janela transparente sempre no topo por cima de outros aplicativos do Windows.
+
+Também é uma limitação prática do runtime do navegador: ele pode pausar ou limitar renderização de canvas e `requestAnimationFrame` quando a janela está minimizada. Por isso o gravador web não promete gravação visual perfeita com a aba minimizada.
 
 Para overlay global será necessário um pacote futuro separado: **EntreUS Recorder Desktop**, usando Electron ou Tauri.
 

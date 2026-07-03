@@ -3,6 +3,10 @@ import {
   SCREEN_RECORDER_CANVAS_FALLBACK_MESSAGE,
   SCREEN_RECORDER_DEFAULT_ANNOTATION_TOOL,
   SCREEN_RECORDER_DEFAULT_TOOLBAR_LAYOUT,
+  SCREEN_RECORDER_HIDDEN_CANVAS_FPS,
+  SCREEN_RECORDER_MINIMIZED_CAPTURE_WARNING,
+  SCREEN_RECORDER_PRE_RECORDING_VISIBILITY_TIP,
+  SCREEN_RECORDER_SIMPLE_CAPTURE_TIP,
   SCREEN_RECORDER_WEBCAM_LAYOUT_CONSTRAINTS,
   SCREEN_RECORDER_TOOLBAR_LAYOUT_CONSTRAINTS,
   buildScreenRecordingFileName,
@@ -16,11 +20,15 @@ import {
   getScreenRecorderErrorMessage,
   getScreenRecorderOverlayRect,
   getScreenRecorderSupport,
+  getScreenRecorderCompositeLoopDelayMs,
+  getScreenRecorderCompositeLoopFps,
   getWebcamOverlayRect,
+  isScreenRecorderPageHidden,
   isScreenRecorderDrawingTool,
   isMp4MimeType,
   normalizeScreenRecorderWebcamShape,
   normalizeScreenRecorderPoint,
+  shouldUseScreenRecorderCompositeMode,
 } from '../../lib/screen-recorder'
 
 describe('screen recorder helpers', () => {
@@ -230,6 +238,57 @@ describe('screen recorder helpers', () => {
     expect(SCREEN_RECORDER_DEFAULT_ANNOTATION_TOOL).toBe('cursor')
     expect(isScreenRecorderDrawingTool(SCREEN_RECORDER_DEFAULT_ANNOTATION_TOOL)).toBe(false)
     expect(isScreenRecorderDrawingTool('pen')).toBe(true)
+  })
+
+  it('detects hidden recorder pages for minimized-window warnings', () => {
+    expect(isScreenRecorderPageHidden({ hidden: true, visibilityState: 'visible' })).toBe(true)
+    expect(isScreenRecorderPageHidden({ hidden: false, visibilityState: 'hidden' })).toBe(true)
+    expect(isScreenRecorderPageHidden({ hidden: false, visibilityState: 'visible' })).toBe(false)
+    expect(isScreenRecorderPageHidden({ hidden: null, visibilityState: null })).toBe(false)
+  })
+
+  it('uses reduced composite loop FPS when the page is hidden', () => {
+    expect(getScreenRecorderCompositeLoopFps(false)).toBe(30)
+    expect(getScreenRecorderCompositeLoopFps(true)).toBe(SCREEN_RECORDER_HIDDEN_CANVAS_FPS)
+    expect(getScreenRecorderCompositeLoopDelayMs(false)).toBe(33)
+    expect(getScreenRecorderCompositeLoopDelayMs(true)).toBe(125)
+  })
+
+  it('exposes minimized-window guidance messages', () => {
+    expect(SCREEN_RECORDER_MINIMIZED_CAPTURE_WARNING).toContain('congelar a parte visual')
+    expect(SCREEN_RECORDER_PRE_RECORDING_VISIBILITY_TIP).toContain('não minimize')
+    expect(SCREEN_RECORDER_SIMPLE_CAPTURE_TIP).toContain('Gravação simples')
+  })
+
+  it('uses raw screen capture when no overlays are requested', () => {
+    expect(
+      shouldUseScreenRecorderCompositeMode({
+        hasWebcam: false,
+        annotationTool: 'cursor',
+        annotationCount: 0,
+      }),
+    ).toBe(false)
+    expect(
+      shouldUseScreenRecorderCompositeMode({
+        hasWebcam: true,
+        annotationTool: 'cursor',
+        annotationCount: 0,
+      }),
+    ).toBe(true)
+    expect(
+      shouldUseScreenRecorderCompositeMode({
+        hasWebcam: false,
+        annotationTool: 'pen',
+        annotationCount: 0,
+      }),
+    ).toBe(true)
+    expect(
+      shouldUseScreenRecorderCompositeMode({
+        hasWebcam: false,
+        annotationTool: 'cursor',
+        annotationCount: 1,
+      }),
+    ).toBe(true)
   })
 
   it('converts normalized floating overlay layouts to canvas pixels', () => {

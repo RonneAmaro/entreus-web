@@ -14,8 +14,15 @@ export {
 } from './screen-recorder-formats'
 
 export const SCREEN_RECORDER_CANVAS_FPS = 30
+export const SCREEN_RECORDER_HIDDEN_CANVAS_FPS = 8
 export const SCREEN_RECORDER_CANVAS_FALLBACK_MESSAGE =
   'Seu navegador não liberou gravação composta por canvas. A tela será gravada sem webcam ou marcações embutidas.'
+export const SCREEN_RECORDER_MINIMIZED_CAPTURE_WARNING =
+  'O navegador pode congelar a parte visual quando o EntreUS é minimizado. Para gravações com webcam e marcações, mantenha esta janela aberta/visível.'
+export const SCREEN_RECORDER_PRE_RECORDING_VISIBILITY_TIP =
+  'Para evitar congelamento do vídeo, não minimize esta janela durante gravações com webcam ou marcações.'
+export const SCREEN_RECORDER_SIMPLE_CAPTURE_TIP =
+  'Gravação simples da tela tende a ser mais estável quando a janela do EntreUS não está em foco. Gravação com overlays exige manter a janela aberta.'
 
 export const SCREEN_RECORDER_MAX_CANVAS_SIZE = {
   width: 1920,
@@ -194,6 +201,36 @@ export function isScreenRecorderDrawingTool(
 
 export function normalizeScreenRecorderWebcamShape(value: unknown): ScreenRecorderWebcamShape {
   return value === 'circle' ? 'circle' : 'rounded'
+}
+
+export function isScreenRecorderPageHidden({
+  hidden,
+  visibilityState,
+}: {
+  hidden?: boolean | null
+  visibilityState?: string | null
+}) {
+  return hidden === true || visibilityState === 'hidden'
+}
+
+export function getScreenRecorderCompositeLoopFps(isPageHidden: boolean) {
+  return isPageHidden ? SCREEN_RECORDER_HIDDEN_CANVAS_FPS : SCREEN_RECORDER_CANVAS_FPS
+}
+
+export function getScreenRecorderCompositeLoopDelayMs(isPageHidden: boolean) {
+  return Math.round(1000 / getScreenRecorderCompositeLoopFps(isPageHidden))
+}
+
+export function shouldUseScreenRecorderCompositeMode({
+  hasWebcam,
+  annotationTool,
+  annotationCount = 0,
+}: {
+  hasWebcam: boolean
+  annotationTool: ScreenRecorderAnnotationTool
+  annotationCount?: number
+}) {
+  return hasWebcam || annotationCount > 0 || isScreenRecorderDrawingTool(annotationTool)
 }
 
 export function getBestScreenRecorderMimeType(

@@ -32,6 +32,9 @@ import {
   SCREEN_RECORDER_CANVAS_FPS,
   SCREEN_RECORDER_DEFAULT_TOOLBAR_LAYOUT,
   SCREEN_RECORDER_DEFAULT_WEBCAM_LAYOUT,
+  SCREEN_RECORDER_MINIMIZED_CAPTURE_WARNING,
+  SCREEN_RECORDER_PRE_RECORDING_VISIBILITY_TIP,
+  SCREEN_RECORDER_SIMPLE_CAPTURE_TIP,
   SCREEN_RECORDER_TOOLBAR_LAYOUT_CONSTRAINTS,
   SCREEN_RECORDER_WEBCAM_LAYOUT_CONSTRAINTS,
   buildScreenRecordingFileName,
@@ -44,10 +47,13 @@ import {
   getScreenRecorderErrorMessage,
   getScreenRecorderOverlayRect,
   getScreenRecorderSupport,
+  getScreenRecorderCompositeLoopDelayMs,
+  isScreenRecorderPageHidden,
   isMp4MimeType,
   isScreenRecorderDrawingTool,
   normalizeScreenRecorderPoint,
   normalizeScreenRecorderWebcamShape,
+  shouldUseScreenRecorderCompositeMode,
   type ScreenRecorderAnnotationTool,
   type ScreenRecorderOverlayLayout,
   type ScreenRecorderPoint,
@@ -209,6 +215,9 @@ export default function LabScreenRecorderPage() {
   const audioContextRef = useRef<AudioContext | null>(null)
   const audioSourceNodesRef = useRef<MediaStreamAudioSourceNode[]>([])
   const animationFrameRef = useRef<number | null>(null)
+  const compositeFrameTimeoutRef = useRef<number | null>(null)
+  const isCompositeLoopRunningRef = useRef(false)
+  const wasPageHiddenDuringRecordingRef = useRef(false)
   const annotationsRef = useRef<DrawingAnnotation[]>([])
   const activeAnnotationRef = useRef<DrawingAnnotation | null>(null)
   const activePointerIdRef = useRef<number | null>(null)
@@ -253,6 +262,7 @@ export default function LabScreenRecorderPage() {
   const [elapsedMs, setElapsedMs] = useState(0)
   const [errorMessage, setErrorMessage] = useState('')
   const [noticeMessage, setNoticeMessage] = useState('')
+  const [visibilityWarningMessage, setVisibilityWarningMessage] = useState('')
   const [editorMessage, setEditorMessage] = useState('')
   const [mp4ExportMessage, setMp4ExportMessage] = useState('')
   const [isExportingMp4, setIsExportingMp4] = useState(false)
@@ -298,6 +308,7 @@ export default function LabScreenRecorderPage() {
   useEffect(() => {
     return () => {
       if (timerRef.current) window.clearInterval(timerRef.current)
+      stopCompositeLoop()
 
       const recorder = mediaRecorderRef.current
       if (recorder && recorder.state !== 'inactive') {
@@ -328,6 +339,33 @@ export default function LabScreenRecorderPage() {
     }
   }, [annotationToolbarLayout, webcamOverlayLayout, webcamShape])
 
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (isCompositeLoopRunningRef.current) {
+        drawCompositeFrame()
+        startCompositeLoop()
+      }
+
+      const isRecordingNow = status === 'recording' || status === 'paused'
+      if (!isRecordingNow) return
+
+      if (isCurrentPageHidden()) {
+        wasPageHiddenDuringRecordingRef.current = true
+        return
+      }
+
+      if (wasPageHiddenDuringRecordingRef.current) {
+        setVisibilityWarningMessage(SCREEN_RECORDER_MINIMIZED_CAPTURE_WARNING)
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  })
+
   function clearTimer() {
     if (timerRef.current) {
       window.clearInterval(timerRef.current)
@@ -337,6 +375,15 @@ export default function LabScreenRecorderPage() {
 
   function appendNoticeMessage(message: string) {
     setNoticeMessage((current) => current ? `${current} ${message}` : message)
+  }
+
+  function isCurrentPageHidden() {
+    if (typeof document === 'undefined') return false
+
+    return isScreenRecorderPageHidden({
+      hidden: document.hidden,
+      visibilityState: document.visibilityState,
+    })
   }
 
   function getCurrentElapsedMs() {
@@ -357,9 +404,16 @@ export default function LabScreenRecorderPage() {
   }
 
   function stopCompositeLoop() {
+    isCompositeLoopRunningRef.current = false
+
     if (animationFrameRef.current) {
       window.cancelAnimationFrame(animationFrameRef.current)
       animationFrameRef.current = null
+    }
+
+    if (compositeFrameTimeoutRef.current) {
+      window.clearTimeout(compositeFrameTimeoutRef.current)
+      compositeFrameTimeoutRef.current = null
     }
   }
 
@@ -624,9 +678,23 @@ export default function LabScreenRecorderPage() {
 
   function startCompositeLoop() {
     stopCompositeLoop()
+    isCompositeLoopRunningRef.current = true
 
     const renderFrame = () => {
+      animationFrameRef.current = null
+      compositeFrameTimeoutRef.current = null
+      if (!isCompositeLoopRunningRef.current) return
+
       drawCompositeFrame()
+
+      if (isCurrentPageHidden()) {
+        compositeFrameTimeoutRef.current = window.setTimeout(
+          renderFrame,
+          getScreenRecorderCompositeLoopDelayMs(true),
+        )
+        return
+      }
+
       animationFrameRef.current = window.requestAnimationFrame(renderFrame)
     }
 
@@ -875,6 +943,20 @@ export default function LabScreenRecorderPage() {
   }
 
   async function buildVisualRecorderStream(displayStream: MediaStream, cameraStream: MediaStream | null) {
+    const shouldUseComposite = shouldUseScreenRecorderCompositeMode({
+      hasWebcam: Boolean(cameraStream),
+      annotationTool: selectedAnnotationTool,
+      annotationCount: annotationsRef.current.length,
+    })
+
+    if (!shouldUseComposite) {
+      setIsCompositeMode(false)
+      setScreenPreviewStream(displayStream)
+      setWebcamPreviewStream(null)
+      appendNoticeMessage(SCREEN_RECORDER_SIMPLE_CAPTURE_TIP)
+      return displayStream
+    }
+
     const canvas = compositeCanvasRef.current
 
     if (!canvas || typeof canvas.captureStream !== 'function') {
@@ -958,6 +1040,7 @@ export default function LabScreenRecorderPage() {
 
     setErrorMessage('')
     setNoticeMessage('')
+    setVisibilityWarningMessage('')
     setEditorMessage('')
     setMp4ExportMessage('')
     setStatus('requesting')
@@ -969,6 +1052,7 @@ export default function LabScreenRecorderPage() {
     setCanPauseResume(false)
     setIsCompositeMode(true)
     setElapsedMs(0)
+    wasPageHiddenDuringRecordingRef.current = false
     chunksRef.current = []
     clearAnnotations()
 
@@ -1122,6 +1206,7 @@ export default function LabScreenRecorderPage() {
     setIsCompositeMode(true)
     setErrorMessage('')
     setNoticeMessage('')
+    setVisibilityWarningMessage('')
     setEditorMessage('')
     setMp4ExportMessage('')
     setIsExportingMp4(false)
@@ -1130,6 +1215,7 @@ export default function LabScreenRecorderPage() {
     setRecordingFileName('')
     setRecordingMimeType('')
     setElapsedMs(0)
+    wasPageHiddenDuringRecordingRef.current = false
     chunksRef.current = []
     clearAnnotations()
   }
@@ -1312,6 +1398,11 @@ export default function LabScreenRecorderPage() {
   const canResume = status === 'paused' && canPauseResume
   const isRecordingMp4 = isMp4MimeType(recordingMimeType || recordingBlob?.type)
   const recordingDownloadLabel = isRecordingMp4 ? 'Baixar MP4' : 'Baixar WebM'
+  const hasOverlayRecordingIntent = shouldUseScreenRecorderCompositeMode({
+    hasWebcam: useWebcam,
+    annotationTool: selectedAnnotationTool,
+    annotationCount,
+  })
   const visibleWebcamLayout = getWebcamLayoutForSize(canvasSize)
   const webcamOverlayStyle = {
     left: `${visibleWebcamLayout.x * 100}%`,
@@ -1511,10 +1602,24 @@ export default function LabScreenRecorderPage() {
             </div>
 
             <p className="rounded-2xl border border-cyan-300/15 bg-cyan-500/10 px-4 py-3 text-xs leading-5 text-cyan-100/80">
-              No navegador, webcam e marcações aparecem no preview e no vídeo final. Para sobrepor em qualquer janela do Windows, será necessário o futuro EntreUS Recorder Desktop.
+              Dica: para gravações com webcam e marcações, mantenha o EntreUS aberto. Se minimizar a janela, o navegador pode congelar a parte visual.
+            </p>
+
+            <p className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-xs leading-5 text-zinc-300">
+              No navegador, os overlays aparecem no preview e no vídeo final. Para overlays por cima de qualquer janela do Windows, será necessário o futuro EntreUS Recorder Desktop.
+            </p>
+
+            <p className="rounded-2xl border border-emerald-300/15 bg-emerald-500/10 px-4 py-3 text-xs leading-5 text-emerald-100/80">
+              {SCREEN_RECORDER_SIMPLE_CAPTURE_TIP}
             </p>
 
             <div className="grid gap-2">
+              {!isRecording && hasOverlayRecordingIntent && (
+                <p className="rounded-2xl border border-amber-300/20 bg-amber-500/10 px-4 py-3 text-xs font-semibold leading-5 text-amber-100">
+                  {SCREEN_RECORDER_PRE_RECORDING_VISIBILITY_TIP}
+                </p>
+              )}
+
               {!isRecording ? (
                 <button
                   type="button"
@@ -1639,7 +1744,7 @@ export default function LabScreenRecorderPage() {
                 </div>
               )}
 
-              {!recordingUrl && (
+              {!recordingUrl && (!isRecording || isCompositeMode) && (
                 <>
                   <div
                     className="absolute z-20 flex min-h-12 items-center gap-1.5 overflow-visible rounded-2xl border border-white/15 bg-zinc-950/90 p-1.5 shadow-2xl shadow-black/50 ring-1 ring-black/40 backdrop-blur"
@@ -1793,11 +1898,16 @@ export default function LabScreenRecorderPage() {
               )}
             </div>
 
-            {(errorMessage || noticeMessage || editorMessage || mp4ExportMessage || isRecording) && (
+            {(errorMessage || noticeMessage || visibilityWarningMessage || editorMessage || mp4ExportMessage || isRecording) && (
               <div className="mt-3 grid gap-2 text-sm">
                 {isRecording && (
                   <p className="rounded-2xl border border-amber-300/20 bg-amber-500/10 px-4 py-3 font-semibold text-amber-100">
                     Não feche esta aba antes de parar e baixar a gravação.
+                  </p>
+                )}
+                {visibilityWarningMessage && (
+                  <p className="rounded-2xl border border-amber-300/25 bg-amber-500/10 px-4 py-3 font-semibold text-amber-100">
+                    {visibilityWarningMessage}
                   </p>
                 )}
                 {isRecording && isCompositeMode && (
