@@ -56,6 +56,12 @@ const adminCards = [
     icon: Banknote,
   },
   {
+    title: 'Financeiro',
+    description: 'Controle receitas, despesas, custos e lucro da plataforma.',
+    href: '/admin/finance',
+    icon: Banknote,
+  },
+  {
     title: 'Credito Promocional',
     description: 'Enviar ItaCash promocional para usuarios testarem presentes digitais.',
     href: '/admin/promotional-itacash',
