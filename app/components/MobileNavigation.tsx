@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import {
   BarChart3,
   Bell,
@@ -43,6 +43,7 @@ import { useLanguage } from './LanguageProvider'
 import type { LanguageCode } from '@/lib/translations'
 import { useAdminPendingAlerts } from '../hooks/useAdminPendingAlerts'
 import { isAdminRole } from '@/lib/admin'
+import { getComposeHref, type ComposeIntent } from '@/lib/compose-intent'
 
 type MobileNavigationProps = {
   email: string
@@ -54,7 +55,7 @@ type MobileNavigationProps = {
   theme?: string
   onToggleTheme: () => void
   onLogout: () => void
-  onPostClick: () => void
+  onPostClick: (intent?: ComposeIntent) => void
 }
 
 type MyConversationParticipant = {
@@ -120,6 +121,7 @@ export default function MobileNavigation({
   onPostClick,
 }: MobileNavigationProps) {
   const pathname = usePathname()
+  const router = useRouter()
   const { language, languages, setLanguage, t } = useLanguage()
   const [open, setOpen] = useState(false)
   const [openMoreOptions, setOpenMoreOptions] = useState(false)
@@ -135,40 +137,6 @@ export default function MobileNavigation({
 
   const visibleUnreadMessagesCount =
     unreadMessagesCount ?? internalUnreadMessagesCount
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-
-    const query = window.matchMedia('(max-width: 1023px)')
-    const updateActiveState = () => setIsMobileNavActive(query.matches)
-
-    updateActiveState()
-    query.addEventListener('change', updateActiveState)
-
-    return () => {
-      query.removeEventListener('change', updateActiveState)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!isMobileNavActive) return
-    if (typeof unreadMessagesCount === 'number') return
-
-    loadUnreadMessagesCount()
-
-    const interval = window.setInterval(() => {
-      loadUnreadMessagesCount()
-    }, 30000)
-
-    return () => {
-      window.clearInterval(interval)
-    }
-  }, [isMobileNavActive, pathname, unreadMessagesCount])
-
-  useEffect(() => {
-    if (!isMobileNavActive) return
-    loadAdminStatus()
-  }, [isMobileNavActive])
 
   async function loadAdminStatus() {
     const {
@@ -276,6 +244,50 @@ export default function MobileNavigation({
     setInternalUnreadMessagesCount(count)
   }
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const query = window.matchMedia('(max-width: 1023px)')
+    const updateActiveState = () => setIsMobileNavActive(query.matches)
+
+    updateActiveState()
+    query.addEventListener('change', updateActiveState)
+
+    return () => {
+      query.removeEventListener('change', updateActiveState)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!isMobileNavActive) return
+    if (typeof unreadMessagesCount === 'number') return
+
+    const timer = window.setTimeout(() => {
+      loadUnreadMessagesCount()
+    }, 0)
+
+    const interval = window.setInterval(() => {
+      loadUnreadMessagesCount()
+    }, 30000)
+
+    return () => {
+      window.clearTimeout(timer)
+      window.clearInterval(interval)
+    }
+  }, [isMobileNavActive, pathname, unreadMessagesCount])
+
+  useEffect(() => {
+    if (!isMobileNavActive) return
+
+    const timer = window.setTimeout(() => {
+      loadAdminStatus()
+    }, 0)
+
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [isMobileNavActive])
+
   function closeMenu() {
     setOpen(false)
   }
@@ -284,9 +296,15 @@ export default function MobileNavigation({
     setOpenMoreOptions(false)
   }
 
-  function handlePostAction() {
+  function handlePostAction(intent: ComposeIntent) {
     setOpenPostMenu(false)
-    onPostClick()
+
+    if (pathname === '/feed' || pathname === '/') {
+      onPostClick(intent)
+      return
+    }
+
+    router.push(getComposeHref(intent))
   }
 
   function isActive(path: string) {
@@ -990,7 +1008,7 @@ export default function MobileNavigation({
           <div className="absolute bottom-36 right-5 z-[80] flex flex-col items-end gap-6">
             <button
               type="button"
-              onClick={handlePostAction}
+              onClick={() => handlePostAction('text')}
               className="flex items-center gap-4 text-white"
             >
               <span className="min-w-[120px] text-right text-2xl font-semibold drop-shadow">
@@ -1004,7 +1022,7 @@ export default function MobileNavigation({
 
             <button
               type="button"
-              onClick={handlePostAction}
+              onClick={() => handlePostAction('photo')}
               className="flex items-center gap-4 text-white"
             >
               <span className="min-w-[120px] text-right text-2xl font-semibold drop-shadow">
@@ -1018,7 +1036,7 @@ export default function MobileNavigation({
 
             <button
               type="button"
-              onClick={handlePostAction}
+              onClick={() => handlePostAction('video')}
               className="flex items-center gap-4 text-white"
             >
               <span className="min-w-[120px] text-right text-2xl font-semibold drop-shadow">

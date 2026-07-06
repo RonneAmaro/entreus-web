@@ -90,6 +90,11 @@ import {
 import { protectPostForViewer } from '@/lib/protected-post-access'
 import { claimSubmitGuard, releaseSubmitGuard, type SubmitGuard } from '@/lib/post-submit-guard'
 import { resolveCommunityFilterSlug } from '@/lib/rich-text-links'
+import {
+  COMPOSE_ACTION_EVENT,
+  resolveComposeIntent,
+  type ComposeIntent,
+} from '@/lib/compose-intent'
 
 type VisibilityType = 'public' | 'followers' | 'private'
 type ComposerSubmitData = {
@@ -167,6 +172,14 @@ type Post = ModeratedPostFields & {
   media?: PostMedia[]
 }
 
+type FeedPostRow = Omit<Post, 'profiles' | 'visibility' | 'is_sensitive' | 'community_type' | 'content_rating'> & {
+  profiles: ProfileSummary | ProfileSummary[] | null
+  visibility?: VisibilityType | null
+  is_sensitive?: boolean | null
+  community_type?: string | null
+  content_rating?: string | null
+}
+
 type FeedHighlight = {
   id: string
   post_id: string | null
@@ -221,6 +234,10 @@ type Comment = {
   created_at: string
   profiles: ProfileSummary | null
   media?: CommentMedia[]
+}
+
+type CommentRow = Omit<Comment, 'profiles'> & {
+  profiles: ProfileSummary | ProfileSummary[] | null
 }
 
 type CommentMedia = {
@@ -512,7 +529,9 @@ function FeedInstallAppCard() {
   const [isStandalone, setIsStandalone] = useState(false)
 
   useEffect(() => {
-    setIsStandalone(isStandaloneDisplay())
+    const timer = window.setTimeout(() => {
+      setIsStandalone(isStandaloneDisplay())
+    }, 0)
 
     const mediaQuery = window.matchMedia('(display-mode: standalone)')
     const handleChange = () => setIsStandalone(isStandaloneDisplay())
@@ -520,6 +539,7 @@ function FeedInstallAppCard() {
     mediaQuery.addEventListener('change', handleChange)
 
     return () => {
+      window.clearTimeout(timer)
       mediaQuery.removeEventListener('change', handleChange)
     }
   }, [])
@@ -757,7 +777,6 @@ function FeedWindowItem({
 
   useEffect(() => {
     if (forceActive) {
-      setIsNearViewport(true)
       return
     }
 
@@ -834,6 +853,11 @@ function FeedContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const highlightedPostId = searchParams.get('post') || ''
+  const composeParam = searchParams.get('compose')
+  const requestedComposeIntent = useMemo(
+    () => resolveComposeIntent(composeParam),
+    [composeParam],
+  )
   const communityParam = searchParams.get('community') || searchParams.get('comunidade') || ''
   const { theme, setTheme } = useTheme()
   const { t, language } = useLanguage()
@@ -916,6 +940,8 @@ function FeedContent() {
   const [loading, setLoading] = useState(true)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
   const [hasMorePosts, setHasMorePosts] = useState(true)
+  const [activeComposeIntent, setActiveComposeIntent] = useState<ComposeIntent | null>(null)
+  const [composeRequestKey, setComposeRequestKey] = useState(0)
   const [feedCursor, setFeedCursor] = useState<FeedCursor | null>(null)
   const [loadMoreError, setLoadMoreError] = useState('')
   const [communityFilter, setCommunityFilter] = useState<CommunityFilter>('general')
@@ -938,6 +964,19 @@ function FeedContent() {
     [currentProfile],
   )
 
+  const requestPostComposer = useCallback((intent: ComposeIntent = 'text') => {
+    setActiveComposeIntent(intent)
+    setComposeRequestKey((current) => current + 1)
+
+    window.setTimeout(() => {
+      const composer = document.getElementById('post-composer')
+
+      if (composer) {
+        composer.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }
+    }, 50)
+  }, [])
+
   useEffect(() => {
     if (!communityParam) return
 
@@ -945,11 +984,23 @@ function FeedContent() {
     if (!isPostCommunityType(requestedCommunity)) return
     if (!allowedCommunityFilters.includes(requestedCommunity)) return
 
-    setCommunityFilter((current) => (current === requestedCommunity ? current : requestedCommunity))
+    const timer = window.setTimeout(() => {
+      setCommunityFilter((current) => (current === requestedCommunity ? current : requestedCommunity))
+    }, 0)
+
+    return () => {
+      window.clearTimeout(timer)
+    }
   }, [allowedCommunityFilters, communityParam])
 
   useEffect(() => {
-    setMounted(true)
+    const timer = window.setTimeout(() => {
+      setMounted(true)
+    }, 0)
+
+    return () => {
+      window.clearTimeout(timer)
+    }
   }, [])
 
   useEffect(() => {
@@ -1032,6 +1083,33 @@ function FeedContent() {
 
     loadUserAndData()
   }, [router])
+
+  useEffect(() => {
+    if (loading || !requestedComposeIntent) return
+
+    const timer = window.setTimeout(() => {
+      requestPostComposer(requestedComposeIntent)
+    }, 0)
+
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [loading, requestedComposeIntent, requestPostComposer])
+
+  useEffect(() => {
+    function handleComposeAction(event: Event) {
+      const customEvent = event as CustomEvent<{ intent?: string }>
+      const intent = resolveComposeIntent(customEvent.detail?.intent) || 'text'
+
+      requestPostComposer(intent)
+    }
+
+    window.addEventListener(COMPOSE_ACTION_EVENT, handleComposeAction)
+
+    return () => {
+      window.removeEventListener(COMPOSE_ACTION_EVENT, handleComposeAction)
+    }
+  }, [requestPostComposer])
 
   useEffect(() => {
     if (!highlightedPostId || posts.length === 0) return
@@ -1399,7 +1477,7 @@ function FeedContent() {
       return []
     }
 
-    const fetchedRows = (data || []) as any[]
+    const fetchedRows = (data || []) as unknown as FeedPostRow[]
     const lastFetchedPost = fetchedRows[fetchedRows.length - 1] as
       | { created_at: string; id: string }
       | undefined
@@ -1414,7 +1492,7 @@ function FeedContent() {
         : null
     )
 
-    const rawPosts = fetchedRows.map((post: any) => ({
+    const rawPosts: Post[] = fetchedRows.map((post) => ({
       ...post,
       visibility: (post.visibility || 'public') as VisibilityType,
       is_sensitive: post.is_sensitive || false,
@@ -1576,8 +1654,8 @@ function FeedContent() {
       return []
     }
 
-    const normalizedComments = (data || [])
-      .map((comment: any) => ({
+    const normalizedComments = ((data || []) as unknown as CommentRow[])
+      .map((comment): Comment => ({
         ...comment,
         profiles: Array.isArray(comment.profiles)
           ? comment.profiles[0] || null
@@ -3280,20 +3358,6 @@ function FeedContent() {
     setTheme(theme === 'dark' ? 'light' : 'dark')
   }
 
-  function handlePostComposerFocus() {
-    const composer = document.getElementById('post-composer')
-
-    if (composer) {
-      composer.scrollIntoView({ behavior: 'smooth', block: 'center' })
-
-      const textarea = composer.querySelector('textarea')
-
-      if (textarea instanceof HTMLTextAreaElement) {
-        setTimeout(() => textarea.focus(), 350)
-      }
-    }
-  }
-
   function handleFocusCommentInput(postId: string) {
     const input = document.getElementById(`comment-input-${postId}`)
 
@@ -3696,7 +3760,7 @@ function FeedContent() {
         theme={theme}
         onToggleTheme={handleToggleTheme}
         onLogout={handleLogout}
-        onPostClick={handlePostComposerFocus}
+        onPostClick={requestPostComposer}
       />
 
       {replyModalPost && (
@@ -4063,6 +4127,9 @@ function FeedContent() {
                 videoUploadLimitBytes={videoUploadLimit.maxSizeBytes}
                 userTier={videoUploadLimit.tier}
                 canAccessAdult18Plus={canAccessAdult18Plus}
+                initialIntent={activeComposeIntent}
+                intentRequestKey={composeRequestKey}
+                highlightOnMount={composeRequestKey > 0}
                 submitting={creatingPost || uploadingPostImage || uploadingPostVideo}
                 onSubmit={handleCreatePost}
               />

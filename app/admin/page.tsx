@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
   ArrowLeft,
@@ -19,6 +19,7 @@ import {
   Lightbulb,
   LockKeyhole,
   Loader2,
+  Search,
   ShieldOff,
   ShieldAlert,
   ShieldCheck,
@@ -29,6 +30,7 @@ import {
 import { supabase } from '@/lib/supabase'
 import { useAdminPendingAlerts } from '../hooks/useAdminPendingAlerts'
 import { isAdminRole } from '@/lib/admin'
+import { filterAdminCards } from '@/lib/admin-search'
 
 type AdminProfile = {
   id: string
@@ -42,54 +44,63 @@ const adminCards = [
     description: 'Analisar documentos, selfies e solicitacoes de liberacao 18+.',
     href: '/admin/age-verifications',
     icon: ShieldCheck,
+    keywords: ['idade', 'maioridade', '18+', 'documentos', 'selfie', 'verificacao'],
   },
   {
     title: 'Compras ItaCash',
     description: 'Aprovar ou recusar solicitacoes manuais de compra de ItaCash.',
     href: '/admin/itacash-purchases',
     icon: Coins,
+    keywords: ['itacash', 'compras', 'pix', 'comprovante', 'pagamentos'],
   },
   {
     title: 'Saques de criadores',
     description: 'Revisar solicitacoes de saque manual e registrar Pix pago ou recusado.',
     href: '/admin/creator-withdrawals',
     icon: Banknote,
+    keywords: ['saque', 'saques', 'repasses', 'withdrawals', 'pix', 'criadores'],
   },
   {
     title: 'Financeiro',
     description: 'Controle receitas, despesas, custos e lucro da plataforma.',
     href: '/admin/finance',
     icon: Banknote,
+    keywords: ['financeiro', 'financas', 'receitas', 'despesas', 'custos', 'lucro'],
   },
   {
     title: 'Credito Promocional',
     description: 'Enviar ItaCash promocional para usuarios testarem presentes digitais.',
     href: '/admin/promotional-itacash',
     icon: Sparkles,
+    keywords: ['itacash', 'promocional', 'credito', 'bonus', 'promocao'],
   },
   {
     title: 'Feedbacks e Bugs',
     description: 'Acompanhar mensagens, sugestoes e problemas enviados pelos usuarios.',
     href: '/admin/feedback',
     icon: Bug,
+    keywords: ['feedback', 'bug', 'bugs', 'sugestoes', 'relatos'],
   },
   {
     title: 'Denuncias',
     description: 'Revisar denuncias de posts e usuarios feitas pela comunidade.',
     href: '/admin/reports',
     icon: Flag,
+    keywords: ['denuncia', 'denuncias', 'reports', 'report', 'moderacao'],
   },
   {
     title: 'Moderacao',
     description: 'Conteudos ocultos e revisao de moderacao.',
     href: '/admin/moderation',
     icon: ShieldOff,
+    keywords: ['moderacao', 'reports', 'denuncia', 'conteudo', 'oculto'],
   },
   {
     title: 'Selos de usuarios',
     description: 'Conceda ou remova selos manualmente sem acessar o Supabase.',
     href: '/admin/badges',
     icon: Award,
+    keywords: ['selos', 'badges', 'usuarios', 'conquistas'],
   },
   {
     title: 'Auditoria R2',
@@ -97,6 +108,7 @@ const adminCards = [
     href: '/admin/r2-orphans',
     icon: DatabaseZap,
     badge: 'dry-run',
+    keywords: ['r2', 'storage', 'midias', 'orfas', 'auditoria'],
   },
   {
     title: 'Anexos do Meet',
@@ -104,6 +116,7 @@ const adminCards = [
     href: '/admin/meet-attachments',
     icon: FileArchive,
     badge: 'dry-run',
+    keywords: ['meet', 'anexos', 'chat', 'reunioes', 'arquivos'],
   },
   {
     title: 'Gravação Meet',
@@ -111,6 +124,7 @@ const adminCards = [
     href: '/admin/meet-recording',
     icon: ShieldCheck,
     badge: 'configuração',
+    keywords: ['meet', 'gravacao', 'recording', 'diagnostico', 'reunioes'],
   },
   {
     title: 'Checklist de seguranca',
@@ -118,6 +132,7 @@ const adminCards = [
     href: '/admin/security-check',
     icon: LockKeyhole,
     badge: 'manual',
+    keywords: ['seguranca', 'security', 'buckets', 'migrations', 'checklist'],
   },
   {
     title: 'Checklist Beta Fechado',
@@ -125,30 +140,35 @@ const adminCards = [
     href: '/admin/beta-checklist',
     icon: ClipboardCheck,
     badge: 'manual',
+    keywords: ['beta', 'fechado', 'checklist', 'validacao', 'qa'],
   },
   {
     title: 'Sugestoes da Comunidade',
     description: 'Ver ideias enviadas pelos usuarios e entender prioridades da comunidade.',
     href: '/suggestions',
     icon: Lightbulb,
+    keywords: ['sugestoes', 'ideias', 'comunidade', 'prioridades'],
   },
   {
     title: 'Desafios da Comunidade',
     description: 'Acompanhar desafios, participacao e destaques da comunidade.',
     href: '/challenges',
     icon: Trophy,
+    keywords: ['desafios', 'challenges', 'comunidade', 'destaques'],
   },
   {
     title: 'Carteira ItaCash',
     description: 'Acessar sua carteira e acompanhar movimentacoes.',
     href: '/wallet',
     icon: Wallet,
+    keywords: ['carteira', 'wallet', 'itacash', 'movimentacoes'],
   },
   {
     title: 'Presentes Digitais',
     description: 'Ver catalogo de presentes digitais animados.',
     href: '/gifts',
     icon: Gift,
+    keywords: ['presentes', 'gifts', 'digitais', 'catalogo'],
   },
 ]
 
@@ -158,6 +178,7 @@ export default function AdminPage() {
   const [message, setMessage] = useState('')
   const [adminProfile, setAdminProfile] = useState<AdminProfile | null>(null)
   const [newPendingAlert, setNewPendingAlert] = useState(false)
+  const [adminSearchQuery, setAdminSearchQuery] = useState('')
   const isAdmin = isAdminRole(adminProfile?.role)
   const handleNewPendingAlert = useCallback(() => {
     setNewPendingAlert(true)
@@ -209,12 +230,12 @@ export default function AdminPage() {
       icon: Bug,
     },
   ]
+  const filteredAdminCards = useMemo(
+    () => filterAdminCards(adminCards, adminSearchQuery),
+    [adminSearchQuery],
+  )
 
-  useEffect(() => {
-    loadPage()
-  }, [])
-
-  async function loadPage() {
+  const loadPage = useCallback(async () => {
     setLoading(true)
     setMessage('')
 
@@ -245,7 +266,17 @@ export default function AdminPage() {
       role: profileData?.role || 'user',
     })
     setLoading(false)
-  }
+  }, [router])
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      loadPage()
+    }, 0)
+
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [loadPage])
 
   if (loading) {
     return (
@@ -304,6 +335,23 @@ export default function AdminPage() {
 
         <div className="relative z-10 mb-6 rounded-3xl border border-blue-300/20 bg-blue-500/10 p-4 text-sm leading-6 text-blue-50">
           Area restrita para administradores da plataforma.
+        </div>
+
+        <div className="relative z-10 mb-6 rounded-[1.5rem] border border-white/10 bg-zinc-950/85 p-4 shadow-xl shadow-black/20 ring-1 ring-white/5">
+          <label htmlFor="admin-search" className="mb-2 block text-sm font-black text-white">
+            Buscar area administrativa
+          </label>
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+            <input
+              id="admin-search"
+              type="search"
+              value={adminSearchQuery}
+              onChange={(event) => setAdminSearchQuery(event.target.value)}
+              placeholder="Buscar no painel admin..."
+              className="h-12 w-full rounded-2xl border border-white/10 bg-black/50 pl-11 pr-4 text-sm font-semibold text-white outline-none transition placeholder:text-zinc-500 focus:border-blue-300/50 focus:ring-4 focus:ring-blue-500/10"
+            />
+          </div>
         </div>
 
         {newPendingAlert && (
@@ -422,8 +470,13 @@ export default function AdminPage() {
           </div>
         )}
 
+        {filteredAdminCards.length === 0 ? (
+          <div className="relative z-10 rounded-[1.5rem] border border-white/10 bg-zinc-950/80 p-5 text-sm font-semibold text-zinc-300 shadow-xl shadow-black/20">
+            Nenhuma área administrativa encontrada.
+          </div>
+        ) : (
         <div className="relative z-10 grid gap-4 pb-8 sm:grid-cols-2 xl:grid-cols-4">
-          {adminCards.map((card) => {
+          {filteredAdminCards.map((card) => {
             const Icon = card.icon
 
             return (
@@ -460,6 +513,7 @@ export default function AdminPage() {
             )
           })}
         </div>
+        )}
       </section>
     </main>
   )

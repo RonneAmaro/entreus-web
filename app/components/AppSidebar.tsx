@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import Image from 'next/image'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import {
   BarChart3,
   Bell,
@@ -24,6 +24,7 @@ import MoreMenu from './MoreMenu'
 import { useLanguage } from './LanguageProvider'
 import { useAdminPendingAlerts } from '../hooks/useAdminPendingAlerts'
 import { isAdminRole } from '@/lib/admin'
+import { COMPOSE_ACTION_EVENT, getComposeHref } from '@/lib/compose-intent'
 
 type AppSidebarProps = {
   unreadNotificationsCount?: number
@@ -96,6 +97,7 @@ export default function AppSidebar({
   onLogout,
 }: AppSidebarProps) {
   const pathname = usePathname()
+  const router = useRouter()
   const { t } = useLanguage()
   const navMoreButtonRef = useRef<HTMLButtonElement | null>(null)
   const profileMoreButtonRef = useRef<HTMLButtonElement | null>(null)
@@ -110,40 +112,6 @@ export default function AppSidebar({
 
   const visibleUnreadMessagesCount =
     unreadMessagesCount ?? internalUnreadMessagesCount
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-
-    const query = window.matchMedia('(min-width: 1024px)')
-    const updateActiveState = () => setIsDesktopNavActive(query.matches)
-
-    updateActiveState()
-    query.addEventListener('change', updateActiveState)
-
-    return () => {
-      query.removeEventListener('change', updateActiveState)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!isDesktopNavActive) return
-    if (typeof unreadMessagesCount === 'number') return
-
-    loadUnreadMessagesCount()
-
-    const interval = window.setInterval(() => {
-      loadUnreadMessagesCount()
-    }, 30000)
-
-    return () => {
-      window.clearInterval(interval)
-    }
-  }, [isDesktopNavActive, pathname, unreadMessagesCount])
-
-  useEffect(() => {
-    if (!isDesktopNavActive) return
-    loadAdminStatus()
-  }, [isDesktopNavActive])
 
   async function loadAdminStatus() {
     const {
@@ -251,18 +219,59 @@ export default function AppSidebar({
     setInternalUnreadMessagesCount(count)
   }
 
-  function handlePostClick() {
-    const composer = document.getElementById('post-composer')
+  useEffect(() => {
+    if (typeof window === 'undefined') return
 
-    if (composer) {
-      composer.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    const query = window.matchMedia('(min-width: 1024px)')
+    const updateActiveState = () => setIsDesktopNavActive(query.matches)
 
-      const textarea = composer.querySelector('textarea')
+    updateActiveState()
+    query.addEventListener('change', updateActiveState)
 
-      if (textarea instanceof HTMLTextAreaElement) {
-        setTimeout(() => textarea.focus(), 350)
-      }
+    return () => {
+      query.removeEventListener('change', updateActiveState)
     }
+  }, [])
+
+  useEffect(() => {
+    if (!isDesktopNavActive) return
+    if (typeof unreadMessagesCount === 'number') return
+
+    const timer = window.setTimeout(() => {
+      loadUnreadMessagesCount()
+    }, 0)
+
+    const interval = window.setInterval(() => {
+      loadUnreadMessagesCount()
+    }, 30000)
+
+    return () => {
+      window.clearTimeout(timer)
+      window.clearInterval(interval)
+    }
+  }, [isDesktopNavActive, pathname, unreadMessagesCount])
+
+  useEffect(() => {
+    if (!isDesktopNavActive) return
+
+    const timer = window.setTimeout(() => {
+      loadAdminStatus()
+    }, 0)
+
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [isDesktopNavActive])
+
+  function handlePostClick() {
+    if (pathname === '/feed' || pathname === '/') {
+      window.dispatchEvent(new CustomEvent(COMPOSE_ACTION_EVENT, {
+        detail: { intent: 'text' },
+      }))
+      return
+    }
+
+    router.push(getComposeHref('text'))
   }
 
   function isActive(path: string) {

@@ -30,6 +30,7 @@ import { supabase } from '@/lib/supabase'
 import UserTierBadge from './UserTierBadge'
 import type { AiAssistMode } from '@/lib/ai/types'
 import type { UserTier } from '@/lib/user-tiers'
+import type { ComposeIntent } from '@/lib/compose-intent'
 import {
   HEAVY_VIDEO_WARNING_SIZE_BYTES,
   IMAGE_UPLOAD_MAX_SIZE_BYTES,
@@ -87,6 +88,9 @@ type PostComposerProps = {
   videoUploadLimitBytes?: number
   userTier?: UserTier
   canAccessAdult18Plus?: boolean
+  initialIntent?: ComposeIntent | null
+  intentRequestKey?: number
+  highlightOnMount?: boolean
   submitting?: boolean
   onSubmit: (data: {
     content: string
@@ -287,11 +291,16 @@ export default function PostComposer({
   videoUploadLimitBytes = VIDEO_UPLOAD_MAX_SIZE_BYTES,
   userTier = 'standard',
   canAccessAdult18Plus = false,
+  initialIntent = null,
+  intentRequestKey = 0,
+  highlightOnMount = false,
   submitting = false,
   onSubmit,
 }: PostComposerProps) {
   const { t } = useLanguage()
   const mediaInputRef = useRef<HTMLInputElement | null>(null)
+  const photoInputRef = useRef<HTMLInputElement | null>(null)
+  const videoInputRef = useRef<HTMLInputElement | null>(null)
   const cameraPhotoInputRef = useRef<HTMLInputElement | null>(null)
   const cameraVideoInputRef = useRef<HTMLInputElement | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
@@ -315,6 +324,7 @@ export default function PostComposer({
   const [showMediaMenu, setShowMediaMenu] = useState(false)
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [isHighlighted, setIsHighlighted] = useState(false)
   const [isOptimizingVideo, setIsOptimizingVideo] = useState(false)
   const [pendingVideoCompression, setPendingVideoCompression] = useState<PendingVideoCompression | null>(null)
   const [submitLocked, setSubmitLocked] = useState(false)
@@ -372,9 +382,82 @@ export default function PostComposer({
     }
   }, [content, isModalOpen, media.length])
 
+  useEffect(() => {
+    if (!initialIntent || intentRequestKey <= 0) return
+
+    let pickerTimer: number | null = null
+    let highlightTimer: number | null = null
+    let focusTimer: number | null = null
+
+    const requestTimer = window.setTimeout(() => {
+      setIsModalOpen(true)
+      setShowEmojiPicker(false)
+      setShowMediaMenu(false)
+
+      if (highlightOnMount) {
+        setIsHighlighted(true)
+      }
+
+      highlightTimer = window.setTimeout(() => {
+        setIsHighlighted(false)
+      }, 1800)
+
+      focusTimer = window.setTimeout(() => {
+        textareaRef.current?.focus()
+      }, 120)
+
+      if (initialIntent === 'photo' || initialIntent === 'video') {
+        setMediaFeedback({
+          type: 'info',
+          message: 'Escolha uma mídia para publicar.',
+        })
+
+        pickerTimer = window.setTimeout(() => {
+          const input = initialIntent === 'photo' ? photoInputRef.current : videoInputRef.current
+
+          if (!input) {
+            setShowMediaMenu(true)
+            setMediaFeedback({
+              type: 'warning',
+              message: 'Não foi possível abrir o seletor automaticamente. Clique em adicionar mídia.',
+            })
+            return
+          }
+
+          try {
+            input.click()
+          } catch {
+            setShowMediaMenu(true)
+            setMediaFeedback({
+              type: 'warning',
+              message: 'Não foi possível abrir o seletor automaticamente. Clique em adicionar mídia.',
+            })
+          }
+        }, 180)
+      }
+    }, 0)
+
+    return () => {
+      window.clearTimeout(requestTimer)
+      if (highlightTimer !== null) window.clearTimeout(highlightTimer)
+      if (focusTimer !== null) window.clearTimeout(focusTimer)
+      if (pickerTimer !== null) window.clearTimeout(pickerTimer)
+    }
+  }, [highlightOnMount, initialIntent, intentRequestKey])
+
   function openMediaPicker(replacementMediaId?: string) {
     mediaReplacementIdRef.current = replacementMediaId || null
     mediaInputRef.current?.click()
+  }
+
+  function openPhotoPicker() {
+    mediaReplacementIdRef.current = null
+    photoInputRef.current?.click()
+  }
+
+  function openVideoPicker() {
+    mediaReplacementIdRef.current = null
+    videoInputRef.current?.click()
   }
 
   function openCameraPhotoPicker() {
@@ -508,6 +591,8 @@ export default function PostComposer({
     }
 
     if (mediaInputRef.current) mediaInputRef.current.value = ''
+    if (photoInputRef.current) photoInputRef.current.value = ''
+    if (videoInputRef.current) videoInputRef.current.value = ''
     if (cameraPhotoInputRef.current) cameraPhotoInputRef.current.value = ''
     if (cameraVideoInputRef.current) cameraVideoInputRef.current.value = ''
   }
@@ -987,7 +1072,13 @@ export default function PostComposer({
 
   return (
     <>
-      <div className="rounded-[1.35rem] border border-zinc-200/70 bg-white/90 px-3 py-2.5 shadow-sm ring-1 ring-black/5 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-zinc-950/80 dark:ring-white/10">
+      <div
+        className={`rounded-[1.35rem] border px-3 py-2.5 shadow-sm backdrop-blur-xl transition ${
+          isHighlighted
+            ? 'border-blue-400/70 bg-blue-50/90 ring-4 ring-blue-500/20 dark:border-blue-400/60 dark:bg-blue-950/30 dark:ring-blue-400/20'
+            : 'border-zinc-200/70 bg-white/90 ring-1 ring-black/5 dark:border-zinc-800/70 dark:bg-zinc-950/80 dark:ring-white/10'
+        }`}
+      >
         <div className="flex items-center gap-3">
           {userAvatarUrl ? (
             <img
@@ -1064,7 +1155,7 @@ export default function PostComposer({
               </button>
 
               <p className="text-sm font-black text-zinc-950 dark:text-white">
-                Criar post
+                Criar publicação
               </p>
 
               <button
@@ -1337,6 +1428,26 @@ export default function PostComposer({
                   />
 
                   <input
+                    ref={photoInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif,.jpg,.jpeg,.png,.webp,.gif"
+                    multiple
+                    className="hidden"
+                    disabled={isOptimizingVideo}
+                    onChange={(event) => addFiles(event.target.files)}
+                  />
+
+                  <input
+                    ref={videoInputRef}
+                    type="file"
+                    accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov"
+                    multiple
+                    className="hidden"
+                    disabled={isOptimizingVideo}
+                    onChange={(event) => addFiles(event.target.files)}
+                  />
+
+                  <input
                     ref={cameraPhotoInputRef}
                     type="file"
                     accept="image/*"
@@ -1366,16 +1477,36 @@ export default function PostComposer({
                           ? 'border-blue-200 bg-blue-50 text-blue-700 ring-1 ring-blue-200 dark:border-blue-500/30 dark:bg-blue-950/40 dark:text-blue-200'
                           : 'border-zinc-200 bg-white text-blue-600 hover:bg-blue-50 dark:border-zinc-800 dark:bg-black dark:text-blue-300 dark:hover:bg-blue-950/30'
                       } disabled:cursor-not-allowed disabled:opacity-50`}
-                      title="Adicionar midia"
-                      aria-label="Adicionar midia"
+                      title="Adicionar mídia"
+                      aria-label="Adicionar mídia"
                       aria-expanded={showMediaMenu}
                     >
                       <ImagePlus className="h-4 w-4" />
-                      Midia
+                      Adicionar mídia
                     </button>
 
                     {showMediaMenu && (
                       <div className="absolute left-0 top-12 z-[10000] w-[min(17rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-blue-400/25 bg-white p-1.5 text-zinc-900 shadow-2xl shadow-blue-950/20 ring-1 ring-black/5 dark:bg-zinc-950 dark:text-white dark:ring-white/10">
+                        <button
+                          type="button"
+                          onClick={openPhotoPicker}
+                          disabled={isOptimizingVideo}
+                          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-bold transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-blue-950/30"
+                        >
+                          <ImagePlus className="h-4 w-4 text-blue-500" />
+                          Adicionar foto
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={openVideoPicker}
+                          disabled={isOptimizingVideo}
+                          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-bold transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-blue-950/30"
+                        >
+                          <Video className="h-4 w-4 text-blue-500" />
+                          Adicionar vídeo
+                        </button>
+
                         <button
                           type="button"
                           onClick={() => openMediaPicker()}
