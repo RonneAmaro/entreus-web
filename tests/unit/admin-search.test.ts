@@ -24,7 +24,7 @@ const cards = [
     title: 'Verificacoes 18+',
     description: 'Analisar documentos e selfies.',
     href: '/admin/age-verifications',
-    keywords: ['idade', 'maioridade'],
+    keywords: ['idade', 'maioridade', 'verificacao'],
   },
   {
     title: 'Denuncias',
@@ -43,6 +43,30 @@ const cards = [
     description: 'Roteiro manual para validacao.',
     href: '/admin/beta-checklist',
     keywords: ['beta'],
+  },
+  {
+    title: 'Auditoria R2',
+    description: 'Verifique possiveis midias orfas no armazenamento.',
+    href: '/admin/r2-orphans',
+    keywords: ['r2', 'storage'],
+  },
+  {
+    title: 'Selos de usuarios',
+    description: 'Conceda ou remova selos manualmente.',
+    href: '/admin/badges',
+    keywords: ['selos', 'badges'],
+  },
+  {
+    title: 'Checklist de seguranca',
+    description: 'Confira pontos criticos antes de liberar usuarios reais.',
+    href: '/admin/security-check',
+    keywords: ['seguranca', 'security'],
+  },
+  {
+    title: 'Feedbacks e Bugs',
+    description: 'Acompanhar sugestoes e problemas enviados pelos usuarios.',
+    href: '/admin/feedback',
+    keywords: ['feedback', 'bugs'],
   },
 ]
 
@@ -72,8 +96,15 @@ describe('admin search helpers', () => {
     ])
   })
 
+  it('finds creator withdrawals by repasse keyword', () => {
+    expect(filterAdminCards(cards, 'repasse').map((card) => card.title)).toEqual([
+      'Saques de criadores',
+    ])
+  })
+
   it('finds 18+ verification by keyword', () => {
     expect(filterAdminCards(cards, 'idade').map((card) => card.title)).toEqual(['Verificacoes 18+'])
+    expect(filterAdminCards(cards, 'verificação').map((card) => card.title)).toEqual(['Verificacoes 18+'])
   })
 
   it('finds reports and moderation by denuncia', () => {
@@ -81,6 +112,25 @@ describe('admin search helpers', () => {
       'Denuncias',
       'Moderacao',
     ])
+  })
+
+  it('finds reports and moderation by moderation terms', () => {
+    expect(filterAdminCards(cards, 'moderacao').map((card) => card.title)).toEqual([
+      'Denuncias',
+      'Moderacao',
+    ])
+    expect(filterAdminCards(cards, 'moderação').map((card) => card.title)).toEqual([
+      'Denuncias',
+      'Moderacao',
+    ])
+  })
+
+  it('finds the final audit recommended admin areas', () => {
+    expect(filterAdminCards(cards, 'beta').map((card) => card.title)).toEqual(['Checklist Beta Fechado'])
+    expect(filterAdminCards(cards, 'r2').map((card) => card.title)).toEqual(['Auditoria R2'])
+    expect(filterAdminCards(cards, 'selo').map((card) => card.title)).toEqual(['Selos de usuarios'])
+    expect(filterAdminCards(cards, 'segurança').map((card) => card.title)).toEqual(['Checklist de seguranca'])
+    expect(filterAdminCards(cards, 'feedback').map((card) => card.title)).toEqual(['Feedbacks e Bugs'])
   })
 
   it('returns an empty list when there is no match', () => {

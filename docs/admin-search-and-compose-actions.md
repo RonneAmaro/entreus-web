@@ -12,11 +12,15 @@ O `/admin` tem uma busca client-side no topo do painel, sem API e sem banco. Os 
 O texto é normalizado antes da comparação, então buscas com acento ou caixa diferente continuam funcionando. Exemplos úteis:
 
 - `financeiro` encontra Financeiro;
-- `idade` encontra Verificações 18+;
-- `denúncia` encontra Denúncias e Moderação;
+- `idade` ou `verificação` encontra Verificações 18+;
+- `denúncia`, `moderacao` ou `moderação` encontra Denúncias e Moderação;
 - `beta` encontra Checklist Beta Fechado;
 - `ItaCash` encontra áreas relacionadas a ItaCash;
-- `saque` encontra Saques de criadores.
+- `saque` ou `repasse` encontra Saques de criadores;
+- `r2` encontra Auditoria R2;
+- `selo` encontra Selos de usuários;
+- `segurança` encontra Checklist de segurança;
+- `feedback` encontra Feedbacks e Bugs.
 
 Quando nenhum card combina com a busca, o painel mostra: `Nenhuma área administrativa encontrada.`
 
@@ -54,10 +58,11 @@ O fallback exibido é: `Clique em adicionar mídia para escolher a foto/vídeo.`
 ## Checklist manual 48A
 
 - `/admin`: buscar `financeiro` deve mostrar Financeiro.
-- `/admin`: buscar `idade` deve mostrar Verificações 18+.
-- `/admin`: buscar `denúncia` deve mostrar Denúncias e Moderação.
+- `/admin`: buscar `idade` ou `verificação` deve mostrar Verificações 18+.
+- `/admin`: buscar `denúncia`, `moderacao` ou `moderação` deve mostrar Denúncias e Moderação.
 - `/admin`: buscar `itacash` deve mostrar áreas ItaCash.
-- `/admin`: buscar `saque` deve mostrar Saques de criadores.
+- `/admin`: buscar `saque` ou `repasse` deve mostrar Saques de criadores.
+- `/admin`: buscar `beta`, `r2`, `selo`, `segurança` e `feedback` deve encontrar os cards correspondentes.
 - `/admin`: buscar um termo inválido deve mostrar `Nenhuma área administrativa encontrada.`
 - `/feed?compose=1`: deve abrir/focar o composer.
 - `/feed?compose=photo`: deve abrir o composer e preparar seleção de foto.
