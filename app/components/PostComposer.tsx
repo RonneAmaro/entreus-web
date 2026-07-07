@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import {
@@ -30,7 +30,11 @@ import { supabase } from '@/lib/supabase'
 import UserTierBadge from './UserTierBadge'
 import type { AiAssistMode } from '@/lib/ai/types'
 import type { UserTier } from '@/lib/user-tiers'
-import type { ComposeIntent } from '@/lib/compose-intent'
+import {
+  COMPOSE_ACTION_EVENT,
+  resolveComposeIntent,
+  type ComposeIntent,
+} from '@/lib/compose-intent'
 import {
   HEAVY_VIDEO_WARNING_SIZE_BYTES,
   IMAGE_UPLOAD_MAX_SIZE_BYTES,
@@ -183,6 +187,11 @@ const AI_LOADING_LABELS: Record<AiAssistMode, string> = {
   improve_post: 'Melhorando...',
   suggest_caption: 'Gerando legenda...',
 }
+const MEDIA_INTENT_FALLBACK_MESSAGE = 'Clique em adicionar mídia para escolher a foto/vídeo.'
+const MEDIA_INTENT_READY_MESSAGES: Record<'photo' | 'video', string> = {
+  photo: 'Escolha uma foto para publicar.',
+  video: 'Escolha um vídeo para publicar.',
+}
 const POST_EMOJI_GROUPS = [
   {
     title: 'Populares',
@@ -330,6 +339,24 @@ export default function PostComposer({
   const [submitLocked, setSubmitLocked] = useState(false)
   const isSubmitting = submitting || submitLocked
 
+  const tryOpenIntentMediaPicker = useCallback((intent: ComposeIntent) => {
+    const input =
+      intent === 'photo'
+        ? photoInputRef.current
+        : intent === 'video'
+          ? videoInputRef.current
+          : null
+
+    if (!input) return false
+
+    try {
+      input.click()
+      return true
+    } catch {
+      return false
+    }
+  }, [])
+
   const selectedCategory = useMemo(() => {
     return CATEGORY_OPTIONS.find((item) => item.value === category)
   }, [category])
@@ -392,7 +419,7 @@ export default function PostComposer({
     const requestTimer = window.setTimeout(() => {
       setIsModalOpen(true)
       setShowEmojiPicker(false)
-      setShowMediaMenu(false)
+      setShowMediaMenu(initialIntent === 'photo' || initialIntent === 'video')
 
       if (highlightOnMount) {
         setIsHighlighted(true)
@@ -409,30 +436,23 @@ export default function PostComposer({
       if (initialIntent === 'photo' || initialIntent === 'video') {
         setMediaFeedback({
           type: 'info',
-          message: 'Escolha uma mídia para publicar.',
+          message: MEDIA_INTENT_READY_MESSAGES[initialIntent],
         })
 
         pickerTimer = window.setTimeout(() => {
-          const input = initialIntent === 'photo' ? photoInputRef.current : videoInputRef.current
-
-          if (!input) {
+          if (!tryOpenIntentMediaPicker(initialIntent)) {
             setShowMediaMenu(true)
             setMediaFeedback({
               type: 'warning',
-              message: 'Não foi possível abrir o seletor automaticamente. Clique em adicionar mídia.',
+              message: MEDIA_INTENT_FALLBACK_MESSAGE,
             })
             return
           }
 
-          try {
-            input.click()
-          } catch {
-            setShowMediaMenu(true)
-            setMediaFeedback({
-              type: 'warning',
-              message: 'Não foi possível abrir o seletor automaticamente. Clique em adicionar mídia.',
-            })
-          }
+          setMediaFeedback({
+            type: 'info',
+            message: MEDIA_INTENT_FALLBACK_MESSAGE,
+          })
         }, 180)
       }
     }, 0)
@@ -443,7 +463,68 @@ export default function PostComposer({
       if (focusTimer !== null) window.clearTimeout(focusTimer)
       if (pickerTimer !== null) window.clearTimeout(pickerTimer)
     }
-  }, [highlightOnMount, initialIntent, intentRequestKey])
+  }, [highlightOnMount, initialIntent, intentRequestKey, tryOpenIntentMediaPicker])
+
+  useEffect(() => {
+    let highlightTimer: number | null = null
+    let focusTimer: number | null = null
+
+    function clearTimers() {
+      if (highlightTimer !== null) window.clearTimeout(highlightTimer)
+      if (focusTimer !== null) window.clearTimeout(focusTimer)
+      highlightTimer = null
+      focusTimer = null
+    }
+
+    function handleComposeAction(event: Event) {
+      const customEvent = event as CustomEvent<{ intent?: string }>
+      const intent = resolveComposeIntent(customEvent.detail?.intent) || 'text'
+      const isMediaIntent = intent === 'photo' || intent === 'video'
+
+      clearTimers()
+      setIsModalOpen(true)
+      setShowEmojiPicker(false)
+      setShowMediaMenu(isMediaIntent)
+      setIsHighlighted(true)
+
+      highlightTimer = window.setTimeout(() => {
+        setIsHighlighted(false)
+      }, 1800)
+
+      if (isMediaIntent) {
+        setMediaFeedback({
+          type: 'info',
+          message: MEDIA_INTENT_READY_MESSAGES[intent],
+        })
+
+        if (!tryOpenIntentMediaPicker(intent)) {
+          setMediaFeedback({
+            type: 'warning',
+            message: MEDIA_INTENT_FALLBACK_MESSAGE,
+          })
+          return
+        }
+
+        setMediaFeedback({
+          type: 'info',
+          message: MEDIA_INTENT_FALLBACK_MESSAGE,
+        })
+        return
+      }
+
+      setShowMediaMenu(false)
+      focusTimer = window.setTimeout(() => {
+        textareaRef.current?.focus()
+      }, 80)
+    }
+
+    window.addEventListener(COMPOSE_ACTION_EVENT, handleComposeAction)
+
+    return () => {
+      clearTimers()
+      window.removeEventListener(COMPOSE_ACTION_EVENT, handleComposeAction)
+    }
+  }, [tryOpenIntentMediaPicker])
 
   function openMediaPicker(replacementMediaId?: string) {
     mediaReplacementIdRef.current = replacementMediaId || null
@@ -1072,6 +1153,56 @@ export default function PostComposer({
 
   return (
     <>
+      <input
+        ref={mediaInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/gif,.jpg,.jpeg,.png,.webp,.gif,video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov"
+        multiple
+        className="hidden"
+        disabled={isOptimizingVideo}
+        onChange={(event) => addFiles(event.target.files)}
+      />
+
+      <input
+        ref={photoInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/gif,.jpg,.jpeg,.png,.webp,.gif"
+        multiple
+        className="hidden"
+        disabled={isOptimizingVideo}
+        onChange={(event) => addFiles(event.target.files)}
+      />
+
+      <input
+        ref={videoInputRef}
+        type="file"
+        accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov"
+        multiple
+        className="hidden"
+        disabled={isOptimizingVideo}
+        onChange={(event) => addFiles(event.target.files)}
+      />
+
+      <input
+        ref={cameraPhotoInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        disabled={isOptimizingVideo}
+        onChange={(event) => addFiles(event.target.files)}
+      />
+
+      <input
+        ref={cameraVideoInputRef}
+        type="file"
+        accept="video/*"
+        capture="environment"
+        className="hidden"
+        disabled={isOptimizingVideo}
+        onChange={(event) => addFiles(event.target.files)}
+      />
+
       <div
         className={`rounded-[1.35rem] border px-3 py-2.5 shadow-sm backdrop-blur-xl transition ${
           isHighlighted
@@ -1417,56 +1548,6 @@ export default function PostComposer({
             <div className="mt-3 flex flex-col gap-3">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-                  <input
-                    ref={mediaInputRef}
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp,image/gif,.jpg,.jpeg,.png,.webp,.gif,video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov"
-                    multiple
-                    className="hidden"
-                    disabled={isOptimizingVideo}
-                    onChange={(event) => addFiles(event.target.files)}
-                  />
-
-                  <input
-                    ref={photoInputRef}
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp,image/gif,.jpg,.jpeg,.png,.webp,.gif"
-                    multiple
-                    className="hidden"
-                    disabled={isOptimizingVideo}
-                    onChange={(event) => addFiles(event.target.files)}
-                  />
-
-                  <input
-                    ref={videoInputRef}
-                    type="file"
-                    accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov"
-                    multiple
-                    className="hidden"
-                    disabled={isOptimizingVideo}
-                    onChange={(event) => addFiles(event.target.files)}
-                  />
-
-                  <input
-                    ref={cameraPhotoInputRef}
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    className="hidden"
-                    disabled={isOptimizingVideo}
-                    onChange={(event) => addFiles(event.target.files)}
-                  />
-
-                  <input
-                    ref={cameraVideoInputRef}
-                    type="file"
-                    accept="video/*"
-                    capture="environment"
-                    className="hidden"
-                    disabled={isOptimizingVideo}
-                    onChange={(event) => addFiles(event.target.files)}
-                  />
-
                   <div className="relative shrink-0">
                     <button
                       type="button"

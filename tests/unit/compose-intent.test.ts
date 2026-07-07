@@ -4,15 +4,23 @@ import { getComposeHref, resolveComposeIntent } from '../../lib/compose-intent'
 describe('compose intent helpers', () => {
   it('maps compose=1 to text intent', () => {
     expect(resolveComposeIntent('1')).toBe('text')
+    expect(resolveComposeIntent('publish')).toBe('text')
+    expect(resolveComposeIntent('post')).toBe('text')
   })
 
   it('maps compose=photo to photo intent', () => {
     expect(resolveComposeIntent('photo')).toBe('photo')
+    expect(resolveComposeIntent('foto')).toBe('photo')
+    expect(resolveComposeIntent('imagem')).toBe('photo')
   })
 
   it('maps compose=video to video intent', () => {
     expect(resolveComposeIntent('video')).toBe('video')
     expect(resolveComposeIntent('vídeo')).toBe('video')
+  })
+
+  it('uses the first compose value when the router gives an array', () => {
+    expect(resolveComposeIntent(['photo', 'video'])).toBe('photo')
   })
 
   it('returns null for invalid or missing values', () => {

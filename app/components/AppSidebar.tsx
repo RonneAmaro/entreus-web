@@ -264,10 +264,11 @@ export default function AppSidebar({
   }, [isDesktopNavActive])
 
   function handlePostClick() {
-    if (pathname === '/feed' || pathname === '/') {
+    if (pathname === '/feed') {
       window.dispatchEvent(new CustomEvent(COMPOSE_ACTION_EVENT, {
         detail: { intent: 'text' },
       }))
+      router.replace(getComposeHref('text'), { scroll: false })
       return
     }
 

@@ -30,7 +30,7 @@ import {
 import { supabase } from '@/lib/supabase'
 import { useAdminPendingAlerts } from '../hooks/useAdminPendingAlerts'
 import { isAdminRole } from '@/lib/admin'
-import { filterAdminCards } from '@/lib/admin-search'
+import { filterAdminCards, normalizeAdminSearchText } from '@/lib/admin-search'
 
 type AdminProfile = {
   id: string
@@ -192,48 +192,75 @@ export default function AdminPage() {
     enabled: isAdmin,
     onNewPending: handleNewPendingAlert,
   })
-  const pendingSummaryCards = [
-    {
-      key: 'itacashPurchases' as const,
-      title: 'Compras ItaCash pendentes',
-      count: adminPendingCounts.itacashPurchases,
-      description: 'Compras manuais e Pix com comprovante aguardando analise.',
-      href: '/admin/itacash-purchases',
-      action: 'Revisar agora',
-      icon: Coins,
-    },
-    {
-      key: 'ageVerifications' as const,
-      title: 'Verificacoes 18+ pendentes',
-      count: adminPendingCounts.ageVerifications,
-      description: 'Documentos e selfies aguardando revisao manual.',
-      href: '/admin/age-verifications',
-      action: 'Revisar agora',
-      icon: ShieldCheck,
-    },
-    {
-      key: 'reports' as const,
-      title: 'Denuncias pendentes',
-      count: adminPendingCounts.reports,
-      description: 'Relatos de usuarios sobre posts ou perfis.',
-      href: '/admin/reports',
-      action: 'Revisar agora',
-      icon: Flag,
-    },
-    {
-      key: 'feedbackReports' as const,
-      title: 'Feedbacks e bugs novos',
-      count: adminPendingCounts.feedbackReports,
-      description: 'Relatos internos abertos, triados ou em andamento.',
-      href: '/admin/feedback',
-      action: 'Revisar agora',
-      icon: Bug,
-    },
-  ]
+  const pendingSummaryCards = useMemo(
+    () => [
+      {
+        key: 'itacashPurchases' as const,
+        title: 'Compras ItaCash pendentes',
+        count: adminPendingCounts.itacashPurchases,
+        description: 'Compras manuais e Pix com comprovante aguardando analise.',
+        href: '/admin/itacash-purchases',
+        action: 'Revisar agora',
+        icon: Coins,
+        keywords: ['itacash', 'compras', 'pix', 'comprovante', 'pagamentos', 'pendencias'],
+      },
+      {
+        key: 'ageVerifications' as const,
+        title: 'Verificacoes 18+ pendentes',
+        count: adminPendingCounts.ageVerifications,
+        description: 'Documentos e selfies aguardando revisao manual.',
+        href: '/admin/age-verifications',
+        action: 'Revisar agora',
+        icon: ShieldCheck,
+        keywords: ['idade', 'maioridade', '18+', 'documentos', 'selfie', 'verificacao', 'pendencias'],
+      },
+      {
+        key: 'reports' as const,
+        title: 'Denuncias pendentes',
+        count: adminPendingCounts.reports,
+        description: 'Relatos de usuarios sobre posts ou perfis.',
+        href: '/admin/reports',
+        action: 'Revisar agora',
+        icon: Flag,
+        keywords: ['denuncia', 'denuncias', 'reports', 'report', 'moderacao', 'pendencias'],
+      },
+      {
+        key: 'feedbackReports' as const,
+        title: 'Feedbacks e bugs novos',
+        count: adminPendingCounts.feedbackReports,
+        description: 'Relatos internos abertos, triados ou em andamento.',
+        href: '/admin/feedback',
+        action: 'Revisar agora',
+        icon: Bug,
+        keywords: ['feedback', 'bug', 'bugs', 'sugestoes', 'relatos', 'pendencias'],
+      },
+    ],
+    [
+      adminPendingCounts.ageVerifications,
+      adminPendingCounts.feedbackReports,
+      adminPendingCounts.itacashPurchases,
+      adminPendingCounts.reports,
+    ],
+  )
+  const normalizedAdminSearchQuery = useMemo(
+    () => normalizeAdminSearchText(adminSearchQuery),
+    [adminSearchQuery],
+  )
+  const isAdminSearchActive = normalizedAdminSearchQuery.length > 0
+  const filteredPendingSummaryCards = useMemo(
+    () => (
+      isAdminSearchActive
+        ? filterAdminCards(pendingSummaryCards, adminSearchQuery)
+        : pendingSummaryCards
+    ),
+    [adminSearchQuery, isAdminSearchActive, pendingSummaryCards],
+  )
   const filteredAdminCards = useMemo(
     () => filterAdminCards(adminCards, adminSearchQuery),
     [adminSearchQuery],
   )
+  const hasAdminSearchResults =
+    filteredPendingSummaryCards.length > 0 || filteredAdminCards.length > 0
 
   const loadPage = useCallback(async () => {
     setLoading(true)
@@ -352,9 +379,16 @@ export default function AdminPage() {
               className="h-12 w-full rounded-2xl border border-white/10 bg-black/50 pl-11 pr-4 text-sm font-semibold text-white outline-none transition placeholder:text-zinc-500 focus:border-blue-300/50 focus:ring-4 focus:ring-blue-500/10"
             />
           </div>
+          {isAdminSearchActive && (
+            <p className="mt-3 text-xs font-semibold text-zinc-400">
+              {hasAdminSearchResults
+                ? `${filteredPendingSummaryCards.length + filteredAdminCards.length} areas encontradas.`
+                : 'Nenhuma area administrativa encontrada para essa busca.'}
+            </p>
+          )}
         </div>
 
-        {newPendingAlert && (
+        {!isAdminSearchActive && newPendingAlert && (
           <div className="relative z-10 mb-5 flex flex-col gap-3 rounded-3xl border border-red-300/30 bg-red-500/15 p-4 text-red-50 ring-1 ring-red-300/15 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-start gap-3">
               <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-200" />
@@ -373,6 +407,7 @@ export default function AdminPage() {
           </div>
         )}
 
+        {!isAdminSearchActive && (
         <div className={`relative z-10 mb-6 overflow-hidden rounded-[2rem] border p-5 shadow-xl ring-1 ${
           totalPending > 0
             ? 'border-red-300/30 bg-red-500/15 text-red-50 shadow-red-950/20 ring-red-300/15'
@@ -417,9 +452,11 @@ export default function AdminPage() {
             )}
           </div>
         </div>
+        )}
 
+        {filteredPendingSummaryCards.length > 0 && (
         <div className="relative z-10 mb-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {pendingSummaryCards.map((item) => {
+          {filteredPendingSummaryCards.map((item) => {
             const Icon = item.icon
             const hasError = Boolean(adminPendingErrors[item.key])
             const hasPending = item.count > 0
@@ -463,6 +500,7 @@ export default function AdminPage() {
             )
           })}
         </div>
+        )}
 
         {message && (
           <div className="relative z-10 mb-5 rounded-2xl border border-amber-300/20 bg-amber-500/10 px-4 py-3 text-sm font-semibold text-amber-100">
@@ -470,7 +508,7 @@ export default function AdminPage() {
           </div>
         )}
 
-        {filteredAdminCards.length === 0 ? (
+        {!hasAdminSearchResults ? (
           <div className="relative z-10 rounded-[1.5rem] border border-white/10 bg-zinc-950/80 p-5 text-sm font-semibold text-zinc-300 shadow-xl shadow-black/20">
             Nenhuma área administrativa encontrada.
           </div>

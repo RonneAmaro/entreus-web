@@ -947,6 +947,7 @@ function FeedContent() {
   const [communityFilter, setCommunityFilter] = useState<CommunityFilter>('general')
   const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null)
   const loadingMoreRef = useRef(false)
+  const handledLocalComposeIntentRef = useRef<ComposeIntent | null>(null)
   const canAccessAdult18Plus = useMemo(
     () => canViewAdult18Plus({
       isMinor: currentProfile?.is_minor,
@@ -1086,6 +1087,10 @@ function FeedContent() {
 
   useEffect(() => {
     if (loading || !requestedComposeIntent) return
+    if (handledLocalComposeIntentRef.current === requestedComposeIntent) {
+      handledLocalComposeIntentRef.current = null
+      return
+    }
 
     const timer = window.setTimeout(() => {
       requestPostComposer(requestedComposeIntent)
@@ -1100,6 +1105,19 @@ function FeedContent() {
     function handleComposeAction(event: Event) {
       const customEvent = event as CustomEvent<{ intent?: string }>
       const intent = resolveComposeIntent(customEvent.detail?.intent) || 'text'
+
+      handledLocalComposeIntentRef.current = intent
+
+      if (intent === 'photo' || intent === 'video') {
+        window.setTimeout(() => {
+          const composer = document.getElementById('post-composer')
+
+          if (composer) {
+            composer.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          }
+        }, 50)
+        return
+      }
 
       requestPostComposer(intent)
     }

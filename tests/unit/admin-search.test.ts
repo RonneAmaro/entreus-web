@@ -9,6 +9,18 @@ const cards = [
     keywords: ['financas'],
   },
   {
+    title: 'Compras ItaCash',
+    description: 'Aprovar solicitacoes manuais de compra de ItaCash.',
+    href: '/admin/itacash-purchases',
+    keywords: ['itacash', 'pix', 'pagamentos'],
+  },
+  {
+    title: 'Saques de criadores',
+    description: 'Revisar solicitacoes de saque manual e registrar Pix pago.',
+    href: '/admin/creator-withdrawals',
+    keywords: ['saque', 'saques', 'repasses'],
+  },
+  {
     title: 'Verificacoes 18+',
     description: 'Analisar documentos e selfies.',
     href: '/admin/age-verifications',
@@ -46,6 +58,18 @@ describe('admin search helpers', () => {
 
   it('finds Financeiro by title', () => {
     expect(filterAdminCards(cards, 'financeiro').map((card) => card.title)).toEqual(['Financeiro'])
+  })
+
+  it('finds ItaCash areas by keyword', () => {
+    expect(filterAdminCards(cards, 'itacash').map((card) => card.title)).toEqual([
+      'Compras ItaCash',
+    ])
+  })
+
+  it('finds creator withdrawals by saque keyword', () => {
+    expect(filterAdminCards(cards, 'saque').map((card) => card.title)).toEqual([
+      'Saques de criadores',
+    ])
   })
 
   it('finds 18+ verification by keyword', () => {

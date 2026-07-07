@@ -43,7 +43,7 @@ import { useLanguage } from './LanguageProvider'
 import type { LanguageCode } from '@/lib/translations'
 import { useAdminPendingAlerts } from '../hooks/useAdminPendingAlerts'
 import { isAdminRole } from '@/lib/admin'
-import { getComposeHref, type ComposeIntent } from '@/lib/compose-intent'
+import { COMPOSE_ACTION_EVENT, getComposeHref, type ComposeIntent } from '@/lib/compose-intent'
 
 type MobileNavigationProps = {
   email: string
@@ -118,7 +118,6 @@ export default function MobileNavigation({
   theme,
   onToggleTheme,
   onLogout,
-  onPostClick,
 }: MobileNavigationProps) {
   const pathname = usePathname()
   const router = useRouter()
@@ -298,13 +297,17 @@ export default function MobileNavigation({
 
   function handlePostAction(intent: ComposeIntent) {
     setOpenPostMenu(false)
+    const href = getComposeHref(intent)
 
-    if (pathname === '/feed' || pathname === '/') {
-      onPostClick(intent)
+    if (pathname === '/feed') {
+      window.dispatchEvent(new CustomEvent(COMPOSE_ACTION_EVENT, {
+        detail: { intent },
+      }))
+      router.replace(href, { scroll: false })
       return
     }
 
-    router.push(getComposeHref(intent))
+    router.push(href)
   }
 
   function isActive(path: string) {
