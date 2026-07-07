@@ -2,138 +2,111 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   ArrowLeft,
-  CheckCircle2,
   ClipboardCheck,
+  Copy,
   ExternalLink,
-  Flag,
+  Filter,
   Loader2,
+  RotateCcw,
+  Search,
   ShieldAlert,
-  ShieldCheck,
-  Sparkles,
-  Video,
-  Wallet,
 } from 'lucide-react'
 import { isAdminRole } from '@/lib/admin'
+import {
+  BETA_CHECKLIST_ITEMS,
+  BETA_CHECKLIST_STORAGE_KEY,
+  betaChecklistStatusLabels,
+  betaChecklistStatuses,
+  buildBetaChecklistReport,
+  calculateBetaChecklistSummary,
+  filterBetaChecklistItems,
+  getBetaChecklistItemStatus,
+  type BetaChecklistFilter,
+  type BetaChecklistProgress,
+  type BetaChecklistStatus,
+} from '@/lib/beta-checklist'
 import { supabase } from '@/lib/supabase'
 
 type AdminState = 'loading' | 'denied' | 'ready'
 
-type ChecklistSection = {
-  title: string
-  description: string
-  icon: typeof ClipboardCheck
-  links: Array<{ label: string; href: string }>
-  items: string[]
+const filterOptions: Array<{ value: BetaChecklistFilter; label: string }> = [
+  { value: 'all', label: 'Todos' },
+  { value: 'pending', label: 'Pendentes' },
+  { value: 'passed', label: 'Passou' },
+  { value: 'bug', label: 'Bug' },
+  { value: 'review', label: 'Revisar' },
+]
+
+function getStatusClassName(status: BetaChecklistStatus) {
+  if (status === 'passed') {
+    return 'border-emerald-300/30 bg-emerald-500/10 text-emerald-100'
+  }
+
+  if (status === 'bug') {
+    return 'border-red-300/35 bg-red-500/15 text-red-100'
+  }
+
+  if (status === 'review') {
+    return 'border-amber-300/35 bg-amber-500/15 text-amber-100'
+  }
+
+  return 'border-white/10 bg-white/5 text-zinc-300'
 }
 
-const checklistSections: ChecklistSection[] = [
-  {
-    title: 'Conta, perfil e convite',
-    description: 'Entrada do usuario, perfil publico e funil inicial de criadores.',
-    icon: Sparkles,
-    links: [
-      { label: 'Cadastro', href: '/signup' },
-      { label: 'Login', href: '/login' },
-      { label: 'Meu perfil', href: '/profile' },
-      { label: 'Convite', href: '/convite' },
-      { label: 'Criadores', href: '/creators' },
-    ],
-    items: [
-      'Criar conta, entrar, sair e recuperar senha.',
-      'Completar perfil com username, avatar, banner, bio e localizacao.',
-      'Abrir perfil publico em outra conta.',
-      'Validar formulario de interesse de criador.',
-    ],
-  },
-  {
-    title: 'Feed, composer e posts',
-    description: 'Publicacao, classificacao de conteudo e interacoes sociais.',
-    icon: ClipboardCheck,
-    links: [
-      { label: 'Feed', href: '/feed' },
-      { label: 'Salvos', href: '/saved' },
-      { label: 'Busca', href: '/search' },
-      { label: 'Notificacoes', href: '/notifications' },
-    ],
-    items: [
-      'Criar post texto, imagem, video e link.',
-      'Testar comunidades, opcoes avancadas e classificacao segura/18+.',
-      'Curtir, comentar, repostar, salvar, denunciar e abrir post individual.',
-      'Conferir tema visual, avatar ring, cores de torcida e tiers VIP/Anciao.',
-    ],
-  },
-  {
-    title: 'Monetizacao e criadores',
-    description: 'ItaCash, posts pagos, gorjetas, carteira e metricas do criador.',
-    icon: Wallet,
-    links: [
-      { label: 'Carteira', href: '/wallet' },
-      { label: 'Comprar ItaCash', href: '/buy-itacash' },
-      { label: 'ItaCash', href: '/itacash' },
-      { label: 'Dashboard', href: '/creator-dashboard' },
-      { label: 'VIP Plus', href: '/vip-plus' },
-    ],
-    items: [
-      'Conferir saldo, transacoes e compra manual/Pix em ambiente controlado.',
-      'Enviar gorjeta e validar saldo do remetente e do criador.',
-      'Criar post pago, ver paywall, desbloquear e testar saldo insuficiente.',
-      'Abrir dashboard e validar posts, interacoes, apoios e visualizacoes.',
-    ],
-  },
-  {
-    title: 'Seguranca 18+ e admin',
-    description: 'Verificacao de idade, bloqueios, reports, moderacao e filas operacionais.',
-    icon: ShieldCheck,
-    links: [
-      { label: 'Verificacao 18+', href: '/age-verification' },
-      { label: 'Admin', href: '/admin' },
-      { label: 'Reports', href: '/admin/reports' },
-      { label: 'Moderacao', href: '/admin/moderation' },
-      { label: 'Age admin', href: '/admin/age-verifications' },
-      { label: 'Seguranca', href: '/admin/security-check' },
-    ],
-    items: [
-      'Conta menor/nao verificada nao deve ver conteudo adulto.',
-      'Adulto verificado ve adulto somente quando a regra permitir.',
-      'Denuncia aparece no admin e conteudo ocultado sai da lista publica.',
-      'Usuario comum nao pode acessar paginas admin.',
-    ],
-  },
-  {
-    title: 'Lab, Meet e mobile',
-    description: 'Ferramentas criativas, salas ao vivo e teste em celular/PWA.',
-    icon: Video,
-    links: [
-      { label: 'Lab', href: '/lab' },
-      { label: 'Screen Recorder', href: '/lab/screen-recorder' },
-      { label: 'Video Editor', href: '/lab/video-editor' },
-      { label: 'Meet', href: '/meet' },
-      { label: 'Instalar PWA', href: '/instalar' },
-    ],
-    items: [
-      'Gravar tela com microfone, webcam e anotacoes.',
-      'Baixar MP4/WebM e converter WebM para MP4.',
-      'Importar video no editor e exportar MP4.',
-      'Criar sala Meet, entrar com duas contas e testar mobile/PWA.',
-    ],
-  },
-]
+function getSummaryCardClassName(kind: BetaChecklistStatus | 'total') {
+  if (kind === 'passed') return 'border-emerald-300/25 bg-emerald-500/10 text-emerald-50'
+  if (kind === 'bug') return 'border-red-300/25 bg-red-500/10 text-red-50'
+  if (kind === 'review') return 'border-amber-300/25 bg-amber-500/10 text-amber-50'
+  if (kind === 'pending') return 'border-white/10 bg-zinc-950/80 text-zinc-100'
 
-const approvalItems = [
-  'Nenhum bloqueador aberto antes de convidar criadores.',
-  'Fluxos de ItaCash e posts pagos testados com contas controladas.',
-  'Fluxos 18+ e admin testados sem documentos ou dados reais.',
-  'Bugs registrados com rota, conta, passos, esperado, obtido, prioridade e status.',
-]
+  return 'border-blue-300/25 bg-blue-500/10 text-blue-50'
+}
+
+function parseStoredProgress(value: string | null): BetaChecklistProgress {
+  if (!value) return {}
+
+  try {
+    const parsed = JSON.parse(value) as BetaChecklistProgress
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
+
+    const nextProgress: BetaChecklistProgress = {}
+
+    for (const [itemId, entry] of Object.entries(parsed)) {
+      if (!entry || typeof entry !== 'object') continue
+
+      const status = betaChecklistStatuses.includes(entry.status as BetaChecklistStatus)
+        ? entry.status
+        : undefined
+      const note = typeof entry.note === 'string' ? entry.note.slice(0, 240) : ''
+
+      if (status || note.trim()) {
+        nextProgress[itemId] = { status, note }
+      }
+    }
+
+    return nextProgress
+  } catch {
+    return {}
+  }
+}
+
+function getRouteParts(route: string) {
+  return route.split(',').map((part) => part.trim()).filter(Boolean)
+}
 
 export default function AdminBetaChecklistPage() {
   const router = useRouter()
   const [adminState, setAdminState] = useState<AdminState>('loading')
   const [adminLabel, setAdminLabel] = useState('')
   const [message, setMessage] = useState('')
+  const [progress, setProgress] = useState<BetaChecklistProgress>({})
+  const [progressLoaded, setProgressLoaded] = useState(false)
+  const [statusFilter, setStatusFilter] = useState<BetaChecklistFilter>('all')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [copyMessage, setCopyMessage] = useState('')
 
   useEffect(() => {
     let active = true
@@ -179,6 +152,105 @@ export default function AdminBetaChecklistPage() {
       active = false
     }
   }, [router])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const timer = window.setTimeout(() => {
+      setProgress(parseStoredProgress(window.localStorage.getItem(BETA_CHECKLIST_STORAGE_KEY)))
+      setProgressLoaded(true)
+    }, 0)
+
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!progressLoaded || typeof window === 'undefined') return
+
+    window.localStorage.setItem(BETA_CHECKLIST_STORAGE_KEY, JSON.stringify(progress))
+  }, [progress, progressLoaded])
+
+  const summary = useMemo(
+    () => calculateBetaChecklistSummary(BETA_CHECKLIST_ITEMS, progress),
+    [progress],
+  )
+
+  const visibleItems = useMemo(
+    () => filterBetaChecklistItems(BETA_CHECKLIST_ITEMS, progress, {
+      status: statusFilter,
+      query: searchQuery,
+    }),
+    [progress, searchQuery, statusFilter],
+  )
+
+  function updateItemStatus(itemId: string, status: BetaChecklistStatus) {
+    setProgress((current) => {
+      const currentEntry = current[itemId]
+      const note = currentEntry?.note || ''
+      const nextProgress = { ...current }
+
+      if (status === 'pending' && !note.trim()) {
+        delete nextProgress[itemId]
+        return nextProgress
+      }
+
+      nextProgress[itemId] = {
+        ...currentEntry,
+        status,
+        note,
+      }
+
+      return nextProgress
+    })
+  }
+
+  function updateItemNote(itemId: string, note: string) {
+    const safeNote = note.slice(0, 240)
+
+    setProgress((current) => {
+      const currentEntry = current[itemId]
+      const status = getBetaChecklistItemStatus(current, itemId)
+      const nextProgress = { ...current }
+
+      if (status === 'pending' && !safeNote.trim()) {
+        delete nextProgress[itemId]
+        return nextProgress
+      }
+
+      nextProgress[itemId] = {
+        ...currentEntry,
+        status,
+        note: safeNote,
+      }
+
+      return nextProgress
+    })
+  }
+
+  async function handleCopyReport() {
+    const report = buildBetaChecklistReport(BETA_CHECKLIST_ITEMS, progress)
+
+    try {
+      await navigator.clipboard.writeText(report)
+      setCopyMessage('Relatório copiado para a área de transferência.')
+    } catch {
+      setCopyMessage('Nao foi possivel copiar automaticamente. Tente novamente no navegador.')
+    }
+  }
+
+  function handleClearProgress() {
+    const confirmed = window.confirm('Limpar todo o progresso salvo neste navegador?')
+
+    if (!confirmed) return
+
+    setProgress({})
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem(BETA_CHECKLIST_STORAGE_KEY)
+    }
+    setCopyMessage('Progresso local limpo.')
+  }
 
   if (adminState === 'loading') {
     return (
@@ -227,10 +299,11 @@ export default function AdminBetaChecklistPage() {
               Beta fechado
             </p>
             <h1 className="mt-3 text-3xl font-black tracking-tight sm:text-5xl">
-              Checklist de testes manuais
+              Checklist interativo de testes
             </h1>
             <p className="mt-3 max-w-3xl text-sm leading-6 text-zinc-400 sm:text-base">
-              Roteiro visual para validar a EntreUS com contas controladas antes de chamar criadores fundadores.
+              Use este checklist para validar o EntreUS antes de liberar usuarios beta.
+              O progresso fica salvo apenas neste navegador.
             </p>
           </div>
 
@@ -240,89 +313,202 @@ export default function AdminBetaChecklistPage() {
           </div>
         </header>
 
-        <div className="mb-6 grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
-          <div className="rounded-[2rem] border border-blue-300/20 bg-blue-500/10 p-5 text-blue-50 ring-1 ring-blue-300/10">
-            <div className="flex items-start gap-3">
-              <ClipboardCheck className="mt-1 h-6 w-6 shrink-0 text-blue-100" />
-              <div>
-                <h2 className="text-lg font-black">Registro oficial em Markdown</h2>
-                <p className="mt-2 text-sm leading-6 text-blue-50/80">
-                  Esta pagina nao grava checks no banco. Use o guia completo e o checklist rapido como fonte oficial dos testes.
-                </p>
-                <div className="mt-4 flex flex-wrap gap-2 text-xs font-black">
-                  <span className="rounded-full bg-white px-3 py-1.5 text-black">
-                    docs/beta-closed-manual-test-guide.md
-                  </span>
-                  <span className="rounded-full bg-white px-3 py-1.5 text-black">
-                    docs/beta-closed-quick-checklist.md
-                  </span>
-                </div>
-              </div>
-            </div>
+        <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+          <div className={`rounded-[1.5rem] border p-4 ${getSummaryCardClassName('total')}`}>
+            <p className="text-xs font-black uppercase tracking-[0.16em] opacity-70">Total</p>
+            <p className="mt-2 text-3xl font-black">{summary.total}</p>
+            <p className="mt-1 text-xs opacity-75">{summary.completionPercent}% concluido</p>
           </div>
-
-          <div className="rounded-[2rem] border border-emerald-300/20 bg-emerald-500/10 p-5 text-emerald-50 ring-1 ring-emerald-300/10">
-            <h2 className="flex items-center gap-2 text-lg font-black">
-              <CheckCircle2 className="h-5 w-5" />
-              Criterio de saida
-            </h2>
-            <ul className="mt-4 space-y-3 text-sm leading-6 text-emerald-50/85">
-              {approvalItems.map((item) => (
-                <li key={item} className="flex gap-2">
-                  <span className="mt-2 h-2 w-2 shrink-0 rounded-full bg-emerald-300" />
-                  <span>{item}</span>
-                </li>
-              ))}
-            </ul>
+          <div className={`rounded-[1.5rem] border p-4 ${getSummaryCardClassName('passed')}`}>
+            <p className="text-xs font-black uppercase tracking-[0.16em] opacity-70">Passou</p>
+            <p className="mt-2 text-3xl font-black">{summary.passed}</p>
+          </div>
+          <div className={`rounded-[1.5rem] border p-4 ${getSummaryCardClassName('bug')}`}>
+            <p className="text-xs font-black uppercase tracking-[0.16em] opacity-70">Bug</p>
+            <p className="mt-2 text-3xl font-black">{summary.bug}</p>
+          </div>
+          <div className={`rounded-[1.5rem] border p-4 ${getSummaryCardClassName('review')}`}>
+            <p className="text-xs font-black uppercase tracking-[0.16em] opacity-70">Revisar</p>
+            <p className="mt-2 text-3xl font-black">{summary.review}</p>
+          </div>
+          <div className={`rounded-[1.5rem] border p-4 ${getSummaryCardClassName('pending')}`}>
+            <p className="text-xs font-black uppercase tracking-[0.16em] opacity-70">Pendente</p>
+            <p className="mt-2 text-3xl font-black">{summary.pending}</p>
+          </div>
+          <div className="rounded-[1.5rem] border border-white/10 bg-zinc-950/85 p-4 text-zinc-100">
+            <p className="text-xs font-black uppercase tracking-[0.16em] text-zinc-500">Visiveis</p>
+            <p className="mt-2 text-3xl font-black">{visibleItems.length}</p>
+            <p className="mt-1 text-xs text-zinc-500">apos filtros</p>
           </div>
         </div>
 
-        <div className="grid gap-4 lg:grid-cols-2">
-          {checklistSections.map((section) => {
-            const Icon = section.icon
+        <div className="mb-6 rounded-[2rem] border border-white/10 bg-zinc-950/85 p-4 shadow-xl shadow-black/20 ring-1 ring-white/5">
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+            <label className="relative block">
+              <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Buscar por item, categoria ou rota..."
+                className="h-12 w-full rounded-2xl border border-white/10 bg-black/50 pl-11 pr-4 text-sm font-semibold text-white outline-none transition placeholder:text-zinc-500 focus:border-blue-300/50 focus:ring-4 focus:ring-blue-500/10"
+              />
+            </label>
 
-            return (
-              <section
-                key={section.title}
-                className="rounded-[2rem] border border-white/10 bg-zinc-950/85 p-5 shadow-xl shadow-black/20 ring-1 ring-white/5"
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={handleCopyReport}
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-white px-4 text-sm font-black text-black transition hover:bg-blue-50"
               >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex min-w-0 items-start gap-3">
-                    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-blue-500/15 text-blue-100 ring-1 ring-blue-300/15">
-                      <Icon className="h-6 w-6" />
-                    </span>
+                <Copy className="h-4 w-4" />
+                Copiar relatório
+              </button>
+              <button
+                type="button"
+                onClick={handleClearProgress}
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-red-300/25 bg-red-500/10 px-4 text-sm font-black text-red-100 transition hover:bg-red-500/20"
+              >
+                <RotateCcw className="h-4 w-4" />
+                Limpar progresso
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-2 pr-1 text-xs font-black uppercase tracking-[0.16em] text-zinc-500">
+              <Filter className="h-4 w-4" />
+              Filtros
+            </span>
+            {filterOptions.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setStatusFilter(option.value)}
+                className={`rounded-full px-4 py-2 text-sm font-black transition ${
+                  statusFilter === option.value
+                    ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/20'
+                    : 'border border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10'
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+
+          {copyMessage && (
+            <p className="mt-4 rounded-2xl border border-blue-300/20 bg-blue-500/10 px-4 py-3 text-sm font-semibold text-blue-50">
+              {copyMessage}
+            </p>
+          )}
+        </div>
+
+        {visibleItems.length === 0 ? (
+          <div className="rounded-[1.5rem] border border-white/10 bg-zinc-950/80 p-5 text-sm font-semibold text-zinc-300 shadow-xl shadow-black/20">
+            Nenhum item encontrado.
+          </div>
+        ) : (
+          <div className="grid gap-4 lg:grid-cols-2">
+            {visibleItems.map((item) => {
+              const status = getBetaChecklistItemStatus(progress, item.id)
+              const note = progress[item.id]?.note || ''
+
+              return (
+                <article
+                  key={item.id}
+                  className="rounded-[2rem] border border-white/10 bg-zinc-950/85 p-5 shadow-xl shadow-black/20 ring-1 ring-white/5"
+                >
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
-                      <h2 className="text-xl font-black">{section.title}</h2>
-                      <p className="mt-2 text-sm leading-6 text-zinc-400">{section.description}</p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-full border border-blue-300/20 bg-blue-500/10 px-3 py-1 text-xs font-black text-blue-100">
+                          {item.category}
+                        </span>
+                        <span className={`rounded-full border px-3 py-1 text-xs font-black ${getStatusClassName(status)}`}>
+                          {betaChecklistStatusLabels[status]}
+                        </span>
+                      </div>
+                      <h2 className="mt-3 text-xl font-black">{item.title}</h2>
+                      <p className="mt-2 text-sm leading-6 text-zinc-400">{item.description}</p>
                     </div>
+
+                    <label className="block shrink-0">
+                      <span className="mb-1.5 block text-xs font-black uppercase tracking-[0.14em] text-zinc-500">
+                        Status
+                      </span>
+                      <select
+                        value={status}
+                        onChange={(event) => updateItemStatus(item.id, event.target.value as BetaChecklistStatus)}
+                        className="h-11 rounded-xl border border-white/10 bg-black px-3 text-sm font-black text-white outline-none transition focus:border-blue-300/50 focus:ring-4 focus:ring-blue-500/10"
+                      >
+                        {betaChecklistStatuses.map((statusOption) => (
+                          <option key={statusOption} value={statusOption}>
+                            {betaChecklistStatusLabels[statusOption]}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
                   </div>
-                  <Flag className="h-5 w-5 shrink-0 text-zinc-500" />
-                </div>
 
-                <div className="mt-5 flex flex-wrap gap-2">
-                  {section.links.map((link) => (
-                    <Link
-                      key={`${section.title}-${link.href}`}
-                      href={link.href}
-                      className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-black text-zinc-100 transition hover:border-blue-300/30 hover:bg-blue-500/15 hover:text-blue-50"
-                    >
-                      {link.label}
-                      <ExternalLink className="h-3 w-3" />
-                    </Link>
-                  ))}
-                </div>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {getRouteParts(item.route).map((route) => {
+                      const isConcreteRoute = route.startsWith('/') && !route.includes('[')
 
-                <ul className="mt-5 space-y-3">
-                  {section.items.map((item) => (
-                    <li key={item} className="flex gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3 text-sm leading-6 text-zinc-200">
-                      <span className="mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border border-zinc-500/70" />
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )
-          })}
+                      return isConcreteRoute ? (
+                        <Link
+                          key={`${item.id}-${route}`}
+                          href={route}
+                          className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-black text-zinc-100 transition hover:border-blue-300/30 hover:bg-blue-500/15"
+                        >
+                          {route}
+                          <ExternalLink className="h-3 w-3" />
+                        </Link>
+                      ) : (
+                        <span
+                          key={`${item.id}-${route}`}
+                          className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-black text-zinc-400"
+                        >
+                          {route}
+                        </span>
+                      )
+                    })}
+                  </div>
+
+                  <label className="mt-4 block">
+                    <span className="mb-1.5 block text-xs font-black uppercase tracking-[0.14em] text-zinc-500">
+                      Observação curta
+                    </span>
+                    <textarea
+                      value={note}
+                      onChange={(event) => updateItemNote(item.id, event.target.value)}
+                      maxLength={240}
+                      rows={3}
+                      placeholder="Ex.: passou no Chrome mobile; revisar copy; bug no upload..."
+                      className="w-full resize-none rounded-2xl border border-white/10 bg-black/50 px-4 py-3 text-sm font-semibold leading-6 text-white outline-none transition placeholder:text-zinc-600 focus:border-blue-300/50 focus:ring-4 focus:ring-blue-500/10"
+                    />
+                    <span className="mt-1 block text-right text-[11px] font-semibold text-zinc-500">
+                      {note.length}/240
+                    </span>
+                  </label>
+                </article>
+              )
+            })}
+          </div>
+        )}
+
+        <div className="mt-6 rounded-[2rem] border border-blue-300/20 bg-blue-500/10 p-5 text-sm leading-6 text-blue-50 ring-1 ring-blue-300/10">
+          <div className="flex items-start gap-3">
+            <ClipboardCheck className="mt-1 h-5 w-5 shrink-0 text-blue-100" />
+            <div>
+              <p className="font-black">Roteiro complementar</p>
+              <p className="mt-1 text-blue-50/80">
+                Use este painel como ferramenta pratica da rodada atual. Para contexto completo, consulte
+                {' '}
+                <Link href="/admin" className="font-black underline underline-offset-2">o painel admin</Link>
+                {' '}e os documentos Markdown do beta fechado no repositorio.
+              </p>
+            </div>
+          </div>
         </div>
       </section>
     </main>

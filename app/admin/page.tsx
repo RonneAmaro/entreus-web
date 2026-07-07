@@ -136,11 +136,11 @@ const adminCards = [
   },
   {
     title: 'Checklist Beta Fechado',
-    description: 'Roteiro manual para validar criadores, monetizacao, 18+, admin, Lab, Meet e mobile.',
+    description: 'Checklist interativo para validar criadores, monetizacao, 18+, admin, Lab, Meet e mobile.',
     href: '/admin/beta-checklist',
     icon: ClipboardCheck,
     badge: 'manual',
-    keywords: ['beta', 'fechado', 'checklist', 'validacao', 'qa'],
+    keywords: ['beta', 'fechado', 'checklist', 'validacao', 'qa', 'interativo', 'relatorio'],
   },
   {
     title: 'Sugestoes da Comunidade',
