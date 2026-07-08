@@ -59,3 +59,24 @@ test('VIP checkout action is visible without starting a payment', async ({ page 
   await expectNoServerError(page)
   await expect(page.getByRole('button', { name: 'Pagar com Mercado Pago' })).toBeVisible()
 })
+
+test('creator onboarding shows founder and monetization CTAs', async ({ page }) => {
+  const response = await page.goto('/creators', { waitUntil: 'domcontentloaded' })
+
+  expect(response?.status() || 200).toBeLessThan(500)
+  await expectNoServerError(page)
+  await expect(page.getByRole('link', { name: 'Quero ser criador fundador' }).first()).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Conhecer monetizacao com ItaCash' }).first()).toBeVisible()
+  await expect(page.getByText('Voce recebe 85% do valor.')).toBeVisible()
+})
+
+test('creator application exposes onboarding questions without sensitive documents', async ({ page }) => {
+  const response = await page.goto('/creators/apply', { waitUntil: 'domcontentloaded' })
+
+  expect(response?.status() || 200).toBeLessThan(500)
+  await expectNoServerError(page)
+  await expect(page.getByLabel('WhatsApp ou contato')).toBeVisible()
+  await expect(page.getByLabel('Usuario ou rede principal')).toBeVisible()
+  await expect(page.getByLabel('Tamanho aproximado da audiencia')).toBeVisible()
+  await expect(page.getByText('nao pede documento')).toBeVisible()
+})

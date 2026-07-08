@@ -1,5 +1,7 @@
-# Solicitações de Criadores Fundadores
+# Solicitacoes de Criadores Fundadores
 
-O formulário público `/creators/apply` envia para `POST /api/creator-interest` apenas nome, e-mail, categoria, mensagem e campos opcionais de perfil/canal. Não coleta CPF, RG, documento, endereço, senha ou dados bancários. Não promete aprovação, renda ou pagamento.
+O formulario publico `/creators/apply` envia para `POST /api/creator-interest` nome, e-mail, nicho principal, mensagem e campos opcionais de perfil/canal, link principal, tamanho aproximado de audiencia e interesse em conteudo adulto.
 
-A tabela `creator_interest_requests` depende da migration manual `20260621_create_creator_interest_requests.sql`, que não foi aplicada. Após aprovação, aplicar no SQL Editor, rodar `verify-creator-interest-requests.sql` somente para leitura e usar o rollback apenas se necessário. O próximo pacote sugerido é o admin de triagem.
+Contato/WhatsApp e interesses adicionais sao incorporados na mensagem para reaproveitar o schema existente. O formulario nao coleta CPF, RG, documento, endereco, senha, dados bancarios ou comprovantes. Tambem nao promete aprovacao, renda, pagamento ou monetizacao imediata.
+
+A tabela `creator_interest_requests` depende da migration manual `20260621_create_creator_interest_requests.sql`. Este pacote nao cria migration nova e nao altera banco. Apos aprovacao operacional, aplicar migrations somente pelo fluxo manual definido para Supabase.
