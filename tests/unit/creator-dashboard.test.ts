@@ -60,4 +60,15 @@ describe('creator dashboard helper', () => {
     ])
     expect(orderCreatorPosts(posts, { 'post-2': 9 }, 'engagement')[0]).not.toHaveProperty('content')
   })
+
+  it('keeps creator dashboard support totals as net creator income', () => {
+    const summary = summarizeCreatorDashboard({
+      posts: [],
+      supportsReceived: 85,
+      walletBalance: 85,
+    })
+
+    expect(summary.supports).toEqual({ value: 85, available: true })
+    expect(summary.walletBalance).toEqual({ value: 85, available: true })
+  })
 })

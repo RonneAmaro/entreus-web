@@ -170,14 +170,25 @@ export async function POST(request: Request) {
       return jsonTipError(reason, statusForRpcReason(reason))
     }
 
-    const result = (data || {}) as { sender_balance_after?: unknown }
+    const result = (data || {}) as {
+      sender_balance_after?: unknown
+      gross_amount?: unknown
+      creator_amount?: unknown
+      platform_fee_amount?: unknown
+      platform_fee_bps?: unknown
+    }
+    const grossAmount = typeof result.gross_amount === 'number' ? result.gross_amount : payload.amount
 
     return NextResponse.json({
       ok: true,
-      amount: payload.amount,
+      amount: grossAmount,
+      grossAmount,
+      creatorAmount: typeof result.creator_amount === 'number' ? result.creator_amount : null,
+      platformFeeAmount: typeof result.platform_fee_amount === 'number' ? result.platform_fee_amount : null,
+      platformFeeBps: typeof result.platform_fee_bps === 'number' ? result.platform_fee_bps : null,
       postId: payload.postId,
       senderBalanceAfter: typeof result.sender_balance_after === 'number' ? result.sender_balance_after : null,
-      message: `Voce enviou ${payload.amount} ItaCash.`,
+      message: `Voce enviou ${grossAmount} ItaCash.`,
     })
   } catch (error) {
     if (process.env.NODE_ENV === 'development') {

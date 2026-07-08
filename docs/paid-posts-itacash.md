@@ -39,7 +39,9 @@ A migration adiciona:
 6. Conferir `/wallet` nos dois usuarios:
    - comprador: `Desbloqueio de post`
    - criador: `Post pago recebido`
-7. Conferir `/creator-dashboard` no criador para ver total e desbloqueios por posts pagos.
+7. Conferir `/creator-dashboard` no criador para ver total liquido e desbloqueios por posts pagos.
+
+O split 85/15 do Pacote 40 esta documentado em `docs/itacash-revenue-split.md`.
 
 ## Limitacoes
 

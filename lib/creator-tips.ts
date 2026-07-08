@@ -1,3 +1,5 @@
+import { getRevenueSplitBreakdown } from './revenue-split'
+
 export const CREATOR_TIP_QUICK_AMOUNTS = [10, 25, 50, 100] as const
 export const CREATOR_TIP_MIN_AMOUNT = 1
 export const CREATOR_TIP_MESSAGE_MAX_LENGTH = 160
@@ -46,6 +48,8 @@ export type CreatorTipTransactionRow = {
 export type CreatorTipRecentItem = {
   id: string
   amount: number
+  grossAmount: number
+  platformFeeAmount: number
   createdAt: string | null
   senderId: string | null
   message: string | null
@@ -53,6 +57,8 @@ export type CreatorTipRecentItem = {
 
 export type CreatorTipsSummary = {
   totalReceived: number
+  grossAmount: number
+  platformFeeAmount: number
   countReceived: number
   recentTips: CreatorTipRecentItem[]
 }
@@ -214,6 +220,10 @@ export function summarizeCreatorTips(
   const positiveRows = rows
     .map((row) => ({ row, amount: safePositiveAmount(row.amount) }))
     .filter((item) => item.amount > 0)
+    .map((item) => ({
+      ...item,
+      split: getRevenueSplitBreakdown(item.row.metadata, item.amount),
+    }))
 
   const recentTips = positiveRows
     .slice()
@@ -223,7 +233,7 @@ export function summarizeCreatorTips(
       return (Number.isFinite(rightTime) ? rightTime : 0) - (Number.isFinite(leftTime) ? leftTime : 0)
     })
     .slice(0, Math.max(0, recentLimit))
-    .map(({ row, amount }, index) => {
+    .map(({ row, amount, split }, index) => {
       const metadata = normalizeMetadata(row.metadata)
       const senderId = isUuid(metadata.sender_id) ? String(metadata.sender_id) : null
       const message = normalizeCreatorTipMessage(metadata.message)
@@ -231,6 +241,8 @@ export function summarizeCreatorTips(
       return {
         id: row.id || `tip-${index}`,
         amount,
+        grossAmount: split.grossAmount,
+        platformFeeAmount: split.platformFeeAmount,
         createdAt: row.created_at || null,
         senderId,
         message,
@@ -239,6 +251,8 @@ export function summarizeCreatorTips(
 
   return {
     totalReceived: positiveRows.reduce((total, item) => total + item.amount, 0),
+    grossAmount: positiveRows.reduce((total, item) => total + item.split.grossAmount, 0),
+    platformFeeAmount: positiveRows.reduce((total, item) => total + item.split.platformFeeAmount, 0),
     countReceived: positiveRows.length,
     recentTips,
   }

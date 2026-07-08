@@ -210,10 +210,14 @@ export default function CreatorDashboardPage() {
   })
   const [tipActivity, setTipActivity] = useState({
     count: undefined as number | undefined,
+    grossAmount: undefined as number | undefined,
+    platformFeeAmount: undefined as number | undefined,
     recentTips: [] as CreatorTipRecentItem[],
   })
   const [paidPostActivity, setPaidPostActivity] = useState({
     total: undefined as number | undefined,
+    grossAmount: undefined as number | undefined,
+    platformFeeAmount: undefined as number | undefined,
     count: undefined as number | undefined,
     recentUnlocks: [] as ReturnType<typeof summarizePaidPostUnlocks>['recentUnlocks'],
   })
@@ -388,10 +392,14 @@ export default function CreatorDashboardPage() {
     setMetrics({ likes, comments, reposts, saves, followers, supports, walletBalance })
     setTipActivity({
       count: tipsSummary?.countReceived,
+      grossAmount: tipsSummary?.grossAmount,
+      platformFeeAmount: tipsSummary?.platformFeeAmount,
       recentTips: tipsSummary?.recentTips || [],
     })
     setPaidPostActivity({
       total: paidPostsSummary?.totalReceived,
+      grossAmount: paidPostsSummary?.grossAmount,
+      platformFeeAmount: paidPostsSummary?.platformFeeAmount,
       count: paidPostsSummary?.unlockCount,
       recentUnlocks: paidPostsSummary?.recentUnlocks || [],
     })
@@ -535,14 +543,14 @@ export default function CreatorDashboardPage() {
     { label: 'Seguidores', metric: summary.followers, icon: Users, tone: 'bg-violet-500/15 text-violet-200', unavailableLabel: 'Disponível quando a lista de seguidores responder.' },
     { label: 'Engajamento estimado', metric: summary.engagementRate, icon: BarChart3, tone: 'bg-amber-500/15 text-amber-200', suffix: summary.engagementRate.available ? '%' : '', unavailableLabel: 'Analytics de visualizações ainda está em preparação.' },
     {
-      label: 'Apoios recebidos',
+      label: 'Gorjetas liquidas',
       metric: summary.supports,
       icon: Coins,
       tone: 'bg-cyan-500/15 text-cyan-200',
       renderValue: summary.supports.available
         ? <ItaCashAmount amount={summary.supports.value} size="lg" className="text-white" valueClassName="text-2xl" />
         : undefined,
-      unavailableLabel: 'Mostra apenas apoios ItaCash já registrados.',
+      unavailableLabel: 'Mostra gorjetas ItaCash liquidas ja registradas.',
     },
   ]
 
@@ -562,6 +570,12 @@ export default function CreatorDashboardPage() {
   const withdrawalPreviewBrl = Number.isFinite(withdrawalPreviewAmount)
     ? convertItaCashToBrl(withdrawalPreviewAmount)
     : 0
+  const tipNetAmount = summary.supports.available ? summary.supports.value : undefined
+  const paidPostNetAmount = paidPostActivity.total
+  const revenueAvailable = tipNetAmount !== undefined || paidPostNetAmount !== undefined
+  const netRevenueAmount = (tipNetAmount || 0) + (paidPostNetAmount || 0)
+  const grossRevenueAmount = (tipActivity.grossAmount ?? tipNetAmount ?? 0) + (paidPostActivity.grossAmount ?? paidPostNetAmount ?? 0)
+  const platformFeeAmount = (tipActivity.platformFeeAmount || 0) + (paidPostActivity.platformFeeAmount || 0)
 
   return (
     <main className="min-h-screen overflow-x-hidden bg-black text-white">
@@ -667,32 +681,52 @@ export default function CreatorDashboardPage() {
 
                 <article className="rounded-[2rem] border border-white/10 bg-zinc-950/90 p-5 shadow-xl shadow-black/20 ring-1 ring-white/5">
                   <p className="text-xs font-black uppercase tracking-[0.18em] text-violet-300">Monetização</p>
-                  <h2 className="mt-2 text-2xl font-black">Gorjetas ItaCash</h2>
+                  <h2 className="mt-2 text-2xl font-black">Receita ItaCash</h2>
                   {summary.walletBalance.available ? (
                     <div className="mt-4 rounded-2xl border border-cyan-300/20 bg-cyan-500/10 p-4">
-                      <p className="text-xs font-black uppercase tracking-[0.14em] text-cyan-100/70">Saldo ItaCash da carteira</p>
+                      <p className="text-xs font-black uppercase tracking-[0.14em] text-cyan-100/70">Saldo liquido da carteira</p>
                       <ItaCashAmount amount={summary.walletBalance.value} size="lg" className="mt-2 text-cyan-50" valueClassName="text-2xl" />
                       <p className="mt-2 text-xs leading-5 text-cyan-100/70">Equivalente aproximado: {formatBRL(convertItaCashToBrl(summary.walletBalance.value))}. Saques pendentes ja reduzem este saldo.</p>
                     </div>
                   ) : (
                     <p className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-zinc-400">Carteira ItaCash indisponível no momento.</p>
                   )}
+                  {revenueAvailable && (
+                    <div className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-4">
+                      <p className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Resumo financeiro</p>
+                      <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                        <div>
+                          <p className="text-xs font-bold text-zinc-500">Receita liquida recebida</p>
+                          <ItaCashAmount amount={netRevenueAmount} size="sm" className="mt-1 text-emerald-100" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-zinc-500">Taxa da plataforma</p>
+                          <ItaCashAmount amount={platformFeeAmount} size="sm" className="mt-1 text-amber-100" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-zinc-500">Valor bruto movimentado</p>
+                          <ItaCashAmount amount={grossRevenueAmount} size="sm" className="mt-1 text-white" />
+                        </div>
+                      </div>
+                      <p className="mt-3 text-xs leading-5 text-zinc-500">Os valores exibidos ao criador ja sao liquidos, apos a taxa da plataforma. Historico anterior a aplicacao da migration pode aparecer com taxa zero.</p>
+                    </div>
+                  )}
                   {summary.supports.available ? (
                     <div className="mt-4 grid gap-3 sm:grid-cols-2">
                       <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
-                        <p className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Total recebido</p>
+                        <p className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Gorjetas liquidas recebidas</p>
                         <ItaCashAmount amount={summary.supports.value} size="lg" className="mt-2 text-white" valueClassName="text-xl" />
                       </div>
                       <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
-                        <p className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Apoios recebidos</p>
+                        <p className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Gorjetas</p>
                         <p className="mt-2 text-xl font-black text-white">{formatNumber(tipActivity.count || 0)}</p>
                       </div>
                     </div>
                   ) : (
-                    <p className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-zinc-400">Apoios em ItaCash indisponiveis no momento.</p>
+                    <p className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-zinc-400">Gorjetas ItaCash indisponiveis no momento.</p>
                   )}
                   <div className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-4">
-                    <p className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Ultimos apoios</p>
+                    <p className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Ultimas gorjetas liquidas</p>
                     {summary.supports.available && tipActivity.recentTips.length > 0 ? (
                       <div className="mt-3 space-y-2">
                         {tipActivity.recentTips.map((tip) => (
@@ -703,7 +737,7 @@ export default function CreatorDashboardPage() {
                         ))}
                       </div>
                     ) : (
-                      <p className="mt-3 text-sm leading-6 text-zinc-400">Quando alguem apoiar seu conteudo, os ItaCash aparecerao aqui.</p>
+                      <p className="mt-3 text-sm leading-6 text-zinc-400">Quando alguem enviar uma gorjeta, o valor liquido aparecera aqui.</p>
                     )}
                   </div>
                   <div className="mt-4 rounded-2xl border border-cyan-300/15 bg-cyan-500/10 p-4">
@@ -712,7 +746,7 @@ export default function CreatorDashboardPage() {
                       <>
                         <div className="mt-3 grid gap-3 sm:grid-cols-2">
                           <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
-                            <p className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Total recebido</p>
+                            <p className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Posts pagos liquidos recebidos</p>
                             <ItaCashAmount amount={paidPostActivity.total} size="lg" className="mt-2 text-white" valueClassName="text-xl" />
                           </div>
                           <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
@@ -963,7 +997,7 @@ export default function CreatorDashboardPage() {
                 <div className="mt-5 grid gap-3 sm:grid-cols-3">
                   <div className="rounded-2xl bg-black/30 p-4"><Repeat2 className="h-5 w-5 text-violet-200" /><p className="mt-3 text-xl font-black">{summary.reposts.available ? formatNumber(summary.reposts.value) : '—'}</p><p className="mt-1 text-xs text-zinc-500">Reposts</p></div>
                   <div className="rounded-2xl bg-black/30 p-4"><Bookmark className="h-5 w-5 text-amber-200" /><p className="mt-3 text-xl font-black">{summary.saves.available ? formatNumber(summary.saves.value) : '—'}</p><p className="mt-1 text-xs text-zinc-500">Salvos</p></div>
-                  <div className="rounded-2xl bg-black/30 p-4"><Coins className="h-5 w-5 text-cyan-200" /><p className="mt-3 text-xl font-black">{summary.supports.available ? <ItaCashAmount amount={summary.supports.value} size="lg" valueClassName="text-xl" /> : '—'}</p><p className="mt-1 text-xs text-zinc-500">Apoios</p></div>
+                  <div className="rounded-2xl bg-black/30 p-4"><Coins className="h-5 w-5 text-cyan-200" /><p className="mt-3 text-xl font-black">{summary.supports.available ? <ItaCashAmount amount={summary.supports.value} size="lg" valueClassName="text-xl" /> : '—'}</p><p className="mt-1 text-xs text-zinc-500">Gorjetas liquidas</p></div>
                 </div>
                 <p className="mt-5 text-sm leading-6 text-zinc-500">Não carregamos conteúdo, mídia, URLs de storage ou dados de outros criadores neste painel.</p>
               </article>

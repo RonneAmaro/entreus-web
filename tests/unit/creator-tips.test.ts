@@ -92,14 +92,48 @@ describe('creator tips helper', () => {
       },
     ], 1)).toEqual({
       totalReceived: 75,
+      grossAmount: 75,
+      platformFeeAmount: 0,
       countReceived: 2,
       recentTips: [
         {
           id: 'tip-2',
           amount: 50,
+          grossAmount: 50,
+          platformFeeAmount: 0,
           createdAt: '2026-06-21T12:00:00.000Z',
           senderId: receiverId,
           message: null,
+        },
+      ],
+    })
+  })
+
+  it('keeps creator tip summaries net when revenue split metadata is present', () => {
+    expect(summarizeCreatorTips([
+      {
+        id: 'tip-net',
+        amount: 85,
+        created_at: '2026-06-22T12:00:00.000Z',
+        metadata: {
+          sender_id: senderId,
+          gross_amount: 100,
+          creator_amount: 85,
+          platform_fee_amount: 15,
+          platform_fee_bps: 1500,
+        },
+      },
+    ])).toMatchObject({
+      totalReceived: 85,
+      grossAmount: 100,
+      platformFeeAmount: 15,
+      countReceived: 1,
+      recentTips: [
+        {
+          id: 'tip-net',
+          amount: 85,
+          grossAmount: 100,
+          platformFeeAmount: 15,
         },
       ],
     })

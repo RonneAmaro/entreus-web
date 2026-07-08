@@ -43,7 +43,7 @@ Se a leitura de `itacash_transactions` falhar por RLS ou schema ausente, o paine
 
 - O schema reaproveitado nao grava `post_id` estruturado na transacao da gorjeta. A rota valida o post quando informado, mas a RPC atual registra apenas a transferencia e a mensagem.
 - Nao ha saque real ou automatico.
-- Nao ha taxa de plataforma.
+- A taxa de plataforma 85/15 e documentada em `docs/itacash-revenue-split.md`.
 - Nao ha extrato financeiro completo do criador neste pacote.
 
 ## Proximos passos

@@ -1,4 +1,5 @@
 import { canViewPostByClassification, type ContentAccessProfile } from './content-access'
+import { getRevenueSplitBreakdown } from './revenue-split'
 
 export const PAID_POST_MIN_PRICE = 1
 
@@ -51,10 +52,14 @@ export type PaidPostTransactionRow = {
 
 export type PaidPostUnlockSummary = {
   totalReceived: number
+  grossAmount: number
+  platformFeeAmount: number
   unlockCount: number
   recentUnlocks: {
     id: string
     amount: number
+    grossAmount: number
+    platformFeeAmount: number
     createdAt: string | null
     buyerId: string | null
     postId: string | null
@@ -217,6 +222,10 @@ export function summarizePaidPostUnlocks(rows: PaidPostTransactionRow[], recentL
   const normalized = rows
     .map((row) => ({ row, amount: normalizePositiveAmount(row.amount), metadata: normalizeMetadata(row.metadata) }))
     .filter((item) => item.amount > 0)
+    .map((item) => ({
+      ...item,
+      split: getRevenueSplitBreakdown(item.row.metadata, item.amount),
+    }))
 
   const postStats = new Map<string, { unlocks: number; total: number }>()
 
@@ -231,6 +240,8 @@ export function summarizePaidPostUnlocks(rows: PaidPostTransactionRow[], recentL
 
   return {
     totalReceived: normalized.reduce((total, item) => total + item.amount, 0),
+    grossAmount: normalized.reduce((total, item) => total + item.split.grossAmount, 0),
+    platformFeeAmount: normalized.reduce((total, item) => total + item.split.platformFeeAmount, 0),
     unlockCount: normalized.length,
     recentUnlocks: normalized
       .slice()
@@ -243,6 +254,8 @@ export function summarizePaidPostUnlocks(rows: PaidPostTransactionRow[], recentL
       .map((item, index) => ({
         id: item.row.id || `paid-unlock-${index}`,
         amount: item.amount,
+        grossAmount: item.split.grossAmount,
+        platformFeeAmount: item.split.platformFeeAmount,
         createdAt: item.row.created_at || null,
         buyerId: normalizeUuidFromMetadata(item.metadata.buyer_id),
         postId: normalizeUuidFromMetadata(item.metadata.post_id),

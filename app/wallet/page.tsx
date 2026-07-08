@@ -45,6 +45,10 @@ type ItaCashTransaction = {
     withdrawable?: boolean
     reason?: string | null
     campaign?: string | null
+    gross_amount?: number
+    creator_amount?: number
+    platform_fee_amount?: number
+    platform_fee_bps?: number
   } | null
   created_at: string
 }
@@ -114,12 +118,12 @@ const transactionLabels: Record<string, string> = {
   reward: 'Recompensa',
   gift_sent: 'Presente enviado',
   gift_received: 'Presente recebido',
-  tip_sent: 'Apoio enviado',
-  tip_received: 'Apoio recebido',
+  tip_sent: 'Gorjeta enviada',
+  tip_received: 'Gorjeta recebida liquida',
   support_sent: 'Apoio enviado',
   support_received: 'Apoio recebido',
   paid_post_unlock: 'Desbloqueio de post',
-  paid_post_received: 'Post pago recebido',
+  paid_post_received: 'Post pago recebido liquido',
   purchase_confirmed: 'Compra de ItaCash',
   promotional_credit: 'Credito promocional',
   withdrawal_requested: 'Saque solicitado',
@@ -236,6 +240,22 @@ function getGiftNameFromDescription(description: string | null) {
   if (!description) return ''
   const parts = description.split(':')
   return parts.length > 1 ? parts.slice(1).join(':').trim() : ''
+}
+
+function formatRevenueSplitDetail(metadata: ItaCashTransaction['metadata']) {
+  const grossAmount = metadata?.gross_amount
+  const platformFeeAmount = metadata?.platform_fee_amount
+
+  if (
+    typeof grossAmount !== 'number' ||
+    typeof platformFeeAmount !== 'number' ||
+    grossAmount <= 0 ||
+    platformFeeAmount <= 0
+  ) {
+    return ''
+  }
+
+  return `Bruto: ${grossAmount} | Taxa da plataforma: ${platformFeeAmount}`
 }
 
 export default function WalletPage() {
@@ -430,17 +450,19 @@ export default function WalletPage() {
     }
 
     if (transaction.type === 'tip_sent' || transaction.type === 'support_sent') {
+      const splitDetail = formatRevenueSplitDetail(transaction.metadata)
       return {
-        title: 'Voce enviou apoio em ItaCash',
-        detail: transaction.description || 'Apoio enviado para criador',
+        title: 'Voce enviou uma gorjeta em ItaCash',
+        detail: splitDetail || transaction.description || 'Gorjeta enviada para criador',
         tone: 'out',
       }
     }
 
     if (transaction.type === 'tip_received' || transaction.type === 'support_received') {
+      const splitDetail = formatRevenueSplitDetail(transaction.metadata)
       return {
-        title: 'Voce recebeu apoio em ItaCash',
-        detail: transaction.description || 'Apoio recebido na carteira',
+        title: 'Voce recebeu uma gorjeta liquida em ItaCash',
+        detail: splitDetail || transaction.description || 'Gorjeta recebida liquida na carteira',
         tone: 'in',
       }
     }
@@ -454,9 +476,10 @@ export default function WalletPage() {
     }
 
     if (transaction.type === 'paid_post_received') {
+      const splitDetail = formatRevenueSplitDetail(transaction.metadata)
       return {
-        title: 'Voce recebeu por um post pago',
-        detail: transaction.description || 'Recebimento por desbloqueio de post',
+        title: 'Voce recebeu liquido por um post pago',
+        detail: splitDetail || transaction.description || 'Post pago recebido liquido',
         tone: 'in',
       }
     }

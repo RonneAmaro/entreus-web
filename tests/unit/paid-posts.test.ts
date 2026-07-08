@@ -120,6 +120,8 @@ describe('paid posts helper', () => {
         {
           id: 'unlock-1',
           amount: 25,
+          grossAmount: 25,
+          platformFeeAmount: 0,
           buyerId,
           postId,
         },
@@ -129,6 +131,39 @@ describe('paid posts helper', () => {
           postId,
           unlocks: 1,
           total: 25,
+        },
+      ],
+    })
+  })
+
+  it('keeps paid post income net when revenue split metadata is present', () => {
+    expect(summarizePaidPostUnlocks([
+      {
+        id: 'unlock-net',
+        amount: 85,
+        created_at: '2026-06-22T12:00:00.000Z',
+        metadata: {
+          buyer_id: buyerId,
+          post_id: postId,
+          gross_amount: 100,
+          creator_amount: 85,
+          platform_fee_amount: 15,
+          platform_fee_bps: 1500,
+        },
+      },
+    ])).toMatchObject({
+      totalReceived: 85,
+      grossAmount: 100,
+      platformFeeAmount: 15,
+      unlockCount: 1,
+      recentUnlocks: [
+        {
+          id: 'unlock-net',
+          amount: 85,
+          grossAmount: 100,
+          platformFeeAmount: 15,
+          buyerId,
+          postId,
         },
       ],
     })

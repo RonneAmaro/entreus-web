@@ -84,20 +84,29 @@ export async function POST(request: Request) {
     const result = (data || {}) as {
       already_unlocked?: unknown
       amount?: unknown
+      gross_amount?: unknown
+      creator_amount?: unknown
+      platform_fee_amount?: unknown
+      platform_fee_bps?: unknown
       buyer_balance_after?: unknown
     }
     const amount = typeof result.amount === 'number' ? result.amount : null
+    const grossAmount = typeof result.gross_amount === 'number' ? result.gross_amount : amount
     const alreadyUnlocked = result.already_unlocked === true
 
     return NextResponse.json({
       ok: true,
       alreadyUnlocked,
-      amount,
+      amount: grossAmount,
+      grossAmount,
+      creatorAmount: typeof result.creator_amount === 'number' ? result.creator_amount : null,
+      platformFeeAmount: typeof result.platform_fee_amount === 'number' ? result.platform_fee_amount : null,
+      platformFeeBps: typeof result.platform_fee_bps === 'number' ? result.platform_fee_bps : null,
       buyerBalanceAfter: typeof result.buyer_balance_after === 'number' ? result.buyer_balance_after : null,
       message: alreadyUnlocked
         ? getPaidPostErrorMessage('already_unlocked')
-        : amount
-          ? `Post desbloqueado por ${amount} ItaCash.`
+        : grossAmount
+          ? `Post desbloqueado por ${grossAmount} ItaCash.`
           : 'Post desbloqueado.',
     })
   } catch (error) {
