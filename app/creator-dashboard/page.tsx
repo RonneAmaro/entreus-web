@@ -45,14 +45,23 @@ import {
   type PostViewRow,
 } from '@/lib/post-analytics'
 import {
+  BANK_ACCOUNT_TYPES,
+  CREATOR_WITHDRAWAL_PAYMENT_METHODS,
   ITACASH_PER_BRL,
   MIN_WITHDRAWAL_BRL,
   MIN_WITHDRAWAL_ITACASH,
   PIX_KEY_TYPES,
   canRequestWithdrawal,
   convertItaCashToBrl,
+  formatWithdrawalPaymentDetailsSummary,
   formatWithdrawalStatus,
+  getBankAccountTypeLabel,
+  getWithdrawalPaymentMethodLabel,
+  getWithdrawalPaymentMethodNotice,
   validateWithdrawalRequestPayload,
+  type BankAccountType,
+  type CreatorWithdrawalPaymentDetails,
+  type CreatorWithdrawalPaymentMethod,
   type CreatorWithdrawalStatus,
   type PixKeyType,
 } from '@/lib/creator-withdrawals'
@@ -73,9 +82,10 @@ type CreatorWithdrawalRow = {
   id: string
   amount_itacash: number
   amount_brl: number
-  pix_key: string
-  pix_key_type: PixKeyType
-  holder_name: string
+  payment_method: CreatorWithdrawalPaymentMethod
+  payment_details: CreatorWithdrawalPaymentDetails
+  payment_summary?: string
+  payment_method_label?: string
   status: CreatorWithdrawalStatus
   rejection_reason: string | null
   created_at: string
@@ -99,6 +109,28 @@ const PIX_KEY_TYPE_LABELS: Record<PixKeyType, string> = {
   phone: 'Telefone',
   random: 'Aleatoria',
   cnpj: 'CNPJ',
+}
+
+const DEFAULT_WITHDRAWAL_FORM = {
+  amountItacash: '',
+  paymentMethod: 'pix' as CreatorWithdrawalPaymentMethod,
+  pixKey: '',
+  pixKeyType: 'cpf' as PixKeyType,
+  pixHolderName: '',
+  bankHolderName: '',
+  bankDocument: '',
+  bankName: '',
+  bankAgency: '',
+  bankAccount: '',
+  bankAccountType: 'checking' as BankAccountType,
+  bankNotes: '',
+  internationalHolderName: '',
+  internationalCountry: '',
+  internationalDesiredMethod: '',
+  internationalNotes: '',
+  otherHolderName: '',
+  otherMethodDescription: '',
+  otherNotes: '',
 }
 
 function isMissingPostColumnError(error: { message?: string } | null | undefined) {
@@ -152,6 +184,7 @@ function formatBRL(value: number) {
 
 function withdrawalStatusClass(status: CreatorWithdrawalStatus) {
   if (status === 'paid') return 'bg-emerald-500/10 text-emerald-200 ring-emerald-300/15'
+  if (status === 'approved') return 'bg-blue-500/10 text-blue-100 ring-blue-300/15'
   if (status === 'rejected') return 'bg-red-500/10 text-red-200 ring-red-300/15'
   if (status === 'cancelled') return 'bg-zinc-500/10 text-zinc-300 ring-white/10'
   return 'bg-amber-500/10 text-amber-100 ring-amber-300/15'
@@ -159,6 +192,7 @@ function withdrawalStatusClass(status: CreatorWithdrawalStatus) {
 
 function withdrawalStatusIcon(status: CreatorWithdrawalStatus) {
   if (status === 'paid') return <CheckCircle2 className="h-3.5 w-3.5" />
+  if (status === 'approved') return <CheckCircle2 className="h-3.5 w-3.5" />
   if (status === 'rejected') return <XCircle className="h-3.5 w-3.5" />
   return <Clock className="h-3.5 w-3.5" />
 }
@@ -222,12 +256,7 @@ export default function CreatorDashboardPage() {
     recentUnlocks: [] as ReturnType<typeof summarizePaidPostUnlocks>['recentUnlocks'],
   })
   const [withdrawals, setWithdrawals] = useState<CreatorWithdrawalRow[]>([])
-  const [withdrawalForm, setWithdrawalForm] = useState({
-    amountItacash: '',
-    pixKey: '',
-    pixKeyType: 'cpf' as PixKeyType,
-    holderName: '',
-  })
+  const [withdrawalForm, setWithdrawalForm] = useState(DEFAULT_WITHDRAWAL_FORM)
   const [withdrawalSubmitting, setWithdrawalSubmitting] = useState(false)
   const [withdrawalMessage, setWithdrawalMessage] = useState('')
   const [viewActivity, setViewActivity] = useState({
@@ -451,9 +480,24 @@ export default function CreatorDashboardPage() {
     const availableBalance = metrics.walletBalance === undefined ? null : metrics.walletBalance
     const validation = validateWithdrawalRequestPayload({
       amountItacash: withdrawalForm.amountItacash,
+      paymentMethod: withdrawalForm.paymentMethod,
       pixKey: withdrawalForm.pixKey,
       pixKeyType: withdrawalForm.pixKeyType,
-      holderName: withdrawalForm.holderName,
+      holderName: withdrawalForm.pixHolderName,
+      bankHolderName: withdrawalForm.bankHolderName,
+      bankDocument: withdrawalForm.bankDocument,
+      bankName: withdrawalForm.bankName,
+      bankAgency: withdrawalForm.bankAgency,
+      bankAccount: withdrawalForm.bankAccount,
+      bankAccountType: withdrawalForm.bankAccountType,
+      bankNotes: withdrawalForm.bankNotes,
+      internationalHolderName: withdrawalForm.internationalHolderName,
+      internationalCountry: withdrawalForm.internationalCountry,
+      internationalDesiredMethod: withdrawalForm.internationalDesiredMethod,
+      internationalNotes: withdrawalForm.internationalNotes,
+      otherHolderName: withdrawalForm.otherHolderName,
+      otherMethodDescription: withdrawalForm.otherMethodDescription,
+      otherNotes: withdrawalForm.otherNotes,
       availableBalance,
     })
 
@@ -494,10 +538,10 @@ export default function CreatorDashboardPage() {
     }
 
     setWithdrawalForm((current) => ({
-      amountItacash: '',
-      pixKey: '',
+      ...DEFAULT_WITHDRAWAL_FORM,
+      paymentMethod: current.paymentMethod,
       pixKeyType: current.pixKeyType,
-      holderName: '',
+      bankAccountType: current.bankAccountType,
     }))
     setWithdrawalMessage(data.message || 'Solicitacao de saque enviada.')
     await loadDashboard()
@@ -561,11 +605,14 @@ export default function CreatorDashboardPage() {
     { label: 'Primeira publicação', complete: summary.posts > 0, description: 'As métricas aparecem após a primeira publicação.' },
     { label: 'Regras da comunidade aceitas', complete: Boolean(profile?.terms_accepted_at), description: 'Use a plataforma conforme os termos aceitos.' },
     { label: 'Verificação 18+ para conteúdo adulto', complete: profile?.age_verification_status === 'approved', description: 'Opcional; exigida apenas para publicar na área adulta.' },
-    { label: 'Pronto para monetizacao', complete: Boolean(profile?.username && profile?.avatar_url && summary.posts > 0), description: 'Gorjetas e posts pagos com ItaCash ja podem aparecer no painel; saques terao pacote proprio.' },
+    { label: 'Pronto para monetizacao', complete: Boolean(profile?.username && profile?.avatar_url && summary.posts > 0), description: 'Gorjetas, posts pagos e saques manuais usam ItaCash com conferencia da equipe.' },
   ]
 
   const walletBalanceValue = summary.walletBalance.available ? summary.walletBalance.value : 0
   const canSubmitWithdrawal = summary.walletBalance.available && canRequestWithdrawal(walletBalanceValue)
+  const withdrawalFormDisabled = !summary.walletBalance.available || withdrawalSubmitting
+  const selectedPaymentMethodLabel = getWithdrawalPaymentMethodLabel(withdrawalForm.paymentMethod)
+  const selectedPaymentMethodNotice = getWithdrawalPaymentMethodNotice(withdrawalForm.paymentMethod)
   const withdrawalPreviewAmount = Number(withdrawalForm.amountItacash)
   const withdrawalPreviewBrl = Number.isFinite(withdrawalPreviewAmount)
     ? convertItaCashToBrl(withdrawalPreviewAmount)
@@ -780,7 +827,7 @@ export default function CreatorDashboardPage() {
                         <p className="text-xs font-black uppercase tracking-[0.14em] text-emerald-100/70">Saque</p>
                         <h3 className="mt-1 text-xl font-black">Solicitar saque manual</h3>
                         <p className="mt-1 text-sm leading-6 text-emerald-50/75">
-                          Minimo: <ItaCashAmount amount={MIN_WITHDRAWAL_ITACASH} size="sm" className="mx-1" /> = {formatBRL(MIN_WITHDRAWAL_BRL)}. Pagamento Pix manual pelo admin.
+                          O saque e processado manualmente pela equipe EntreUS. O saque minimo e de <ItaCashAmount amount={MIN_WITHDRAWAL_ITACASH} size="sm" className="mx-1" /> = {formatBRL(MIN_WITHDRAWAL_BRL)}.
                         </p>
                       </div>
                     </div>
@@ -820,21 +867,43 @@ export default function CreatorDashboardPage() {
                           value={withdrawalForm.amountItacash}
                           onChange={(event) => setWithdrawalForm((current) => ({ ...current, amountItacash: event.target.value }))}
                           className="mt-2 w-full rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm font-semibold text-white outline-none transition focus:border-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
-                          disabled={!summary.walletBalance.available || withdrawalSubmitting}
+                          disabled={withdrawalFormDisabled}
                         />
                         <span className="mt-1 block text-xs text-zinc-500">
                           Previa: {formatBRL(withdrawalPreviewBrl > 0 ? withdrawalPreviewBrl : 0)}
                         </span>
                       </label>
 
-                      <div className="grid gap-3 sm:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
+                      <label className="block">
+                        <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Metodo de recebimento</span>
+                        <select
+                          value={withdrawalForm.paymentMethod}
+                          onChange={(event) => setWithdrawalForm((current) => ({ ...current, paymentMethod: event.target.value as CreatorWithdrawalPaymentMethod }))}
+                          className="mt-2 w-full rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm font-semibold text-white outline-none transition focus:border-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                          disabled={withdrawalFormDisabled}
+                        >
+                          {CREATOR_WITHDRAWAL_PAYMENT_METHODS.map((method) => (
+                            <option key={method} value={method}>{getWithdrawalPaymentMethodLabel(method)}</option>
+                          ))}
+                        </select>
+                        <span className="mt-1 block text-xs leading-5 text-zinc-500">
+                          {selectedPaymentMethodNotice} Confira seus dados antes de enviar.
+                        </span>
+                      </label>
+
+                      {withdrawalForm.paymentMethod === 'pix' && (
+                      <div className="grid gap-3">
+                        <p className="rounded-2xl border border-emerald-300/15 bg-emerald-500/10 p-3 text-xs font-semibold leading-5 text-emerald-50/80">
+                          Pix e o metodo recomendado no Brasil.
+                        </p>
+                        <div className="grid gap-3 sm:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
                         <label className="block">
                           <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Tipo Pix</span>
                           <select
                             value={withdrawalForm.pixKeyType}
                             onChange={(event) => setWithdrawalForm((current) => ({ ...current, pixKeyType: event.target.value as PixKeyType }))}
                             className="mt-2 w-full rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm font-semibold text-white outline-none transition focus:border-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
-                            disabled={!summary.walletBalance.available || withdrawalSubmitting}
+                            disabled={withdrawalFormDisabled}
                           >
                             {PIX_KEY_TYPES.map((type) => (
                               <option key={type} value={type}>{PIX_KEY_TYPE_LABELS[type]}</option>
@@ -848,20 +917,186 @@ export default function CreatorDashboardPage() {
                             value={withdrawalForm.pixKey}
                             onChange={(event) => setWithdrawalForm((current) => ({ ...current, pixKey: event.target.value }))}
                             className="mt-2 w-full rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm font-semibold text-white outline-none transition focus:border-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
-                            disabled={!summary.walletBalance.available || withdrawalSubmitting}
+                            disabled={withdrawalFormDisabled}
+                          />
+                        </label>
+                        </div>
+
+                        <label className="block">
+                          <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Nome do titular</span>
+                          <input
+                            value={withdrawalForm.pixHolderName}
+                            onChange={(event) => setWithdrawalForm((current) => ({ ...current, pixHolderName: event.target.value }))}
+                            className="mt-2 w-full rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm font-semibold text-white outline-none transition focus:border-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                            disabled={withdrawalFormDisabled}
                           />
                         </label>
                       </div>
+                      )}
 
-                      <label className="block">
-                        <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Nome do titular</span>
-                        <input
-                          value={withdrawalForm.holderName}
-                          onChange={(event) => setWithdrawalForm((current) => ({ ...current, holderName: event.target.value }))}
-                          className="mt-2 w-full rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm font-semibold text-white outline-none transition focus:border-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
-                          disabled={!summary.walletBalance.available || withdrawalSubmitting}
-                        />
-                      </label>
+                      {withdrawalForm.paymentMethod === 'bank_transfer' && (
+                      <div className="grid gap-3">
+                        <p className="rounded-2xl border border-amber-300/15 bg-amber-500/10 p-3 text-xs font-semibold leading-5 text-amber-50/80">
+                          Transferencia bancaria pode levar mais tempo. A equipe confere os dados manualmente.
+                        </p>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <label className="block">
+                            <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Nome do titular</span>
+                            <input
+                              value={withdrawalForm.bankHolderName}
+                              onChange={(event) => setWithdrawalForm((current) => ({ ...current, bankHolderName: event.target.value }))}
+                              className="mt-2 w-full rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm font-semibold text-white outline-none transition focus:border-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                              disabled={withdrawalFormDisabled}
+                            />
+                          </label>
+                          <label className="block">
+                            <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">CPF/CNPJ do titular</span>
+                            <input
+                              value={withdrawalForm.bankDocument}
+                              onChange={(event) => setWithdrawalForm((current) => ({ ...current, bankDocument: event.target.value }))}
+                              className="mt-2 w-full rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm font-semibold text-white outline-none transition focus:border-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                              disabled={withdrawalFormDisabled}
+                            />
+                          </label>
+                          <label className="block">
+                            <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Banco</span>
+                            <input
+                              value={withdrawalForm.bankName}
+                              onChange={(event) => setWithdrawalForm((current) => ({ ...current, bankName: event.target.value }))}
+                              className="mt-2 w-full rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm font-semibold text-white outline-none transition focus:border-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                              disabled={withdrawalFormDisabled}
+                            />
+                          </label>
+                          <label className="block">
+                            <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Tipo de conta</span>
+                            <select
+                              value={withdrawalForm.bankAccountType}
+                              onChange={(event) => setWithdrawalForm((current) => ({ ...current, bankAccountType: event.target.value as BankAccountType }))}
+                              className="mt-2 w-full rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm font-semibold text-white outline-none transition focus:border-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                              disabled={withdrawalFormDisabled}
+                            >
+                              {BANK_ACCOUNT_TYPES.map((type) => (
+                                <option key={type} value={type}>{getBankAccountTypeLabel(type)}</option>
+                              ))}
+                            </select>
+                          </label>
+                          <label className="block">
+                            <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Agencia</span>
+                            <input
+                              value={withdrawalForm.bankAgency}
+                              onChange={(event) => setWithdrawalForm((current) => ({ ...current, bankAgency: event.target.value }))}
+                              className="mt-2 w-full rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm font-semibold text-white outline-none transition focus:border-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                              disabled={withdrawalFormDisabled}
+                            />
+                          </label>
+                          <label className="block">
+                            <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Conta</span>
+                            <input
+                              value={withdrawalForm.bankAccount}
+                              onChange={(event) => setWithdrawalForm((current) => ({ ...current, bankAccount: event.target.value }))}
+                              className="mt-2 w-full rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm font-semibold text-white outline-none transition focus:border-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                              disabled={withdrawalFormDisabled}
+                            />
+                          </label>
+                        </div>
+                        <label className="block">
+                          <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Observacao opcional</span>
+                          <textarea
+                            value={withdrawalForm.bankNotes}
+                            onChange={(event) => setWithdrawalForm((current) => ({ ...current, bankNotes: event.target.value }))}
+                            rows={2}
+                            className="mt-2 w-full resize-none rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm font-semibold text-white outline-none transition focus:border-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                            disabled={withdrawalFormDisabled}
+                          />
+                        </label>
+                      </div>
+                      )}
+
+                      {withdrawalForm.paymentMethod === 'international_manual' && (
+                      <div className="grid gap-3">
+                        <p className="rounded-2xl border border-amber-300/15 bg-amber-500/10 p-3 text-xs font-semibold leading-5 text-amber-50/80">
+                          Saques internacionais estao em analise e podem exigir conferencia manual. Nao ha saque internacional automatico.
+                        </p>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <label className="block">
+                            <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Nome do titular</span>
+                            <input
+                              value={withdrawalForm.internationalHolderName}
+                              onChange={(event) => setWithdrawalForm((current) => ({ ...current, internationalHolderName: event.target.value }))}
+                              className="mt-2 w-full rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm font-semibold text-white outline-none transition focus:border-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                              disabled={withdrawalFormDisabled}
+                            />
+                          </label>
+                          <label className="block">
+                            <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Pais</span>
+                            <input
+                              value={withdrawalForm.internationalCountry}
+                              onChange={(event) => setWithdrawalForm((current) => ({ ...current, internationalCountry: event.target.value }))}
+                              className="mt-2 w-full rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm font-semibold text-white outline-none transition focus:border-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                              disabled={withdrawalFormDisabled}
+                            />
+                          </label>
+                        </div>
+                        <label className="block">
+                          <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Metodo desejado</span>
+                          <input
+                            value={withdrawalForm.internationalDesiredMethod}
+                            onChange={(event) => setWithdrawalForm((current) => ({ ...current, internationalDesiredMethod: event.target.value }))}
+                            className="mt-2 w-full rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm font-semibold text-white outline-none transition focus:border-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                            disabled={withdrawalFormDisabled}
+                          />
+                        </label>
+                        <label className="block">
+                          <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Observacoes</span>
+                          <textarea
+                            value={withdrawalForm.internationalNotes}
+                            onChange={(event) => setWithdrawalForm((current) => ({ ...current, internationalNotes: event.target.value }))}
+                            rows={2}
+                            className="mt-2 w-full resize-none rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm font-semibold text-white outline-none transition focus:border-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                            disabled={withdrawalFormDisabled}
+                          />
+                        </label>
+                      </div>
+                      )}
+
+                      {withdrawalForm.paymentMethod === 'other_manual' && (
+                      <div className="grid gap-3">
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <label className="block">
+                            <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Nome do titular</span>
+                            <input
+                              value={withdrawalForm.otherHolderName}
+                              onChange={(event) => setWithdrawalForm((current) => ({ ...current, otherHolderName: event.target.value }))}
+                              className="mt-2 w-full rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm font-semibold text-white outline-none transition focus:border-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                              disabled={withdrawalFormDisabled}
+                            />
+                          </label>
+                          <label className="block">
+                            <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Descricao do metodo</span>
+                            <input
+                              value={withdrawalForm.otherMethodDescription}
+                              onChange={(event) => setWithdrawalForm((current) => ({ ...current, otherMethodDescription: event.target.value }))}
+                              className="mt-2 w-full rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm font-semibold text-white outline-none transition focus:border-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                              disabled={withdrawalFormDisabled}
+                            />
+                          </label>
+                        </div>
+                        <label className="block">
+                          <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Observacoes</span>
+                          <textarea
+                            value={withdrawalForm.otherNotes}
+                            onChange={(event) => setWithdrawalForm((current) => ({ ...current, otherNotes: event.target.value }))}
+                            rows={2}
+                            className="mt-2 w-full resize-none rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm font-semibold text-white outline-none transition focus:border-emerald-300 disabled:cursor-not-allowed disabled:opacity-60"
+                            disabled={withdrawalFormDisabled}
+                          />
+                        </label>
+                      </div>
+                      )}
+
+                      <div className="rounded-2xl border border-white/10 bg-black/30 p-3 text-xs leading-5 text-zinc-400">
+                        Metodo escolhido: <span className="font-black text-zinc-100">{selectedPaymentMethodLabel}</span>. A equipe confere os dados, paga fora da plataforma e registra o status aqui.
+                      </div>
 
                       <button
                         type="submit"
@@ -883,6 +1118,9 @@ export default function CreatorDashboardPage() {
                                 <div>
                                   <ItaCashAmount amount={withdrawal.amount_itacash} size="sm" className="text-white" />
                                   <p className="mt-1 text-xs text-zinc-500">{formatBRL(Number(withdrawal.amount_brl) || 0)} - {formatDate(withdrawal.created_at)}</p>
+                                  <p className="mt-1 text-xs font-semibold text-zinc-300">
+                                    {withdrawal.payment_summary || formatWithdrawalPaymentDetailsSummary(withdrawal.payment_method, withdrawal.payment_details)}
+                                  </p>
                                 </div>
                                 <span className={`inline-flex w-fit items-center gap-1 rounded-full px-2.5 py-1 text-xs font-black ring-1 ${withdrawalStatusClass(withdrawal.status)}`}>
                                   {withdrawalStatusIcon(withdrawal.status)}

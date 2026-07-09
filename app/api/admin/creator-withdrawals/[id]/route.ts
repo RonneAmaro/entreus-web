@@ -2,10 +2,16 @@ import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { isAdminRole } from '@/lib/admin'
 import {
+  formatWithdrawalPaymentDetailsSummary,
   getCreatorWithdrawalErrorMessage,
+  getWithdrawalPaymentMethodLabel,
   isUuid,
+  normalizeAdminCreatorWithdrawalAction,
   normalizeCreatorWithdrawalRpcError,
+  normalizeWithdrawalPaymentMethod,
   type CreatorWithdrawalErrorReason,
+  type CreatorWithdrawalPaymentDetails,
+  type PixWithdrawalPaymentDetails,
 } from '@/lib/creator-withdrawals'
 
 export const dynamic = 'force-dynamic'
@@ -19,6 +25,17 @@ type AdminWithdrawalPatchBody = {
   adminNotes?: unknown
   admin_notes?: unknown
 }
+
+type CreatorWithdrawalDbRow = {
+  payment_method?: string | null
+  payment_details?: unknown
+  pix_key?: string | null
+  pix_key_type?: string | null
+  holder_name?: string | null
+}
+
+const WITHDRAWAL_SELECT_WITH_PAYMENT = 'id, user_id, wallet_id, amount_itacash, amount_brl, itacash_per_brl, payment_method, payment_details, pix_key, pix_key_type, holder_name, status, admin_notes, rejection_reason, reviewed_by, reviewed_at, paid_at, created_at, updated_at'
+const WITHDRAWAL_SELECT_LEGACY = 'id, user_id, wallet_id, amount_itacash, amount_brl, itacash_per_brl, pix_key, pix_key_type, holder_name, status, admin_notes, rejection_reason, reviewed_by, reviewed_at, paid_at, created_at, updated_at'
 
 function getSupabaseForRequest(request: Request) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -57,6 +74,46 @@ function sanitizeText(value: unknown, maxLength = 1000) {
   return value.trim().replace(/\s+/g, ' ').slice(0, maxLength)
 }
 
+function isMissingPaymentSchemaError(error: unknown) {
+  const message = error && typeof error === 'object' && 'message' in error
+    ? String((error as { message?: unknown }).message || '').toLowerCase()
+    : ''
+
+  return message.includes('payment_method') || message.includes('payment_details')
+}
+
+function asPaymentDetails(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {}
+}
+
+function buildLegacyPixDetails(row: CreatorWithdrawalDbRow): PixWithdrawalPaymentDetails {
+  return {
+    method: 'pix',
+    pixKey: row.pix_key || '',
+    pixKeyType: row.pix_key_type === 'cnpj' || row.pix_key_type === 'email' || row.pix_key_type === 'phone' || row.pix_key_type === 'random'
+      ? row.pix_key_type
+      : 'cpf',
+    holderName: row.holder_name || '',
+  }
+}
+
+function normalizeWithdrawalRow<T extends CreatorWithdrawalDbRow>(row: T) {
+  const paymentMethod = normalizeWithdrawalPaymentMethod(row.payment_method) || 'pix'
+  const paymentDetails = Object.keys(asPaymentDetails(row.payment_details)).length > 0
+    ? row.payment_details as CreatorWithdrawalPaymentDetails
+    : buildLegacyPixDetails(row)
+
+  return {
+    ...row,
+    payment_method: paymentMethod,
+    payment_details: paymentDetails,
+    payment_method_label: getWithdrawalPaymentMethodLabel(paymentMethod),
+    payment_summary: formatWithdrawalPaymentDetailsSummary(paymentMethod, paymentDetails),
+  }
+}
+
 async function validateAdmin(request: Request) {
   const supabase = getSupabaseForRequest(request)
   const {
@@ -81,6 +138,60 @@ async function validateAdmin(request: Request) {
   return { ok: true as const, supabase, userId: user.id }
 }
 
+export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
+  try {
+    const { id } = await context.params
+
+    if (!isUuid(id)) {
+      return jsonWithdrawalError('request_not_found', 404)
+    }
+
+    const admin = await validateAdmin(request)
+
+    if (!admin.ok) {
+      return jsonWithdrawalError(admin.reason, admin.status)
+    }
+
+    const initialResult = await admin.supabase
+      .from('creator_withdrawal_requests')
+      .select(WITHDRAWAL_SELECT_WITH_PAYMENT)
+      .eq('id', id)
+      .maybeSingle()
+    let data = initialResult.data as CreatorWithdrawalDbRow | null
+    let error = initialResult.error
+
+    if (error && isMissingPaymentSchemaError(error)) {
+      const legacyResult = await admin.supabase
+        .from('creator_withdrawal_requests')
+        .select(WITHDRAWAL_SELECT_LEGACY)
+        .eq('id', id)
+        .maybeSingle()
+
+      data = legacyResult.data as CreatorWithdrawalDbRow | null
+      error = legacyResult.error
+    }
+
+    if (error) {
+      const reason = normalizeCreatorWithdrawalRpcError(error)
+      return jsonWithdrawalError(reason, statusForReason(reason))
+    }
+
+    if (!data) {
+      return jsonWithdrawalError('request_not_found', 404)
+    }
+
+    return NextResponse.json({
+      ok: true,
+      withdrawal: normalizeWithdrawalRow(data as CreatorWithdrawalDbRow),
+    })
+  } catch (error) {
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('[AdminCreatorWithdrawals] GET detail failed:', error)
+    }
+    return jsonWithdrawalError('internal', 500)
+  }
+}
+
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await context.params
@@ -90,11 +201,9 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     }
 
     const body = (await request.json().catch(() => ({}))) as AdminWithdrawalPatchBody
-    const action = typeof (body.action ?? body.status) === 'string'
-      ? String(body.action ?? body.status).trim().toLowerCase()
-      : ''
+    const action = normalizeAdminCreatorWithdrawalAction(body.action ?? body.status)
 
-    if (action !== 'paid' && action !== 'reject' && action !== 'rejected') {
+    if (!action) {
       return jsonWithdrawalError('action_not_allowed', 400)
     }
 
@@ -104,8 +213,37 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       return jsonWithdrawalError(admin.reason, admin.status)
     }
 
+    const adminNotes = sanitizeText(body.adminNotes ?? body.admin_notes, 1000) || null
+
+    if (action === 'reviewing') {
+      const { data, error } = await admin.supabase.rpc('set_creator_withdrawal_reviewing', {
+        p_request_id: id,
+        p_admin_notes: adminNotes,
+      })
+
+      if (error) {
+        const reason = normalizeCreatorWithdrawalRpcError(error)
+        return jsonWithdrawalError(reason, statusForReason(reason))
+      }
+
+      return NextResponse.json({ ok: true, withdrawal: data || null, message: 'Solicitacao marcada em analise.' })
+    }
+
+    if (action === 'approved') {
+      const { data, error } = await admin.supabase.rpc('approve_creator_withdrawal', {
+        p_request_id: id,
+        p_admin_notes: adminNotes,
+      })
+
+      if (error) {
+        const reason = normalizeCreatorWithdrawalRpcError(error)
+        return jsonWithdrawalError(reason, statusForReason(reason))
+      }
+
+      return NextResponse.json({ ok: true, withdrawal: data || null, message: 'Solicitacao aprovada para pagamento manual.' })
+    }
+
     if (action === 'paid') {
-      const adminNotes = sanitizeText(body.adminNotes ?? body.admin_notes, 1000) || null
       const { data, error } = await admin.supabase.rpc('mark_creator_withdrawal_paid', {
         p_request_id: id,
         p_admin_notes: adminNotes,

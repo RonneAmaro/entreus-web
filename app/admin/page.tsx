@@ -55,10 +55,10 @@ const adminCards = [
   },
   {
     title: 'Saques de criadores',
-    description: 'Revisar solicitacoes de saque manual e registrar Pix pago ou recusado.',
+    description: 'Revisar saques manuais e registrar pagamento externo por Pix, banco ou metodo manual.',
     href: '/admin/creator-withdrawals',
     icon: Banknote,
-    keywords: ['saque', 'saques', 'repasses', 'withdrawals', 'pix', 'criadores'],
+    keywords: ['saque', 'saques', 'repasses', 'withdrawals', 'pix', 'banco', 'criadores'],
   },
   {
     title: 'Financeiro',
@@ -205,6 +205,16 @@ export default function AdminPage() {
         keywords: ['itacash', 'compras', 'pix', 'comprovante', 'pagamentos', 'pendencias'],
       },
       {
+        key: 'creatorWithdrawals' as const,
+        title: 'Saques pendentes',
+        count: adminPendingCounts.creatorWithdrawals,
+        description: 'Saques manuais de criadores aguardando conferencia ou pagamento externo.',
+        href: '/admin/creator-withdrawals',
+        action: 'Revisar saques',
+        icon: Banknote,
+        keywords: ['saque', 'saques', 'repasses', 'withdrawals', 'pix', 'banco', 'pendencias'],
+      },
+      {
         key: 'ageVerifications' as const,
         title: 'Verificacoes 18+ pendentes',
         count: adminPendingCounts.ageVerifications,
@@ -237,6 +247,7 @@ export default function AdminPage() {
     ],
     [
       adminPendingCounts.ageVerifications,
+      adminPendingCounts.creatorWithdrawals,
       adminPendingCounts.feedbackReports,
       adminPendingCounts.itacashPurchases,
       adminPendingCounts.reports,
@@ -532,6 +543,11 @@ export default function AdminPage() {
                   {card.href === '/admin/itacash-purchases' && adminPendingCounts.itacashPurchases > 0 && (
                     <span className="ml-2 inline-flex min-h-[22px] min-w-[22px] items-center justify-center rounded-full bg-red-600 px-1.5 align-middle text-[11px] font-black text-white">
                       {adminPendingCounts.itacashPurchases > 99 ? '99+' : adminPendingCounts.itacashPurchases}
+                    </span>
+                  )}
+                  {card.href === '/admin/creator-withdrawals' && adminPendingCounts.creatorWithdrawals > 0 && (
+                    <span className="ml-2 inline-flex min-h-[22px] min-w-[22px] items-center justify-center rounded-full bg-red-600 px-1.5 align-middle text-[11px] font-black text-white">
+                      {adminPendingCounts.creatorWithdrawals > 99 ? '99+' : adminPendingCounts.creatorWithdrawals}
                     </span>
                   )}
                   {'badge' in card && card.badge && (

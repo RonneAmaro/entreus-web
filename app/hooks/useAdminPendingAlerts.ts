@@ -1,31 +1,24 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-
-export type AdminPendingAlerts = {
-  itacashPurchases: number
-  ageVerifications: number
-  reports: number
-  feedbackReports: number
-}
-
-type AdminPendingAlertKey = keyof AdminPendingAlerts
+import {
+  emptyAdminPendingAlerts,
+  getAdminPendingTotal,
+  type AdminPendingAlertKey,
+  type AdminPendingAlerts,
+} from '@/lib/admin-pending-alerts'
 
 type UseAdminPendingAlertsOptions = {
   enabled?: boolean
   onNewPending?: () => void
 }
 
-const emptyCounts: AdminPendingAlerts = {
-  itacashPurchases: 0,
-  ageVerifications: 0,
-  reports: 0,
-  feedbackReports: 0,
-}
-
 const ADMIN_PENDING_CACHE_MS = 30000
 export const ADMIN_PENDING_ALERTS_CHANGED_EVENT = 'entreus:admin-pending-alerts-changed'
+
+type SupabaseQueryBuilder = ReturnType<typeof supabase.from>
+type SupabaseCountQuery = ReturnType<SupabaseQueryBuilder['select']>
 
 let cachedCounts: AdminPendingAlerts | null = null
 let cachedErrors: Partial<Record<AdminPendingAlertKey, string>> = {}
@@ -35,18 +28,14 @@ let pendingCountsRequest: Promise<{
   errors: Partial<Record<AdminPendingAlertKey, string>>
 }> | null = null
 
-export function getAdminPendingTotal(counts: AdminPendingAlerts) {
-  return counts.itacashPurchases + counts.ageVerifications + counts.reports + counts.feedbackReports
-}
-
 async function countRows(
   table: string,
-  applyFilter?: (query: any) => unknown
+  applyFilter?: (query: SupabaseCountQuery) => SupabaseCountQuery
 ) {
-  let query = supabase.from(table).select('id', { count: 'exact', head: true })
+  let query: SupabaseCountQuery = supabase.from(table).select('id', { count: 'exact', head: true })
 
   if (applyFilter) {
-    query = applyFilter(query) as typeof query
+    query = applyFilter(query)
   }
 
   const { count, error } = await query
@@ -89,6 +78,7 @@ async function loadAdminPendingCounts() {
   pendingCountsRequest = (async () => {
     const results = await Promise.allSettled([
       countRows('itacash_purchase_requests', (query) => query.eq('status', 'pending')),
+      countRows('creator_withdrawal_requests', (query) => query.eq('status', 'pending')),
       countRows('age_verification_requests', (query) => query.eq('status', 'pending')),
       countReports(),
       countRows('internal_feedback_reports', (query) => query.in('status', ['open', 'triaged', 'in_progress'])),
@@ -96,16 +86,18 @@ async function loadAdminPendingCounts() {
 
     const nextCounts: AdminPendingAlerts = {
       itacashPurchases: results[0].status === 'fulfilled' ? results[0].value : 0,
-      ageVerifications: results[1].status === 'fulfilled' ? results[1].value : 0,
-      reports: results[2].status === 'fulfilled' ? results[2].value : 0,
-      feedbackReports: results[3].status === 'fulfilled' ? results[3].value : 0,
+      creatorWithdrawals: results[1].status === 'fulfilled' ? results[1].value : 0,
+      ageVerifications: results[2].status === 'fulfilled' ? results[2].value : 0,
+      reports: results[3].status === 'fulfilled' ? results[3].value : 0,
+      feedbackReports: results[4].status === 'fulfilled' ? results[4].value : 0,
     }
     const nextErrors: Partial<Record<AdminPendingAlertKey, string>> = {}
 
     if (results[0].status === 'rejected') nextErrors.itacashPurchases = 'Nao foi possivel carregar'
-    if (results[1].status === 'rejected') nextErrors.ageVerifications = 'Nao foi possivel carregar'
-    if (results[2].status === 'rejected') nextErrors.reports = 'Nao foi possivel carregar'
-    if (results[3].status === 'rejected') nextErrors.feedbackReports = 'Nao foi possivel carregar'
+    if (results[1].status === 'rejected') nextErrors.creatorWithdrawals = 'Nao foi possivel carregar'
+    if (results[2].status === 'rejected') nextErrors.ageVerifications = 'Nao foi possivel carregar'
+    if (results[3].status === 'rejected') nextErrors.reports = 'Nao foi possivel carregar'
+    if (results[4].status === 'rejected') nextErrors.feedbackReports = 'Nao foi possivel carregar'
 
     Object.entries(nextErrors).forEach(([key, value]) => {
       console.warn('[AdminAlerts] Count unavailable:', { key, message: value })
@@ -133,7 +125,7 @@ export function useAdminPendingAlerts({
   onNewPending,
 }: UseAdminPendingAlertsOptions = {}) {
   const [counts, setCounts] = useState<AdminPendingAlerts>(() =>
-    enabled && cachedCounts ? cachedCounts : emptyCounts
+    enabled && cachedCounts ? cachedCounts : emptyAdminPendingAlerts
   )
   const [errors, setErrors] = useState<Partial<Record<AdminPendingAlertKey, string>>>(() =>
     enabled ? cachedErrors : {}
@@ -141,11 +133,12 @@ export function useAdminPendingAlerts({
   const [loading, setLoading] = useState(false)
   const previousTotalRef = useRef(0)
   const refreshTimerRef = useRef<number | null>(null)
-  const channelNameRef = useRef(`admin-pending-alerts-${Math.random().toString(36).slice(2)}`)
+  const channelId = useId()
+  const channelName = `admin-pending-alerts-${channelId.replace(/[^a-zA-Z0-9_-]/g, '')}`
 
   const loadCounts = useCallback(async () => {
     if (!enabled) {
-      setCounts(emptyCounts)
+      setCounts(emptyAdminPendingAlerts)
       setErrors({})
       setLoading(false)
       previousTotalRef.current = 0
@@ -179,7 +172,11 @@ export function useAdminPendingAlerts({
   }, [loadCounts])
 
   useEffect(() => {
-    loadCounts()
+    const timer = window.setTimeout(() => {
+      void loadCounts()
+    }, 0)
+
+    return () => window.clearTimeout(timer)
   }, [loadCounts])
 
   useEffect(() => {
@@ -213,8 +210,9 @@ export function useAdminPendingAlerts({
     if (!enabled) return
 
     const channel = supabase
-      .channel(channelNameRef.current)
+      .channel(channelName)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'itacash_purchase_requests' }, scheduleCountsRefresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'creator_withdrawal_requests' }, scheduleCountsRefresh)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'age_verification_requests' }, scheduleCountsRefresh)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'reports' }, scheduleCountsRefresh)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'internal_feedback_reports' }, scheduleCountsRefresh)
@@ -223,7 +221,7 @@ export function useAdminPendingAlerts({
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [enabled, scheduleCountsRefresh])
+  }, [channelName, enabled, scheduleCountsRefresh])
 
   return {
     counts,
