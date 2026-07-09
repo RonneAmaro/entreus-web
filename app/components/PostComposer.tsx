@@ -28,6 +28,8 @@ import {
 import { useLanguage } from './LanguageProvider'
 import { supabase } from '@/lib/supabase'
 import UserTierBadge from './UserTierBadge'
+import ComposerActiveChips from './post-composer/ComposerActiveChips'
+import ComposerPublishSummary from './post-composer/ComposerPublishSummary'
 import type { AiAssistMode } from '@/lib/ai/types'
 import type { UserTier } from '@/lib/user-tiers'
 import {
@@ -61,6 +63,12 @@ import {
 } from '@/lib/post-classification'
 import { isLegacyAdultCategory, normalizePostClassification } from '@/lib/content-access'
 import { getPaidPostErrorMessage, validatePaidPostPrice } from '@/lib/paid-posts'
+import {
+  DEFAULT_POST_COMPOSER_ADVANCED_OPEN,
+  getComposerActiveAdvancedChips,
+  getComposerPublishSummary,
+  getComposerVisualGuardMessage,
+} from '@/lib/post-composer-ux'
 import { claimSubmitGuard, releaseSubmitGuard, type SubmitGuard } from '@/lib/post-submit-guard'
 
 type VisibilityType = 'public' | 'followers' | 'private'
@@ -331,11 +339,12 @@ export default function PostComposer({
   const [activeAiMode, setActiveAiMode] = useState<AiAssistMode | null>(null)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [showMediaMenu, setShowMediaMenu] = useState(false)
-  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false)
+  const [showAdvancedOptions, setShowAdvancedOptions] = useState(DEFAULT_POST_COMPOSER_ADVANCED_OPEN)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isHighlighted, setIsHighlighted] = useState(false)
   const [isOptimizingVideo, setIsOptimizingVideo] = useState(false)
   const [pendingVideoCompression, setPendingVideoCompression] = useState<PendingVideoCompression | null>(null)
+  const [publishSuccessMessage, setPublishSuccessMessage] = useState('')
   const [submitLocked, setSubmitLocked] = useState(false)
   const isSubmitting = submitting || submitLocked
 
@@ -369,6 +378,10 @@ export default function PostComposer({
     return VISIBILITY_OPTIONS.find((item) => item.value === visibility)
   }, [visibility])
 
+  const selectedRating = useMemo(() => {
+    return CONTENT_RATINGS.find((item) => item.key === contentRating)
+  }, [contentRating])
+
   const optimizedVideoItems = useMemo(() => {
     return media.filter(hasVideoOptimization)
   }, [media])
@@ -376,6 +389,16 @@ export default function PostComposer({
   useEffect(() => {
     mediaRef.current = media
   }, [media])
+
+  useEffect(() => {
+    if (!publishSuccessMessage) return
+
+    const timer = window.setTimeout(() => {
+      setPublishSuccessMessage('')
+    }, 4500)
+
+    return () => window.clearTimeout(timer)
+  }, [publishSuccessMessage])
 
   useEffect(() => {
     return () => {
@@ -558,6 +581,7 @@ export default function PostComposer({
     }
 
     setError('')
+    setPublishSuccessMessage('')
     setMediaFeedback(null)
     setPendingVideoCompression(null)
     setShowMediaMenu(false)
@@ -595,7 +619,11 @@ export default function PostComposer({
       }
 
       if (fileIsImage && file.size > IMAGE_UPLOAD_MAX_SIZE_BYTES) {
-        setError(isGif(file) ? 'GIF muito grande. O limite atual e 5 MB.' : t('postComposer.errors.imageTooLarge'))
+        setError(
+          isGif(file)
+            ? 'GIF muito grande. Use ate 5 MB.'
+            : `Imagem muito grande. Use ate ${formatUploadLimitMegabytes(IMAGE_UPLOAD_MAX_SIZE_BYTES)}.`,
+        )
         continue
       }
 
@@ -848,6 +876,7 @@ export default function PostComposer({
   function handleContentChange(value: string) {
     setContent(value)
     setAiFeedback(null)
+    setPublishSuccessMessage('')
   }
 
   function handleCategoryChange(value: string) {
@@ -908,8 +937,33 @@ export default function PostComposer({
     setContentRating(resolveContentRating(communityType, nextRating))
   }
 
+  function handleAdult18PlusToggle(checked: boolean) {
+    if (checked) {
+      if (!canAccessAdult18Plus) {
+        setError('Conteudo adulto 18+ exige verificacao aprovada.')
+        setCommunityType('general')
+        setContentRating('safe')
+        return
+      }
+
+      setError('')
+      setCommunityType('adult_18plus')
+      setContentRating('adult_18plus')
+      return
+    }
+
+    setError('')
+    setCommunityType('general')
+    setContentRating('safe')
+
+    if (isLegacyAdultCategory(category)) {
+      setCategory('cotidiano')
+    }
+  }
+
   function handlePaidPostToggle(checked: boolean) {
     setIsPaidPost(checked)
+    setError('')
 
     if (!checked) {
       setPaidPostPrice('')
@@ -1065,7 +1119,7 @@ export default function PostComposer({
       }
 
       if (!trimmedContent && media.length === 0) {
-        setError(t('postComposer.errors.empty'))
+        setError('Escreva algo ou adicione uma foto ou video antes de publicar.')
         return
       }
 
@@ -1081,7 +1135,7 @@ export default function PostComposer({
       )
 
       if (resolvedClassification.contentRating === 'adult_18plus' && !canAccessAdult18Plus) {
-        setError('Area 18+ exige verificacao de idade aprovada.')
+        setError('Conteudo adulto 18+ exige verificacao aprovada.')
         return
       }
 
@@ -1107,7 +1161,10 @@ export default function PostComposer({
         priceItacash: paidPriceValidation.value,
       })
 
-      if (result === false) return
+      if (result === false) {
+        setError('Nao foi possivel publicar agora. Tente novamente.')
+        return
+      }
 
       setContent('')
       setCategory('cotidiano')
@@ -1123,6 +1180,7 @@ export default function PostComposer({
       setMediaFeedback(null)
       setAiFeedback(null)
       setPendingVideoCompression(null)
+      setPublishSuccessMessage('Publicado com sucesso.')
       setIsModalOpen(false)
       setMedia((current) => {
         current.forEach((item) => URL.revokeObjectURL(item.url))
@@ -1139,6 +1197,36 @@ export default function PostComposer({
   const canUseAi =
     trimmedContentLength >= AI_MIN_TEXT_LENGTH && !isSubmitting && !activeAiMode
   const portalElement = typeof document === 'undefined' ? null : document.body
+  const visibilityLabel = selectedVisibility ? t(selectedVisibility.labelKey) : 'Publica'
+  const contentRatingLabel = selectedRating?.label || 'Seguro'
+  const hasAdultSelection =
+    communityType === 'adult_18plus' ||
+    contentRating === 'adult_18plus' ||
+    isLegacyAdultCategory(category)
+  const activeAdvancedChips = getComposerActiveAdvancedChips({
+    community: communityType,
+    communityLabel: selectedCommunity.label,
+    contentRating,
+    contentRatingLabel,
+    visibility,
+    visibilityLabel,
+    isPaidPost,
+  })
+  const publishSummaryItems = getComposerPublishSummary({
+    communityLabel: selectedCommunity.label,
+    visibilityLabel,
+    contentRatingLabel,
+    isPaidPost,
+  })
+  const visualGuardMessage = getComposerVisualGuardMessage({
+    hasText: trimmedContentLength > 0,
+    mediaCount: media.length,
+    isOptimizingVideo,
+    isPaidPost,
+    paidPostPrice,
+    hasAdultSelection,
+    canAccessAdult18Plus,
+  })
   const getAiButtonTitle = (mode: AiAssistMode) => {
     if (activeAiMode === mode) return AI_LOADING_LABELS[mode]
     if (activeAiMode) return 'Aguarde a outra acao da IA terminar.'
@@ -1149,7 +1237,7 @@ export default function PostComposer({
       ? 'Sugerir legenda com IA da EntreUS'
       : 'Melhorar texto com IA da EntreUS'
   }
-  const placeholderText = t('postComposer.placeholder').replace('{name}', userName)
+  const placeholderText = 'O que voce quer compartilhar hoje?'
 
   return (
     <>
@@ -1225,7 +1313,10 @@ export default function PostComposer({
 
           <button
             type="button"
-            onClick={() => setIsModalOpen(true)}
+            onClick={() => {
+              setPublishSuccessMessage('')
+              setIsModalOpen(true)
+            }}
             className="min-w-0 flex-1 rounded-full px-2 py-2 text-left text-[15px] text-zinc-500 transition hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
           >
             {placeholderText}
@@ -1233,10 +1324,13 @@ export default function PostComposer({
 
           <button
             type="button"
-            onClick={() => setIsModalOpen(true)}
+            onClick={() => {
+              setPublishSuccessMessage('')
+              setIsModalOpen(true)
+            }}
             className="hidden rounded-full bg-blue-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm shadow-blue-600/20 transition hover:bg-blue-700 sm:inline-flex"
           >
-            {t('postComposer.post')}
+            Publicar
           </button>
         </div>
 
@@ -1246,7 +1340,10 @@ export default function PostComposer({
               <button
                 key={index}
                 type="button"
-                onClick={() => setIsModalOpen(true)}
+                onClick={() => {
+                  setPublishSuccessMessage('')
+                  setIsModalOpen(true)
+                }}
                 className="flex h-8 w-8 items-center justify-center rounded-full transition hover:bg-blue-50 dark:hover:bg-blue-950/40"
                 aria-label="Abrir criador de post"
               >
@@ -1257,7 +1354,10 @@ export default function PostComposer({
 
           <button
             type="button"
-            onClick={() => setIsModalOpen(true)}
+            onClick={() => {
+              setPublishSuccessMessage('')
+              setIsModalOpen(true)
+            }}
             className="flex h-8 w-8 items-center justify-center rounded-full transition hover:bg-blue-50 dark:hover:bg-blue-950/40"
             aria-label="Abrir criador de post"
           >
@@ -1265,6 +1365,16 @@ export default function PostComposer({
           </button>
         </div>
       </div>
+
+      {publishSuccessMessage && (
+        <p
+          className="mt-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300"
+          role="status"
+          aria-live="polite"
+        >
+          {publishSuccessMessage}
+        </p>
+      )}
 
       {portalElement && isModalOpen && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-end justify-center px-2 py-3 sm:items-center sm:px-4 sm:py-8">
@@ -1286,7 +1396,7 @@ export default function PostComposer({
               </button>
 
               <p className="text-sm font-black text-zinc-950 dark:text-white">
-                Criar publicação
+                Criar post
               </p>
 
               <button
@@ -1295,7 +1405,7 @@ export default function PostComposer({
                 onClick={handleSubmit}
                 className="rounded-full bg-blue-600 px-4 py-2 text-sm font-black text-white shadow-sm shadow-blue-600/20 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-zinc-300 disabled:text-zinc-600 dark:disabled:bg-zinc-800 dark:disabled:text-zinc-500"
               >
-                {isOptimizingVideo ? 'Otimizando...' : isSubmitting ? t('postComposer.posting') : t('postComposer.post')}
+                {isOptimizingVideo ? 'Otimizando...' : isSubmitting ? t('postComposer.posting') : 'Publicar'}
               </button>
             </div>
 
@@ -1321,7 +1431,7 @@ export default function PostComposer({
             ref={textareaRef}
             value={content}
             onChange={(event) => handleContentChange(event.target.value)}
-            placeholder={t('postComposer.placeholder').replace('{name}', userName)}
+            placeholder={placeholderText}
             className="min-h-[76px] w-full resize-none border-0 bg-transparent px-0 py-2 text-lg text-zinc-900 outline-none placeholder:text-zinc-500 dark:text-zinc-100 dark:placeholder:text-zinc-500 sm:min-h-[92px] sm:text-xl"
           />
 
@@ -1502,47 +1612,23 @@ export default function PostComposer({
           )}
 
           <div className="mt-4 border-t border-zinc-200 pt-3 dark:border-zinc-800">
-            <div className="rounded-2xl border border-zinc-200 bg-zinc-50/80 p-3 dark:border-zinc-800 dark:bg-zinc-950/70">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                <label className="block min-w-0 flex-1">
-                  <span className="mb-1.5 block text-xs font-black uppercase text-zinc-500 dark:text-zinc-400">
-                    Comunidade
-                  </span>
-                  <select
-                    value={communityType}
-                    onChange={(event) => handleCommunityChange(event.target.value)}
-                    className="h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm font-semibold text-zinc-900 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800 dark:bg-black dark:text-white"
-                  >
-                    {COMMUNITIES.map((community) => (
-                      <option
-                        key={community.key}
-                        value={community.key}
-                        disabled={community.requires18Plus && !canAccessAdult18Plus}
-                      >
-                        {community.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
-                  <span className="rounded-full border border-zinc-200 bg-white px-2.5 py-1 font-bold dark:border-zinc-800 dark:bg-black">
-                    Padrao: Geral
-                  </span>
-                  <span className="rounded-full border border-zinc-200 bg-white px-2.5 py-1 font-bold dark:border-zinc-800 dark:bg-black">
-                    {selectedCommunity.label}
-                  </span>
-                  {selectedCommunity.sensitive && (
-                    <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 font-bold text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
-                      Sensivel
-                    </span>
-                  )}
-                </div>
+            <div className="flex flex-col gap-2 rounded-2xl border border-zinc-200 bg-zinc-50/80 px-3 py-2.5 text-xs dark:border-zinc-800 dark:bg-zinc-950/70 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <span className="rounded-full border border-zinc-200 bg-white px-2.5 py-1 font-bold text-zinc-700 dark:border-zinc-800 dark:bg-black dark:text-zinc-200">
+                  Comunidade: {selectedCommunity.label}
+                </span>
+                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 font-bold text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-200">
+                  {contentRating === 'safe' ? 'Conteudo seguro' : contentRatingLabel}
+                </span>
               </div>
 
-              <p className="mt-2 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
-                {selectedCommunity.description} Conteudo 18+ exige verificacao de idade aprovada.
+              <p className="text-zinc-500 dark:text-zinc-400">
+                Seu post sera exibido na comunidade escolhida.
               </p>
+            </div>
+
+            <div className="mt-3">
+              <ComposerPublishSummary items={publishSummaryItems} />
             </div>
 
             <div className="mt-3 flex flex-col gap-3">
@@ -1558,12 +1644,12 @@ export default function PostComposer({
                           ? 'border-blue-200 bg-blue-50 text-blue-700 ring-1 ring-blue-200 dark:border-blue-500/30 dark:bg-blue-950/40 dark:text-blue-200'
                           : 'border-zinc-200 bg-white text-blue-600 hover:bg-blue-50 dark:border-zinc-800 dark:bg-black dark:text-blue-300 dark:hover:bg-blue-950/30'
                       } disabled:cursor-not-allowed disabled:opacity-50`}
-                      title="Adicionar mídia"
-                      aria-label="Adicionar mídia"
+                      title="Adicionar foto ou video"
+                      aria-label="Adicionar foto ou video"
                       aria-expanded={showMediaMenu}
                     >
                       <ImagePlus className="h-4 w-4" />
-                      Adicionar mídia
+                      Adicionar foto ou video
                     </button>
 
                     {showMediaMenu && (
@@ -1714,21 +1800,17 @@ export default function PostComposer({
                   className="flex h-10 w-full items-center justify-center gap-2 rounded-full bg-zinc-900 px-6 text-sm font-bold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-black sm:w-auto sm:min-w-[110px]"
                 >
                   {isOptimizingVideo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                  {isOptimizingVideo ? 'Otimizando...' : isSubmitting ? t('postComposer.posting') : t('postComposer.post')}
+                  {isOptimizingVideo ? 'Otimizando...' : isSubmitting ? t('postComposer.posting') : 'Publicar'}
                 </button>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2 pl-1 text-xs text-zinc-500 dark:text-zinc-500">
-                <span>{t('postComposer.mediaCounter').replace('{current}', String(media.length)).replace('{max}', String(MAX_MEDIA_FILES))}</span>
-                {contentRating === 'adult_18plus' && (
-                  <span className="rounded-full border border-yellow-300/40 bg-yellow-50 px-2 py-1 font-bold text-yellow-800 dark:bg-yellow-950/30 dark:text-yellow-200">
-                    Conteudo adulto fica isolado e protegido por verificacao 18+.
-                  </span>
-                )}
-                {isPaidPost && (
-                  <span className="rounded-full border border-cyan-200 bg-cyan-50 px-2 py-1 font-bold text-cyan-800 dark:border-cyan-900/60 dark:bg-cyan-950/30 dark:text-cyan-200">
-                    Post pago ativo
-                  </span>
+              <div className="flex flex-col gap-2 pl-1 text-xs text-zinc-500 dark:text-zinc-500">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span>{t('postComposer.mediaCounter').replace('{current}', String(media.length)).replace('{max}', String(MAX_MEDIA_FILES))}</span>
+                  <ComposerActiveChips chips={activeAdvancedChips} />
+                </div>
+                {visualGuardMessage && !error && (
+                  <p className="text-zinc-500 dark:text-zinc-400">{visualGuardMessage}</p>
                 )}
               </div>
             </div>
@@ -1745,15 +1827,39 @@ export default function PostComposer({
                       Opcoes avancadas
                     </p>
                     <p className="mt-1 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
-                      Use quando precisar monetizar, mudar a classificacao ou ajustar a visibilidade.
+                      Ajuste comunidade, visibilidade, post pago e 18+ quando precisar.
                     </p>
                   </div>
                   <span className="rounded-full border border-zinc-200 px-2.5 py-1 text-xs font-bold text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
-                    {selectedVisibility ? t(selectedVisibility.labelKey) : t('postComposer.privacy')}
+                    {activeAdvancedChips.length > 0 ? 'Ativas' : 'Padrao simples'}
                   </span>
                 </div>
 
-                <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <label className="block">
+                    <span className="mb-1.5 block text-xs font-bold text-zinc-600 dark:text-zinc-300">
+                      Comunidade
+                    </span>
+                    <select
+                      value={communityType}
+                      onChange={(event) => handleCommunityChange(event.target.value)}
+                      className="h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm font-semibold text-zinc-900 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white"
+                    >
+                      {COMMUNITIES.map((community) => (
+                        <option
+                          key={community.key}
+                          value={community.key}
+                          disabled={community.requires18Plus && !canAccessAdult18Plus}
+                        >
+                          {community.label}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="mt-1.5 block text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+                      Seu post sera exibido na comunidade escolhida.
+                    </span>
+                  </label>
+
                   <label className="block">
                     <span className="mb-1.5 block text-xs font-bold text-zinc-600 dark:text-zinc-300">
                       Categoria
@@ -1798,7 +1904,7 @@ export default function PostComposer({
 
                   <label className="block">
                     <span className="mb-1.5 block text-xs font-bold text-zinc-600 dark:text-zinc-300">
-                      Classificacao
+                      Classificacao do conteudo
                     </span>
                     <select
                       value={contentRating}
@@ -1819,6 +1925,35 @@ export default function PostComposer({
                   </label>
                 </div>
 
+                <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50/70 p-3 dark:border-amber-900/60 dark:bg-amber-950/20">
+                  <label className="flex items-start gap-3">
+                    <input
+                      type="checkbox"
+                      checked={hasAdultSelection}
+                      onChange={(event) => handleAdult18PlusToggle(event.target.checked)}
+                      disabled={!canAccessAdult18Plus}
+                      className="mt-1 h-4 w-4 rounded border-amber-300 text-amber-600 focus:ring-amber-500 disabled:cursor-not-allowed disabled:opacity-60"
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-2 text-sm font-black text-amber-950 dark:text-amber-100">
+                        <Lock className="h-4 w-4" />
+                        Conteudo 18+
+                      </span>
+                      <span className="mt-1 block text-xs leading-5 text-amber-900/80 dark:text-amber-100/75">
+                        Conteudo 18+ so aparece para usuarios verificados e autorizados.
+                      </span>
+                      {!canAccessAdult18Plus && (
+                        <span className="mt-1 block text-xs leading-5 text-amber-900 dark:text-amber-100">
+                          Conteudo adulto 18+ exige verificacao aprovada.{' '}
+                          <Link href="/age-verification" className="font-black underline underline-offset-2">
+                            Verificar idade
+                          </Link>
+                        </span>
+                      )}
+                    </span>
+                  </label>
+                </div>
+
                 <div className="mt-3 rounded-2xl border border-cyan-200 bg-cyan-50/70 p-3 dark:border-cyan-900/60 dark:bg-cyan-950/20">
                   <label className="flex items-start gap-3">
                     <input
@@ -1830,10 +1965,10 @@ export default function PostComposer({
                     <span className="min-w-0 flex-1">
                       <span className="flex items-center gap-2 text-sm font-black text-cyan-900 dark:text-cyan-100">
                         <Coins className="h-4 w-4" />
-                        Post pago
+                        Transformar em post pago
                       </span>
                       <span className="mt-1 block text-xs leading-5 text-cyan-800/75 dark:text-cyan-100/70">
-                        Usuarios pagarao ItaCash para desbloquear este post.
+                        O publico paga ItaCash para desbloquear este conteudo.
                       </span>
                     </span>
                   </label>
@@ -1841,7 +1976,7 @@ export default function PostComposer({
                   {isPaidPost && (
                     <label className="mt-3 block">
                       <span className="mb-1.5 block text-xs font-bold text-cyan-900 dark:text-cyan-100">
-                        Preco em ItaCash
+                        Definir preco em ItaCash
                       </span>
                       <input
                         type="number"
@@ -1853,7 +1988,7 @@ export default function PostComposer({
                         className="h-11 w-full rounded-xl border border-cyan-200 bg-white px-3 text-sm font-semibold text-zinc-900 outline-none transition focus:border-cyan-400 focus:ring-4 focus:ring-cyan-500/10 dark:border-cyan-900/60 dark:bg-black dark:text-white"
                       />
                       <span className="mt-1.5 block text-xs leading-5 text-cyan-800/75 dark:text-cyan-100/70">
-                        Informe um valor inteiro positivo. O conteudo e a midia ficam bloqueados ate o desbloqueio.
+                        Voce recebe 85%. A plataforma retem 15%.
                       </span>
                     </label>
                   )}
