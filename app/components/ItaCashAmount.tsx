@@ -51,7 +51,7 @@ export default function ItaCashAmount({
 
   return (
     <span
-      className={`inline-flex shrink-0 items-center whitespace-nowrap align-middle font-black leading-none ${SIZE_CLASS_NAMES[size]} ${className}`}
+      className={`inline-flex max-w-full min-w-0 flex-wrap items-center whitespace-normal align-middle font-black leading-tight ${SIZE_CLASS_NAMES[size]} ${className}`}
       title={accessibleLabel}
       aria-label={accessibleLabel}
     >
@@ -76,8 +76,8 @@ export default function ItaCashAmount({
         </span>
       )}
 
-      <span className={valueClassName}>{amountText}</span>
-      {showLabel && <span className="font-semibold opacity-75">ItaCash</span>}
+      <span className={`min-w-0 break-all ${valueClassName}`}>{amountText}</span>
+      {showLabel && <span className="min-w-0 font-semibold opacity-75">ItaCash</span>}
     </span>
   )
 }

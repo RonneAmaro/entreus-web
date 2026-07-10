@@ -679,6 +679,21 @@ export default function CreatorDashboardPage() {
           </div>
         </header>
 
+        <nav aria-label="Acoes rapidas do criador" className="mt-4 grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <Link href="/feed#post-composer" className="flex min-w-0 items-center gap-3 rounded-2xl border border-blue-300/20 bg-blue-500/10 px-4 py-3 text-sm font-black text-blue-100 transition hover:-translate-y-0.5 hover:bg-blue-500/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300">
+            <Send className="h-4 w-4 shrink-0" /> Criar post pago
+          </Link>
+          <Link href="#monetizacao" className="flex min-w-0 items-center gap-3 rounded-2xl border border-cyan-300/20 bg-cyan-500/10 px-4 py-3 text-sm font-black text-cyan-100 transition hover:-translate-y-0.5 hover:bg-cyan-500/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300">
+            <Coins className="h-4 w-4 shrink-0" /> Ver monetizacao
+          </Link>
+          <Link href="#saque" className="flex min-w-0 items-center gap-3 rounded-2xl border border-emerald-300/20 bg-emerald-500/10 px-4 py-3 text-sm font-black text-emerald-100 transition hover:-translate-y-0.5 hover:bg-emerald-500/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300">
+            <Banknote className="h-4 w-4 shrink-0" /> Solicitar saque
+          </Link>
+          <Link href="/profile" className="flex min-w-0 items-center gap-3 rounded-2xl border border-violet-300/20 bg-violet-500/10 px-4 py-3 text-sm font-black text-violet-100 transition hover:-translate-y-0.5 hover:bg-violet-500/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300">
+            <BadgeCheck className="h-4 w-4 shrink-0" /> Editar perfil
+          </Link>
+        </nav>
+
         {message && <p className="mt-5 rounded-2xl border border-amber-300/20 bg-amber-500/10 px-4 py-3 text-sm font-semibold text-amber-100">{message}</p>}
 
         {loading ? (
@@ -726,7 +741,7 @@ export default function CreatorDashboardPage() {
                   )}
                 </article>
 
-                <article className="rounded-[2rem] border border-white/10 bg-zinc-950/90 p-5 shadow-xl shadow-black/20 ring-1 ring-white/5">
+                <article id="monetizacao" className="min-w-0 scroll-mt-24 overflow-hidden rounded-[2rem] border border-white/10 bg-zinc-950/90 p-4 shadow-xl shadow-black/20 ring-1 ring-white/5 sm:p-5">
                   <p className="text-xs font-black uppercase tracking-[0.18em] text-violet-300">Monetização</p>
                   <h2 className="mt-2 text-2xl font-black">Receita ItaCash</h2>
                   {summary.walletBalance.available ? (
@@ -818,7 +833,7 @@ export default function CreatorDashboardPage() {
                       <p className="mt-3 text-sm leading-6 text-cyan-100/75">Recebimentos por posts pagos ficam disponiveis depois da migration aplicada.</p>
                     )}
                   </div>
-                  <div className="mt-4 rounded-2xl border border-emerald-300/20 bg-emerald-500/10 p-4">
+                  <div id="saque" className="mt-4 min-w-0 scroll-mt-24 overflow-hidden rounded-2xl border border-emerald-300/20 bg-emerald-500/10 p-4">
                     <div className="flex items-start gap-3">
                       <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/15 text-emerald-100">
                         <Banknote className="h-5 w-5" />
@@ -833,12 +848,12 @@ export default function CreatorDashboardPage() {
                     </div>
 
                     <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                      <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
+                      <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/30 p-4">
                         <p className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Disponivel</p>
                         <ItaCashAmount amount={walletBalanceValue} size="lg" className="mt-2" valueClassName="text-xl" />
                         <p className="mt-1 text-xs text-zinc-400">{formatBRL(convertItaCashToBrl(walletBalanceValue))}</p>
                       </div>
-                      <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
+                      <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/30 p-4">
                         <p className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Conversao</p>
                         <ItaCashAmount amount={ITACASH_PER_BRL} size="lg" className="mt-2" valueClassName="text-xl" />
                         <p className="mt-1 text-xs text-zinc-400">R$ 1,00</p>

@@ -263,7 +263,7 @@ export default function CreatorsPage() {
           <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
             <ActionLink href="/creators/apply">Entrar na lista de criadores</ActionLink>
             <ActionLink href="/signup" variant="secondary">Criar minha conta</ActionLink>
-            <ActionLink href="/creator-dashboard" variant="ghost">Ver meu painel de criador</ActionLink>
+            <ActionLink href="/creator-dashboard" variant="ghost">Bora la: acessar meu painel</ActionLink>
           </div>
           <div className="mt-5 flex flex-wrap justify-center gap-4 text-sm font-bold text-zinc-400">
             <Link href="/buy-itacash" className="hover:text-white">Conhecer ItaCash</Link>

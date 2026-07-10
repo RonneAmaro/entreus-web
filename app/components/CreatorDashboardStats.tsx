@@ -31,13 +31,13 @@ export function CreatorDashboardStats({ items }: { items: StatCard[] }) {
         const Icon = item.icon
 
         return (
-          <article key={item.label} className="rounded-[1.75rem] border border-white/10 bg-zinc-950/90 p-5 shadow-xl shadow-black/20 ring-1 ring-white/5">
+          <article key={item.label} className="min-w-0 overflow-hidden rounded-[1.75rem] border border-white/10 bg-gradient-to-br from-zinc-900/95 to-zinc-950 p-4 shadow-xl shadow-black/20 ring-1 ring-white/5 sm:p-5">
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <p className="text-xs font-black uppercase tracking-[0.16em] text-zinc-500">{item.label}</p>
-                <p className="mt-3 truncate text-2xl font-black text-white">
+                <div className="mt-3 min-w-0 break-words text-xl font-black leading-tight text-white sm:text-2xl">
                   {item.metric.available && item.renderValue ? item.renderValue : formatMetric(item.metric, item.suffix)}
-                </p>
+                </div>
                 {!item.metric.available && item.unavailableLabel && (
                   <p className="mt-2 text-xs leading-5 text-zinc-500">{item.unavailableLabel}</p>
                 )}

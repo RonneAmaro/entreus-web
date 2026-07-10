@@ -17,6 +17,7 @@ describe('ItaCash display helpers', () => {
     expect(formatItaCashAmount(1000)).toBe('1.000')
     expect(formatItaCashAmount('2500')).toBe('2.500')
     expect(formatItaCashAmount(12.5)).toBe('12,5')
+    expect(formatItaCashAmount(999999)).toBe('999.999')
   })
 
   it('keeps an explicit fallback for missing icon images', () => {
