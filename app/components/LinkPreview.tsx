@@ -12,8 +12,9 @@ type LinkPreviewProps = {
 
 type IframeExternalEmbed = Extract<
   ExternalEmbed,
-  { provider: 'youtube' | 'tiktok' | 'vimeo' }
+  { provider: 'youtube' | 'vimeo' }
 >
+type TikTokExternalEmbed = Extract<ExternalEmbed, { provider: 'tiktok' }>
 type YouTubeExternalEmbed = Extract<ExternalEmbed, { provider: 'youtube' }>
 type XExternalEmbed = Extract<ExternalEmbed, { provider: 'x' }>
 type InstagramExternalEmbed = Extract<ExternalEmbed, { provider: 'instagram' }>
@@ -190,27 +191,6 @@ function EmbedShell({
 }
 
 function getEmbedDisplay(embed: IframeExternalEmbed): EmbedDisplay {
-  if (embed.provider === 'tiktok') {
-    return {
-      providerLabel: 'TikTok',
-      title: 'Video do TikTok',
-      iframeTitle: 'Video do TikTok incorporado',
-      buttonLabel: 'Abrir no TikTok',
-      ariaLabel: 'Abrir video no TikTok em nova aba',
-      mark: <span className="text-base font-black">T</span>,
-      markClassName: 'bg-zinc-950 text-white dark:bg-white dark:text-zinc-950',
-      actionClassName:
-        'border-zinc-300 bg-white text-zinc-950 hover:border-zinc-400 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white dark:hover:border-zinc-500 dark:hover:bg-zinc-800',
-      frameWrapClassName: 'flex justify-center bg-zinc-950 p-2 sm:p-3',
-      frameClassName:
-        'relative aspect-[9/16] w-full max-w-[20rem] overflow-hidden rounded-[1.1rem] bg-black shadow-2xl shadow-black/30 sm:rounded-[1.25rem]',
-      allow:
-        'autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share',
-      sandbox:
-        'allow-scripts allow-same-origin allow-presentation allow-popups',
-    }
-  }
-
   if (embed.provider === 'vimeo') {
     return {
       providerLabel: 'Vimeo',
@@ -249,6 +229,33 @@ function getEmbedDisplay(embed: IframeExternalEmbed): EmbedDisplay {
     sandbox:
       'allow-scripts allow-same-origin allow-presentation allow-popups',
   }
+}
+
+function TikTokPreview({ embed }: { embed: TikTokExternalEmbed }) {
+  return (
+    <EmbedShell providerLabel="TikTok" title="Video do TikTok" originalUrl={embed.originalUrl}
+      buttonLabel="Abrir no TikTok" ariaLabel="Abrir video no TikTok em nova aba"
+      mark={<span className="text-base font-black">T</span>}
+      markClassName="bg-zinc-950 text-white dark:bg-white dark:text-zinc-950"
+      actionClassName="border-zinc-300 bg-white text-zinc-950 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white">
+      {embed.renderMode === 'player' && embed.embedUrl ? (
+        <div className="flex justify-center overflow-hidden bg-zinc-950 p-2 sm:p-3">
+          <div className="relative aspect-[9/16] w-full max-w-[22rem] overflow-hidden rounded-[1.1rem] bg-black shadow-2xl sm:max-h-[42rem]">
+            <iframe src={embed.embedUrl} title="Video do TikTok incorporado" loading="lazy"
+              allow="encrypted-media; fullscreen; picture-in-picture" allowFullScreen
+              referrerPolicy="strict-origin-when-cross-origin" className="absolute inset-0 h-full w-full border-0" />
+          </div>
+        </div>
+      ) : (
+        <div className="bg-zinc-50/60 p-4 dark:bg-zinc-950/60">
+          <div className="mx-auto max-w-lg rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900/50">
+            <p className="font-black text-zinc-950 dark:text-white">Conteudo do TikTok</p>
+            <p className="mt-2 text-sm leading-6 text-zinc-500">Este link sera aberto no TikTok. {embed.reason}</p>
+          </div>
+        </div>
+      )}
+    </EmbedShell>
+  )
 }
 
 function XPostPreview({ embed }: { embed: XExternalEmbed }) {
@@ -311,6 +318,7 @@ function FacebookPreview({ embed }: { embed: FacebookExternalEmbed }) {
       actionClassName="border-blue-200 bg-white text-blue-700 hover:border-blue-300 hover:bg-blue-50 dark:border-blue-900/70 dark:bg-zinc-900 dark:text-blue-200 dark:hover:border-blue-700 dark:hover:bg-blue-950/40"
     >
       <div className="bg-zinc-50/60 p-3.5 dark:bg-zinc-950/60 sm:p-4">
+        {embed.renderMode === 'embed' && embed.embedUrl ? (
         <div className="flex justify-center">
           <div
             className={`relative w-full max-w-[31.25rem] overflow-hidden rounded-[1.1rem] border border-blue-100 bg-white shadow-sm dark:border-blue-950/70 dark:bg-zinc-900/40 ${
@@ -329,6 +337,12 @@ function FacebookPreview({ embed }: { embed: FacebookExternalEmbed }) {
             />
           </div>
         </div>
+        ) : (
+          <div className="mx-auto max-w-lg rounded-[1.1rem] border border-blue-100 bg-white p-5 dark:border-blue-950/70 dark:bg-zinc-900/40">
+            <p className="font-black text-zinc-950 dark:text-white">Conteudo do Facebook</p>
+            <p className="mt-2 text-sm leading-6 text-zinc-500 dark:text-zinc-400">Este conteudo pode nao permitir reproducao dentro da EntreUS.</p>
+          </div>
+        )}
       </div>
     </EmbedShell>
   )
@@ -406,7 +420,7 @@ function InstagramPreview({ embed }: { embed: InstagramExternalEmbed }) {
     >
       <div
         ref={containerRef}
-        className="bg-zinc-50/60 p-3.5 dark:bg-zinc-950/60 sm:p-4"
+        className="max-h-[48rem] overflow-hidden bg-zinc-50/60 p-3.5 dark:bg-zinc-950/60 sm:p-4 lg:max-h-[52rem]"
       >
         {embedState !== 'blocked' && (
           <blockquote
@@ -446,6 +460,7 @@ function InstagramPreview({ embed }: { embed: InstagramExternalEmbed }) {
             </p>
           </div>
         )}
+        <p className="mx-auto mt-3 max-w-[33.75rem] text-xs text-zinc-500 dark:text-zinc-400">Se o player nao carregar, abra no Instagram.</p>
       </div>
     </EmbedShell>
   )
@@ -573,6 +588,10 @@ export default function LinkPreview({
 
   if (externalEmbed.provider === 'instagram') {
     return <InstagramPreview embed={externalEmbed} />
+  }
+
+  if (externalEmbed.provider === 'tiktok') {
+    return <TikTokPreview embed={externalEmbed} />
   }
 
   if (externalEmbed.provider === 'facebook') {

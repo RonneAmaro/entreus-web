@@ -1,4 +1,4 @@
-type VideoExternalEmbedProvider = 'youtube' | 'tiktok' | 'vimeo'
+type VideoExternalEmbedProvider = 'youtube' | 'vimeo'
 
 export type InstagramContentType = 'post' | 'reel' | 'tv' | 'story'
 export type FacebookContentType = 'post' | 'video' | 'reel' | 'watch' | 'unknown'
@@ -24,6 +24,15 @@ type XExternalEmbed = {
   originalUrl: string
 }
 
+type TikTokExternalEmbed = {
+  provider: 'tiktok'
+  renderMode: 'player' | 'fallback'
+  videoId?: string
+  embedUrl?: string
+  originalUrl: string
+  reason?: string
+}
+
 type InstagramExternalEmbed = {
   provider: 'instagram'
   postId: string
@@ -37,12 +46,15 @@ type FacebookExternalEmbed = {
   postId?: string
   username?: string
   contentType: FacebookContentType
-  embedUrl: string
+  renderMode: 'embed' | 'fallback'
+  embedUrl?: string
   originalUrl: string
+  reason?: string
 }
 
 export type ExternalEmbed =
   | VideoExternalEmbed
+  | TikTokExternalEmbed
   | XExternalEmbed
   | InstagramExternalEmbed
   | FacebookExternalEmbed
@@ -211,7 +223,19 @@ export function getTikTokVideoId(url: string): string | null {
 export function getTikTokEmbedUrl(videoId: string): string | null {
   if (!isSafeTikTokVideoId(videoId)) return null
 
-  return `https://www.tiktok.com/embed/v2/${videoId}`
+  const params = new URLSearchParams({
+    controls: '1', autoplay: '0', muted: '0', music_info: '0', description: '0', rel: '0',
+  })
+  return `https://www.tiktok.com/player/v1/${videoId}?${params.toString()}`
+}
+
+function isTikTokUrl(url: string) {
+  try {
+    const parsedUrl = new URL(url)
+    return ['http:', 'https:'].includes(parsedUrl.protocol) && TIKTOK_HOSTS.has(parsedUrl.hostname.toLowerCase())
+  } catch {
+    return false
+  }
 }
 
 export function getVimeoVideoId(url: string): string | null {
@@ -352,6 +376,8 @@ function getFacebookDetails(url: string): {
   postId?: string
   username?: string
   originalUrl: string
+  renderMode: 'embed' | 'fallback'
+  reason?: string
 } | null {
   try {
     const parsedUrl = new URL(url)
@@ -373,11 +399,19 @@ function getFacebookDetails(url: string): {
 
     const originalUrl = parsedUrl.href
 
+    if (pathnameParts[0] === 'share') {
+      return {
+        contentType: 'unknown', originalUrl, renderMode: 'fallback',
+        reason: 'Links de compartilhamento do Facebook nao oferecem embed confiavel.',
+      }
+    }
+
     if (hostname === 'fb.watch') {
       return {
         contentType: 'watch',
         postId: getSafeFacebookContentId(pathnameParts[0]),
         originalUrl,
+        renderMode: 'embed',
       }
     }
 
@@ -391,6 +425,7 @@ function getFacebookDetails(url: string): {
         contentType: 'watch',
         postId: videoId,
         originalUrl,
+        renderMode: 'embed',
       }
     }
 
@@ -403,6 +438,7 @@ function getFacebookDetails(url: string): {
         contentType: 'reel',
         postId,
         originalUrl,
+        renderMode: 'embed',
       }
     }
 
@@ -411,6 +447,7 @@ function getFacebookDetails(url: string): {
         contentType: 'video',
         postId: videoId,
         originalUrl,
+        renderMode: 'embed',
       }
     }
 
@@ -419,6 +456,7 @@ function getFacebookDetails(url: string): {
         contentType: 'post',
         postId: storyId,
         originalUrl,
+        renderMode: 'embed',
       }
     }
 
@@ -432,6 +470,7 @@ function getFacebookDetails(url: string): {
         username: pathnameParts[1],
         postId,
         originalUrl,
+        renderMode: 'embed',
       }
     }
 
@@ -445,6 +484,7 @@ function getFacebookDetails(url: string): {
         username: pathnameParts[0],
         postId,
         originalUrl,
+        renderMode: 'embed',
       }
     }
 
@@ -461,6 +501,7 @@ function getFacebookDetails(url: string): {
         username: pathnameParts[0] === 'videos' ? undefined : pathnameParts[0],
         postId,
         originalUrl,
+        renderMode: 'embed',
       }
     }
 
@@ -468,6 +509,8 @@ function getFacebookDetails(url: string): {
       contentType: 'unknown',
       username: pathnameParts[0],
       originalUrl,
+      renderMode: 'fallback',
+      reason: 'Este formato do Facebook pode bloquear reproducao incorporada.',
     }
   } catch {
     return null
@@ -529,9 +572,17 @@ export function detectExternalEmbed(url: string): ExternalEmbed | null {
   if (tiktokVideoId && tiktokEmbedUrl) {
     return {
       provider: 'tiktok',
+      renderMode: 'player',
       videoId: tiktokVideoId,
       embedUrl: tiktokEmbedUrl,
       originalUrl: url,
+    }
+  }
+
+  if (isTikTokUrl(url)) {
+    return {
+      provider: 'tiktok', renderMode: 'fallback', originalUrl: url,
+      reason: 'Nao foi possivel identificar um video publico neste link.',
     }
   }
 
@@ -582,11 +633,12 @@ export function detectExternalEmbed(url: string): ExternalEmbed | null {
       username: facebookDetails.username,
       postId: facebookDetails.postId,
       contentType: facebookDetails.contentType,
-      embedUrl: getFacebookEmbedUrl(
-        facebookDetails.contentType,
-        facebookDetails.originalUrl
-      ),
+      renderMode: facebookDetails.renderMode,
+      embedUrl: facebookDetails.renderMode === 'embed' ? getFacebookEmbedUrl(
+        facebookDetails.contentType, facebookDetails.originalUrl
+      ) : undefined,
       originalUrl: facebookDetails.originalUrl,
+      reason: facebookDetails.reason,
     }
   }
 
