@@ -14,14 +14,13 @@ import PostMoreMenu from './PostMoreMenu'
 import UserBadges from './UserBadges'
 import UserTierBadge from './UserTierBadge'
 import ProfileAvatarFrame from './ProfileAvatarFrame'
-import { getUserTierSurfaceClassName } from './UserTierFrame'
 import ItaCashAmount from './ItaCashAmount'
 import TranslatePostButton from './TranslatePostButton'
 import { useLanguage } from './LanguageProvider'
 import { isModeratedHidden, type ModeratedPostFields } from '@/lib/post-moderation'
 import { supabase } from '@/lib/supabase'
 import { getPaidPostErrorMessage, getPaidPostPrice, isPaidPost } from '@/lib/paid-posts'
-import { getEffectiveProfileTheme } from '@/lib/profile-themes'
+import { getProfileVisuals } from '@/lib/profile-visuals'
 import type { UserTier } from '@/lib/user-tiers'
 import {
   getPostCommunityLabel as getCommunityLabel,
@@ -385,10 +384,11 @@ export default function PostCard({
 
   const authorUsername = post.profiles?.username || t('feed.post.username')
   const authorAvatar = post.profiles?.avatar_url || ''
-  const authorTheme = getEffectiveProfileTheme(
-    authorProfileTheme ?? post.profiles?.profile_theme,
-    authorTier,
-  )
+  const authorVisuals = getProfileVisuals({
+    tier: authorTier,
+    themeKey: authorProfileTheme ?? post.profiles?.profile_theme,
+  })
+  const authorTheme = authorVisuals.theme
   const isOwnPost = post.user_id === currentUserId
   const postPaid = isPaidPost(post)
   const postPrice = getPaidPostPrice(post)
@@ -467,7 +467,7 @@ export default function PostCard({
       className={`group/post relative overflow-hidden rounded-[1.65rem] border bg-white/95 p-4 shadow-sm shadow-black/5 ring-1 ring-black/5 backdrop-blur-xl transition-all duration-300 before:pointer-events-none before:absolute before:inset-0 before:bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.12),transparent_44%)] before:opacity-0 before:transition-opacity hover:border-blue-400/45 hover:shadow-xl hover:shadow-blue-500/10 hover:before:opacity-100 dark:bg-slate-950/85 dark:ring-white/10 sm:rounded-[2rem] sm:p-6 ${highlighted
           ? 'border-blue-400 ring-2 ring-blue-200 dark:border-blue-300 dark:ring-blue-900/70'
           : 'border-zinc-200/70 dark:border-zinc-800/70'
-        } ${getUserTierSurfaceClassName(authorTier)} ${authorTheme.cardClassName}`}
+        } ${authorVisuals.postClassName} ${authorTheme.cardClassName}`}
     >
       {authorTheme.postAccentClassName && (
         <span

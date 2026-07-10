@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { getEffectiveProfileTheme } from '@/lib/profile-themes'
+import { getProfileVisuals } from '@/lib/profile-visuals'
 import type { UserTier } from '@/lib/user-tiers'
 import UserTierFrame from './UserTierFrame'
 
@@ -32,13 +32,13 @@ export default function ProfileAvatarFrame({
   imageClassName = '',
   fallbackClassName = '',
 }: ProfileAvatarFrameProps) {
-  const theme = getEffectiveProfileTheme(themeKey, tier)
+  const visuals = getProfileVisuals({ tier, themeKey })
   const label = (name || username || 'Usuario').trim() || 'Usuario'
 
   return (
     <UserTierFrame
       tier={tier}
-      className={`relative h-12 w-12 overflow-visible p-0.5 ring-2 ring-zinc-200 ring-offset-2 ring-offset-white shadow-sm dark:ring-zinc-700 dark:ring-offset-slate-950 ${theme.avatarFrameClassName} ${className}`}
+      className={`relative h-12 w-12 overflow-visible p-0.5 ring-2 ring-zinc-200 ring-offset-2 ring-offset-white shadow-sm dark:ring-zinc-700 dark:ring-offset-slate-950 ${visuals.avatarClassName} ${visuals.theme.avatarFrameClassName} ${className}`}
     >
       {children || (avatarUrl ? (
         <img
