@@ -43,17 +43,21 @@ describe('beta checklist helpers', () => {
       pending: 3,
       passed: 0,
       bug: 0,
-      review: 0,
+      testing: 0,
+      blocker: 0,
+      notApplicable: 0,
       completed: 0,
       completionPercent: 0,
+      readinessPercent: 0,
+      readyToInviteCreators: false,
     })
   })
 
-  it('summarizes passed, bug and review statuses', () => {
+  it('summarizes approved, issue and blocker statuses', () => {
     const progress: BetaChecklistProgress = {
       login: { status: 'passed' },
       media: { status: 'bug' },
-      moderation: { status: 'review' },
+      moderation: { status: 'blocker' },
     }
 
     expect(calculateBetaChecklistSummary(sampleItems, progress)).toEqual({
@@ -61,9 +65,13 @@ describe('beta checklist helpers', () => {
       pending: 0,
       passed: 1,
       bug: 1,
-      review: 1,
+      testing: 0,
+      blocker: 1,
+      notApplicable: 0,
       completed: 3,
       completionPercent: 100,
+      readinessPercent: 33,
+      readyToInviteCreators: false,
     })
   })
 
@@ -90,14 +98,14 @@ describe('beta checklist helpers', () => {
     ])
   })
 
-  it('builds a report with bugs, review items and notes', () => {
+  it('builds a report with issues, blockers and notes', () => {
     const progress: BetaChecklistProgress = {
       media: {
         status: 'bug',
         note: 'Seletor de video nao abriu no celular.',
       },
       moderation: {
-        status: 'review',
+        status: 'blocker',
         note: 'Revisar copy da fila.',
       },
     }
@@ -109,8 +117,8 @@ describe('beta checklist helpers', () => {
     )
 
     expect(report).toContain('Relatório Beta Fechado - EntreUS')
-    expect(report).toContain('- Bug: 1')
-    expect(report).toContain('- Revisar: 1')
+    expect(report).toContain('- Problemas: 1')
+    expect(report).toContain('- Bloqueadores: 1')
     expect(report).toContain('[Upload de mídia] Foto e vídeo')
     expect(report).toContain('[Moderação] Denúncias')
     expect(report).toContain('Seletor de video nao abriu no celular.')
@@ -132,7 +140,11 @@ describe('beta checklist helpers', () => {
         'ItaCash',
         '18+',
         'Moderação',
-        'Creator Dashboard',
+        'Criadores',
+        'Monetizacao',
+        'Saques de criadores',
+        'Mobile e UX',
+        'Preparacao para convite',
         'Lab',
         'Meet',
         'Mobile/PWA',

@@ -1,6 +1,6 @@
 export const BETA_CHECKLIST_STORAGE_KEY = 'entreus:beta-checklist:v1'
 
-export const betaChecklistStatuses = ['pending', 'passed', 'bug', 'review'] as const
+export const betaChecklistStatuses = ['pending', 'testing', 'passed', 'bug', 'blocker', 'not_applicable'] as const
 
 export type BetaChecklistStatus = (typeof betaChecklistStatuses)[number]
 export type BetaChecklistFilter = BetaChecklistStatus | 'all'
@@ -11,6 +11,7 @@ export type BetaChecklistItem = {
   title: string
   description: string
   route: string
+  critical?: boolean
 }
 
 export type BetaChecklistProgressEntry = {
@@ -25,16 +26,22 @@ export type BetaChecklistSummary = {
   pending: number
   passed: number
   bug: number
-  review: number
+  testing: number
+  blocker: number
+  notApplicable: number
   completed: number
   completionPercent: number
+  readinessPercent: number
+  readyToInviteCreators: boolean
 }
 
 export const betaChecklistStatusLabels: Record<BetaChecklistStatus, string> = {
-  pending: 'Pendente',
-  passed: 'Passou',
-  bug: 'Bug',
-  review: 'Revisar',
+  pending: 'Nao testado',
+  testing: 'Em teste',
+  passed: 'Aprovado',
+  bug: 'Problema encontrado',
+  blocker: 'Bloqueador',
+  not_applicable: 'Nao se aplica',
 }
 
 export const BETA_CHECKLIST_ITEMS: BetaChecklistItem[] = [
@@ -138,10 +145,35 @@ export const BETA_CHECKLIST_ITEMS: BetaChecklistItem[] = [
   },
   {
     id: 'creator-dashboard',
-    category: 'Creator Dashboard',
+    category: 'Criadores',
     title: 'Metricas do criador',
     description: 'Abrir dashboard, conferir posts, interacoes, apoios, empty states e erros seguros.',
     route: '/creator-dashboard',
+  },
+  {
+    id: 'creator-invitation-flow', category: 'Criadores', title: 'Convite, onboarding e CTA Bora la',
+    description: 'Abrir paginas de convite, formulario e acesso direto ao painel premium.',
+    route: '/creators, /creators/apply, /convite, /creator-dashboard', critical: true,
+  },
+  {
+    id: 'creator-monetization-e2e', category: 'Monetizacao', title: 'Gorjeta, post pago e divisao 85/15',
+    description: 'Validar com contas controladas o valor bruto, 85% liquido do criador e 15% da plataforma.',
+    route: '/feed, /creator-dashboard, /wallet', critical: true,
+  },
+  {
+    id: 'creator-withdrawal-lifecycle', category: 'Saques de criadores', title: 'Ciclo completo do saque manual',
+    description: 'Testar minimo, Pix, banco, analise, aprovacao, pagamento, recusa e devolucao de saldo.',
+    route: '/creator-dashboard#saque, /admin/creator-withdrawals', critical: true,
+  },
+  {
+    id: 'mobile-creator-dashboard', category: 'Mobile e UX', title: 'Painel do criador e ItaCash no celular',
+    description: 'Conferir cards responsivos e valores ate 999.999 ItaCash sem overflow horizontal.',
+    route: '/creator-dashboard', critical: true,
+  },
+  {
+    id: 'invitation-readiness', category: 'Preparacao para convite', title: 'Primeiros cinco criadores',
+    description: 'Revisar termos, suporte, fluxo manual, explicacao 85/15 e plano de acompanhamento.',
+    route: '/terms, /contact, /creators', critical: true,
   },
   {
     id: 'lab-tools',
@@ -221,9 +253,13 @@ export function calculateBetaChecklistSummary(
     pending: 0,
     passed: 0,
     bug: 0,
-    review: 0,
+    testing: 0,
+    blocker: 0,
+    notApplicable: 0,
     completed: 0,
     completionPercent: 0,
+    readinessPercent: 0,
+    readyToInviteCreators: false,
   }
 
   for (const item of items) {
@@ -232,12 +268,19 @@ export function calculateBetaChecklistSummary(
     if (status === 'pending') summary.pending += 1
     if (status === 'passed') summary.passed += 1
     if (status === 'bug') summary.bug += 1
-    if (status === 'review') summary.review += 1
+    if (status === 'testing') summary.testing += 1
+    if (status === 'blocker') summary.blocker += 1
+    if (status === 'not_applicable') summary.notApplicable += 1
   }
 
-  summary.completed = summary.passed + summary.bug + summary.review
+  summary.completed = summary.passed + summary.bug + summary.blocker + summary.notApplicable
   summary.completionPercent =
     summary.total > 0 ? Math.round((summary.completed / summary.total) * 100) : 0
+  const applicableTotal = summary.total - summary.notApplicable
+  summary.readinessPercent = applicableTotal > 0
+    ? Math.round((summary.passed / applicableTotal) * 100)
+    : 100
+  summary.readyToInviteCreators = summary.blocker === 0 && summary.readinessPercent === 100
 
   return summary
 }
@@ -277,8 +320,9 @@ export function buildBetaChecklistReport(
   generatedAt: Date = new Date(),
 ) {
   const summary = calculateBetaChecklistSummary(items, progress)
-  const bugs = items.filter((item) => getBetaChecklistItemStatus(progress, item.id) === 'bug')
-  const review = items.filter((item) => getBetaChecklistItemStatus(progress, item.id) === 'review')
+  const blockers = items.filter((item) => getBetaChecklistItemStatus(progress, item.id) === 'blocker')
+  const pending = items.filter((item) => ['pending', 'testing', 'bug'].includes(getBetaChecklistItemStatus(progress, item.id)))
+  const approved = items.filter((item) => getBetaChecklistItemStatus(progress, item.id) === 'passed')
   const notes = items
     .map((item) => ({
       item,
@@ -293,17 +337,20 @@ export function buildBetaChecklistReport(
     '',
     'Resumo:',
     `- Total: ${summary.total}`,
-    `- Passou: ${summary.passed}`,
-    `- Bug: ${summary.bug}`,
-    `- Revisar: ${summary.review}`,
-    `- Pendente: ${summary.pending}`,
-    `- Concluído: ${summary.completionPercent}%`,
+    `- Prontidao: ${summary.readinessPercent}%`,
+    `- Aprovados: ${summary.passed}`,
+    `- Problemas: ${summary.bug}`,
+    `- Bloqueadores: ${summary.blocker}`,
+    `- Nao testados: ${summary.pending}`,
     '',
-    'Bugs encontrados:',
-    ...(bugs.length > 0 ? bugs.map(formatItem) : ['- Nenhum bug marcado.']),
+    'Bloqueadores:',
+    ...(blockers.length > 0 ? blockers.map(formatItem) : ['- Nenhum bloqueador marcado.']),
     '',
-    'Itens para revisar:',
-    ...(review.length > 0 ? review.map(formatItem) : ['- Nenhum item para revisar.']),
+    'Itens pendentes:',
+    ...(pending.length > 0 ? pending.map(formatItem) : ['- Nenhum item pendente.']),
+    '',
+    'Itens aprovados:',
+    ...(approved.length > 0 ? approved.map(formatItem) : ['- Nenhum item aprovado.']),
     '',
     'Observações preenchidas:',
     ...(notes.length > 0

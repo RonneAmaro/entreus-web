@@ -35,9 +35,8 @@ type AdminState = 'loading' | 'denied' | 'ready'
 const filterOptions: Array<{ value: BetaChecklistFilter; label: string }> = [
   { value: 'all', label: 'Todos' },
   { value: 'pending', label: 'Pendentes' },
-  { value: 'passed', label: 'Passou' },
-  { value: 'bug', label: 'Bug' },
-  { value: 'review', label: 'Revisar' },
+  { value: 'blocker', label: 'Bloqueadores' },
+  { value: 'passed', label: 'Aprovados' },
 ]
 
 function getStatusClassName(status: BetaChecklistStatus) {
@@ -49,9 +48,11 @@ function getStatusClassName(status: BetaChecklistStatus) {
     return 'border-red-300/35 bg-red-500/15 text-red-100'
   }
 
-  if (status === 'review') {
+  if (status === 'testing') {
     return 'border-amber-300/35 bg-amber-500/15 text-amber-100'
   }
+  if (status === 'blocker') return 'border-red-300/50 bg-red-500/25 text-red-50'
+  if (status === 'not_applicable') return 'border-zinc-300/20 bg-zinc-500/10 text-zinc-300'
 
   return 'border-white/10 bg-white/5 text-zinc-300'
 }
@@ -59,7 +60,8 @@ function getStatusClassName(status: BetaChecklistStatus) {
 function getSummaryCardClassName(kind: BetaChecklistStatus | 'total') {
   if (kind === 'passed') return 'border-emerald-300/25 bg-emerald-500/10 text-emerald-50'
   if (kind === 'bug') return 'border-red-300/25 bg-red-500/10 text-red-50'
-  if (kind === 'review') return 'border-amber-300/25 bg-amber-500/10 text-amber-50'
+  if (kind === 'testing') return 'border-amber-300/25 bg-amber-500/10 text-amber-50'
+  if (kind === 'blocker') return 'border-red-300/35 bg-red-500/20 text-red-50'
   if (kind === 'pending') return 'border-white/10 bg-zinc-950/80 text-zinc-100'
 
   return 'border-blue-300/25 bg-blue-500/10 text-blue-50'
@@ -317,19 +319,19 @@ export default function AdminBetaChecklistPage() {
           <div className={`rounded-[1.5rem] border p-4 ${getSummaryCardClassName('total')}`}>
             <p className="text-xs font-black uppercase tracking-[0.16em] opacity-70">Total</p>
             <p className="mt-2 text-3xl font-black">{summary.total}</p>
-            <p className="mt-1 text-xs opacity-75">{summary.completionPercent}% concluido</p>
+            <p className="mt-1 text-xs opacity-75">Prontidao beta: {summary.readinessPercent}%</p>
           </div>
           <div className={`rounded-[1.5rem] border p-4 ${getSummaryCardClassName('passed')}`}>
-            <p className="text-xs font-black uppercase tracking-[0.16em] opacity-70">Passou</p>
+            <p className="text-xs font-black uppercase tracking-[0.16em] opacity-70">Aprovados</p>
             <p className="mt-2 text-3xl font-black">{summary.passed}</p>
           </div>
           <div className={`rounded-[1.5rem] border p-4 ${getSummaryCardClassName('bug')}`}>
             <p className="text-xs font-black uppercase tracking-[0.16em] opacity-70">Bug</p>
             <p className="mt-2 text-3xl font-black">{summary.bug}</p>
           </div>
-          <div className={`rounded-[1.5rem] border p-4 ${getSummaryCardClassName('review')}`}>
-            <p className="text-xs font-black uppercase tracking-[0.16em] opacity-70">Revisar</p>
-            <p className="mt-2 text-3xl font-black">{summary.review}</p>
+          <div className={`rounded-[1.5rem] border p-4 ${getSummaryCardClassName('blocker')}`}>
+            <p className="text-xs font-black uppercase tracking-[0.16em] opacity-70">Bloqueadores</p>
+            <p className="mt-2 text-3xl font-black">{summary.blocker}</p>
           </div>
           <div className={`rounded-[1.5rem] border p-4 ${getSummaryCardClassName('pending')}`}>
             <p className="text-xs font-black uppercase tracking-[0.16em] opacity-70">Pendente</p>
@@ -341,6 +343,16 @@ export default function AdminBetaChecklistPage() {
             <p className="mt-1 text-xs text-zinc-500">apos filtros</p>
           </div>
         </div>
+
+        <section className={`mb-6 rounded-[2rem] border p-5 ${summary.blocker > 0 ? 'border-red-300/30 bg-red-500/15 text-red-50' : 'border-emerald-300/20 bg-emerald-500/10 text-emerald-50'}`}>
+          <div className="flex items-start gap-3">
+            <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0" />
+            <div>
+              <h2 className="font-black">{summary.readyToInviteCreators ? 'Checklist pronto para convite' : 'Ainda nao convidar criadores'}</h2>
+              <p className="mt-1 text-sm leading-6 opacity-80">Nao avance com bloqueadores em saque, post pago, gorjeta, 18+, login/cadastro, upload, moderacao, termos ou suporte.</p>
+            </div>
+          </div>
+        </section>
 
         <div className="mb-6 rounded-[2rem] border border-white/10 bg-zinc-950/85 p-4 shadow-xl shadow-black/20 ring-1 ring-white/5">
           <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
@@ -495,6 +507,19 @@ export default function AdminBetaChecklistPage() {
             })}
           </div>
         )}
+
+        <section className="mt-6 grid gap-4 lg:grid-cols-3">
+          {[
+            { title: 'Conta A - usuario comum', steps: 'Cadastrar, completar perfil, publicar, curtir/comentar, testar ItaCash e enviar gorjeta.' },
+            { title: 'Conta B - criador', steps: 'Configurar perfil, criar post pago, receber gorjeta/desbloqueio e pedir saque.' },
+            { title: 'Conta C - admin', steps: 'Revisar denuncias e idade, conferir saque pendente, aprovar/recusar e validar o painel admin.' },
+          ].map((script) => (
+            <article key={script.title} className="rounded-[2rem] border border-white/10 bg-zinc-950/85 p-5 ring-1 ring-white/5">
+              <h2 className="font-black text-white">{script.title}</h2>
+              <p className="mt-2 text-sm leading-6 text-zinc-400">{script.steps}</p>
+            </article>
+          ))}
+        </section>
 
         <div className="mt-6 rounded-[2rem] border border-blue-300/20 bg-blue-500/10 p-5 text-sm leading-6 text-blue-50 ring-1 ring-blue-300/10">
           <div className="flex items-start gap-3">
