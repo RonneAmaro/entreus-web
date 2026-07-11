@@ -20,8 +20,6 @@ import TipModal from "../../components/TipModal";
 import GiftShowcase, { type GiftShowcaseItem } from "../../components/GiftShowcase";
 import { Coins, ExternalLink, Flag, Gift, Loader2, MapPin, Maximize2, Search, UserCheck, UserPlus, UserX, X } from "lucide-react";
 import {
-  isMissingPostModerationColumnError,
-  isModeratedHidden,
   type ModeratedPostFields,
 } from "@/lib/post-moderation";
 import { resolveUserTier } from "@/lib/user-tiers";
@@ -29,19 +27,15 @@ import {
   getEffectiveProfileThemeKey,
   getProfileTheme,
 } from "@/lib/profile-themes";
-import {
-  canViewerSeePostClassification as canViewCommunity,
-  getSafePostCommunity as normalizeCommunity,
-  getSafePostContentRating as normalizeContentRating,
-  isAdultPostClassification as isAdultCommunityOrRating,
-} from "@/lib/post-classification";
 import { canViewAdultContent } from "@/lib/content-access";
-import { applyPostVisibilityFilters } from "@/lib/post-visibility";
-import { isMissingPaidPostColumnError } from "@/lib/paid-posts";
-import { protectPostForViewer } from "@/lib/protected-post-access";
+import {
+  getExclusiveAccessState,
+  isExclusiveCreatorProfilePost,
+  isPublicCreatorProfilePost,
+} from "@/lib/creator-profile-access";
 
 type VisibilityType = "public" | "followers" | "private";
-type ProfileTab = "posts" | "replies" | "media";
+type ProfileTab = "posts" | "exclusive";
 
 type Profile = {
   id: string;
@@ -160,26 +154,8 @@ const PROFILE_SELECT_WITH_THEME =
   "id, username, display_name, bio, avatar_url, banner_url, country, city, state, website_url, website_title, show_sensitive_content, is_minor, wants_18_plus, age_verification_status, vip_status, vip_expires_at, profile_theme";
 const PROFILE_SELECT_FALLBACK =
   "id, username, display_name, bio, avatar_url, banner_url, country, city, state, website_url, website_title, show_sensitive_content, is_minor, wants_18_plus, age_verification_status, vip_status, vip_expires_at";
-const POST_SELECT_COMMUNITY_FIELDS = `
-        community_type,
-        content_rating,
-`;
-const POST_SELECT_PAID_FIELDS = `
-        is_paid,
-        price_itacash,
-`;
-
 function isMissingProfileThemeColumnError(error: { message?: string } | null) {
   return Boolean(error?.message && /profile_theme/i.test(error.message));
-}
-
-function isMissingCommunityColumnError(error: { message?: string } | null | undefined) {
-  const message = (error?.message || "").toLowerCase();
-  return message.includes("community_type") || message.includes("content_rating");
-}
-
-function removePaidPostSelectFields(selectFields: string) {
-  return selectFields.replace(POST_SELECT_PAID_FIELDS, "");
 }
 
 export default function PublicProfilePage() {
@@ -255,6 +231,7 @@ export default function PublicProfilePage() {
   );
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
   }, []);
 
@@ -267,44 +244,43 @@ export default function PublicProfilePage() {
         data: { user },
       } = await supabase.auth.getUser();
 
-      if (!user) {
-        router.push("/login");
-        return;
-      }
+      setLoggedUserId(user?.id || "");
+      setEmail(user?.email || "");
 
-      setLoggedUserId(user.id);
-      setEmail(user.email || "");
+      let normalizedLoggedProfile: Profile | null = null;
 
-      let { data: loggedProfileData, error: loggedProfileError } = await supabase
-        .from("profiles")
-        .select(PROFILE_SELECT_WITH_THEME)
-        .eq("id", user.id)
-        .maybeSingle();
-
-      if (isMissingProfileThemeColumnError(loggedProfileError)) {
-        const fallbackResult = await supabase
+      if (user) {
+        let { data: loggedProfileData, error: loggedProfileError } = await supabase
           .from("profiles")
-          .select(PROFILE_SELECT_FALLBACK)
+          .select(PROFILE_SELECT_WITH_THEME)
           .eq("id", user.id)
           .maybeSingle();
 
-        loggedProfileData = fallbackResult.data
-          ? { ...fallbackResult.data, profile_theme: "default" }
-          : null;
-        loggedProfileError = fallbackResult.error;
-      }
+        if (isMissingProfileThemeColumnError(loggedProfileError)) {
+          const fallbackResult = await supabase
+            .from("profiles")
+            .select(PROFILE_SELECT_FALLBACK)
+            .eq("id", user.id)
+            .maybeSingle();
 
-      const normalizedLoggedProfile = loggedProfileData
-        ? {
-            ...loggedProfileData,
-            is_minor: loggedProfileData.is_minor,
-            show_sensitive_content: canViewAdultContent({
-              isMinor: loggedProfileData.is_minor,
-              wants18Plus: loggedProfileData.wants_18_plus,
-              ageVerificationStatus: loggedProfileData.age_verification_status,
-            }),
-          }
-        : null;
+          loggedProfileData = fallbackResult.data
+            ? { ...fallbackResult.data, profile_theme: "default" }
+            : null;
+          loggedProfileError = fallbackResult.error;
+        }
+
+        normalizedLoggedProfile = loggedProfileData
+          ? {
+              ...loggedProfileData,
+              is_minor: loggedProfileData.is_minor,
+              show_sensitive_content: canViewAdultContent({
+                isMinor: loggedProfileData.is_minor,
+                wants18Plus: loggedProfileData.wants_18_plus,
+                ageVerificationStatus: loggedProfileData.age_verification_status,
+              }),
+            }
+          : null;
+      }
 
       setLoggedProfile(normalizedLoggedProfile);
 
@@ -358,18 +334,19 @@ export default function PublicProfilePage() {
         .filter(Boolean);
       setProfileBadgeSlugs(badgeSlugs);
 
-      const isOwn = user.id === profileData.id;
+      const currentUserId = user?.id || "";
+      const isOwn = currentUserId === profileData.id;
 
       let blockedByMe = false;
       let blockedMe = false;
       let currentFollowData: { id: string } | null = null;
 
-      if (!isOwn) {
+      if (currentUserId && !isOwn) {
         const { data: blockedByMeData, error: blockedByMeError } =
           await supabase
             .from("blocks")
             .select("id")
-            .eq("blocker_id", user.id)
+            .eq("blocker_id", currentUserId)
             .eq("blocked_id", profileData.id)
             .maybeSingle();
 
@@ -384,7 +361,7 @@ export default function PublicProfilePage() {
             .from("blocks")
             .select("id")
             .eq("blocker_id", profileData.id)
-            .eq("blocked_id", user.id)
+            .eq("blocked_id", currentUserId)
             .maybeSingle();
 
         if (hasBlockedMeError) {
@@ -405,7 +382,7 @@ export default function PublicProfilePage() {
           const { data: followData } = await supabase
             .from("follows")
             .select("id")
-            .eq("follower_id", user.id)
+            .eq("follower_id", currentUserId)
             .eq("following_id", profileData.id)
             .maybeSingle();
 
@@ -418,7 +395,7 @@ export default function PublicProfilePage() {
         await Promise.all([
           loadPublicProfileActivity(
             profileData,
-            user.id,
+            currentUserId,
             isOwn,
             !!currentFollowData,
             normalizedLoggedProfile?.show_sensitive_content || false,
@@ -427,9 +404,9 @@ export default function PublicProfilePage() {
           loadCounts(profileData.id),
           loadLikes(),
           loadComments(),
-          loadBookmarks(user.id),
+          currentUserId ? loadBookmarks(currentUserId) : Promise.resolve(),
           loadAllReposts(profileData),
-          loadUnreadNotificationsCount(user.id),
+          currentUserId ? loadUnreadNotificationsCount(currentUserId) : Promise.resolve(),
           loadPublicReceivedGifts(profileData.id),
         ]);
       } else {
@@ -440,7 +417,9 @@ export default function PublicProfilePage() {
         setReceivedGifts([]);
       }
 
-      await loadUnreadNotificationsCount(user.id);
+      if (currentUserId) {
+        await loadUnreadNotificationsCount(currentUserId);
+      }
 
       setLoading(false);
     }
@@ -694,25 +673,6 @@ export default function PublicProfilePage() {
     setReposts(normalizedReposts);
   }
 
-  async function loadPaidUnlockIdsForPosts(currentUserId: string, postIds: string[]) {
-    if (!currentUserId || postIds.length === 0) return new Set<string>();
-
-    const { data, error } = await supabase
-      .from("paid_post_unlocks")
-      .select("post_id")
-      .eq("buyer_id", currentUserId)
-      .in("post_id", postIds);
-
-    if (error) {
-      if (!isMissingPaidPostColumnError(error)) {
-        console.warn("Nao foi possivel carregar desbloqueios de posts pagos do perfil publico:", error.message);
-      }
-      return new Set<string>();
-    }
-
-    return new Set((data || []).map((row) => row.post_id).filter(Boolean) as string[]);
-  }
-
   async function loadPublicProfileActivity(
     profileData: Profile,
     currentUserId: string,
@@ -721,375 +681,44 @@ export default function PublicProfilePage() {
     allowSensitiveContent: boolean,
     viewerProfile: Profile | null = loggedProfile,
   ) {
-    const postSelectWithModeration = `
-        id,
-        content,
-        category,
-        created_at,
-        user_id,
-        image_url,
-        video_url,
-        visibility,
-        is_sensitive,
-        ${POST_SELECT_COMMUNITY_FIELDS}
-        ${POST_SELECT_PAID_FIELDS}
-        moderation_status,
-        moderated_at,
-        moderated_by,
-        moderation_reason,
-        profiles (
-          username,
-          display_name,
-          avatar_url,
-          vip_status,
-          vip_expires_at,
-          profile_theme
-        )
-      `;
-    const postSelectFallback = `
-        id,
-        content,
-        category,
-        created_at,
-        user_id,
-        image_url,
-        video_url,
-        visibility,
-        is_sensitive,
-        ${POST_SELECT_COMMUNITY_FIELDS}
-        ${POST_SELECT_PAID_FIELDS}
-        profiles (
-          username,
-          display_name,
-          avatar_url,
-          vip_status,
-          vip_expires_at,
-          profile_theme
-        )
-      `;
-    const { data: repostsData, error: repostsError } = await supabase
-      .from("reposts")
-      .select("id, post_id, user_id, created_at")
-      .eq("user_id", profileData.id)
-      .order("created_at", { ascending: false });
+    void currentUserId;
+    void isOwn;
+    void currentIsFollowing;
+    void allowSensitiveContent;
+    void viewerProfile;
 
-    if (repostsError) {
-      setMessage("Erro ao carregar reposts do perfil: " + repostsError.message);
-      return;
+    const headers: Record<string, string> = {};
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (session?.access_token) {
+      headers.Authorization = `Bearer ${session.access_token}`;
     }
 
-    const repostPostIds = (repostsData || []).map((repost) => repost.post_id);
-
-    let { data: ownPostsData, error: ownPostsError } = await applyPostVisibilityFilters(supabase
-      .from("posts")
-      .select(postSelectWithModeration)
-      .eq("user_id", profileData.id), {
-        isMinor: viewerProfile?.is_minor,
-        wants18Plus: viewerProfile?.wants_18_plus,
-        ageVerificationStatus: viewerProfile?.age_verification_status,
-      }, 'public-list')
-      .order("created_at", { ascending: false });
-
-    if (ownPostsError && isMissingPaidPostColumnError(ownPostsError)) {
-      const fallback = await applyPostVisibilityFilters(supabase
-        .from("posts")
-        .select(removePaidPostSelectFields(postSelectWithModeration))
-        .eq("user_id", profileData.id), {
-          isMinor: viewerProfile?.is_minor,
-          wants18Plus: viewerProfile?.wants_18_plus,
-          ageVerificationStatus: viewerProfile?.age_verification_status,
-        }, 'public-list')
-        .order("created_at", { ascending: false });
-
-      ownPostsData = fallback.data as typeof ownPostsData;
-      ownPostsError = fallback.error;
-    }
-
-    if (ownPostsError && isMissingPostModerationColumnError(ownPostsError)) {
-      const fallback = await applyPostVisibilityFilters(supabase
-        .from("posts")
-        .select(postSelectFallback)
-        .eq("user_id", profileData.id), {
-          isMinor: viewerProfile?.is_minor,
-          wants18Plus: viewerProfile?.wants_18_plus,
-          ageVerificationStatus: viewerProfile?.age_verification_status,
-        }, 'public-list')
-        .order("created_at", { ascending: false });
-
-      ownPostsData = fallback.data as typeof ownPostsData;
-      ownPostsError = fallback.error;
-
-      if (ownPostsError && isMissingPaidPostColumnError(ownPostsError)) {
-        const paidFallback = await applyPostVisibilityFilters(supabase
-          .from("posts")
-          .select(removePaidPostSelectFields(postSelectFallback))
-          .eq("user_id", profileData.id), {
-            isMinor: viewerProfile?.is_minor,
-            wants18Plus: viewerProfile?.wants_18_plus,
-            ageVerificationStatus: viewerProfile?.age_verification_status,
-          }, 'public-list')
-          .order("created_at", { ascending: false });
-
-        ownPostsData = paidFallback.data as typeof ownPostsData;
-        ownPostsError = paidFallback.error;
-      }
-    }
-
-    if (ownPostsError && isMissingCommunityColumnError(ownPostsError)) {
-      const fallback = await applyPostVisibilityFilters(supabase
-        .from("posts")
-        .select(removePaidPostSelectFields(postSelectWithModeration).replace(POST_SELECT_COMMUNITY_FIELDS, ""))
-        .eq("user_id", profileData.id), {
-          isMinor: viewerProfile?.is_minor,
-          wants18Plus: viewerProfile?.wants_18_plus,
-          ageVerificationStatus: viewerProfile?.age_verification_status,
-        }, 'public-list')
-        .order("created_at", { ascending: false });
-
-      ownPostsData = fallback.data as typeof ownPostsData;
-      ownPostsError = fallback.error;
-    }
-
-    if (ownPostsError) {
-      setMessage("Erro ao carregar publicações: " + ownPostsError.message);
-      return;
-    }
-
-    const ownPosts = ((ownPostsData || []) as any[])
-      .map((post) => ({
-        ...post,
-        visibility: (post.visibility || "public") as VisibilityType,
-        is_sensitive: post.is_sensitive || false,
-        community_type: normalizeCommunity(post.community_type),
-        content_rating: normalizeContentRating(post.content_rating),
-        profiles: Array.isArray(post.profiles)
-          ? post.profiles[0] || null
-          : post.profiles,
-      }))
-      .filter((post: Post) =>
-        !isModeratedHidden(post) &&
-        canViewCommunity(
-          {
-            isMinor: viewerProfile?.is_minor,
-            wants18Plus: viewerProfile?.wants_18_plus,
-            ageVerificationStatus: viewerProfile?.age_verification_status,
-          },
-          post.community_type,
-          post.content_rating,
-          post.category,
-        ) &&
-        canSeePost(post, currentUserId, isOwn, currentIsFollowing),
-      );
-
-    let repostedPosts: Post[] = [];
-
-    if (repostPostIds.length > 0) {
-      let { data: repostedPostsData, error: repostedPostsError } =
-        await applyPostVisibilityFilters(supabase
-          .from("posts")
-          .select(postSelectWithModeration)
-          .in("id", repostPostIds), {
-            isMinor: viewerProfile?.is_minor,
-            wants18Plus: viewerProfile?.wants_18_plus,
-            ageVerificationStatus: viewerProfile?.age_verification_status,
-          }, 'public-list');
-
-      if (repostedPostsError && isMissingPaidPostColumnError(repostedPostsError)) {
-        const fallback = await applyPostVisibilityFilters(supabase
-          .from("posts")
-          .select(removePaidPostSelectFields(postSelectWithModeration))
-          .in("id", repostPostIds), {
-            isMinor: viewerProfile?.is_minor,
-            wants18Plus: viewerProfile?.wants_18_plus,
-            ageVerificationStatus: viewerProfile?.age_verification_status,
-          }, 'public-list');
-
-        repostedPostsData = fallback.data as typeof repostedPostsData;
-        repostedPostsError = fallback.error;
-      }
-
-      if (repostedPostsError && isMissingPostModerationColumnError(repostedPostsError)) {
-        const fallback = await applyPostVisibilityFilters(supabase
-          .from("posts")
-          .select(postSelectFallback)
-          .in("id", repostPostIds), {
-            isMinor: viewerProfile?.is_minor,
-            wants18Plus: viewerProfile?.wants_18_plus,
-            ageVerificationStatus: viewerProfile?.age_verification_status,
-          }, 'public-list');
-
-        repostedPostsData = fallback.data as typeof repostedPostsData;
-        repostedPostsError = fallback.error;
-
-        if (repostedPostsError && isMissingPaidPostColumnError(repostedPostsError)) {
-          const paidFallback = await applyPostVisibilityFilters(supabase
-            .from("posts")
-            .select(removePaidPostSelectFields(postSelectFallback))
-            .in("id", repostPostIds), {
-              isMinor: viewerProfile?.is_minor,
-              wants18Plus: viewerProfile?.wants_18_plus,
-              ageVerificationStatus: viewerProfile?.age_verification_status,
-            }, 'public-list');
-
-          repostedPostsData = paidFallback.data as typeof repostedPostsData;
-          repostedPostsError = paidFallback.error;
-        }
-      }
-
-      if (repostedPostsError && isMissingCommunityColumnError(repostedPostsError)) {
-        const fallback = await applyPostVisibilityFilters(supabase
-          .from("posts")
-          .select(removePaidPostSelectFields(postSelectWithModeration).replace(POST_SELECT_COMMUNITY_FIELDS, ""))
-          .in("id", repostPostIds), {
-            isMinor: viewerProfile?.is_minor,
-            wants18Plus: viewerProfile?.wants_18_plus,
-            ageVerificationStatus: viewerProfile?.age_verification_status,
-          }, 'public-list');
-
-        repostedPostsData = fallback.data as typeof repostedPostsData;
-        repostedPostsError = fallback.error;
-      }
-
-      if (repostedPostsError) {
-        setMessage(
-          "Erro ao carregar posts repostados: " + repostedPostsError.message,
-        );
-        return;
-      }
-
-      repostedPosts = ((repostedPostsData || []) as any[])
-        .map((post) => ({
-          ...post,
-          visibility: (post.visibility || "public") as VisibilityType,
-          is_sensitive: post.is_sensitive || false,
-          community_type: normalizeCommunity(post.community_type),
-          content_rating: normalizeContentRating(post.content_rating),
-          profiles: Array.isArray(post.profiles)
-            ? post.profiles[0] || null
-            : post.profiles,
-        }))
-        .filter((post: Post) => !isModeratedHidden(post))
-        .filter((post: Post) =>
-          canViewCommunity(
-            {
-              isMinor: viewerProfile?.is_minor,
-              wants18Plus: viewerProfile?.wants_18_plus,
-              ageVerificationStatus: viewerProfile?.age_verification_status,
-            },
-            post.community_type,
-            post.content_rating,
-            post.category,
-          ),
-        )
-        .filter((post: Post) =>
-          canSeePost(
-            post,
-            currentUserId,
-            post.user_id === currentUserId,
-            currentIsFollowing,
-          ),
-        )
-        .filter((post: Post) => canSeePost(post, currentUserId, false, currentIsFollowing));
-    }
-
-    const allPostsMap = new Map<string, Post>();
-
-    for (const post of [...ownPosts, ...repostedPosts]) {
-      allPostsMap.set(post.id, post);
-    }
-
-    const allPosts = Array.from(allPostsMap.values());
-    const allPostIds = allPosts.map((post) => post.id);
-    const paidUnlockedIds = await loadPaidUnlockIdsForPosts(currentUserId, allPostIds);
-
-    let mediaByPost: Record<string, PostMedia[]> = {};
-
-    if (allPostIds.length > 0) {
-      const { data: mediaData, error: mediaError } = await supabase
-        .from("post_media")
-        .select(
-          "id, post_id, user_id, media_url, media_type, position, created_at, access_level",
-        )
-        .in("post_id", allPostIds)
-        .order("position", { ascending: true });
-
-      if (mediaError) {
-        console.error(
-          "Erro ao carregar mídias do perfil público:",
-          mediaError.message,
-        );
-      }
-
-      mediaByPost = ((mediaData || []) as PostMedia[]).reduce(
-        (acc, mediaItem) => {
-          if (!acc[mediaItem.post_id]) acc[mediaItem.post_id] = [];
-          acc[mediaItem.post_id].push(mediaItem);
-          return acc;
-        },
-        {} as Record<string, PostMedia[]>,
-      );
-    }
-
-    const normalizedPosts = allPosts.map((post) => {
-      const paidUnlocked = post.user_id === currentUserId || paidUnlockedIds.has(post.id);
-      return protectPostForViewer({
-        post: {
-          ...post,
-          media: mediaByPost[post.id] || [],
-          paid_unlocked: paidUnlocked,
-        },
-        viewerId: currentUserId,
-        viewerProfile: {
-          isMinor: viewerProfile?.is_minor,
-          wants18Plus: viewerProfile?.wants_18_plus,
-          ageVerificationStatus: viewerProfile?.age_verification_status,
-        },
-        hasPaidUnlock: paidUnlocked,
-        isFollowingAuthor: post.user_id === profileData.id ? currentIsFollowing : false,
-      });
+    const response = await fetch(`/api/creator-profile/${encodeURIComponent(profileData.username)}/posts`, {
+      headers,
+      cache: "no-store",
     });
+    const payload = await response.json().catch(() => null) as {
+      error?: string;
+      posts?: Post[];
+      reposts?: Repost[];
+    } | null;
 
-    setPosts(normalizedPosts);
+    if (!response.ok || !payload) {
+      setMessage(payload?.error || "Erro ao carregar publicacoes do perfil.");
+      setPosts([]);
+      return;
+    }
 
-    const profileReposts: Repost[] = (repostsData || []).map((repost) => ({
-      ...repost,
-      profiles: {
-        username: profileData.username,
-        display_name: profileData.display_name,
-        avatar_url: profileData.avatar_url,
-      },
-    }));
-
+    setPosts(payload.posts || []);
     setReposts((current) => {
       const otherReposts = current.filter(
         (repost) => repost.user_id !== profileData.id,
       );
-      return [...otherReposts, ...profileReposts];
+      return [...otherReposts, ...(payload.reposts || [])];
     });
-  }
-
-  function canSeePost(
-    post: Post,
-    currentUserId: string,
-    isOwn: boolean,
-    currentIsFollowing: boolean,
-  ) {
-    if (post.user_id === currentUserId) return true;
-    if (isOwn) return true;
-    if (post.visibility === "public") return true;
-    if (post.visibility === "followers") return currentIsFollowing;
-    return false;
-  }
-
-  function isSensitivePost(post: Post) {
-    return (
-      post.is_sensitive ||
-      normalizeContentRating(post.content_rating) !== "safe" ||
-      isAdultCommunityOrRating(post.community_type, post.content_rating, post.category) ||
-      post.category === "adulto" ||
-      post.category === "sensual" ||
-      post.category === "18plus"
-    );
   }
 
   async function refreshProfileState(profileId: string, currentUserId: string) {
@@ -1798,16 +1427,16 @@ export default function PublicProfilePage() {
     setMessage("Presente compartilhado no feed.");
   }
 
-  const feedItems = useMemo<FeedItem[]>(() => {
+  function buildFeedItems(visiblePosts: Post[]): FeedItem[] {
     if (!profile) return [];
 
     const postMap = new Map<string, Post>();
 
-    for (const post of posts) {
+    for (const post of visiblePosts) {
       postMap.set(post.id, post);
     }
 
-    const ownPostItems: FeedItem[] = posts
+    const ownPostItems: FeedItem[] = visiblePosts
       .filter((post) => post.user_id === profile.id)
       .map((post) => ({
         type: "post",
@@ -1840,24 +1469,44 @@ export default function PublicProfilePage() {
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       );
     });
-  }, [posts, reposts, profile]);
+  }
 
-  const mediaItems = useMemo(() => {
-    return feedItems.filter((item) => {
-      const post = item.post;
+  const publicPosts = useMemo(
+    () => posts.filter((post) => isPublicCreatorProfilePost(post)),
+    [posts],
+  );
 
-      return (
-        (post.media && post.media.length > 0) ||
-        Boolean(post.image_url) ||
-        Boolean(post.video_url)
-      );
-    });
-  }, [feedItems]);
+  const exclusivePosts = useMemo(
+    () => posts.filter((post) => isExclusiveCreatorProfilePost(post)),
+    [posts],
+  );
+
+  const publicFeedItems = useMemo<FeedItem[]>(
+    () => buildFeedItems(publicPosts),
+    [publicPosts, reposts, profile],
+  );
+
+  const exclusiveFeedItems = useMemo<FeedItem[]>(
+    () => buildFeedItems(exclusivePosts),
+    [exclusivePosts, reposts, profile],
+  );
+
+  const feedItems = activeProfileTab === "exclusive" ? exclusiveFeedItems : publicFeedItems;
+
+  const exclusiveAccessState = getExclusiveAccessState({
+    viewerId: loggedUserId,
+    viewerProfile: {
+      isMinor: loggedProfile?.is_minor,
+      wants18Plus: loggedProfile?.wants_18_plus,
+      ageVerificationStatus: loggedProfile?.age_verification_status,
+    },
+    isAuthor: loggedUserId === profile?.id,
+  });
 
   const suggestedProfiles = useMemo(() => {
     const suggestions = new Map<string, ProfileSummary>();
 
-    for (const item of feedItems) {
+    for (const item of publicFeedItems) {
       const itemProfile = item.post.profiles;
 
       if (!itemProfile?.username || itemProfile.username === profile?.username) {
@@ -1868,14 +1517,13 @@ export default function PublicProfilePage() {
     }
 
     return Array.from(suggestions.values()).slice(0, 3);
-  }, [feedItems, profile?.username]);
+  }, [publicFeedItems, profile?.username]);
 
-  const repostsCount = feedItems.filter((item) => item.type === "repost").length;
   const profileTabs: { id: ProfileTab; label: string; count?: number }[] = [
-    { id: "posts", label: "Posts", count: feedItems.length },
-    { id: "replies", label: "Respostas" },
-    { id: "media", label: "Mídia", count: mediaItems.length },
+    { id: "posts", label: "Publicações", count: publicFeedItems.length },
+    { id: "exclusive", label: "Exclusivo", count: exclusiveFeedItems.length },
   ];
+  const repostsCount = publicFeedItems.filter((item) => item.type === "repost").length;
 
   async function refreshPublicProfileActivity() {
     if (!profile) return;
@@ -2598,7 +2246,7 @@ export default function PublicProfilePage() {
 
         {!hasBlockedMe && !isBlockedByMe && (
           <div className="overflow-hidden rounded-[2rem] border border-zinc-200/70 bg-white/95 shadow-sm ring-1 ring-black/5 dark:border-zinc-800/70 dark:bg-black/80 dark:ring-white/10">
-            <div className="grid grid-cols-3 border-b border-zinc-200/70 dark:border-zinc-800/70">
+            <div className="grid grid-cols-2 border-b border-zinc-200/70 dark:border-zinc-800/70">
               {profileTabs.map((tab) => {
                 const selected = activeProfileTab === tab.id;
 
@@ -2638,70 +2286,26 @@ export default function PublicProfilePage() {
                 {feedItems.map(renderFeedItem)}
               </div>
             )}
-
-            {activeProfileTab === "replies" && (
-              <div className="p-6 text-center">
-                <p className="text-base font-bold text-zinc-900 dark:text-white">
-                  Respostas em breve
-                </p>
-                <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                  As respostas deste perfil aparecerão aqui quando essa
-                  visualização estiver disponível.
-                </p>
-              </div>
-            )}
-
-            {activeProfileTab === "media" && (
-              <div className="p-3 sm:p-4">
-                {mediaItems.length === 0 ? (
-                  <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-6 text-center text-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400">
-                    Nenhuma mídia visível ainda.
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                    {mediaItems.map((item) => {
-                      const post = item.post;
-                      const media = post.media?.[0];
-                      const mediaUrl =
-                        media?.media_url || post.image_url || post.video_url;
-                      const isVideo =
-                        media?.media_type === "video" || Boolean(post.video_url);
-
-                      if (!mediaUrl) return null;
-
-                      return (
-                        <button
-                          key={`media-${item.id}`}
-                          type="button"
-                          onClick={() => router.push(`/post/${post.id}`)}
-                          className="group relative aspect-square overflow-hidden rounded-2xl bg-zinc-100 ring-1 ring-zinc-200/70 transition hover:scale-[1.01] dark:bg-zinc-900 dark:ring-zinc-800/70"
-                        >
-                          {isVideo ? (
-                            <video
-                              src={mediaUrl}
-                              className="h-full w-full object-cover"
-                              muted
-                              playsInline
-                            />
-                          ) : (
-                            <img
-                              src={mediaUrl}
-                              alt="Mídia do post"
-                              className="h-full w-full object-cover"
-                            />
-                          )}
-
-                          <span className="absolute inset-0 bg-black/0 transition group-hover:bg-black/20" />
-                          {isVideo && (
-                            <span className="absolute bottom-2 right-2 rounded-full bg-black/70 px-2 py-1 text-[10px] font-black uppercase text-white">
-                              Vídeo
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })}
+            {activeProfileTab === "exclusive" && (
+              <div className="space-y-4 p-3 sm:p-4">
+                {exclusiveAccessState === "signed_out" && (
+                  <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-6 text-zinc-700 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300">
+                    <p className="font-bold text-zinc-950 dark:text-white">
+                      Entre na sua conta para acessar a area exclusiva deste criador.
+                    </p>
+                    <Link href="/login" className="mt-4 inline-flex rounded-full bg-zinc-950 px-5 py-2 text-sm font-bold text-white dark:bg-white dark:text-black">
+                      Entrar
+                    </Link>
                   </div>
                 )}
+
+                {exclusiveAccessState === "available" && exclusiveFeedItems.length === 0 && (
+                  <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-6 text-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400">
+                    Nenhum conteudo exclusivo visivel para sua conta agora.
+                  </div>
+                )}
+
+                {exclusiveAccessState === "available" && exclusiveFeedItems.map(renderFeedItem)}
               </div>
             )}
           </div>
