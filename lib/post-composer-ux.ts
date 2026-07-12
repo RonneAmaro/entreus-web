@@ -1,3 +1,5 @@
+import { getComposerProfileContentModeGuidance as getProfileModeGuidance } from './profile-content-mode'
+
 export const DEFAULT_POST_COMPOSER_ADVANCED_OPEN = false
 
 export type ComposerVisibility = 'public' | 'followers' | 'private'
@@ -79,4 +81,8 @@ export function getComposerVisualGuardMessage(input: ComposerVisualGuardInput) {
   }
 
   return null
+}
+
+export function getComposerProfileContentModeGuidance(profileContentMode: unknown) {
+  return getProfileModeGuidance(profileContentMode)
 }

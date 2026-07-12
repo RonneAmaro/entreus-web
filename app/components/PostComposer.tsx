@@ -66,9 +66,11 @@ import { getPaidPostErrorMessage, validatePaidPostPrice } from '@/lib/paid-posts
 import {
   DEFAULT_POST_COMPOSER_ADVANCED_OPEN,
   getComposerActiveAdvancedChips,
+  getComposerProfileContentModeGuidance,
   getComposerPublishSummary,
   getComposerVisualGuardMessage,
 } from '@/lib/post-composer-ux'
+import type { ProfileContentMode } from '@/lib/profile-content-mode'
 import { claimSubmitGuard, releaseSubmitGuard, type SubmitGuard } from '@/lib/post-submit-guard'
 
 type VisibilityType = 'public' | 'followers' | 'private'
@@ -100,6 +102,7 @@ type PostComposerProps = {
   videoUploadLimitBytes?: number
   userTier?: UserTier
   canAccessAdult18Plus?: boolean
+  profileContentMode?: ProfileContentMode
   initialIntent?: ComposeIntent | null
   intentRequestKey?: number
   highlightOnMount?: boolean
@@ -308,6 +311,7 @@ export default function PostComposer({
   videoUploadLimitBytes = VIDEO_UPLOAD_MAX_SIZE_BYTES,
   userTier = 'standard',
   canAccessAdult18Plus = false,
+  profileContentMode = 'general',
   initialIntent = null,
   intentRequestKey = 0,
   highlightOnMount = false,
@@ -1227,6 +1231,7 @@ export default function PostComposer({
     hasAdultSelection,
     canAccessAdult18Plus,
   })
+  const profileContentModeGuidance = getComposerProfileContentModeGuidance(profileContentMode)
   const getAiButtonTitle = (mode: AiAssistMode) => {
     if (activeAiMode === mode) return AI_LOADING_LABELS[mode]
     if (activeAiMode) return 'Aguarde a outra acao da IA terminar.'
@@ -1612,6 +1617,12 @@ export default function PostComposer({
           )}
 
           <div className="mt-4 border-t border-zinc-200 pt-3 dark:border-zinc-800">
+            {profileContentModeGuidance && (
+              <p className="mb-3 rounded-2xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold leading-6 text-blue-800 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-200">
+                {profileContentModeGuidance}
+              </p>
+            )}
+
             <div className="flex flex-col gap-2 rounded-2xl border border-zinc-200 bg-zinc-50/80 px-3 py-2.5 text-xs dark:border-zinc-800 dark:bg-zinc-950/70 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex min-w-0 flex-wrap items-center gap-2">
                 <span className="rounded-full border border-zinc-200 bg-white px-2.5 py-1 font-bold text-zinc-700 dark:border-zinc-800 dark:bg-black dark:text-zinc-200">

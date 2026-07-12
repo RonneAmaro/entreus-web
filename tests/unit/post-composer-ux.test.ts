@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_POST_COMPOSER_ADVANCED_OPEN,
   getComposerActiveAdvancedChips,
+  getComposerProfileContentModeGuidance,
   getComposerPublishSummary,
   getComposerVisualGuardMessage,
 } from '../../lib/post-composer-ux'
@@ -64,5 +65,17 @@ describe('post composer UX helpers', () => {
       hasAdultSelection: true,
       canAccessAdult18Plus: false,
     })).toBe('Conteudo adulto 18+ exige verificacao aprovada.')
+  })
+
+  it('adds profile-mode guidance without changing safe post defaults', () => {
+    expect(getComposerProfileContentModeGuidance('general')).toBeNull()
+    expect(getComposerProfileContentModeGuidance('adult')).toContain('seguro por padrao')
+    expect(getComposerProfileContentModeGuidance('mixed')).toContain('publica ou 18+')
+    expect(getComposerPublishSummary({
+      communityLabel: 'Geral',
+      visibilityLabel: 'Publica',
+      contentRatingLabel: 'Seguro',
+      isPaidPost: false,
+    })).toContainEqual({ label: 'Classificacao', value: 'Seguro' })
   })
 })

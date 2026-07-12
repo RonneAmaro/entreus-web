@@ -95,6 +95,7 @@ import {
   resolveComposeIntent,
   type ComposeIntent,
 } from '@/lib/compose-intent'
+import { getSafeProfileContentMode, type ProfileContentMode } from '@/lib/profile-content-mode'
 
 type VisibilityType = 'public' | 'followers' | 'private'
 type ComposerSubmitData = {
@@ -121,6 +122,20 @@ type CurrentProfile = {
   vip_status?: string | null
   vip_expires_at?: string | null
   badge_slugs?: string[]
+  profile_content_mode?: ProfileContentMode
+}
+
+type CurrentProfileRow = {
+  username: string | null
+  display_name: string | null
+  avatar_url: string | null
+  show_sensitive_content?: boolean | null
+  is_minor?: boolean | null
+  wants_18_plus?: boolean | null
+  age_verification_status?: string | null
+  vip_status?: string | null
+  vip_expires_at?: string | null
+  profile_content_mode?: string | null
 }
 
 type UserBadgeRow = {
@@ -1021,7 +1036,7 @@ function FeedContent() {
       const [profileResult, badgesResult] = await Promise.all([
         supabase
           .from('profiles')
-          .select('username, display_name, avatar_url, show_sensitive_content, is_minor, wants_18_plus, age_verification_status, vip_status, vip_expires_at')
+          .select('username, display_name, avatar_url, show_sensitive_content, is_minor, wants_18_plus, age_verification_status, vip_status, vip_expires_at, profile_content_mode')
           .eq('id', user.id)
           .single(),
         supabase
@@ -1030,27 +1045,42 @@ function FeedContent() {
           .eq('user_id', user.id),
       ])
       const { data: profileData, error: profileError } = profileResult
+      let safeProfileData = profileData as CurrentProfileRow | null
+      let safeProfileError = profileError
+
+      if (profileError && /profile_content_mode/i.test(profileError.message)) {
+        const fallbackProfileResult = await supabase
+          .from('profiles')
+          .select('username, display_name, avatar_url, show_sensitive_content, is_minor, wants_18_plus, age_verification_status, vip_status, vip_expires_at')
+          .eq('id', user.id)
+          .single()
+
+        safeProfileData = fallbackProfileResult.data as CurrentProfileRow | null
+        safeProfileError = fallbackProfileResult.error
+      }
+
       const badgeSlugs = ((badgesResult.data || []) as UserBadgeRow[])
         .flatMap((row) => (Array.isArray(row.badges) ? row.badges : [row.badges]))
         .map((badge) => badge?.slug || '')
         .filter(Boolean)
 
       const loadedCurrentProfile: CurrentProfile | null =
-        !profileError && profileData
+        !safeProfileError && safeProfileData
           ? {
-            username: profileData.username,
-            display_name: profileData.display_name,
-            avatar_url: profileData.avatar_url,
-            is_minor: profileData.is_minor,
-            wants_18_plus: profileData.wants_18_plus || false,
-            age_verification_status: profileData.age_verification_status || 'not_started',
-            vip_status: profileData.vip_status,
-            vip_expires_at: profileData.vip_expires_at,
+            username: safeProfileData.username,
+            display_name: safeProfileData.display_name,
+            avatar_url: safeProfileData.avatar_url,
+            is_minor: safeProfileData.is_minor,
+            wants_18_plus: safeProfileData.wants_18_plus || false,
+            age_verification_status: safeProfileData.age_verification_status || 'not_started',
+            vip_status: safeProfileData.vip_status,
+            vip_expires_at: safeProfileData.vip_expires_at,
+            profile_content_mode: getSafeProfileContentMode(safeProfileData.profile_content_mode),
             badge_slugs: badgeSlugs,
             show_sensitive_content: canViewAdult18Plus({
-              isMinor: profileData.is_minor,
-              wants18Plus: profileData.wants_18_plus,
-              ageVerificationStatus: profileData.age_verification_status,
+              isMinor: safeProfileData.is_minor,
+              wants18Plus: safeProfileData.wants_18_plus,
+              ageVerificationStatus: safeProfileData.age_verification_status,
             }),
           }
           : null
@@ -4145,6 +4175,7 @@ function FeedContent() {
                 videoUploadLimitBytes={videoUploadLimit.maxSizeBytes}
                 userTier={videoUploadLimit.tier}
                 canAccessAdult18Plus={canAccessAdult18Plus}
+                profileContentMode={currentProfile?.profile_content_mode || 'general'}
                 initialIntent={activeComposeIntent}
                 intentRequestKey={composeRequestKey}
                 highlightOnMount={composeRequestKey > 0}

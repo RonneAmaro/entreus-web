@@ -2,7 +2,7 @@ import { canViewAdultContent, isAdultPost, type ContentAccessProfile } from './c
 import { isPaidPost } from './paid-posts'
 import { evaluateProtectedPostAccess, protectPostForViewer, type ProtectedPostLike } from './protected-post-access'
 
-export type ProfileContentMode = 'general' | 'adult' | 'mixed'
+export { getSafeProfileContentMode, type ProfileContentMode } from './profile-content-mode'
 
 export type CreatorProfilePost = ProtectedPostLike & {
   id: string
@@ -55,10 +55,6 @@ export type CreatorProfilePayloadInput<TPost extends CreatorProfilePost> = {
   unlockedPostIds?: Set<string>
   followingAuthorIds?: Set<string>
   viewer: CreatorProfileViewer
-}
-
-export function getSafeProfileContentMode(value: unknown): ProfileContentMode {
-  return value === 'adult' || value === 'mixed' ? value : 'general'
 }
 
 export function isPublicCreatorProfilePost(post: CreatorProfilePost) {

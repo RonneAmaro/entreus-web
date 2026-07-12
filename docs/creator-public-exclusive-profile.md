@@ -67,6 +67,8 @@ Foi criada a migration `supabase/migrations/20260711_add_profile_content_mode.sq
 
 A migration nao foi aplicada. O campo serve para comunicacao e configuracao futura do perfil, mas nao substitui a classificacao por post.
 
+Detalhes da configuracao e do fallback sem migration estao em `docs/creator-profile-content-mode.md`.
+
 ## Limitacoes atuais
 
 - A pagina publica ainda e um client component, mas a listagem sensivel de posts foi movida para uma route handler server-side.
