@@ -96,6 +96,13 @@ const adminCards = [
     keywords: ['moderacao', 'reports', 'denuncia', 'conteudo', 'oculto'],
   },
   {
+    title: 'Avatar e capa',
+    description: 'Revisar imagens de identidade publica enviadas por perfis adulto e misto.',
+    href: '/admin/profile-media',
+    icon: ShieldAlert,
+    keywords: ['moderacao', 'avatar', 'capa', 'perfil', 'adulto', 'misto'],
+  },
+  {
     title: 'Selos de usuarios',
     description: 'Conceda ou remova selos manualmente sem acessar o Supabase.',
     href: '/admin/badges',

@@ -108,12 +108,14 @@ function getSupabaseAdminForUploadLimits() {
   })
 }
 
-function buildObjectKey(folder: R2UploadFolder, userId: string, contentType: string, accessLevel: 'public' | 'protected' | 'adult_private') {
+function buildObjectKey(folder: R2UploadFolder, userId: string, contentType: string, accessLevel: 'public' | 'protected' | 'adult_private', profileMediaReview = false) {
   const timestamp = Date.now()
   const extension = UPLOAD_EXTENSION_BY_MIME_TYPE[contentType] || 'bin'
 
   const prefix =
-    accessLevel === 'adult_private'
+    profileMediaReview
+      ? 'protected/profile-media'
+      : accessLevel === 'adult_private'
       ? 'protected/adult-post-media'
       : accessLevel === 'protected'
         ? 'protected/paid-post-media'
@@ -398,7 +400,12 @@ export async function POST(request: Request) {
   const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY as string
   const bucketName = process.env.R2_BUCKET_NAME as string
   const publicBaseUrl = process.env.R2_PUBLIC_BASE_URL as string
-  const key = buildObjectKey(folder, user.id, contentType, accessLevel)
+  let profileMediaReview = false
+  if (isProfileMediaFolder(folder)) {
+    const { data: profile } = await supabase.from('profiles').select('profile_content_mode').eq('id', user.id).maybeSingle()
+    profileMediaReview = profile?.profile_content_mode === 'adult' || profile?.profile_content_mode === 'mixed'
+  }
+  const key = buildObjectKey(folder, user.id, contentType, accessLevel, profileMediaReview)
 
   const client = new S3Client({
     region: 'auto',
@@ -419,7 +426,7 @@ export async function POST(request: Request) {
     const uploadUrl = await getSignedUrl(client, command, {
       expiresIn: PRESIGNED_URL_EXPIRES_IN_SECONDS,
     })
-    const publicUrl = accessLevel === 'public' ? buildPublicUrl(publicBaseUrl, key) : null
+    const publicUrl = accessLevel === 'public' && !profileMediaReview ? buildPublicUrl(publicBaseUrl, key) : null
 
     console.info('[R2Presign] Upload preparado:', {
       fileName: body.fileName,
@@ -430,6 +437,7 @@ export async function POST(request: Request) {
       status: 200,
       hasUploadUrl: Boolean(uploadUrl),
       accessLevel,
+      requiresReview: profileMediaReview,
       hasPublicUrl: Boolean(publicUrl),
       hasKey: Boolean(key),
     })

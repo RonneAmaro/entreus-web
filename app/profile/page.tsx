@@ -55,6 +55,7 @@ type Profile = {
   vip_status?: string | null
   vip_expires_at?: string | null
   profile_theme?: string | null
+  profile_content_mode?: 'general' | 'adult' | 'mixed'
 }
 
 type UserBadgeRow = {
@@ -145,6 +146,8 @@ type ProfileMediaPresignData = {
   uploadUrl?: string
   publicUrl?: string
   key?: string
+  storageProvider?: string
+  requiresReview?: boolean
   contentType?: string
   message?: string
   error?: string
@@ -156,7 +159,7 @@ const PROFILE_MEDIA_FOLDERS: Record<ProfileMediaKind, string> = {
 }
 
 const PROFILE_SELECT_WITH_THEME =
-  'id, username, display_name, bio, avatar_url, banner_url, country, city, state, website_url, website_title, birth_date, show_sensitive_content, is_minor, parental_consent_status, wants_18_plus, age_verification_status, age_verified_at, vip_status, vip_expires_at, profile_theme'
+  'id, username, display_name, bio, avatar_url, banner_url, country, city, state, website_url, website_title, birth_date, show_sensitive_content, is_minor, parental_consent_status, wants_18_plus, age_verification_status, age_verified_at, vip_status, vip_expires_at, profile_theme, profile_content_mode'
 const PROFILE_SELECT_FALLBACK =
   'id, username, display_name, bio, avatar_url, banner_url, country, city, state, website_url, website_title, birth_date, show_sensitive_content, is_minor, parental_consent_status, wants_18_plus, age_verification_status, age_verified_at, vip_status, vip_expires_at'
 const POST_SELECT_PAID_FIELDS = `
@@ -338,7 +341,7 @@ export default function ProfilePage() {
           .maybeSingle()
 
         data = fallbackResult.data
-          ? { ...fallbackResult.data, profile_theme: 'default' }
+          ? { ...fallbackResult.data, profile_theme: 'default', profile_content_mode: 'general' as const }
           : null
         error = fallbackResult.error
       }
@@ -369,6 +372,7 @@ export default function ProfilePage() {
         age_verification_status: 'not_started',
         age_verified_at: null,
         profile_theme: 'default',
+        profile_content_mode: 'general',
       }
 
       setProfile(loadedProfile)
@@ -555,9 +559,8 @@ export default function ProfilePage() {
     return Boolean(
       data?.ok &&
         typeof data.uploadUrl === 'string' &&
-        typeof data.publicUrl === 'string' &&
         typeof data.key === 'string' &&
-        data.key.startsWith(`${folder}/${userId}/`) &&
+        (data.key.startsWith(`${folder}/${userId}/`) || data.key.startsWith(`protected/profile-media/${userId}/`)) &&
         data.contentType === file.type,
     )
   }
@@ -595,7 +598,7 @@ export default function ProfilePage() {
       const uploadUrl = presignData?.uploadUrl
       const publicUrl = presignData?.publicUrl
 
-      if (typeof uploadUrl !== 'string' || typeof publicUrl !== 'string') {
+      if (typeof uploadUrl !== 'string' || (!presignData?.requiresReview && typeof publicUrl !== 'string')) {
         setMessage(
           kind === 'avatar'
             ? t('profile.messages.uploadAvatarError')
@@ -621,7 +624,20 @@ export default function ProfilePage() {
         return null
       }
 
-      return publicUrl
+      const validPresignData = presignData as ProfileMediaPresignData
+      if (validPresignData.requiresReview) {
+        const submissionResponse = await fetch('/api/profile/media-submissions', {
+          method: 'POST', headers: authHeaders,
+          body: JSON.stringify({ mediaType: kind, storageKey: validPresignData.key }),
+        })
+        const submissionData = await submissionResponse.json().catch(() => null)
+        if (!submissionResponse.ok) {
+          setMessage(submissionData?.error || 'Nao foi possivel enviar a imagem para analise.')
+          return null
+        }
+        return { requiresReview: true, publicUrl: null }
+      }
+      return { requiresReview: false, publicUrl: publicUrl as string }
     } catch {
       setMessage(
         kind === 'avatar'
@@ -1030,17 +1046,22 @@ export default function ProfilePage() {
     const previewUrl = URL.createObjectURL(file)
     setAvatarPreview(previewUrl)
 
-    const publicUrl = await uploadProfileMediaToR2(file, 'avatar')
+    const uploadResult = await uploadProfileMediaToR2(file, 'avatar')
 
-    if (!publicUrl) {
+    if (!uploadResult) {
       setUploadingAvatar(false)
       return
     }
 
-    setAvatarUrl(publicUrl)
-    setAvatarPreview(publicUrl)
+    if (uploadResult.requiresReview) {
+      setAvatarPreview(profile?.avatar_url || '')
+      setMessage('Sua nova imagem esta em analise. A imagem publica atual continuara visivel ate a conclusao.')
+    } else {
+      setAvatarUrl(uploadResult.publicUrl || '')
+      setAvatarPreview(uploadResult.publicUrl || '')
+      setMessage(t('profile.messages.avatarUpdated'))
+    }
     setUploadingAvatar(false)
-    setMessage(t('profile.messages.avatarUpdated'))
   }
 
   async function handleBannerSelect(file: File | null) {
@@ -1066,17 +1087,22 @@ export default function ProfilePage() {
     const previewUrl = URL.createObjectURL(file)
     setBannerPreview(previewUrl)
 
-    const publicUrl = await uploadProfileMediaToR2(file, 'banner')
+    const uploadResult = await uploadProfileMediaToR2(file, 'banner')
 
-    if (!publicUrl) {
+    if (!uploadResult) {
       setUploadingBanner(false)
       return
     }
 
-    setBannerUrl(publicUrl)
-    setBannerPreview(publicUrl)
+    if (uploadResult.requiresReview) {
+      setBannerPreview(profile?.banner_url || '')
+      setMessage('Sua nova imagem esta em analise. A imagem publica atual continuara visivel ate a conclusao.')
+    } else {
+      setBannerUrl(uploadResult.publicUrl || '')
+      setBannerPreview(uploadResult.publicUrl || '')
+      setMessage(t('profile.messages.bannerUpdated'))
+    }
     setUploadingBanner(false)
-    setMessage(t('profile.messages.bannerUpdated'))
   }
 
   async function handleSaveProfile(e: React.FormEvent) {
@@ -1654,6 +1680,12 @@ export default function ProfilePage() {
         {isMinor && parentalConsentDisplayStatus !== 'approved' && (
           <div className="mt-5 rounded-3xl border border-red-300/50 bg-red-50 px-5 py-4 text-sm font-semibold leading-6 text-red-800 shadow-sm dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-200">
             Seu acesso completo esta bloqueado ate a autorizacao do responsavel.
+          </div>
+        )}
+
+        {(profile?.profile_content_mode === 'adult' || profile?.profile_content_mode === 'mixed') && (
+          <div className="mt-5 rounded-2xl border border-amber-300/50 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
+            Avatar e capa aparecem publicamente. Use imagens adequadas para visualizacao geral. Conteudo explicito deve ser publicado somente na area 18+.
           </div>
         )}
 
