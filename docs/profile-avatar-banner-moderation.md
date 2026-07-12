@@ -18,6 +18,8 @@ Estados: `pending_review`, `approved`, `rejected`, `change_requested` e `cancell
 
 `/admin/profile-media` usa APIs autenticadas com headers privados completos e sem cache. A listagem remove bucket e storage key do resultado e fornece somente uma signed URL R2 temporaria (5 a 15 minutos) para preview. Aprovar, recusar e pedir troca exigem exatamente o papel `admin`, a mesma regra de `lib/admin.ts`; recusa/troca exigem motivo.
 
+A rota visual usa um guard cliente porque a autenticacao atual esta em `localStorage`. Seu estado inicial e fechado: enquanto a API administrativa nao retorna `200`, fila, usuarios, previews e botoes nao sao renderizados. `401` redireciona para login, `403` para o feed e outras falhas exibem apenas um erro neutro. A seguranca dos dados e das acoes administrativas e garantida pelas Route Handlers server-side, que validam `auth.getUser()` e o papel no banco; migracao global para cookies/SSR fica em pacote separado.
+
 Na aprovacao, a API executa novo `HeadObject` e copia para `profile-media/public/<user>/<uuid>` com extensao derivada do MIME validado (`.jpg`, `.png` ou `.webp`). `CopySource` codifica cada segmento sem perder as barras. Outro `HeadObject` confirma MIME e tamanho idênticos e maiores que zero. A URL publica final e formada exclusivamente no servidor; a base deve ser HTTPS, sem credenciais, query ou hash. A RPC nunca concatena a chave `protected/`, exige categoria `safe`, bloqueia a linha com `FOR UPDATE`, impede decisao dupla e atualiza perfil e submissao na mesma transacao.
 
 ## Armazenamento, RLS e seguranca
@@ -32,11 +34,23 @@ Todo envio adulto/misto cai em `pending_review`. Uma futura interface em `lib/mo
 
 ## Teste manual
 
-1. Entrar com perfil `mixed`, enviar avatar e confirmar `pending_review`.
-2. Em janela anonima, confirmar que o avatar anterior continua.
-3. Como admin, abrir `/admin/profile-media`, confirmar preview temporario e aprovar.
-4. Reabrir o perfil publico e confirmar o novo avatar.
-5. Enviar capa, recusar com motivo e confirmar que a capa anterior continua.
-6. Confirmar que o dono ve o motivo e outro usuario nao ve a submissao.
-7. No Network, confirmar ausencia de storage key/bucket nas respostas de usuario e admin e `Cache-Control: private, no-store`.
-8. Confirmar que o upload nao ativa 18+, nao altera posts e que decisao repetida falha.
+Use duas contas separadas: um criador `mixed` ou `adult` e um administrador.
+
+1. Entrar como criador.
+2. Enviar um avatar JPEG e confirmar a mensagem de imagem em analise e o estado `pending_review`.
+3. Abrir o perfil publico em janela anonima e confirmar que o avatar anterior continua.
+4. Entrar como administrador em outra sessao.
+5. Abrir `/admin/profile-media` e confirmar que o preview usa URL temporaria.
+6. Aprovar com categoria `safe`.
+7. Reabrir o perfil publico anonimo e confirmar o avatar atualizado pela copia `profile-media/public/`.
+8. Voltar ao criador e enviar uma capa WebP.
+9. Como admin, recusar com categoria `prohibited` e motivo.
+10. Confirmar que a capa anterior permanece e que o criador ve o motivo.
+11. Enviar outra capa e usar `Pedir troca` com categoria `review` e orientacao.
+12. Confirmar `change_requested`, preservacao da capa e possibilidade de novo envio.
+13. No Network, conferir `Cache-Control`, `Pragma`, `Expires` e `Vary` nas tres APIs de moderacao.
+14. Confirmar que os payloads nao exibem bucket, storage keys, tokens, `CopySource` ou secrets.
+15. Tentar abrir diretamente a URL publica correspondente ao prefixo `protected/profile-media/` e confirmar bloqueio anonimo.
+16. Confirmar que usuario comum e cliente publico nao acessam a fila, tabelas ou RPCs e que uma segunda decisao da mesma submissao recebe conflito.
+
+Sem fixtures locais de Supabase/R2, aprovacao real, concorrencia no PostgreSQL e isolamento do prefixo protegido permanecem verificacoes manuais obrigatorias. O pacote futuro de orfaos deve cobrir retencao, tentativas de exclusao segura e trilha de auditoria; esta versao apenas registra o objeto para limpeza posterior.
