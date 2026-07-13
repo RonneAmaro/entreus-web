@@ -113,19 +113,21 @@ describe('profile media moderation', () => {
     expect(() => validateProfileMediaObject({ ContentType: 'text/html', ContentLength: 10 }, 'avatar')).toThrow()
     expect(() => validateProfileMediaObject({ ContentType: 'image/svg+xml', ContentLength: 10 }, 'avatar')).toThrow()
     expect(() => validateProfileMediaObject({ ContentType: 'image/png', ContentLength: 0 }, 'avatar')).toThrow()
-    expect(buildApprovedProfileMediaKey('user-a', 'protected/profile-media/user-a/deceptive.svg', 'image/jpeg')).toMatch(/\.jpg$/)
+    const userId = '11111111-1111-4111-8111-111111111111'
+    expect(buildApprovedProfileMediaKey(userId, `protected/profile-media/${userId}/deceptive.svg`, 'image/jpeg')).toMatch(/\.jpg$/)
   })
   it('URL-encodes every CopySource segment while preserving path separators', () => {
     expect(buildR2CopySource('my bucket', 'folder/file name+.jpg')).toBe('my%20bucket/folder/file%20name%2B.jpg')
     expect(buildR2CopySource('bucket', 'pasta/ação 世界.webp')).toBe('bucket/pasta/a%C3%A7%C3%A3o%20%E4%B8%96%E7%95%8C.webp')
   })
   it('accepts only a clean HTTPS public base and matching approved key', () => {
-    const key = 'profile-media/public/user-a/file.jpg'
-    expect(buildApprovedProfileMediaUrl('https://media.example.com/base/', 'user-a', key)).toBe(`https://media.example.com/base/${key}`)
-    expect(() => buildApprovedProfileMediaUrl('http://media.example.com', 'user-a', key)).toThrow()
-    expect(() => buildApprovedProfileMediaUrl('https://user:pass@media.example.com', 'user-a', key)).toThrow()
-    expect(() => buildApprovedProfileMediaUrl('https://media.example.com?x=1', 'user-a', key)).toThrow()
-    expect(() => buildApprovedProfileMediaUrl('https://media.example.com#x', 'user-a', key)).toThrow()
+    const userId = '11111111-1111-4111-8111-111111111111'
+    const key = `profile-media/public/${userId}/22222222-2222-4222-8222-222222222222.jpg`
+    expect(buildApprovedProfileMediaUrl('https://media.example.com/base/', userId, key)).toBe(`https://media.example.com/base/${key}`)
+    expect(() => buildApprovedProfileMediaUrl('http://media.example.com', userId, key)).toThrow()
+    expect(() => buildApprovedProfileMediaUrl('https://user:pass@media.example.com', userId, key)).toThrow()
+    expect(() => buildApprovedProfileMediaUrl('https://media.example.com?x=1', userId, key)).toThrow()
+    expect(() => buildApprovedProfileMediaUrl('https://media.example.com#x', userId, key)).toThrow()
     expect(() => buildApprovedProfileMediaUrl('https://media.example.com', 'other-user', key)).toThrow()
   })
   it('requires safe category for approval and preserves orphan records', () => {

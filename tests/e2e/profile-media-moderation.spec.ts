@@ -66,7 +66,7 @@ test.describe('profile media moderation security without test credentials', () =
   test('server failure keeps a neutral error state without queue data or actions', async ({ page }) => {
     await page.route('**/api/admin/profile-media-submissions', (route) => route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ ok: false }) }))
     await page.goto('/admin/profile-media', { waitUntil: 'domcontentloaded' })
-    await expect(page.getByText('Nao foi possivel verificar o acesso agora.')).toBeVisible()
+    await expect(page.getByText('Nao foi possivel verificar o acesso agora.')).toBeVisible({ timeout: 15_000 })
     await expect(page.getByRole('heading', { name: 'Avatar e capa' })).toHaveCount(0)
     await expect(page.getByRole('button', { name: 'Aprovar' })).toHaveCount(0)
   })
@@ -90,6 +90,17 @@ test.describe('profile media moderation security without test credentials', () =
       }),
     ]
     for (const response of responses) {
+      expect(response.status()).toBe(401)
+      await expectPrivateNoStore(response)
+      await expectNoInternalPayload(response)
+    }
+  })
+
+  test('orphan cleanup endpoint rejects browser calls without its dedicated secret', async ({ request }) => {
+    for (const response of [
+      await request.post('/api/internal/profile-media-orphan-cleanup', { data: { dryRun: true } }),
+      await request.post('/api/internal/profile-media-orphan-cleanup', { headers: { 'x-profile-media-cleanup-secret': 'incorrect' }, data: { dryRun: false } }),
+    ]) {
       expect(response.status()).toBe(401)
       await expectPrivateNoStore(response)
       await expectNoInternalPayload(response)

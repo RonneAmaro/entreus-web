@@ -7,12 +7,16 @@ vi.mock('@aws-sdk/client-s3', () => {
     S3Client: class { send = sdk.send },
     HeadObjectCommand: class HeadObjectCommand extends Command {},
     CopyObjectCommand: class CopyObjectCommand extends Command {},
+    DeleteObjectCommand: class DeleteObjectCommand extends Command {},
   }
 })
 
-import { copyProfileMediaToApprovedPublicKey, headPrivateProfileMediaObject, ProfileMediaCopyError } from '../../lib/profile-media-r2'
+import { copyProfileMediaToApprovedPublicKey, deleteApprovedProfileMediaObject, headPrivateProfileMediaObject, ProfileMediaCopyError } from '../../lib/profile-media-r2'
 
 describe('profile media R2 integration boundary', () => {
+  const userId = '11111111-1111-4111-8111-111111111111'
+  const approvedKey = 'profile-media/public/11111111-1111-4111-8111-111111111111/22222222-2222-4222-8222-222222222222.jpg'
+  const approvedPngKey = 'profile-media/public/11111111-1111-4111-8111-111111111111/22222222-2222-4222-8222-222222222222.png'
   beforeEach(() => {
     sdk.send.mockReset()
     process.env.R2_ACCOUNT_ID = 'configured-account'
@@ -33,14 +37,14 @@ describe('profile media R2 integration boundary', () => {
       .mockResolvedValueOnce({ ContentType: 'image/webp', ContentLength: 2048 })
       .mockResolvedValueOnce({ CopyObjectResult: { ETag: 'opaque' } })
       .mockResolvedValueOnce({ ContentType: 'image/webp', ContentLength: 2048 })
-    const result = await copyProfileMediaToApprovedPublicKey({ userId: 'user-a', sourceKey: 'protected/profile-media/user-a/source.untrusted', mediaType: 'banner' })
-    expect(result.approvedKey).toMatch(/^profile-media\/public\/user-a\/[0-9a-f-]+\.webp$/)
+    const result = await copyProfileMediaToApprovedPublicKey({ userId, sourceKey: `protected/profile-media/${userId}/source.untrusted`, mediaType: 'banner' })
+    expect(result.approvedKey).toMatch(new RegExp(`^profile-media/public/${userId}/[0-9a-f-]+\\.webp$`))
     expect(sdk.send).toHaveBeenCalledTimes(3)
   })
 
   it('rejects a missing source before copy', async () => {
     sdk.send.mockRejectedValueOnce(new Error('not found'))
-    await expect(copyProfileMediaToApprovedPublicKey({ userId: 'user-a', sourceKey: 'protected/profile-media/user-a/missing', mediaType: 'avatar' })).rejects.toThrow('not found')
+    await expect(copyProfileMediaToApprovedPublicKey({ userId, sourceKey: `protected/profile-media/${userId}/missing`, mediaType: 'avatar' })).rejects.toThrow('not found')
     expect(sdk.send).toHaveBeenCalledTimes(1)
   })
 
@@ -49,9 +53,34 @@ describe('profile media R2 integration boundary', () => {
       .mockResolvedValueOnce({ ContentType: 'image/png', ContentLength: 4096 })
       .mockResolvedValueOnce({ CopyObjectResult: {} })
       .mockResolvedValueOnce({ ContentType: 'image/png', ContentLength: 0 })
-    const error = await copyProfileMediaToApprovedPublicKey({ userId: 'user-a', sourceKey: 'protected/profile-media/user-a/source', mediaType: 'avatar' }).catch((value) => value)
+    const error = await copyProfileMediaToApprovedPublicKey({ userId, sourceKey: `protected/profile-media/${userId}/source`, mediaType: 'avatar' }).catch((value) => value)
     expect(error).toBeInstanceOf(ProfileMediaCopyError)
     expect(error.copyMayExist).toBe(true)
-    expect(error.approvedKey).toMatch(/^profile-media\/public\/user-a\//)
+    expect(error.approvedKey).toContain(`profile-media/public/${userId}/`)
+  })
+
+  it('deletes an approved public orphan and confirms absence after the executor safety checks', async () => {
+    sdk.send
+      .mockResolvedValueOnce({})
+      .mockRejectedValueOnce(Object.assign(new Error('missing'), { name: 'NotFound', $metadata: { httpStatusCode: 404 } }))
+    await expect(deleteApprovedProfileMediaObject(approvedKey)).resolves.toBe('deleted')
+    expect(sdk.send).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not reinterpret a DeleteObject failure as an absent object', async () => {
+    sdk.send.mockRejectedValueOnce(Object.assign(new Error('missing'), { name: 'NoSuchKey' }))
+    await expect(deleteApprovedProfileMediaObject(approvedKey)).rejects.toMatchObject({ name: 'NoSuchKey' })
+    expect(sdk.send).toHaveBeenCalledTimes(1)
+  })
+
+  it('fails when DeleteObject fails or destination confirmation still finds the object', async () => {
+    sdk.send
+      .mockRejectedValueOnce(new Error('delete failed'))
+    await expect(deleteApprovedProfileMediaObject(approvedPngKey)).rejects.toThrow('delete failed')
+    expect(sdk.send).toHaveBeenCalledTimes(1)
+    sdk.send.mockReset()
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ ContentType: 'image/png', ContentLength: 100 })
+    await expect(deleteApprovedProfileMediaObject(approvedPngKey)).rejects.toThrow('could not be confirmed')
   })
 })

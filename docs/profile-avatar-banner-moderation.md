@@ -26,7 +26,7 @@ Na aprovacao, a API executa novo `HeadObject` e copia para `profile-media/public
 
 `profile_media_submissions` mantém metadados e historico minimo. Nao existem policies de tabela para usuarios autenticados, inclusive admins no navegador: leitura e toda escrita passam pelas APIs server-side com service role. O bucket nao integra a linha nem pode ser definido pelo cliente; a API/RPC definem usuario, provider, MIME verificado, chave e status. Credenciais R2, service role, bucket, storage key e URL privada permanente nao sao retornados.
 
-A migration e apenas revisavel e nao deve ser aplicada automaticamente. Antes de aplica-la, confirmar que `public.is_admin()` existe e configurar o ambiente server-side usado pela rota com a base publica R2 ja existente. Arquivos cancelados/recusados nao sao apagados automaticamente. Se a copia publica terminar mas a RPC falhar, a API registra a chave apenas no banco em `profile_media_copy_orphans`, sem expo-la em resposta ou log. Limpeza segura e politica de retencao ficam como trabalho futuro.
+A migration e apenas revisavel e nao deve ser aplicada automaticamente. Antes de aplica-la, confirmar que `public.is_admin()` existe e configurar o ambiente server-side usado pela rota com a base publica R2 ja existente. Arquivos cancelados/recusados nao sao apagados automaticamente. Se a copia publica terminar mas a RPC falhar, a API registra a chave apenas no banco em `profile_media_copy_orphans`, sem expo-la em resposta ou log. O ciclo de retencao, validacao, retry e exclusao confirmada esta em `docs/profile-media-orphan-cleanup.md`.
 
 ## Fallback manual e evolucao
 
