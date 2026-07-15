@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/internal/cron/profile-media-orphan-dry-run",
+      "schedule": "30 3 * * *"
+    }
+  ]
+}

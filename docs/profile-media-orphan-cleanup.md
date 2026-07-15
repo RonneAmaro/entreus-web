@@ -50,7 +50,7 @@ npm.cmd run cleanup:profile-media-orphans -- --execute --limit=10
 
 O script nao carrega `.env.local`: recebe somente as duas variaveis acima pelo ambiente do processo. A URL exige HTTPS, exceto HTTP para localhost/127.0.0.1/[::1], sem credenciais, query ou hash e com o caminho interno exato. Assim o segredo nunca e enviado por HTTP remoto. A rota usa segredo proprio e comparacao por digest com `timingSafeEqual`; nao aceita service role, chave R2 ou login admin como segredo. O modo destrutivo exige `--execute`.
 
-Nao ha cron configurado neste pacote. Um agendador futuro pode chamar a mesma rota, mantendo segredo dedicado, lote pequeno e observabilidade por contadores.
+O dry run diario automatizado usa uma rota GET exclusiva e nunca chama o modo destrutivo desta rota manual. Consulte [Automacao do dry run de midias orfas de perfil](./profile-media-orphan-cleanup-automation.md) para agenda, autenticacao, lock, migration manual, operacao e rollback.
 
 ## Migration, rollback e riscos
 
