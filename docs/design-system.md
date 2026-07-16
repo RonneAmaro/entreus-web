@@ -1,5 +1,9 @@
 # Design visual do EntreUS
 
+## Expressões
+
+Emojis, GIFs e stickers usam o `ExpressionPicker` compartilhado e os tokens de surface, border e brand. Tabs expõem texto e `aria-selected`, alvos têm ao menos 44 px, mobile usa sheet e desktop painel. `ExpressionAttachment` limita tamanho, preserva proporção, alt, fallback e preview estático com redução de movimento. Não criar seletores específicos por tela; consulte `docs/unified-expressions.md`.
+
 ## Marca
 
 `EntreUSWordmark` é a representação visual universal do nome. “Entre” herda a cor principal do contexto; “US” usa `text-blue-600` no tema claro e `dark:text-blue-400` no escuro. A marca não quebra e é anunciada como uma única palavra. Contextos técnicos, metadados, ARIA, `alt`, URLs e texto copiado mantêm `EntreUS` em texto simples.

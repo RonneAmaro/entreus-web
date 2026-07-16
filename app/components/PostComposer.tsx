@@ -72,6 +72,9 @@ import {
 } from '@/lib/post-composer-ux'
 import type { ProfileContentMode } from '@/lib/profile-content-mode'
 import { claimSubmitGuard, releaseSubmitGuard, type SubmitGuard } from '@/lib/post-submit-guard'
+import ExpressionPicker from './expressions/ExpressionPicker'
+import ExpressionAttachment from './expressions/ExpressionAttachment'
+import type { ExpressionAsset } from '@/lib/expressions/expression-types'
 
 type VisibilityType = 'public' | 'followers' | 'private'
 
@@ -118,6 +121,7 @@ type PostComposerProps = {
     mediaFiles: File[]
     isPaid: boolean
     priceItacash: number | null
+    expression: ExpressionAsset | null
   }) => boolean | void | Promise<boolean | void>
 }
 
@@ -342,6 +346,9 @@ export default function PostComposer({
   const [aiFeedback, setAiFeedback] = useState<AiFeedback | null>(null)
   const [activeAiMode, setActiveAiMode] = useState<AiAssistMode | null>(null)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const [expression, setExpression] = useState<ExpressionAsset | null>(null)
+  const [expressionUserId, setExpressionUserId] = useState('signed-in')
+  const [expressionToken, setExpressionToken] = useState<string | null>(null)
   const [showMediaMenu, setShowMediaMenu] = useState(false)
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(DEFAULT_POST_COMPOSER_ADVANCED_OPEN)
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -351,6 +358,13 @@ export default function PostComposer({
   const [publishSuccessMessage, setPublishSuccessMessage] = useState('')
   const [submitLocked, setSubmitLocked] = useState(false)
   const isSubmitting = submitting || submitLocked
+
+  useEffect(() => {
+    void supabase.auth.getSession().then(({ data }) => {
+      setExpressionUserId(data.session?.user.id || 'signed-in')
+      setExpressionToken(data.session?.access_token || null)
+    })
+  }, [])
 
   const tryOpenIntentMediaPicker = useCallback((intent: ComposeIntent) => {
     const input =
@@ -1122,7 +1136,7 @@ export default function PostComposer({
         return
       }
 
-      if (!trimmedContent && media.length === 0) {
+      if (!trimmedContent && media.length === 0 && !expression) {
         setError('Escreva algo ou adicione uma foto ou video antes de publicar.')
         return
       }
@@ -1163,6 +1177,7 @@ export default function PostComposer({
         mediaFiles,
         isPaid: isPaidPost,
         priceItacash: paidPriceValidation.value,
+        expression,
       })
 
       if (result === false) {
@@ -1179,6 +1194,7 @@ export default function PostComposer({
       setPaidPostPrice('')
       setError('')
       setShowEmojiPicker(false)
+      setExpression(null)
       setShowMediaMenu(false)
       setShowAdvancedOptions(false)
       setMediaFeedback(null)
@@ -1439,6 +1455,7 @@ export default function PostComposer({
             placeholder={placeholderText}
             className="min-h-[76px] w-full resize-none border-0 bg-transparent px-0 py-2 text-lg text-zinc-900 outline-none placeholder:text-zinc-500 dark:text-zinc-100 dark:placeholder:text-zinc-500 sm:min-h-[92px] sm:text-xl"
           />
+          {expression && <div className="mt-3 flex items-start gap-2"><ExpressionAttachment expression={expression} /><button type="button" onClick={() => setExpression(null)} className="rounded-full border border-zinc-300 px-3 py-1 text-xs font-bold dark:border-zinc-700">Remover</button></div>}
 
           {media.length > 0 && (
             <div
@@ -1745,50 +1762,7 @@ export default function PostComposer({
                       <Smile className="h-5 w-5" />
                     </button>
 
-                    {showEmojiPicker && (
-                      <div className="absolute left-0 top-12 z-[10000] max-h-[52dvh] w-[min(20rem,calc(100vw-3rem))] overflow-y-auto rounded-[1.35rem] border border-blue-400/25 bg-zinc-950/95 p-3 shadow-2xl shadow-blue-950/30 ring-1 ring-white/10 backdrop-blur-xl sm:w-80">
-                        <div className="mb-2 flex items-center justify-between gap-3">
-                          <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-200">
-                            Emojis
-                          </p>
-
-                          <button
-                            type="button"
-                            onClick={() => setShowEmojiPicker(false)}
-                            className="flex h-7 w-7 items-center justify-center rounded-full text-zinc-400 transition hover:bg-white/10 hover:text-white"
-                            aria-label="Fechar emojis"
-                            title="Fechar emojis"
-                          >
-                            <X className="h-4 w-4" />
-                          </button>
-                        </div>
-
-                        <div className="space-y-3">
-                          {POST_EMOJI_GROUPS.map((group) => (
-                            <div key={group.title}>
-                              <p className="mb-1.5 text-[11px] font-bold text-zinc-400">
-                                {group.title}
-                              </p>
-
-                              <div className="grid grid-cols-6 gap-1.5">
-                                {group.emojis.map((emoji) => (
-                                  <button
-                                    key={`${group.title}-${emoji}`}
-                                    type="button"
-                                    onClick={() => insertEmoji(emoji)}
-                                    className="flex h-10 w-10 items-center justify-center rounded-full text-xl transition hover:scale-110 hover:bg-blue-500/20 focus:outline-none focus:ring-2 focus:ring-blue-400"
-                                    aria-label={`Inserir emoji ${emoji}`}
-                                    title={emoji}
-                                  >
-                                    {emoji}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+                    <ExpressionPicker open={showEmojiPicker} context="post" userId={expressionUserId} accessToken={expressionToken} onClose={() => setShowEmojiPicker(false)} onSelect={(asset) => asset.kind === 'emoji' ? insertEmoji(asset.providerId) : setExpression(asset)} returnFocusRef={textareaRef} />
                   </div>
 
                   <button

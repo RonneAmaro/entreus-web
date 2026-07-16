@@ -96,6 +96,9 @@ import {
   type ComposeIntent,
 } from '@/lib/compose-intent'
 import { getSafeProfileContentMode, type ProfileContentMode } from '@/lib/profile-content-mode'
+import type { ExpressionAsset } from '@/lib/expressions/expression-types'
+import ExpressionPicker from '../components/expressions/ExpressionPicker'
+import ExpressionAttachment from '../components/expressions/ExpressionAttachment'
 
 type VisibilityType = 'public' | 'followers' | 'private'
 type ComposerSubmitData = {
@@ -109,6 +112,7 @@ type ComposerSubmitData = {
   mediaFiles?: File[]
   isPaid?: boolean
   priceItacash?: number | null
+  expression?: ExpressionAsset | null
 }
 
 type CurrentProfile = {
@@ -174,6 +178,7 @@ type Post = ModeratedPostFields & {
   category: string | null
   created_at: string
   user_id: string
+  expression?: ExpressionAsset | null
   image_url: string | null
   video_url: string | null
   visibility: VisibilityType
@@ -249,6 +254,7 @@ type Comment = {
   created_at: string
   profiles: ProfileSummary | null
   media?: CommentMedia[]
+  expression?: ExpressionAsset | null
 }
 
 type CommentRow = Omit<Comment, 'profiles'> & {
@@ -938,6 +944,7 @@ function FeedContent() {
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({})
   const [commentMediaDrafts, setCommentMediaDrafts] = useState<Record<string, CommentMediaDraft | null>>({})
   const [commentGifInputs, setCommentGifInputs] = useState<Record<string, string>>({})
+  const [commentExpressions, setCommentExpressions] = useState<Record<string, ExpressionAsset | null>>({})
   const [submittingCommentPostId, setSubmittingCommentPostId] = useState<string | null>(null)
   const [openGifPickerPostId, setOpenGifPickerPostId] = useState<string | null>(null)
   const [openCommentEmojiPickerPostId, setOpenCommentEmojiPickerPostId] = useState<string | null>(null)
@@ -1686,6 +1693,7 @@ function FeedContent() {
         post_id,
         user_id,
         content,
+        expression,
         created_at,
         profiles (
           username,
@@ -2877,6 +2885,7 @@ function FeedContent() {
     mediaFiles = [],
     isPaid = false,
     priceItacash = null,
+    expression = null,
   }: ComposerSubmitData) {
     if (!claimSubmitGuard(createPostGuardRef.current)) return false
 
@@ -2888,7 +2897,7 @@ function FeedContent() {
           ? mediaFiles
           : ([imageFile, videoFile].filter(Boolean) as File[])
 
-      if (!content.trim() && finalMediaFiles.length === 0) {
+      if (!content.trim() && finalMediaFiles.length === 0 && !expression) {
         setMessage(t('feed.messages.emptyPost'))
         return false
       }
@@ -2968,6 +2977,7 @@ function FeedContent() {
         is_sensitive: category === '18plus' || normalizedRating !== 'safe',
         is_paid: isPaid,
         price_itacash: isPaid ? paidPriceValidation.value : null,
+        expression,
       }
 
       let { data: insertedPost, error } = await supabase
@@ -3135,8 +3145,9 @@ function FeedContent() {
   async function handleCreateComment(postId: string) {
     const text = commentInputs[postId]?.trim()
     const mediaDraft = commentMediaDrafts[postId]
+    const expression = commentExpressions[postId] || null
 
-    if (!text && !mediaDraft) {
+    if (!text && !mediaDraft && !expression) {
       setMessage(t('feed.messages.emptyComment'))
       return
     }
@@ -3158,6 +3169,7 @@ function FeedContent() {
         post_id: postId,
         user_id: userId,
         content: text || '',
+        expression,
       })
       .select('id')
       .single()
@@ -3203,6 +3215,7 @@ function FeedContent() {
       [postId]: '',
     }))
     removeCommentMediaDraft(postId)
+    setCommentExpressions((current) => ({ ...current, [postId]: null }))
     setCommentGifInputs((prev) => ({
       ...prev,
       [postId]: '',
@@ -3484,23 +3497,10 @@ function FeedContent() {
   }
 
   function handleAddGifUrl(postId: string) {
-    const gifUrl = (commentGifInputs[postId] || '').trim()
-
-    if (gifUrl.length > 500 || !isSafeHttpMediaUrl(gifUrl)) {
+    if (postId) {
       setMessage('Cole um link de GIF válido começando com http:// ou https://.')
       return
     }
-
-    removeCommentMediaDraft(postId)
-    setCommentMediaDrafts((current) => ({
-      ...current,
-      [postId]: {
-        url: gifUrl,
-        type: 'gif',
-        source: 'gif-url',
-      },
-    }))
-    setOpenGifPickerPostId(null)
   }
 
   function handleOpenReplyModal(postId: string) {
@@ -3961,7 +3961,24 @@ function FeedContent() {
                     </div>
                   )}
 
-                  {openCommentEmojiPickerPostId === replyModalPost.id && (
+                  {commentExpressions[replyModalPost.id] && (
+                    <div className="mb-3 flex items-start gap-2">
+                      <ExpressionAttachment expression={commentExpressions[replyModalPost.id]!} compact />
+                      <button type="button" onClick={() => setCommentExpressions((current) => ({ ...current, [replyModalPost.id]: null }))} className="rounded-full border border-zinc-300 px-3 py-1 text-xs font-bold dark:border-zinc-700">Remover</button>
+                    </div>
+                  )}
+
+                  <div className="relative">
+                    <ExpressionPicker
+                      open={openCommentEmojiPickerPostId === replyModalPost.id || openGifPickerPostId === replyModalPost.id}
+                      context="comment"
+                      userId={userId}
+                      onClose={() => { setOpenCommentEmojiPickerPostId(null); setOpenGifPickerPostId(null) }}
+                      onSelect={(asset) => asset.kind === 'emoji' ? handleInsertCommentEmoji(replyModalPost.id, asset.providerId) : setCommentExpressions((current) => ({ ...current, [replyModalPost.id]: asset }))}
+                    />
+                  </div>
+
+                  {openCommentEmojiPickerPostId === '__legacy-disabled__' && replyModalPost !== null && (
                     <div className="mb-3 max-h-[45vh] overflow-hidden rounded-[1.75rem] border border-zinc-200/70 bg-white/95 shadow-2xl shadow-black/15 backdrop-blur-xl dark:border-zinc-700/70 dark:bg-zinc-950/95 sm:max-h-[260px]">
                       <div className="border-b border-zinc-200/70 bg-gradient-to-br from-blue-50 via-white to-purple-50 p-3 dark:border-zinc-800 dark:from-blue-950/30 dark:via-zinc-950 dark:to-purple-950/30">
                         <div className="flex items-center justify-between gap-3">
@@ -4030,7 +4047,7 @@ function FeedContent() {
                     </div>
                   )}
 
-                  {openGifPickerPostId === replyModalPost.id && (
+                  {openGifPickerPostId === '__legacy-disabled__' && replyModalPost !== null && (
                     <div className="mb-3 rounded-[1.5rem] border border-blue-400/20 bg-zinc-950/95 p-3 shadow-2xl shadow-blue-950/20 ring-1 ring-white/10">
                       <label className="text-xs font-black uppercase tracking-[0.14em] text-blue-200">
                         Cole o link do GIF
@@ -4827,6 +4844,7 @@ function FeedContent() {
                                       ))}
                                     </div>
                                   )}
+                                  {!isEditingThisComment && comment.expression && <div className="mt-3"><ExpressionAttachment expression={comment.expression} compact /></div>}
 
                                   <div className="mt-2 flex items-center gap-3">
                                     <button

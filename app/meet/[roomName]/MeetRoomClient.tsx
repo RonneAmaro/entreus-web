@@ -1,6 +1,9 @@
 'use client'
 
 import { supabase } from '@/lib/supabase'
+import ExpressionPicker from '../../components/expressions/ExpressionPicker'
+import ExpressionAttachment from '../../components/expressions/ExpressionAttachment'
+import type { ExpressionAsset } from '@/lib/expressions/expression-types'
 import {
   MEET_OPTIONS_PANEL_ID,
   MEET_RECORDING_PANEL_ITEM,
@@ -187,6 +190,7 @@ type MeetDataMessage =
         mimeType: string
         size: number
       } | null
+      expression?: ExpressionAsset | null
     }
   | {
       type: 'reaction'
@@ -597,6 +601,7 @@ function PortugueseConference({
   const [chatDraft, setChatDraft] = useState('')
   const [chatUnread, setChatUnread] = useState(false)
   const [showChatEmojiPanel, setShowChatEmojiPanel] = useState(false)
+  const [chatExpression, setChatExpression] = useState<ExpressionAsset | null>(null)
   const [chatAttachmentUploading, setChatAttachmentUploading] = useState(false)
   const [chatAttachmentError, setChatAttachmentError] = useState<string | null>(null)
   const [showReactions, setShowReactions] = useState(false)
@@ -817,7 +822,7 @@ function PortugueseConference({
 
   async function sendChatMessage() {
     const text = chatDraft.trim().slice(0, MAX_CHAT_MESSAGE_LENGTH)
-    if (!text) return
+    if (!text && !chatExpression) return
 
     const draftMessage: ChatMessage = {
       type: 'chat',
@@ -828,9 +833,11 @@ function PortugueseConference({
       senderIdentity: localParticipant?.identity || null,
       sentAt: Date.now(),
       attachment: null,
+      expression: chatExpression,
     }
 
     setChatDraft('')
+    setChatExpression(null)
     setShowChatEmojiPanel(false)
 
     let message = draftMessage
@@ -847,6 +854,7 @@ function PortugueseConference({
             senderName: draftMessage.senderName,
             senderIdentity: draftMessage.senderIdentity,
             type: 'text',
+            expression: draftMessage.expression,
           }),
         })
         const data = (await response.json()) as { ok: boolean; message?: ChatMessage }
@@ -1786,7 +1794,10 @@ function PortugueseConference({
                             </button>
                           </div>
                         ) : (
-                          <p className="break-words text-sm leading-6 text-zinc-200">{renderMessageText(message.text)}</p>
+                          <>
+                            {message.text && <p className="break-words text-sm leading-6 text-zinc-200">{renderMessageText(message.text)}</p>}
+                            {message.expression && <div className="mt-2"><ExpressionAttachment expression={message.expression} compact /></div>}
+                          </>
                         )}
                       </div>
                     ))
@@ -1824,7 +1835,8 @@ function PortugueseConference({
                       <button type="button" onClick={() => setShowChatEmojiPanel((current) => !current)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-blue-300/15 bg-white/[0.06] text-zinc-100 transition hover:bg-blue-500/15" aria-label="Adicionar emoji" title="Adicionar emoji">
                         <Smile className="h-4 w-4" />
                       </button>
-                      {showChatEmojiPanel ? (
+                      <ExpressionPicker open={showChatEmojiPanel} context="meet" userId={localParticipant?.identity || 'meet-user'} onClose={() => setShowChatEmojiPanel(false)} onSelect={(asset) => asset.kind === 'emoji' ? insertChatEmoji(asset.providerId) : setChatExpression(asset)} />
+                      {false && showChatEmojiPanel ? (
                         <div className="absolute bottom-12 right-0 z-50 grid w-48 grid-cols-5 gap-1 rounded-2xl border border-blue-300/20 bg-black/95 p-2 shadow-2xl shadow-black/45 ring-1 ring-blue-100/10 backdrop-blur-2xl">
                           {CHAT_EMOJIS.map((emoji) => (
                             <button key={emoji} type="button" onClick={() => insertChatEmoji(emoji)} className="flex h-9 w-9 items-center justify-center rounded-xl text-lg transition hover:bg-blue-500/20" aria-label={`Inserir emoji ${emoji}`} title={`Inserir emoji ${emoji}`}>
@@ -1834,7 +1846,7 @@ function PortugueseConference({
                         </div>
                       ) : null}
                     </div>
-                    <button type="submit" disabled={!chatDraft.trim()} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50">
+                    <button type="submit" disabled={!chatDraft.trim() && !chatExpression} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50">
                       <Send className="h-4 w-4" />
                     </button>
                   </div>

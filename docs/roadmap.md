@@ -1,5 +1,9 @@
 # Roadmap oficial do EntreUS
 
+## Pacote 51 — Sistema unificado de emojis, GIFs e stickers
+
+Implementação preparada com picker compartilhado, APIs server-side, Tenor sob feature flag, posts/comentários/mensagens/Meet, migration incremental não aplicada e testes focados. Marcar como concluído somente após suíte integral, staging e aprovação visual desktop/mobile nos dois temas.
+
 Este documento consolida a sequência oficial de evolução do produto. Checklists, planos técnicos e guias operacionais em `docs/` continuam válidos em seus próprios contextos, mas não substituem este roadmap.
 
 ## Estado técnico atual

@@ -9,6 +9,8 @@ import {
   requireUser,
 } from '@/lib/meet-server'
 import { NextResponse } from 'next/server'
+import { validateExpressionSubmission } from '@/lib/expressions/expression-validation'
+import type { ExpressionAsset } from '@/lib/expressions/expression-types'
 
 const MAX_CHAT_MESSAGE_LENGTH = 500
 const MAX_CHAT_HISTORY_MESSAGES = 100
@@ -29,6 +31,7 @@ type ChatMessageRow = {
   attachment_path: string | null
   attachment_mime_type: string | null
   attachment_size: number | null
+  expression: ExpressionAsset | null
 }
 
 type CreateMessageBody = {
@@ -37,6 +40,7 @@ type CreateMessageBody = {
   senderName?: unknown
   senderIdentity?: unknown
   type?: unknown
+  expression?: unknown
 }
 
 function publicChatMessage(row: ChatMessageRow) {
@@ -55,6 +59,7 @@ function publicChatMessage(row: ChatMessageRow) {
           size: row.attachment_size || 0,
         }
       : null,
+    expression: row.expression || null,
   }
 }
 
@@ -117,7 +122,7 @@ export async function GET(request: Request, context: MessagesRouteContext) {
 
   const { data, error } = await access.supabase
     .from('meet_room_chat_messages')
-    .select('id, room_name, sender_name, sender_identity, content, created_at, type, attachment_name, attachment_path, attachment_mime_type, attachment_size')
+    .select('id, room_name, sender_name, sender_identity, content, created_at, type, attachment_name, attachment_path, attachment_mime_type, attachment_size, expression')
     .eq('room_id', access.room.id)
     .eq('room_name', access.room.room_name)
     .order('created_at', { ascending: false })
@@ -146,8 +151,9 @@ export async function POST(request: Request, context: MessagesRouteContext) {
     return jsonError('JSON inválido.', 400)
   }
 
-  const content = normalizeMessageContent(body.content)
-  if (!content) return jsonError('Mensagem vazia.', 400)
+  const content = normalizeMessageContent(body.content) || ''
+  const submission = validateExpressionSubmission(content, body.expression)
+  if (!submission.ok) return jsonError(submission.error, 400)
 
   const messageType = typeof body.type === 'string' ? body.type : 'text'
   if (messageType !== 'text') return jsonError('Tipo de mensagem inválido.', 400)
@@ -167,8 +173,9 @@ export async function POST(request: Request, context: MessagesRouteContext) {
       sender_name: senderName,
       content,
       type: 'text',
+      expression: submission.expression,
     })
-    .select('id, room_name, sender_name, sender_identity, content, created_at, type, attachment_name, attachment_path, attachment_mime_type, attachment_size')
+    .select('id, room_name, sender_name, sender_identity, content, created_at, type, attachment_name, attachment_path, attachment_mime_type, attachment_size, expression')
     .single()
 
   if (error) {

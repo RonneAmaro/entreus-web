@@ -38,6 +38,9 @@ import {
   X,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import ExpressionPicker from '../../components/expressions/ExpressionPicker'
+import ExpressionAttachment from '../../components/expressions/ExpressionAttachment'
+import type { ExpressionAsset } from '@/lib/expressions/expression-types'
 
 type CurrentProfile = {
   id: string
@@ -159,6 +162,7 @@ type MessageRow = {
   attachments?: MessageAttachment[]
   reactions?: MessageReaction[]
   replyTo?: MessageReplyPreview | null
+  expression?: ExpressionAsset | null
 }
 
 type MessageReplyPreview = {
@@ -745,6 +749,7 @@ export default function ConversationPage() {
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null)
   const [newMessage, setNewMessage] = useState('')
   const [openMessageEmojiPicker, setOpenMessageEmojiPicker] = useState(false)
+  const [messageExpression, setMessageExpression] = useState<ExpressionAsset | null>(null)
   const [messageEmojiSearch, setMessageEmojiSearch] = useState('')
   const [activeMessageEmojiCategory, setActiveMessageEmojiCategory] =
     useState<MessageEmojiCategoryId>('entreus')
@@ -2966,7 +2971,7 @@ export default function ConversationPage() {
     const content = newMessage.trim()
     const hasMedia = selectedMedia.length > 0
 
-    if ((!content && !hasMedia) || !userId || !conversationId || recordingAudio) return
+    if ((!content && !hasMedia && !messageExpression) || !userId || !conversationId || recordingAudio) return
 
     if (editingMessageId) {
       await handleSaveEditedMessage(editingMessageId, content)
@@ -2991,6 +2996,7 @@ export default function ConversationPage() {
         type: 'text',
         content: content || null,
         reply_to_message_id: replyingToMessage?.id || null,
+        expression: messageExpression,
       })
       .select('id, conversation_id, sender_id, content, type, call_type, call_status, call_duration_seconds, reply_to_message_id, edited_at, deleted_by, delivered_at, read_at, created_at, updated_at, deleted_at')
       .single()
@@ -3057,6 +3063,7 @@ export default function ConversationPage() {
     }
 
     setNewMessage('')
+    setMessageExpression(null)
     setReplyingToMessage(null)
     setOpenMessageEmojiPicker(false)
     setSelectedMedia([])
@@ -4666,6 +4673,7 @@ export default function ConversationPage() {
                             </div>
                           </>
                         ) : null}
+                        {!item.deleted_at && item.expression && <div className="mt-2"><ExpressionAttachment expression={item.expression} compact /></div>}
 
                         <div
                           className={`relative mt-2 flex items-center gap-1 ${
@@ -4986,7 +4994,8 @@ export default function ConversationPage() {
             onSubmit={handleSendMessage}
             className="relative flex shrink-0 items-center gap-1.5 border-t border-zinc-200/70 bg-white/95 px-2 py-2 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-black/95 sm:gap-2 sm:px-4 sm:py-3"
           >
-            {openMessageEmojiPicker && (
+            <ExpressionPicker open={openMessageEmojiPicker} context="message" userId={userId} onClose={() => setOpenMessageEmojiPicker(false)} onSelect={(asset) => asset.kind === 'emoji' ? handleInsertMessageEmoji(asset.providerId) : setMessageExpression(asset)} />
+            {false && openMessageEmojiPicker && (
               <div className="absolute bottom-full left-2 right-2 z-50 mb-2 max-h-[72vh] overflow-hidden rounded-[2rem] border border-zinc-200/80 bg-white/95 shadow-2xl shadow-black/15 backdrop-blur-2xl dark:border-zinc-800/80 dark:bg-zinc-950/95 sm:left-4 sm:right-auto sm:w-[420px]">
                 <div className="p-3 sm:p-4">
                   <div className="flex items-center justify-between gap-3">
@@ -5144,6 +5153,8 @@ export default function ConversationPage() {
               className="hidden"
             />
 
+            {messageExpression && <div className="absolute bottom-full left-3 mb-2 flex items-start gap-2 rounded-2xl bg-white p-2 shadow-xl dark:bg-zinc-950"><ExpressionAttachment expression={messageExpression} compact /><button type="button" onClick={() => setMessageExpression(null)} aria-label="Remover expressão"><X className="h-4 w-4" /></button></div>}
+
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
@@ -5204,13 +5215,13 @@ export default function ConversationPage() {
                 sending ||
                 uploadingMedia ||
                 recordingAudio ||
-                (!newMessage.trim() && selectedMedia.length === 0)
+                (!newMessage.trim() && selectedMedia.length === 0 && !messageExpression)
               }
               className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full font-semibold transition sm:h-11 sm:w-11 ${
                 sending ||
                 uploadingMedia ||
                 recordingAudio ||
-                (!newMessage.trim() && selectedMedia.length === 0)
+                (!newMessage.trim() && selectedMedia.length === 0 && !messageExpression)
                   ? 'cursor-not-allowed bg-zinc-200 text-zinc-400 dark:bg-zinc-900 dark:text-zinc-600'
                   : `${selectedChatTheme.buttonClass} hover:scale-105`
               }`}
