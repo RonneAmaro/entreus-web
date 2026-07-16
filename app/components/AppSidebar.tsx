@@ -63,12 +63,12 @@ export default function AppSidebar({
     } else router.push(getComposeHref('text'))
   }
 
-  const linkClass = (href: string) => `group relative flex h-12 w-12 items-center justify-center rounded-2xl transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 ${isNavigationItemActive(pathname, href) ? 'bg-blue-500/20 text-blue-100 ring-1 ring-blue-400/20' : 'text-zinc-500 hover:bg-white/10 hover:text-white'}`
+  const linkClass = (href: string) => `group relative flex h-12 w-12 items-center justify-center rounded-2xl transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 ${isNavigationItemActive(pathname, href) ? 'bg-blue-500/15 text-blue-700 ring-1 ring-blue-400/20 dark:bg-blue-500/20 dark:text-blue-100' : 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-950 dark:hover:bg-white/10 dark:hover:text-white'}`
   const badge = (count: number) => count > 0 ? <span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-red-600 px-1 text-center text-[10px] font-black leading-5 text-white">{count > 99 ? '99+' : count}</span> : null
 
   return (
     <>
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-[76px] border-r border-blue-400/10 bg-black/95 backdrop-blur-xl lg:block">
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-[76px] border-r border-zinc-200 bg-white/95 backdrop-blur-xl dark:border-blue-400/10 dark:bg-black/95 lg:block">
         <Link href="/feed" aria-label="EntreUS — abrir Feed" className="absolute left-1/2 top-4 flex h-12 w-12 -translate-x-1/2 items-center justify-center rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400">
           <Image src="/logo-icon.png" alt="" width={40} height={40} priority className="h-10 w-10 rounded-full object-contain" />
         </Link>

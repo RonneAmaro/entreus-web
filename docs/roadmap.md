@@ -60,6 +60,8 @@ Sequência oficial:
 
 ### Pacote 50 — Nova navegação e Hub EntreUS
 
+O Pacote 50B consolida o design system e adiciona auditoria automática dos temas escuro e claro. Seu estado deve ser considerado concluído somente após build, unitários, E2E, audit e revisão das capturas.
+
 **Status:** Em revisão visual
 
 Entregue no Pacote 50:
