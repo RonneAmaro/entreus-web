@@ -60,7 +60,23 @@ Sequência oficial:
 
 ### Pacote 50 — Nova navegação e Hub EntreUS
 
-**Status:** Próximo pacote
+**Status:** Em revisão visual
+
+Entregue no Pacote 50:
+
+- rail compacto no desktop e barra inferior responsiva no celular;
+- ordem oficial Casa, Mensagens, EntreUS, Perfil e Postar;
+- botão central com a identidade existente do EntreUS;
+- Hub compartilhado com Lab e Meet em destaque;
+- catálogo único de rotas, categorias, palavras-chave e permissões;
+- busca local sem diferença de caixa ou acentos;
+- recentes e mais utilizados em armazenamento local separado por usuário;
+- filtros administrativos baseados no perfil autenticado;
+- badges existentes de mensagens, notificações e pendências administrativas;
+- navegação por teclado, Escape, foco controlado e atributos ARIA;
+- nenhuma rota removida, migration criada ou dependência adicionada.
+
+A revisão visual do Hub está em andamento. O Pacote 50 não deve ser marcado como concluído antes da aprovação visual do proprietário. O pacote ainda não foi enviado ao GitHub nem implantado.
 
 Objetivo: substituir a navegação atual por uma estrutura mais enxuta, moderna, profissional, responsiva e escalável.
 

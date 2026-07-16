@@ -1,6 +1,7 @@
 'use client'
 
 import Image from 'next/image'
+import EntreUSWordmark from './EntreUSWordmark'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import type { ReactNode } from 'react'
@@ -55,7 +56,7 @@ export default function BrandHeader({
                   compact ? 'text-2xl' : 'text-3xl'
                 }`}
               >
-                Entre<span className="text-blue-500">US</span>
+                <EntreUSWordmark />
               </h1>
 
               {subtitle && (

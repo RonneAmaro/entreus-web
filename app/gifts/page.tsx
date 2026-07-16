@@ -7,6 +7,7 @@ import { useTheme } from 'next-themes'
 import AppSidebar from '../components/AppSidebar'
 import MobileNavigation from '../components/MobileNavigation'
 import ItaCashAmount from '../components/ItaCashAmount'
+import EntreUSWordmark from '../components/EntreUSWordmark'
 import {
   ArrowLeft,
   CheckCircle2,
@@ -62,14 +63,6 @@ const giftIconBySlug: Record<string, LucideIcon> = {
   'trofeu-destaque': Trophy,
   'diamante-premium': Gem,
   'coroa-elite': Crown,
-}
-
-function BrandWordmark() {
-  return (
-    <span className="inline-flex items-center font-black tracking-tight text-white">
-      Entre<span className="text-blue-300">US</span>
-    </span>
-  )
 }
 
 function categoryLabel(value: string) {
@@ -469,12 +462,12 @@ export default function GiftsPage() {
             <div className="inline-flex items-center gap-3 rounded-full border border-blue-300/20 bg-blue-500/10 px-4 py-2">
               <img src="/logo-icon.png" alt="EntreUS" className="h-8 w-8 rounded-full object-contain" />
               <span className="text-sm font-black">
-                <BrandWordmark /> Gifts
+                <EntreUSWordmark /> Gifts
               </span>
             </div>
 
             <h1 className="mt-6 max-w-4xl text-4xl font-black tracking-tight sm:text-6xl">
-              Presentes digitais para celebrar pessoas na <BrandWordmark />.
+              Presentes digitais para celebrar pessoas na <EntreUSWordmark />.
             </h1>
             <p className="mt-5 max-w-2xl text-lg leading-8 text-zinc-300">
               Escolha um presente, encontre um usuario e envie reconhecimento usando ItaCash. Neste MVP, 100% do valor vai para quem recebe.

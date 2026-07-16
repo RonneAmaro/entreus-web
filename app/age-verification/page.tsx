@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { ArrowLeft, CheckCircle2, FileText, Loader2, ShieldAlert, Upload } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import EntreUSWordmark from '../components/EntreUSWordmark'
 
 type Profile = {
   id: string
@@ -331,7 +332,7 @@ export default function AgeVerificationPage() {
               <div className="inline-flex items-center gap-3 rounded-full border border-blue-300/20 bg-blue-500/10 px-4 py-2">
                 <img src="/logo-icon.png" alt="EntreUS" className="h-8 w-8 rounded-full object-contain" />
                 <span className="text-sm font-black">
-                  Entre<span className="text-blue-300">US</span> Safety
+                  <EntreUSWordmark /> Safety
                 </span>
               </div>
 

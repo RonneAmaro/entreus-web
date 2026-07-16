@@ -2,21 +2,12 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import MeetRoomClient, { InviteActions } from './MeetRoomClient'
+import EntreUSWordmark from '../../components/EntreUSWordmark'
 
 type MeetPageProps = {
   params: Promise<{
     roomName: string
   }>
-}
-
-function EntreUSWordmark({ suffix }: { suffix?: string }) {
-  return (
-    <span className="inline-flex items-baseline tracking-normal">
-      <span className="text-white">Entre</span>
-      <span className="text-blue-400">US</span>
-      {suffix ? <span className="ml-2 text-blue-100">{suffix}</span> : null}
-    </span>
-  )
 }
 
 export default async function MeetRoomPage({ params }: MeetPageProps) {
@@ -52,7 +43,7 @@ export default async function MeetRoomPage({ params }: MeetPageProps) {
                 Chamada ao vivo
               </p>
               <h1 className="text-3xl font-black tracking-normal sm:text-4xl">
-                <EntreUSWordmark suffix="Meet" />
+                <EntreUSWordmark /> <span className="text-blue-100">Meet</span>
               </h1>
               <p className="mt-2 text-sm leading-6 text-zinc-400">
                 Converse por vídeo e áudio em tempo real.

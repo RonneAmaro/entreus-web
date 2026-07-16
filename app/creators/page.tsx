@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import CreatorBadgesExplainer from '../components/CreatorBadgesExplainer'
 import CreatorMonetizationExplainer from '../components/CreatorMonetizationExplainer'
+import EntreUSWordmark from '../components/EntreUSWordmark'
 
 export const metadata: Metadata = {
   title: 'Criadores Fundadores | EntreUS',
@@ -102,7 +103,7 @@ export default function CreatorsPage() {
             <Link href="/" className="inline-flex items-center gap-3">
               <Image src="/logo-icon.png" alt="" width={44} height={44} className="h-11 w-11 object-contain" priority />
               <span className="text-xl font-black tracking-normal">
-                Entre<span className="text-blue-300">US</span>
+                <EntreUSWordmark />
               </span>
             </Link>
             <ActionLink href="/signup" variant="secondary">Criar conta</ActionLink>

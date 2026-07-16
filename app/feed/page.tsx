@@ -4152,8 +4152,8 @@ function FeedContent() {
         onClose={() => setTipRecipient(null)}
       />
 
-      <section className="w-full overflow-x-hidden px-3 py-16 pb-24 sm:px-6 sm:py-20 lg:mx-auto lg:max-w-[1280px] lg:px-0 lg:py-8 lg:pl-[104px]">
-        <div className="mx-auto grid w-full grid-cols-1 gap-4 sm:gap-6 xl:grid-cols-[minmax(0,40rem)_20rem]">
+      <section data-testid="feed-layout" className="w-full overflow-x-hidden px-3 py-16 pb-24 sm:px-6 sm:py-20 lg:mx-auto lg:max-w-[1600px] lg:py-8 lg:pl-[100px] lg:pr-6">
+        <div className="mx-auto grid w-full grid-cols-1 gap-4 sm:gap-6 xl:grid-cols-[minmax(0,1fr)_clamp(18rem,22vw,24rem)] xl:gap-[clamp(1.5rem,2.5vw,3rem)]">
           <div className="min-w-0">
             {currentProfile && !currentProfile.show_sensitive_content && (
               <div className="mb-4 rounded-[1.5rem] border border-yellow-200/70 bg-yellow-50/80 px-4 py-3 text-sm text-yellow-800 shadow-sm ring-1 ring-yellow-100/70 dark:border-yellow-900/50 dark:bg-yellow-950/10 dark:text-yellow-300 dark:ring-yellow-900/20">
@@ -4909,7 +4909,7 @@ function FeedContent() {
 
           </div>
 
-          <aside className="hidden xl:block">
+          <aside data-testid="feed-right-rail" className="hidden min-w-0 xl:block">
             <div className="sticky top-8 space-y-4">
               <div className="rounded-[2rem] border border-zinc-200/70 bg-white/95 p-5 shadow-sm ring-1 ring-black/5 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-black/80 dark:ring-white/10">
                 <div className="mb-3 flex items-center gap-2">

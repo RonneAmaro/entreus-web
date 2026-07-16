@@ -26,6 +26,7 @@ import {
   useTracks,
 } from '@livekit/components-react'
 import '@livekit/components-styles'
+import EntreUSWordmark from '../../components/EntreUSWordmark'
 import {
   Check,
   Circle,
@@ -1141,7 +1142,7 @@ function PortugueseConference({
           </div>
           <div className="min-w-0">
             <p className="truncate text-sm font-black tracking-normal">
-              Entre<span className="text-blue-400">US</span> Meet
+              <EntreUSWordmark /> Meet
             </p>
             <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zinc-400">
               <span className="truncate">Sala {roomName}</span>
@@ -2495,7 +2496,7 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
             </div>
             <div className="min-w-0">
               <p className="truncate text-sm font-black tracking-normal">
-                Entre<span className="text-blue-400">US</span> Meet
+                <EntreUSWordmark /> Meet
               </p>
               <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zinc-400">
                 <span className="truncate">Sala {roomName}</span>
@@ -2713,7 +2714,7 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
                 <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full border border-blue-500/20 bg-black/70 text-blue-300 shadow-lg shadow-blue-500/10">
                   <Video className="h-9 w-9" />
                 </div>
-                <p className="text-base font-semibold text-zinc-100">Sala Entre<span className="text-blue-400">US</span></p>
+                <p className="text-base font-semibold text-zinc-100">Sala <EntreUSWordmark /></p>
                 <p className="mt-2 text-sm leading-6 text-zinc-400">A chamada abre aqui depois da aprovação.</p>
               </div>
             </div>

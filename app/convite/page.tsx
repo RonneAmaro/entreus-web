@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import BadgeVisual from '../components/BadgeVisual'
 import ItaCashAmount from '../components/ItaCashAmount'
+import EntreUSWordmark from '../components/EntreUSWordmark'
 
 export const metadata: Metadata = {
   title: 'EntreUS para Criadores',
@@ -197,7 +198,7 @@ export default function InvitePage() {
                 priority
               />
               <span className="text-xl font-black tracking-normal">
-                Entre<span className="text-blue-300">US</span>
+                <EntreUSWordmark />
               </span>
             </Link>
 

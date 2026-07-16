@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import AppSidebar from '../components/AppSidebar'
 import MobileNavigation from '../components/MobileNavigation'
+import EntreUSWordmark from '../components/EntreUSWordmark'
 import {
   ArrowLeft,
   BadgeCheck,
@@ -120,14 +121,6 @@ const benefits = [
     icon: Zap,
   },
 ]
-
-function BrandWordmark() {
-  return (
-    <span className="inline-flex items-center font-black tracking-tight text-white">
-      Entre<span className="text-blue-300">US</span>
-    </span>
-  )
-}
 
 function isVipActive(profile: CurrentProfile | null) {
   if (!profile || profile.vip_status !== 'active' || !profile.vip_expires_at) return false
@@ -425,7 +418,7 @@ export default function VipPlusPage() {
                 <Crown className="h-4 w-4" />
               </span>
               <span className="text-sm font-black text-blue-50">
-                <BrandWordmark /> VIP
+                <EntreUSWordmark /> VIP
               </span>
             </div>
 
