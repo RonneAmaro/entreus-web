@@ -38,6 +38,11 @@ type ReportRow = {
   reason: string | null
   status?: string | null
   created_at?: string | null
+  reported_comment_id?: string | null
+  reported_parent_comment_id?: string | null
+  reported_comment_author_id?: string | null
+  reported_comment_depth?: number | null
+  reported_expression_kind?: 'gif' | 'sticker' | null
 }
 
 type ReportedPostContext = ModeratedPostFields & {
@@ -80,6 +85,7 @@ export default function AdminReportsPage() {
   const [postContextById, setPostContextById] = useState<Record<string, ReportedPostContext>>({})
   const [updatingReportId, setUpdatingReportId] = useState<string | null>(null)
   const [updatingPostId, setUpdatingPostId] = useState<string | null>(null)
+  const [updatingCommentId, setUpdatingCommentId] = useState<string | null>(null)
   const [reportFilter, setReportFilter] = useState<ReportFilter>('pending')
 
   const filteredReports = useMemo(() => {
@@ -100,10 +106,6 @@ export default function AdminReportsPage() {
       })
       .sort((a, b) => statusPriority[normalizeReportStatus(a.status)] - statusPriority[normalizeReportStatus(b.status)])
   }, [reports, reportFilter])
-
-  useEffect(() => {
-    loadPage()
-  }, [])
 
   async function loadPage() {
     setLoading(true)
@@ -147,7 +149,7 @@ export default function AdminReportsPage() {
 
     const primaryResult = await supabase
       .from('reports')
-      .select('id, reporter_id, reported_post_id, reported_user_id, reason, status, created_at')
+      .select('id, reporter_id, reported_post_id, reported_user_id, reason, status, created_at, reported_comment_id, reported_parent_comment_id, reported_comment_author_id, reported_comment_depth, reported_expression_kind')
       .order('created_at', { ascending: false })
       .limit(80)
 
@@ -228,6 +230,11 @@ export default function AdminReportsPage() {
 
     setPostContextById(nextContext)
   }
+
+  useEffect(() => {
+    const task = window.setTimeout(() => void loadPage(), 0)
+    return () => window.clearTimeout(task)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   function isSensitivePost(post: ReportedPostContext | undefined) {
     return Boolean(
@@ -312,6 +319,23 @@ export default function AdminReportsPage() {
     if (!confirmed) return
 
     await updateReportStatus(report.id, 'rejected')
+  }
+
+  async function removeReportedComment(report: ReportRow) {
+    if (!report.reported_comment_id || updatingCommentId) return
+    if (!window.confirm('Remover este comentário preservando as respostas?')) return
+    setUpdatingCommentId(report.reported_comment_id)
+    setMessage('')
+    const { error } = await supabase.rpc('delete_threaded_comment', {
+      p_comment_id: report.reported_comment_id,
+    })
+    if (error) {
+      setMessage(`Não foi possível remover o comentário: ${error.message}`)
+      setUpdatingCommentId(null)
+      return
+    }
+    await updateReportStatus(report.id, 'resolved')
+    setUpdatingCommentId(null)
   }
 
   async function notifyPostOwnerAboutHiddenContent(postId: string, postOwnerId: string | null | undefined) {
@@ -511,6 +535,17 @@ export default function AdminReportsPage() {
                     <p className="mt-2 text-xs text-zinc-500">
                       Reportado: {report.reported_user_id || '-'} · Denunciante: {report.reporter_id || '-'}
                     </p>
+                    {report.reported_comment_id && (
+                      <div className="mt-3 rounded-2xl border border-red-300/15 bg-red-500/5 p-3 text-xs text-zinc-300">
+                        <p className="font-black text-red-100">Comentário encadeado</p>
+                        <p className="mt-1 break-all">ID: {report.reported_comment_id}</p>
+                        <p className="mt-1">
+                          Nível lógico: {(report.reported_comment_depth ?? 0) + 1}
+                          {' · '}Pai: {report.reported_parent_comment_id || 'raiz'}
+                          {' · '}Expressão: {report.reported_expression_kind || 'não'}
+                        </p>
+                      </div>
+                    )}
                     {postContext && (
                       <div className="mt-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
                         <div className="flex flex-wrap items-center gap-2 text-xs font-black text-zinc-300">
@@ -584,6 +619,20 @@ export default function AdminReportsPage() {
                       </div>
                     )}
                   </div>
+                  {report.reported_comment_id && (
+                    <div className="grid w-full shrink-0 grid-cols-1 gap-2 sm:w-auto sm:max-w-60">
+                      <p className="text-xs font-black uppercase tracking-[0.16em] text-zinc-500">Comentário denunciado</p>
+                      <button
+                        type="button"
+                        onClick={() => void removeReportedComment(report)}
+                        disabled={updatingCommentId === report.reported_comment_id}
+                        className="inline-flex items-center justify-center gap-1 rounded-full border border-red-300/20 bg-red-500/10 px-4 py-2 text-xs font-black text-red-100 disabled:opacity-60"
+                      >
+                        {updatingCommentId === report.reported_comment_id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldOff className="h-3.5 w-3.5" />}
+                        Remover comentário
+                      </button>
+                    </div>
+                  )}
                   {report.reported_post_id && (
                     <div className="grid w-full shrink-0 grid-cols-1 gap-2 sm:w-auto sm:max-w-60">
                       <p className="text-xs font-black uppercase tracking-[0.16em] text-zinc-500">

@@ -246,3 +246,19 @@ Toda nova ideia deve ser classificada como:
 Uma nova ideia não deve interromper automaticamente o pacote em andamento.
 
 Funcionalidades compartilhadas devem utilizar componentes reutilizáveis e padrões únicos. Isso inclui campos de mensagens, emojis, GIFs, stickers, navegação, busca, upload, modais, estados de carregamento e tratamento de erros.
+# Pacote 52 — Feed premium e comentários encadeados
+
+Status: implementação preparada, aguardando validação em banco descartável e matriz
+E2E completa antes de marcar como concluído.
+
+- [x] migration incremental não aplicada;
+- [x] integridade, profundidade, RPCs e exclusão segura;
+- [x] paginação independente e contagem transacional;
+- [x] resposta com texto, emoji, GIF e sticker;
+- [x] documentação e testes estruturais;
+- [x] denúncia contextual e remoção moderada não destrutiva;
+- [x] E2E específico simulado (8/8);
+- [x] capturas desktop, tablet e mobile revisadas;
+- [ ] aplicar Pacote 51 e 52 em ambiente descartável;
+- [ ] repetir a suíte E2E integral após estabilizar o theme-audit/hydration;
+- [ ] validar concorrência, grants, RLS e bloqueios em PostgreSQL descartável.

@@ -61,3 +61,20 @@ Em desktop largo, sidebar, Feed e rail formam um conjunto equilibrado. O Feed oc
 ## Temas e validação
 
 `next-themes` aplica `dark` ou `light` no `<html>`, armazena a escolha na chave `theme` e inicia novos usuários em `dark`, sem depender do sistema operacional. Novos componentes devem partir de tokens semânticos ou pares claro/`dark:`. Validar em 1440×900 e 390×844, teclado, zoom de 200%, redução de movimento e a suíte `theme-audit.spec.ts`.
+# Feed e conversas encadeadas
+
+Comentários do Feed usam uma única superfície por nó, linha de continuidade para
+filhos e no máximo três níveis de recuo visual. Níveis lógicos mais profundos
+continuam identificados por contexto textual, sem reduzir indefinidamente a largura.
+Composers de resposta aparecem junto ao comentário e reutilizam o seletor unificado
+de expressões no contexto `reply`.
+
+Controles de expandir/recolher devem expor `aria-expanded`/`aria-controls`, manter
+área de toque mínima de 44 px e nunca depender apenas de cor. Conteúdo removido é
+renderizado como marcador neutro, sem avatar ou mídia original. Consulte
+`docs/threaded-comments-and-premium-feed.md`.
+
+As capturas simuladas revisadas em desktop, tablet e mobile confirmam que o recuo
+é limitado e não cria overflow horizontal. Menus de comentários alheios oferecem
+“Denunciar”; comentários próprios oferecem edição/exclusão. A moderação apresenta
+somente contexto mínimo e nunca reproduz conteúdo privado completo.

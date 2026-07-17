@@ -99,6 +99,7 @@ import { getSafeProfileContentMode, type ProfileContentMode } from '@/lib/profil
 import type { ExpressionAsset } from '@/lib/expressions/expression-types'
 import ExpressionPicker from '../components/expressions/ExpressionPicker'
 import ExpressionAttachment from '../components/expressions/ExpressionAttachment'
+import ThreadedComments from '../components/ThreadedComments'
 
 type VisibilityType = 'public' | 'followers' | 'private'
 type ComposerSubmitData = {
@@ -317,7 +318,7 @@ type FeedCursor = {
 
 const FEED_INITIAL_POST_LIMIT = 24
 const FEED_NEXT_POST_LIMIT = 12
-const FEED_INITIAL_COMMENT_LIMIT = 160
+const FEED_INITIAL_COMMENT_LIMIT = 24
 const FEED_INITIAL_REACTION_LIMIT = 500
 const FEED_INITIAL_REPOST_LIMIT = 120
 const ACCEPTED_MEDIA_FORMATS_MESSAGE = 'Formato nao permitido. Use JPG, PNG, WEBP, GIF, MP4, WebM ou MOV.'
@@ -1702,6 +1703,7 @@ function FeedContent() {
         )
       `)
       .in('post_id', currentPostIds)
+      .is('parent_comment_id', null)
       .order('created_at', { ascending: true })
       .limit(FEED_INITIAL_COMMENT_LIMIT)
 
@@ -3164,12 +3166,12 @@ function FeedContent() {
     }
 
     const { data: insertedComment, error } = await supabase
-      .from('comments')
-      .insert({
-        post_id: postId,
-        user_id: userId,
-        content: text || '',
-        expression,
+      .rpc('create_threaded_comment', {
+        p_post_id: postId,
+        p_content: text || '',
+        p_expression: expression,
+        p_parent_comment_id: null,
+        p_client_request_id: crypto.randomUUID(),
       })
       .select('id')
       .single()
@@ -3196,18 +3198,6 @@ function FeedContent() {
         setSubmittingCommentPostId(null)
         return
       }
-    }
-
-    const commentedPost = posts.find((post) => post.id === postId)
-
-    if (commentedPost && commentedPost.user_id !== userId) {
-      await supabase.from('notifications').insert({
-        user_id: commentedPost.user_id,
-        actor_id: userId,
-        type: 'comment',
-        post_id: postId,
-        comment_id: insertedComment?.id || null,
-      })
     }
 
     setCommentInputs((prev) => ({
@@ -3524,8 +3514,9 @@ function FeedContent() {
   async function handleSubmitReplyModal(postId: string) {
     const text = commentInputs[postId]?.trim()
     const mediaDraft = commentMediaDrafts[postId]
+    const expression = commentExpressions[postId]
 
-    if (!text && !mediaDraft) {
+    if (!text && !mediaDraft && !expression) {
       setMessage(t('feed.messages.emptyComment'))
       return
     }
@@ -4659,7 +4650,7 @@ function FeedContent() {
 
                     {!postPaidLocked && (
                     <DeferredFeedSection active={isNearViewport} minHeight={FEED_COMMENTS_PLACEHOLDER_HEIGHT}>
-                    <div className="mt-4 border-t border-zinc-200/70 pt-4 dark:border-zinc-800/70">
+                    {false && <div>
                       <h3 className="mb-3 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
                         {t('feed.comments')}
                       </h3>
@@ -4879,7 +4870,8 @@ function FeedContent() {
                           Responder
                         </button>
                       </div>
-                    </div>
+                    </div>}
+                    <ThreadedComments postId={post.id} currentUserId={userId} onCountChange={() => void loadComments()} />
                     </DeferredFeedSection>
                     )}
                   </article>
