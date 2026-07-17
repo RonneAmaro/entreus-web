@@ -78,3 +78,12 @@ As capturas simuladas revisadas em desktop, tablet e mobile confirmam que o recu
 é limitado e não cria overflow horizontal. Menus de comentários alheios oferecem
 “Denunciar”; comentários próprios oferecem edição/exclusão. A moderação apresenta
 somente contexto mínimo e nunca reproduz conteúdo privado completo.
+
+# Creator Studio
+
+O Creator Studio usa shell próprio com navegação interna estável no desktop e
+faixa compacta no mobile. Cards financeiros distinguem disponível de pendente
+por rótulo e texto, nunca apenas por cor. Métricas ausentes exibem
+“Indisponível”, e insights sempre incluem período, unidade e resumo textual.
+Filtros e ações têm alvo mínimo de 44 px, foco visível e não podem provocar
+overflow em 360 px. Consulte `docs/creator-experience.md`.

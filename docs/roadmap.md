@@ -262,3 +262,17 @@ E2E completa antes de marcar como concluído.
 - [ ] aplicar Pacote 51 e 52 em ambiente descartável;
 - [ ] repetir a suíte E2E integral após estabilizar o theme-audit/hydration;
 - [ ] validar concorrência, grants, RLS e bloqueios em PostgreSQL descartável.
+
+# Pacote 53 — Experiência do Criador
+
+Status: concluído após validações próprias focadas; a suíte integral mantém os
+bloqueios preexistentes documentados do lint/theme-audit.
+
+- [x] Creator Studio central, responsivo e acessível;
+- [x] acesso e ownership derivados da sessão no servidor;
+- [x] visão geral, onboarding, conteúdo, interações, métricas e ganhos reais;
+- [x] perfil e configurações integrados aos fluxos existentes;
+- [x] paginação, falha parcial e cache privado;
+- [x] testes unitários e E2E isolado simulado;
+- [x] capturas em temas claro/escuro e breakpoints principais;
+- [x] nenhuma migration, dependência ou regra financeira nova.
