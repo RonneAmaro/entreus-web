@@ -65,6 +65,47 @@ body {
   box-sizing: border-box;
 }
 
+.entreus-hub-trigger {
+  animation: entreus-hub-breathe 4.6s ease-in-out infinite;
+  transform-origin: center;
+  transition: box-shadow 180ms ease, filter 180ms ease, transform 180ms ease;
+}
+
+.entreus-hub-trigger[data-active="true"] {
+  animation: none;
+  filter: brightness(1.08);
+  transform: scale(1.02);
+}
+
+.entreus-hub-trigger[data-active="false"]:hover {
+  animation: none;
+  box-shadow: 0 12px 30px rgb(59 130 246 / 0.42);
+  transform: translateY(-2px) rotate(1deg) scale(1.02);
+}
+
+.entreus-hub-trigger:active {
+  animation: none;
+  transform: scale(0.96);
+}
+
+@keyframes entreus-hub-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.02);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .entreus-hub-trigger {
+    animation: none;
+    transition: none;
+  }
+}
+
 img,
 video,
 canvas,

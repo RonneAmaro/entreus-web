@@ -14,17 +14,25 @@ function fakeJwt() {
   return `${encode({ alg: 'HS256', typ: 'JWT' })}.${encode({ sub: userId, role: 'authenticated', exp: 4102444800 })}.test`
 }
 
-async function installFakeSession(page: Page, role: 'user' | 'admin' = 'user') {
+async function installFakeSession(
+  page: Page,
+  role: 'user' | 'admin' = 'user',
+  includePosts = false,
+  selectedTheme?: 'dark' | 'light',
+) {
   const supabaseUrl = publicSupabaseUrl()
   const projectRef = new URL(supabaseUrl).hostname.split('.')[0]
   const token = fakeJwt()
   const user = { id: userId, aud: 'authenticated', role: 'authenticated', email: 'navigation@example.test', app_metadata: {}, user_metadata: {} }
 
-  await page.addInitScript(({ key, session }) => {
+  await page.addInitScript(({ key, session, theme }) => {
     window.localStorage.setItem(key, JSON.stringify(session))
+    if (theme) window.localStorage.setItem('theme', theme)
+    window.localStorage.setItem('entreus-language', 'pt')
   }, {
     key: `sb-${projectRef}-auth-token`,
     session: { access_token: token, refresh_token: 'test-refresh', expires_at: 4102444800, expires_in: 3600, token_type: 'bearer', user },
+    theme: selectedTheme,
   })
 
   await page.route(`${supabaseUrl}/**`, async (route) => {
@@ -37,11 +45,97 @@ async function installFakeSession(page: Page, role: 'user' | 'admin' = 'user') {
       await route.fulfill({ status: 200, contentType: 'application/json', headers: { 'content-range': '0-0/1' }, body: JSON.stringify([{ id: userId, username: 'navigation-test', display_name: 'Navigation Test', role, birth_date: '1990-01-01', terms_accepted_at: '2026-01-01T00:00:00Z', privacy_accepted_at: '2026-01-01T00:00:00Z', terms_version: '2026-05', privacy_version: '2026-05', profile_content_mode: 'general', show_sensitive_content: false, wants_18_plus: false, is_minor: false, parental_consent_status: null }]) })
       return
     }
+    if (includePosts && url.pathname.includes('/rest/v1/posts')) {
+      const profile = { username: 'navigation-test', display_name: 'Navigation Test', avatar_url: null, vip_status: null, vip_expires_at: null, profile_theme: null }
+      const posts = [
+        { id: '00000000-0000-4000-8000-000000000051', content: 'Primeira publicação de teste', category: 'general', created_at: '2026-07-18T12:00:00Z', user_id: userId, image_url: null, video_url: null, visibility: 'public', is_sensitive: false, community_type: 'general', content_rating: 'general', is_paid: false, price_itacash: null, profiles: profile },
+        { id: '00000000-0000-4000-8000-000000000052', content: 'Segunda publicação de teste', category: 'general', created_at: '2026-07-18T11:00:00Z', user_id: userId, image_url: null, video_url: null, visibility: 'public', is_sensitive: false, community_type: 'general', content_rating: 'general', is_paid: false, price_itacash: null, profiles: profile },
+      ]
+      await route.fulfill({ status: 200, contentType: 'application/json', headers: { 'content-range': '0-1/2' }, body: JSON.stringify(posts) })
+      return
+    }
     await route.fulfill({ status: 200, contentType: 'application/json', headers: { 'content-range': '0-0/0' }, body: '[]' })
   })
 }
 
 test.describe('responsive navigation and EntreUS Hub', () => {
+  for (const destination of [
+    { id: 'feed', title: 'Casa', href: '/feed', start: '/messages' },
+    { id: 'messages', title: 'Mensagens', href: '/messages', start: '/feed' },
+    { id: 'profile', title: 'Meu perfil', href: '/profile', start: '/feed', showAll: true },
+    { id: 'lab', title: 'EntreUS Lab', href: '/lab', start: '/feed' },
+    { id: 'meet', title: 'EntreUS Meet', href: '/meet', start: '/feed' },
+  ] as const) {
+    test(`Hub navigates to ${destination.title} on the first desktop click`, async ({ page }) => {
+      await installFakeSession(page)
+      await page.setViewportSize({ width: 1440, height: 900 })
+      await page.goto(destination.start, { waitUntil: 'domcontentloaded' })
+      await page.getByRole('navigation', { name: 'Navegação principal' })
+        .getByRole('button', { name: 'Abrir Hub EntreUS' })
+        .click()
+      const dialog = page.getByRole('dialog', { name: 'EntreUS' })
+      await expect(dialog).toBeVisible()
+      if (destination.showAll) {
+        await dialog.getByRole('button', { name: /Ver todos/ }).click()
+      }
+
+      const destinationLink = destination.id === 'profile'
+        ? dialog.getByRole('link', { name: /Perfil, identidade/ })
+        : dialog.getByRole('link', { name: new RegExp(destination.title) })
+      await destinationLink.click()
+      await expect(page).toHaveURL(new RegExp(`${destination.href}$`), { timeout: 20_000 })
+      await expect(page.getByRole('dialog', { name: 'EntreUS' })).toHaveCount(0)
+      const recent = await page.evaluate(({ currentUserId }) => {
+        const raw = window.localStorage.getItem(`entreus:hub-usage:v1:${currentUserId}`)
+        return raw ? JSON.parse(raw).recent[0] : null
+      }, { currentUserId: userId })
+      expect(recent).toBe(destination.id)
+    })
+  }
+
+  test('Hub shows the navigated item in Recentes when reopened', async ({ page }) => {
+    await installFakeSession(page)
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto('/feed', { waitUntil: 'domcontentloaded' })
+    await page.getByRole('button', { name: 'Abrir Hub EntreUS' }).click()
+    await page.getByRole('dialog', { name: 'EntreUS' })
+      .getByRole('link', { name: /Mensagens/ })
+      .click()
+    await expect(page).toHaveURL(/\/messages$/)
+
+    await page.getByRole('button', { name: 'Abrir Hub EntreUS' }).click()
+    const dialog = page.getByRole('dialog', { name: 'EntreUS' })
+    const recentSection = dialog.getByTestId('recent-apps')
+    await expect(recentSection.getByRole('link', { name: /Mensagens/ })).toBeVisible()
+  })
+
+  test('Hub compose action closes and opens the existing composer with Space', async ({ page }) => {
+    await installFakeSession(page)
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto('/feed', { waitUntil: 'domcontentloaded' })
+    await page.getByRole('button', { name: 'Abrir Hub EntreUS' }).click()
+    const dialog = page.getByRole('dialog', { name: 'EntreUS' })
+    const postAction = dialog.getByRole('button', { name: /Postar/ })
+    await postAction.focus()
+    await postAction.press('Space')
+    await expect(page).toHaveURL(/\/feed\?compose=1$/)
+    await expect(page.getByRole('dialog', { name: 'EntreUS' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Adicionar emoji' }).first()).toBeVisible({ timeout: 20_000 })
+  })
+
+  test('Hub route links support keyboard Enter', async ({ page }) => {
+    await installFakeSession(page)
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.goto('/feed', { waitUntil: 'domcontentloaded' })
+    await page.getByRole('button', { name: 'Abrir Hub EntreUS' }).click()
+    const labLink = page.getByRole('dialog', { name: 'EntreUS' })
+      .getByRole('link', { name: /EntreUS Lab/ })
+    await labLink.focus()
+    await labLink.press('Enter')
+    await expect(page).toHaveURL(/\/lab$/)
+    await expect(page.getByRole('dialog', { name: 'EntreUS' })).toHaveCount(0)
+  })
+
   test('desktop rail exposes the official order, searchable Hub and keyboard behavior', async ({ page }) => {
     await installFakeSession(page)
     await page.setViewportSize({ width: 1440, height: 900 })
@@ -123,6 +217,75 @@ test.describe('responsive navigation and EntreUS Hub', () => {
     await dialog.getByRole('button', { name: /Ver todos/ }).click()
     await expect(dialog.getByRole('link', { name: /Administração/ })).toBeVisible({ timeout: 20_000 })
   })
+
+  test('post options stay open predictably and only one menu exists at a time', async ({ page }) => {
+    await installFakeSession(page, 'user', true)
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.goto('/feed', { waitUntil: 'domcontentloaded' })
+
+    const firstPost = page.locator('#post-00000000-0000-4000-8000-000000000051')
+    const secondPost = page.locator('#post-00000000-0000-4000-8000-000000000052')
+    await expect(firstPost).toBeVisible({ timeout: 20_000 })
+    const firstTrigger = firstPost.getByRole('button', { name: 'Mais opções' })
+    const secondTrigger = secondPost.getByRole('button', { name: 'Mais opções' })
+
+    await firstTrigger.click()
+    await expect(firstTrigger).toHaveAttribute('aria-expanded', 'true')
+    await expect(page.getByRole('menu', { name: 'Opções da publicação' })).toHaveCount(1)
+    await firstTrigger.click()
+    await expect(page.getByRole('menu', { name: 'Opções da publicação' })).toHaveCount(0)
+
+    await firstTrigger.click()
+    await secondTrigger.click()
+    await expect(firstTrigger).toHaveAttribute('aria-expanded', 'false')
+    await expect(secondTrigger).toHaveAttribute('aria-expanded', 'true')
+    await expect(page.getByRole('menu', { name: 'Opções da publicação' })).toHaveCount(1)
+
+    await page.getByText('Comunidades', { exact: true }).click()
+    await expect(page.getByRole('menu', { name: 'Opções da publicação' })).toHaveCount(0)
+
+    await firstTrigger.click()
+    await page.getByRole('menuitem', { name: 'Copiar link' }).click()
+    await expect(page.getByRole('menu', { name: 'Opções da publicação' })).toHaveCount(0)
+
+    await firstTrigger.click()
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('menu', { name: 'Opções da publicação' })).toHaveCount(0)
+    await expect(firstTrigger).toBeFocused()
+  })
+
+  for (const theme of ['dark', 'light'] as const) {
+    for (const device of [
+      { name: 'desktop', width: 1440, height: 900 },
+      { name: 'mobile', width: 390, height: 844 },
+    ] as const) {
+      test(`${theme} theme keeps Feed, post menu and Hub readable on ${device.name}`, async ({ page }) => {
+        await installFakeSession(page, 'user', true, theme)
+        await page.setViewportSize({ width: device.width, height: device.height })
+        await page.goto('/feed', { waitUntil: 'domcontentloaded' })
+        await expect(page.locator('html')).toHaveClass(new RegExp(`(^|\\s)${theme}(\\s|$)`))
+        await expect(page.getByTestId('feed-layout')).toBeVisible({ timeout: 20_000 })
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true)
+
+        const firstPost = page.locator('#post-00000000-0000-4000-8000-000000000051')
+        await expect(firstPost).toBeVisible()
+        await firstPost.getByRole('button', { name: 'Mais opções' }).click()
+        const menu = page.getByRole('menu', { name: 'Opções da publicação' })
+        await expect(menu).toBeVisible()
+        await expect(menu).toHaveCSS('background-color', theme === 'dark' ? 'rgb(9, 9, 11)' : 'rgb(255, 255, 255)')
+        await page.keyboard.press('Escape')
+
+        const navigation = page.getByRole('navigation', { name: 'Navegação principal' })
+        const hubButton = navigation.getByRole('button', { name: 'Abrir Hub EntreUS' })
+        await hubButton.click()
+        await expect(hubButton).toHaveAttribute('data-active', 'true')
+        const hub = page.getByRole('dialog', { name: 'EntreUS' })
+        await expect(hub).toBeVisible()
+        expect(await hub.evaluate((element) => getComputedStyle(element).backgroundColor)).not.toBe('rgba(0, 0, 0, 0)')
+        await expect(hub.getByRole('textbox', { name: 'Buscar no Hub' })).toBeVisible()
+      })
+    }
+  }
 
   test('captures the required visual audit states', async ({ page }) => {
     await installFakeSession(page)

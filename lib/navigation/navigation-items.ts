@@ -1,4 +1,4 @@
-import type { NavigationAccent, NavigationItem } from './navigation-types'
+import type { NavigationAccent, NavigationItem, NavigationRouteItem } from './navigation-types'
 
 export const PRIMARY_NAVIGATION = [
   { id: 'home', title: 'Casa', kind: 'link', href: '/feed', icon: 'feed' },
@@ -13,7 +13,8 @@ export const HUB_ITEMS: readonly NavigationItem[] = [
   { id: 'meet', title: 'EntreUS Meet', description: 'Salas, chamadas e encontros ao vivo.', href: '/meet', icon: 'meet', category: 'highlights', keywords: ['reuniao', 'video', 'chamada', 'sala'], audience: 'authenticated', highlighted: true, accent: 'emerald' },
   { id: 'messages', title: 'Mensagens', description: 'Conversas e chats privados.', href: '/messages', icon: 'messages', category: 'communication', keywords: ['chat', 'conversas', 'inbox'], audience: 'authenticated', accent: 'fuchsia' },
   { id: 'notifications', title: 'Notificações', description: 'Atividades e novidades da sua conta.', href: '/notifications', icon: 'bell', category: 'communication', keywords: ['alertas', 'avisos', 'atividade'], audience: 'authenticated', accent: 'red' },
-  { id: 'feed', title: 'Feed', description: 'Página inicial e publicações recentes.', href: '/feed', icon: 'feed', category: 'content', keywords: ['casa', 'inicio', 'posts', 'publicacoes'], audience: 'authenticated', accent: 'blue' },
+  { id: 'feed', title: 'Casa', description: 'Página inicial e publicações recentes.', href: '/feed', icon: 'feed', category: 'content', keywords: ['feed', 'inicio', 'posts', 'publicacoes'], audience: 'authenticated', accent: 'blue' },
+  { id: 'post', title: 'Postar', description: 'Crie uma nova publicação no Feed.', kind: 'compose', icon: 'post', category: 'content', keywords: ['publicar', 'criar', 'post', 'compositor'], audience: 'authenticated', accent: 'blue' },
   { id: 'search', title: 'Buscar', description: 'Encontre pessoas e publicações disponíveis.', href: '/search', icon: 'search', category: 'content', keywords: ['pessoas', 'publicacoes', 'procurar'], audience: 'authenticated', accent: 'indigo' },
   { id: 'saved', title: 'Salvos', description: 'Publicações guardadas para depois.', href: '/saved', icon: 'bookmark', category: 'content', keywords: ['favoritos', 'guardar'], audience: 'authenticated', accent: 'violet' },
   { id: 'challenges', title: 'Desafios', description: 'Desafios e atividades da comunidade.', href: '/challenges', icon: 'challenge', category: 'content', keywords: ['comunidades', 'campanhas'], audience: 'authenticated', accent: 'amber' },
@@ -30,6 +31,14 @@ export const HUB_ITEMS: readonly NavigationItem[] = [
 
 export function navigationAccentFor(item: Pick<NavigationItem, 'accent'>): NavigationAccent {
   return item.accent ?? 'blue'
+}
+
+export function isNavigationRouteItem(item: NavigationItem): item is NavigationRouteItem {
+  return (item.kind ?? 'route') === 'route' && typeof item.href === 'string'
+}
+
+export function isNavigationItemAvailable(item: NavigationItem) {
+  return item.kind !== 'coming-soon'
 }
 
 export const NAVIGATION_CATEGORY_LABELS = {

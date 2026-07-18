@@ -1,6 +1,12 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { HUB_ITEMS, PRIMARY_NAVIGATION, navigationAccentFor } from '../../lib/navigation/navigation-items'
+import {
+  HUB_ITEMS,
+  PRIMARY_NAVIGATION,
+  isNavigationItemAvailable,
+  isNavigationRouteItem,
+  navigationAccentFor,
+} from '../../lib/navigation/navigation-items'
 import { filterNavigationItems, isNavigationItemActive, normalizeNavigationSearch, searchNavigationItems } from '../../lib/navigation/navigation-search'
 import { readHubUsage, recordHubUsage } from '../../lib/navigation/hub-usage'
 
@@ -41,7 +47,47 @@ describe('responsive navigation and EntreUS Hub', () => {
 
   it('does not define duplicate ids or arbitrary URLs', () => {
     expect(new Set(HUB_ITEMS.map((item) => item.id)).size).toBe(HUB_ITEMS.length)
-    for (const item of HUB_ITEMS) expect(item.href).toMatch(/^\/[a-z0-9/-]+$/)
+    for (const item of HUB_ITEMS.filter(isNavigationRouteItem)) {
+      expect(item.href).toMatch(/^\/[a-z0-9/-]+$/)
+    }
+  })
+
+  it('maps every Hub destination to a real product route or the existing compose action', () => {
+    expect(Object.fromEntries(HUB_ITEMS.filter(isNavigationRouteItem).map((item) => [item.id, item.href]))).toEqual({
+      lab: '/lab',
+      meet: '/meet',
+      messages: '/messages',
+      notifications: '/notifications',
+      feed: '/feed',
+      search: '/search',
+      saved: '/saved',
+      challenges: '/challenges',
+      'creator-studio': '/creator-studio',
+      wallet: '/wallet',
+      gifts: '/gifts',
+      vip: '/vip-plus',
+      profile: '/profile',
+      settings: '/settings',
+      help: '/help',
+      editor: '/editor',
+      admin: '/admin',
+    })
+    expect(HUB_ITEMS.find((item) => item.id === 'post')).toMatchObject({ kind: 'compose', title: 'Postar' })
+    expect(HUB_ITEMS.find((item) => item.id === 'feed')).toMatchObject({ title: 'Casa', href: '/feed' })
+  })
+
+  it('keeps coming-soon items unavailable instead of exposing inert navigation', () => {
+    expect(isNavigationItemAvailable({
+      id: 'future',
+      title: 'Futuro',
+      description: 'Ainda indisponível.',
+      kind: 'coming-soon',
+      icon: 'help',
+      category: 'tools',
+      keywords: [],
+      audience: 'authenticated',
+    })).toBe(false)
+    expect(HUB_ITEMS.every(isNavigationItemAvailable)).toBe(true)
   })
 
   it('filters admin resources without treating client hiding as authorization', () => {
@@ -118,6 +164,14 @@ describe('responsive navigation and EntreUS Hub', () => {
     expect(hub).toContain('data-testid="pinned-apps"')
     expect(hub).toContain('Buscar aplicativos, páginas e recursos')
     expect(hub).toContain('setShowAll(true)')
+    expect(hub).toContain('recordHubUsage(userId, item.id, window.localStorage)')
+    expect(hub).toContain("item.kind !== 'compose'")
+    expect(hub).toContain('isNavigationItemAvailable(item)')
+    expect(hub).toContain('handleRouteClick(event, item)')
+    expect(hub).toContain('onNavigate={closeHubAfterNavigation}')
+    expect(hub).toContain('window.setTimeout(closeHub, 0)')
+    expect(hub).toContain('router.push(item.href)')
+    expect(hub).toContain('router.push(composeHref)')
     expect(hub).toContain('src="/logo-icon.png"')
     expect(hub).toContain('Só Entre Nós')
     expect(hub).not.toContain('>Hub EntreUS</h2>')
@@ -137,8 +191,35 @@ describe('responsive navigation and EntreUS Hub', () => {
     expect(hub).not.toMatch(/animate-(spin|pulse|bounce)|infinite/)
     const feed = readFileSync('app/feed/page.tsx', 'utf8')
     expect(feed).toContain('data-testid="feed-layout"')
-    expect(feed).toContain('xl:grid-cols-[minmax(0,1fr)_clamp(18rem,22vw,24rem)]')
+    expect(feed).toContain('xl:grid-cols-[minmax(0,60rem)_clamp(18rem,22vw,24rem)]')
+    expect(feed).toContain('max-w-[60rem]')
     expect(feed).toContain('data-testid="feed-right-rail"')
     expect(hub).not.toMatch(/dangerouslySetInnerHTML|eval\s*\(/)
+  })
+
+  it('keeps the central Hub trigger calm, stateful and reduced-motion safe', () => {
+    const globals = readFileSync('app/globals.css', 'utf8')
+    const desktop = readFileSync('app/components/AppSidebar.tsx', 'utf8')
+    const mobile = readFileSync('app/components/MobileNavigation.tsx', 'utf8')
+    for (const source of [desktop, mobile]) {
+      expect(source).toContain('entreus-hub-trigger')
+      expect(source).toContain('data-active={hubOpen}')
+    }
+    expect(globals).toContain('4.6s ease-in-out infinite')
+    expect(globals).toContain('translateY(-2px) rotate(1deg) scale(1.02)')
+    expect(globals).toContain('.entreus-hub-trigger:active')
+    expect(globals).toContain('@media (prefers-reduced-motion: reduce)')
+  })
+
+  it('coordinates post option menus and preserves accessible menu behavior', () => {
+    const menu = readFileSync('app/components/PostMoreMenu.tsx', 'utf8')
+    expect(menu).toContain("POST_MORE_MENU_OPEN_EVENT = 'entreus:post-more-menu-open'")
+    expect(menu).toContain("document.addEventListener('pointerdown', closeFromOutside)")
+    expect(menu).toContain("event.key !== 'Escape'")
+    expect(menu).toContain('aria-expanded={open}')
+    expect(menu).toContain('aria-haspopup="menu"')
+    expect(menu).toContain('role="menu"')
+    expect(menu).toContain('role="menuitem"')
+    expect(menu).not.toContain('className="fixed inset-0')
   })
 })

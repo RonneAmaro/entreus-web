@@ -42,5 +42,16 @@ describe('EntreUS theme system', () => {
   it('preserves reduced motion in the modal shell', () => {
     expect(hub).toContain('motion-reduce:transform-none')
     expect(hub).not.toMatch(/animate-(spin|pulse|bounce)|infinite/)
+    expect(globals).toContain('@media (prefers-reduced-motion: reduce)')
+    expect(globals).toContain('.entreus-hub-trigger')
+  })
+
+  it('uses semantic surface tokens in the post options menu', () => {
+    const menu = readFileSync('app/components/PostMoreMenu.tsx', 'utf8')
+    expect(menu).toContain('border-border bg-surface text-foreground')
+    expect(menu).toContain('hover:bg-surface-muted')
+    expect(menu).toContain('text-danger')
+    expect(menu).toContain('text-warning')
+    expect(menu).not.toMatch(/#[0-9a-fA-F]{3,8}/)
   })
 })

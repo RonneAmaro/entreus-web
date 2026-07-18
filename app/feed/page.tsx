@@ -100,6 +100,7 @@ import type { ExpressionAsset } from '@/lib/expressions/expression-types'
 import ExpressionPicker from '../components/expressions/ExpressionPicker'
 import ExpressionAttachment from '../components/expressions/ExpressionAttachment'
 import ThreadedComments from '../components/ThreadedComments'
+import EntreUSWordmark from '../components/EntreUSWordmark'
 
 type VisibilityType = 'public' | 'followers' | 'private'
 type ComposerSubmitData = {
@@ -523,6 +524,15 @@ function getLocalFeedTexts(language: string) {
   return feedTexts[language] || feedTexts.pt
 }
 
+function renderEntreUSWordmark(text: string) {
+  return text.split('EntreUS').map((part, index) => (
+    <span key={`${part}-${index}`}>
+      {index > 0 && <EntreUSWordmark />}
+      {part}
+    </span>
+  ))
+}
+
 function getDateLocale(language: string) {
   const locales: Record<string, string> = {
     pt: 'pt-BR',
@@ -579,7 +589,7 @@ function FeedInstallAppCard() {
 
       <span className="min-w-0 flex-1">
         <span className="block text-sm font-black">
-          Instale a EntreUS
+          Instale a <EntreUSWordmark />
         </span>
         <span className="mt-0.5 block text-xs leading-5 text-blue-100/75">
           Use como app direto da tela inicial.
@@ -4161,8 +4171,8 @@ function FeedContent() {
       />
 
       <section data-testid="feed-layout" className="w-full overflow-x-hidden px-3 py-16 pb-24 sm:px-6 sm:py-20 lg:mx-auto lg:max-w-[1600px] lg:py-8 lg:pl-[100px] lg:pr-6">
-        <div className="mx-auto grid w-full grid-cols-1 gap-4 sm:gap-6 xl:grid-cols-[minmax(0,1fr)_clamp(18rem,22vw,24rem)] xl:gap-[clamp(1.5rem,2.5vw,3rem)]">
-          <div className="min-w-0">
+        <div className="mx-auto grid w-full grid-cols-1 gap-4 sm:gap-6 xl:grid-cols-[minmax(0,60rem)_clamp(18rem,22vw,24rem)] xl:justify-center xl:gap-[clamp(1.5rem,2.5vw,3rem)]">
+          <div className="min-w-0 w-full max-w-[60rem] justify-self-center xl:max-w-none">
             {currentProfile && !currentProfile.show_sensitive_content && (
               <div className="mb-4 rounded-[1.5rem] border border-yellow-200/70 bg-yellow-50/80 px-4 py-3 text-sm text-yellow-800 shadow-sm ring-1 ring-yellow-100/70 dark:border-yellow-900/50 dark:bg-yellow-950/10 dark:text-yellow-300 dark:ring-yellow-900/20">
                 {t('feed.sensitiveHiddenPrefix')}{' '}
@@ -5002,12 +5012,12 @@ function FeedContent() {
                     <div className="mb-3 flex items-center gap-2 text-blue-200">
                       <FlaskConical className="h-5 w-5" />
                       <h3 className="font-bold">
-                        {localTexts.mural.labTitle}
+                        {renderEntreUSWordmark(localTexts.mural.labTitle)}
                       </h3>
                     </div>
 
                     <p className="text-sm leading-6 text-blue-100/80">
-                      {localTexts.mural.labDescription}
+                      {renderEntreUSWordmark(localTexts.mural.labDescription)}
                     </p>
 
                     <span className="mt-4 inline-flex rounded-full bg-blue-500 px-4 py-2 text-sm font-bold text-white shadow-sm shadow-blue-500/25 transition group-hover:bg-blue-400">
@@ -5022,7 +5032,7 @@ function FeedContent() {
                     <div className="mb-3 flex items-center gap-2 text-yellow-200">
                       <Award className="h-5 w-5" />
                       <h3 className="font-bold">
-                        Selos EntreUS
+                        Selos <EntreUSWordmark />
                       </h3>
                     </div>
 
@@ -5056,7 +5066,7 @@ function FeedContent() {
                     </div>
 
                     <p className="text-sm leading-6 text-green-100/80">
-                      Ajude o EntreUS Lab a continuar evoluindo com ferramentas gratuitas. Se puder, prefira Pix Nubank, pois não tem taxa para o projeto.
+                      Ajude o <EntreUSWordmark /> Lab a continuar evoluindo com ferramentas gratuitas. Se puder, prefira Pix Nubank, pois não tem taxa para o projeto.
                     </p>
 
                     <div className="mt-4 space-y-3">
@@ -5116,7 +5126,7 @@ function FeedContent() {
                       <FlaskConical className="h-4 w-4" />
                     </div>
                     <p className="text-sm leading-6 text-zinc-600 dark:text-zinc-300">
-                      {localTexts.mural.newsThree}
+                      {renderEntreUSWordmark(localTexts.mural.newsThree)}
                     </p>
                   </div>
                 </div>
@@ -5125,7 +5135,7 @@ function FeedContent() {
               <div className="rounded-[2rem] border border-zinc-200/70 bg-white/80 p-5 text-sm leading-6 text-zinc-500 shadow-sm ring-1 ring-black/5 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-black/60 dark:text-zinc-400 dark:ring-white/10">
                 <div className="mb-2 flex items-center gap-2 font-bold text-zinc-700 dark:text-zinc-200">
                   <MessageCircle className="h-4 w-4" />
-                  EntreUS
+                  <EntreUSWordmark />
                 </div>
                 O mural é uma área experimental. Depois podemos colocar criadores em destaque, anúncios internos, ItaCash, eventos, lives e novidades da comunidade.
               </div>
@@ -5148,7 +5158,7 @@ function FeedContent() {
                 </div>
 
                 <p className="mt-3 text-xs font-semibold text-zinc-400 dark:text-zinc-500">
-                  © 2026 EntreUS
+                  © 2026 <EntreUSWordmark />
                 </p>
               </div>
             </div>

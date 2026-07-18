@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import {
   Copy,
   Edit3,
@@ -20,6 +20,8 @@ type PostMoreMenuProps = {
   onReport: () => void
 }
 
+const POST_MORE_MENU_OPEN_EVENT = 'entreus:post-more-menu-open'
+
 export default function PostMoreMenu({
   isOwnPost,
   copied = false,
@@ -31,6 +33,41 @@ export default function PostMoreMenu({
   onReport,
 }: PostMoreMenuProps) {
   const [open, setOpen] = useState(false)
+  const menuId = useId()
+  const rootRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+
+    const closeFromAnotherMenu = (event: Event) => {
+      if ((event as CustomEvent<string>).detail !== menuId) setOpen(false)
+    }
+    const closeFromOutside = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false)
+    }
+    const closeFromKeyboard = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      setOpen(false)
+      triggerRef.current?.focus()
+    }
+
+    document.addEventListener(POST_MORE_MENU_OPEN_EVENT, closeFromAnotherMenu)
+    document.addEventListener('pointerdown', closeFromOutside)
+    document.addEventListener('keydown', closeFromKeyboard)
+    return () => {
+      document.removeEventListener(POST_MORE_MENU_OPEN_EVENT, closeFromAnotherMenu)
+      document.removeEventListener('pointerdown', closeFromOutside)
+      document.removeEventListener('keydown', closeFromKeyboard)
+    }
+  }, [menuId, open])
+
+  function toggleMenu() {
+    if (!open) {
+      document.dispatchEvent(new CustomEvent(POST_MORE_MENU_OPEN_EVENT, { detail: menuId }))
+    }
+    setOpen((current) => !current)
+  }
 
   function handleAction(action: () => void) {
     action()
@@ -38,30 +75,32 @@ export default function PostMoreMenu({
   }
 
   return (
-    <div className="relative">
+    <div ref={rootRef} className="relative">
       <button
+        ref={triggerRef}
         type="button"
-        onClick={() => setOpen((current) => !current)}
-        className="flex h-9 w-9 items-center justify-center rounded-full text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white"
+        onClick={toggleMenu}
+        className="flex h-9 w-9 items-center justify-center rounded-full text-text-muted transition hover:bg-surface-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand dark:hover:text-white"
         aria-label="Mais opções"
+        aria-expanded={open}
+        aria-controls={menuId}
+        aria-haspopup="menu"
       >
         <MoreHorizontal className="h-5 w-5" />
       </button>
 
       {open && (
-        <>
-          <button
-            type="button"
-            onClick={() => setOpen(false)}
-            className="fixed inset-0 z-40 cursor-default"
-            aria-label="Fechar menu"
-          />
-
-          <div className="absolute right-0 top-10 z-50 w-56 overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-xl dark:border-zinc-800 dark:bg-zinc-950">
+          <div
+            id={menuId}
+            role="menu"
+            aria-label="Opções da publicação"
+            className="absolute right-0 top-10 z-50 w-56 overflow-hidden rounded-2xl border border-border bg-surface text-foreground shadow-xl"
+          >
             <button
               type="button"
+              role="menuitem"
               onClick={() => handleAction(onCopy)}
-              className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-zinc-800 transition hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-900"
+              className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm transition hover:bg-surface-muted focus-visible:bg-surface-muted focus-visible:outline-none"
             >
               <Copy className="h-4 w-4" />
               {copied ? 'Link copiado' : 'Copiar link'}
@@ -71,8 +110,9 @@ export default function PostMoreMenu({
               <>
                 <button
                   type="button"
+                  role="menuitem"
                   onClick={() => handleAction(onEdit)}
-                  className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-zinc-800 transition hover:bg-zinc-100 dark:text-zinc-100 dark:hover:bg-zinc-900"
+                  className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm transition hover:bg-surface-muted focus-visible:bg-surface-muted focus-visible:outline-none"
                 >
                   <Edit3 className="h-4 w-4" />
                   Editar publicação
@@ -80,8 +120,9 @@ export default function PostMoreMenu({
 
                 <button
                   type="button"
+                  role="menuitem"
                   onClick={() => handleAction(onDelete)}
-                  className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-red-600 transition hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30"
+                  className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-danger transition hover:bg-danger/10 focus-visible:bg-danger/10 focus-visible:outline-none"
                 >
                   <Trash2 className="h-4 w-4" />
                   Excluir publicação
@@ -92,12 +133,13 @@ export default function PostMoreMenu({
             {!isOwnPost && (
               <button
                 type="button"
+                role="menuitem"
                 onClick={() => handleAction(onReport)}
                 disabled={reporting || reported}
                 className={`flex w-full items-center gap-3 px-4 py-3 text-left text-sm transition ${
                   reported
-                    ? 'text-green-600 dark:text-green-400'
-                    : 'text-orange-600 hover:bg-orange-50 dark:text-orange-400 dark:hover:bg-orange-950/30'
+                    ? 'text-success'
+                    : 'text-warning hover:bg-warning/10 focus-visible:bg-warning/10 focus-visible:outline-none'
                 } ${reporting ? 'cursor-not-allowed opacity-60' : ''}`}
               >
                 <ShieldAlert className="h-4 w-4" />
@@ -105,7 +147,6 @@ export default function PostMoreMenu({
               </button>
             )}
           </div>
-        </>
       )}
     </div>
   )
