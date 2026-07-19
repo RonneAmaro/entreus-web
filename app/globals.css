@@ -99,6 +99,20 @@ body {
   }
 }
 
+@keyframes entreus-navigation-progress {
+  0% {
+    transform: translateX(-120%);
+  }
+
+  55% {
+    transform: translateX(140%);
+  }
+
+  100% {
+    transform: translateX(320%);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .entreus-hub-trigger {
     animation: none;

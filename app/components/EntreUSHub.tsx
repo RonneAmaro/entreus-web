@@ -21,6 +21,7 @@ import {
 import { searchNavigationItems } from '@/lib/navigation/navigation-search'
 import { readHubUsage, recordHubUsage, type HubUsage } from '@/lib/navigation/hub-usage'
 import { COMPOSE_ACTION_EVENT, getComposeHref } from '@/lib/compose-intent'
+import { announceNavigationStart } from '@/lib/navigation/navigation-feedback'
 import type { NavigationAccent, NavigationCategory, NavigationIcon, NavigationItem } from '@/lib/navigation/navigation-types'
 import EntreUSWordmark from './EntreUSWordmark'
 
@@ -35,6 +36,8 @@ const CATEGORY_ORDER: NavigationCategory[] = [
   'highlights', 'communication', 'content', 'creator', 'account', 'tools', 'administration',
 ]
 const PINNED_IDS = new Set(['lab', 'meet', 'messages', 'wallet', 'feed', 'post'])
+const PRIMARY_PREFETCH_HREFS = ['/messages', '/profile', '/lab', '/meet', '/feed'] as const
+const SECONDARY_PREFETCH_HREFS = ['/notifications', '/search', '/creator-studio', '/wallet', '/settings'] as const
 const ACCENT_CLASSES: Record<NavigationAccent, string> = {
   amber: 'bg-amber-500/15 text-amber-700 ring-amber-500/20 group-hover:bg-amber-500/25 group-hover:shadow-amber-500/20 dark:text-amber-200 dark:ring-amber-300/20',
   blue: 'bg-blue-500/15 text-blue-700 ring-blue-500/20 group-hover:bg-blue-500/25 group-hover:shadow-blue-500/20 dark:text-blue-200 dark:ring-blue-300/20',
@@ -81,11 +84,16 @@ export default function EntreUSHub(props: EntreUSHubProps) {
   const router = useRouter()
   const searchRef = useRef<HTMLInputElement>(null)
   const dialogRef = useRef<HTMLDivElement>(null)
+  const navigationCloseTimerRef = useRef<number | null>(null)
   const [query, setQuery] = useState('')
   const [showAll, setShowAll] = useState(false)
   const [usage, setUsage] = useState<HubUsage>({ recent: [], counts: {} })
 
   const closeHub = useCallback(() => {
+    if (navigationCloseTimerRef.current !== null) {
+      window.clearTimeout(navigationCloseTimerRef.current)
+      navigationCloseTimerRef.current = null
+    }
     setQuery('')
     setShowAll(false)
     onClose()
@@ -130,14 +138,55 @@ export default function EntreUSHub(props: EntreUSHubProps) {
     .sort((a, b) => (usage.counts[b.id] || 0) - (usage.counts[a.id] || 0))
     .slice(0, 4), [availableItems, usage])
 
+  useEffect(() => {
+    if (!open) return
+    const usageHrefs = [...recent, ...frequent]
+      .filter(isNavigationRouteItem)
+      .map((item) => item.href)
+    const fallbackHrefs = showAll ? SECONDARY_PREFETCH_HREFS : PRIMARY_PREFETCH_HREFS
+    const hrefs = [...new Set([...usageHrefs, ...fallbackHrefs])]
+      .filter((href) => href !== pathname)
+      .slice(0, 5)
+    const timers: number[] = []
+
+    const prefetch = () => {
+      hrefs.forEach((href, index) => {
+        timers.push(window.setTimeout(() => router.prefetch(href), index * 160))
+      })
+    }
+    let cancelIdlePrefetch: () => void
+    if (typeof window.requestIdleCallback === 'function') {
+      const idleHandle = window.requestIdleCallback(prefetch, { timeout: 500 })
+      cancelIdlePrefetch = () => window.cancelIdleCallback(idleHandle)
+    } else {
+      const fallbackTimer = window.setTimeout(prefetch, 100)
+      cancelIdlePrefetch = () => window.clearTimeout(fallbackTimer)
+    }
+
+    return () => {
+      cancelIdlePrefetch()
+      timers.forEach((timer) => window.clearTimeout(timer))
+    }
+  }, [open, pathname, recent, frequent, router, showAll])
+
   if (!open || typeof document === 'undefined') return null
 
   function registerItemUsage(item: NavigationItem) {
     recordHubUsage(userId, item.id, window.localStorage)
   }
 
-  function closeHubAfterNavigation() {
-    window.setTimeout(closeHub, 0)
+  function beginHubTransition(title: string, href?: string) {
+    dialogRef.current?.parentElement?.setAttribute('data-navigation-pending', 'true')
+    if (href?.startsWith('/')) {
+      window.queueMicrotask(() => announceNavigationStart({ href: href as `/${string}`, title }))
+    }
+    if (navigationCloseTimerRef.current !== null) window.clearTimeout(navigationCloseTimerRef.current)
+    navigationCloseTimerRef.current = window.setTimeout(closeHub, 180)
+  }
+
+  function closeHubAfterNavigation(item: NavigationItem) {
+    if (!isNavigationRouteItem(item)) return
+    beginHubTransition(item.title, item.href)
   }
 
   function handleRouteClick(event: ReactMouseEvent<HTMLAnchorElement>, item: NavigationItem) {
@@ -146,7 +195,7 @@ export default function EntreUSHub(props: EntreUSHubProps) {
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
     event.preventDefault()
     router.push(item.href)
-    closeHub()
+    beginHubTransition(item.title, item.href)
   }
 
   function runItemAction(item: NavigationItem) {
@@ -156,11 +205,11 @@ export default function EntreUSHub(props: EntreUSHubProps) {
     if (pathname === '/feed') {
       window.dispatchEvent(new CustomEvent(COMPOSE_ACTION_EVENT, { detail: { intent: 'text' } }))
       router.replace(composeHref, { scroll: false })
-      window.setTimeout(closeHub, 100)
+      beginHubTransition(item.title)
       return
     }
     router.push(composeHref)
-    closeHub()
+    beginHubTransition(item.title, composeHref)
   }
 
   const appLink = (item: NavigationItem, compact = false) => {
@@ -177,13 +226,13 @@ export default function EntreUSHub(props: EntreUSHubProps) {
     )
 
     if (isNavigationRouteItem(item)) {
-      return <Link key={item.id} href={item.href} onClick={(event) => handleRouteClick(event, item)} onNavigate={closeHubAfterNavigation} className={className}>{content}</Link>
+      return <Link key={item.id} href={item.href} prefetch={false} onClick={(event) => handleRouteClick(event, item)} onNavigate={() => closeHubAfterNavigation(item)} className={className}>{content}</Link>
     }
     return <button key={item.id} type="button" disabled={!available} aria-disabled={!available} onClick={() => runItemAction(item)} className={className}>{content}</button>
   }
 
   const content = (
-    <div data-testid="entreus-hub-overlay" className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/75 p-0 backdrop-blur-md sm:p-5 lg:p-8" onMouseDown={(event) => { if (event.target === event.currentTarget) closeHub() }}>
+    <div data-testid="entreus-hub-overlay" className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/75 p-0 backdrop-blur-md transition duration-150 data-[navigation-pending=true]:pointer-events-none data-[navigation-pending=true]:opacity-0 motion-reduce:transition-none sm:p-5 lg:p-8" onMouseDown={(event) => { if (event.target === event.currentTarget) closeHub() }}>
       <div ref={dialogRef} id="entreus-hub" role="dialog" aria-modal="true" aria-labelledby="entreus-hub-title" className="relative flex h-[100dvh] w-full flex-col overflow-hidden bg-white text-zinc-950 shadow-2xl shadow-black/30 ring-1 ring-black/10 dark:bg-zinc-950 dark:text-white dark:shadow-black/70 dark:ring-white/10 sm:h-[min(90dvh,820px)] sm:w-[min(88vw,1280px)] sm:rounded-[2rem]">
         <div className="pointer-events-none absolute inset-x-0 top-0 h-44 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.18),transparent_55%)]" />
         <header className="relative shrink-0 px-4 pb-3 pt-[max(env(safe-area-inset-top),16px)] sm:px-8 sm:pb-5 sm:pt-7 lg:px-10">
@@ -224,7 +273,7 @@ export default function EntreUSHub(props: EntreUSHubProps) {
         </main>
 
         <footer className="relative flex shrink-0 items-center justify-between gap-3 border-t border-zinc-200 bg-zinc-50/90 px-4 pb-[max(env(safe-area-inset-bottom),12px)] pt-3 backdrop-blur-xl dark:border-white/[0.07] dark:bg-black/25 sm:px-8 sm:py-3 lg:px-10">
-          <Link href="/profile" onClick={(event) => handleRouteClick(event, HUB_ITEMS.find((item) => item.id === 'profile')!)} onNavigate={closeHubAfterNavigation} className="flex min-w-0 items-center gap-3 rounded-xl p-1.5 pr-3 transition hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 dark:hover:bg-white/[0.07]">{props.avatarUrl ? (
+          <Link href="/profile" prefetch={false} onClick={(event) => handleRouteClick(event, HUB_ITEMS.find((item) => item.id === 'profile')!)} onNavigate={() => closeHubAfterNavigation(HUB_ITEMS.find((item) => item.id === 'profile')!)} className="flex min-w-0 items-center gap-3 rounded-xl p-1.5 pr-3 transition hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 dark:hover:bg-white/[0.07]">{props.avatarUrl ? (
             // eslint-disable-next-line @next/next/no-img-element -- Profile media can use approved runtime hosts outside next/image config.
             <img src={props.avatarUrl} alt="" className="h-9 w-9 rounded-full object-cover" />
           ) : <span className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-500/15 text-blue-700 dark:text-blue-200"><User className="h-4 w-4" /></span>}<span className="min-w-0"><span className="block truncate text-sm font-bold">{props.displayName || props.username || 'Meu perfil'}</span><span className="hidden text-xs text-zinc-500 sm:block">Ver perfil</span></span></Link>

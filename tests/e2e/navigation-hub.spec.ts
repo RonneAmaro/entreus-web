@@ -59,6 +59,32 @@ async function installFakeSession(
 }
 
 test.describe('responsive navigation and EntreUS Hub', () => {
+  test('Hub responds immediately while a slow route is still loading', async ({ page }) => {
+    await installFakeSession(page)
+    await page.setViewportSize({ width: 1440, height: 900 })
+    let navigationStarted = false
+    await page.route('**/lab*', async (route) => {
+      if (!navigationStarted) {
+        await route.abort()
+        return
+      }
+      await new Promise((resolve) => setTimeout(resolve, 800))
+      await route.continue()
+    })
+    await page.goto('/feed', { waitUntil: 'domcontentloaded' })
+    await page.getByRole('button', { name: 'Abrir Hub EntreUS' }).click()
+    const dialog = page.getByRole('dialog', { name: 'EntreUS' })
+    const labLink = dialog.getByRole('link', { name: /EntreUS Lab/ })
+    const overlay = page.getByTestId('entreus-hub-overlay')
+
+    navigationStarted = true
+    await labLink.click({ noWaitAfter: true })
+    await expect(overlay).toHaveAttribute('data-navigation-pending', 'true', { timeout: 500 })
+    await expect(page.getByTestId('navigation-progress')).toBeVisible({ timeout: 500 })
+    await expect(page).toHaveURL(/\/lab$/, { timeout: 20_000 })
+    await expect(page.getByTestId('navigation-progress')).toHaveCount(0)
+  })
+
   for (const destination of [
     { id: 'feed', title: 'Casa', href: '/feed', start: '/messages' },
     { id: 'messages', title: 'Mensagens', href: '/messages', start: '/feed' },

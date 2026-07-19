@@ -168,10 +168,11 @@ describe('responsive navigation and EntreUS Hub', () => {
     expect(hub).toContain("item.kind !== 'compose'")
     expect(hub).toContain('isNavigationItemAvailable(item)')
     expect(hub).toContain('handleRouteClick(event, item)')
-    expect(hub).toContain('onNavigate={closeHubAfterNavigation}')
-    expect(hub).toContain('window.setTimeout(closeHub, 0)')
+    expect(hub).toContain('onNavigate={() => closeHubAfterNavigation(item)}')
+    expect(hub).toContain('window.setTimeout(closeHub, 180)')
     expect(hub).toContain('router.push(item.href)')
     expect(hub).toContain('router.push(composeHref)')
+    expect(hub).toContain('router.prefetch(href)')
     expect(hub).toContain('src="/logo-icon.png"')
     expect(hub).toContain('Só Entre Nós')
     expect(hub).not.toContain('>Hub EntreUS</h2>')
@@ -221,5 +222,59 @@ describe('responsive navigation and EntreUS Hub', () => {
     expect(menu).toContain('role="menu"')
     expect(menu).toContain('role="menuitem"')
     expect(menu).not.toContain('className="fixed inset-0')
+  })
+
+  it('provides bounded prefetch and immediate navigation feedback', () => {
+    const hub = readFileSync('app/components/EntreUSHub.tsx', 'utf8')
+    const progress = readFileSync('app/components/NavigationProgress.tsx', 'utf8')
+    const providers = readFileSync('app/providers.tsx', 'utf8')
+    const globals = readFileSync('app/globals.css', 'utf8')
+
+    expect(hub).toContain("PRIMARY_PREFETCH_HREFS = ['/messages', '/profile', '/lab', '/meet', '/feed']")
+    expect(hub).toContain("SECONDARY_PREFETCH_HREFS = ['/notifications', '/search', '/creator-studio', '/wallet', '/settings']")
+    expect(hub).toContain('.slice(0, 5)')
+    expect(hub).toContain('router.prefetch(href)')
+    expect(hub).toContain("typeof window.requestIdleCallback === 'function'")
+    expect(hub).toContain('window.setTimeout(prefetch, 100)')
+    expect(hub).toContain('prefetch={false}')
+    expect(hub).toContain("setAttribute('data-navigation-pending', 'true')")
+    expect(hub).toContain('announceNavigationStart')
+    expect(progress).toContain('data-testid="navigation-progress"')
+    expect(progress).toContain('12_000')
+    expect(providers).toContain('<NavigationProgress />')
+    expect(globals).toContain('@keyframes entreus-navigation-progress')
+  })
+
+  it('defines lightweight route loading shells for priority destinations', () => {
+    const loadingRoutes = {
+      'app/lab/loading.tsx': 'EntreUS Lab',
+      'app/meet/loading.tsx': 'EntreUS Meet',
+      'app/messages/loading.tsx': 'Mensagens',
+      'app/profile/loading.tsx': 'Perfil',
+      'app/creator-studio/loading.tsx': 'Creator Studio',
+    }
+
+    for (const [path, title] of Object.entries(loadingRoutes)) {
+      const source = readFileSync(path, 'utf8')
+      expect(source).toContain('RouteLoadingShell')
+      expect(source).toContain(`title="${title}"`)
+    }
+
+    const shell = readFileSync('app/components/RouteLoadingShell.tsx', 'utf8')
+    expect(shell).toContain('aria-busy="true"')
+    expect(shell).toContain('bg-background')
+    expect(shell).toContain('bg-surface')
+    expect(shell).not.toContain('animate-spin')
+  })
+
+  it('keeps Lab and the Meet landing free from eager heavyweight features', () => {
+    const lab = readFileSync('app/lab/page.tsx', 'utf8')
+    const meet = readFileSync('app/meet/page.tsx', 'utf8')
+
+    expect(lab).not.toContain("'use client'")
+    expect(lab).not.toMatch(/supabase|fetch\(|@livekit|livekit-client|jspdf|pdfjs-dist/)
+    expect(meet).not.toMatch(/@livekit|livekit-client|MeetRoomClient/)
+    expect(meet).toContain("supabase.auth.getSession()")
+    expect(meet).not.toContain('/api/ai/')
   })
 })
