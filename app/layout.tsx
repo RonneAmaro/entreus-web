@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from 'next'
+import { cookies, headers } from 'next/headers'
 import { siteConfig } from '@/lib/site-config'
+import { resolveLocalePreference } from '@/lib/i18n'
 import { Providers } from './providers'
 import { LanguageProvider } from './components/LanguageProvider'
 import PWARegister from './components/PWARegister'
@@ -78,17 +80,25 @@ export const viewport: Viewport = {
   colorScheme: 'dark light',
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode
 }>) {
+  const [cookieStore, headerStore] = await Promise.all([cookies(), headers()])
+  const cookieLocale = cookieStore.get('entreus-locale')?.value
+  const locale = resolveLocalePreference({
+    cookieLocale,
+    acceptLanguage: headerStore.get('accept-language'),
+    authenticated: false,
+  })
+
   return (
-    <html lang="pt-BR" suppressHydrationWarning>
+    <html lang={locale} suppressHydrationWarning>
       <body>
         <Providers>
           <PWARegister />
-          <LanguageProvider>{children}</LanguageProvider>
+          <LanguageProvider initialLocale={locale}>{children}</LanguageProvider>
         </Providers>
       </body>
     </html>

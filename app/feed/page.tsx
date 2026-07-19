@@ -69,7 +69,6 @@ import {
   canViewAdultPostContent as canViewAdult18Plus,
   canViewerSeePostClassification as canViewCommunity,
   getAllowedPostCommunityFilters as getAllowedCommunityFilters,
-  getPostCommunityLabel as getCommunityLabel,
   getSafePostCommunity as normalizeCommunity,
   getSafePostContentRating as normalizeContentRating,
   isPostCommunityType,
@@ -893,7 +892,33 @@ function FeedContent() {
   const communityParam = searchParams.get('community') || searchParams.get('comunidade') || ''
   const { theme, setTheme } = useTheme()
   const { t, language } = useLanguage()
-  const localTexts = getLocalFeedTexts(language)
+  const localTexts: FeedTexts = {
+    tabs: {
+      posts: t('feed.tabs.posts'),
+      media: t('feed.tabs.media'),
+    },
+    mural: {
+      searchTitle: t('feed.searchTitle'),
+      searchPlaceholder: t('feed.searchPlaceholder'),
+      searchHelper: t('feed.searchHelper'),
+      labTitle: t('feed.labTitle'),
+      labDescription: t('feed.labDescription'),
+      labButton: t('feed.labButton'),
+      donationTitle: t('feed.donationTitle'),
+      donationDescription: t('feed.donationDescription'),
+      donationButton: t('feed.donationButton'),
+      newsTitle: t('feed.newsTitle'),
+      newsOne: t('feed.newsOne'),
+      newsTwo: t('feed.newsTwo'),
+      newsThree: t('feed.newsThree'),
+      emptyMedia: t('feed.emptyMedia'),
+      noSearchResults: t('feed.noSearchResults'),
+      openPost: t('feed.openPost'),
+      galleryMediaCount: t('feed.galleryMediaCount'),
+    },
+  }
+  const getLocalizedCommunityLabel = (value: unknown) =>
+    t(`communities.${normalizeCommunity(value)}`)
 
   const [mounted, setMounted] = useState(false)
   const [userId, setUserId] = useState('')
@@ -3203,7 +3228,7 @@ function FeedContent() {
         })
 
       if (mediaError) {
-        setMessage('Comentário criado, mas a mídia não foi salva. Aplique a migration de mídias de comentários no Supabase.')
+        setMessage(t('post.comments.mediaSaveMigration'))
         await loadComments()
         setSubmittingCommentPostId(null)
         return
@@ -3498,7 +3523,7 @@ function FeedContent() {
 
   function handleAddGifUrl(postId: string) {
     if (postId) {
-      setMessage('Cole um link de GIF válido começando com http:// ou https://.')
+      setMessage(t('post.comments.invalidGifUrl'))
       return
     }
   }
@@ -3636,7 +3661,7 @@ function FeedContent() {
     const haystack = [
       post.content || '',
       post.category || '',
-      getCommunityLabel(post.community_type),
+      getLocalizedCommunityLabel(post.community_type),
       post.profiles?.display_name || '',
       post.profiles?.username || '',
     ]
@@ -3818,7 +3843,7 @@ function FeedContent() {
             type="button"
             onClick={handleCloseReplyModal}
             className="absolute inset-0 cursor-default"
-            aria-label="Fechar resposta"
+            aria-label={t('common.close')}
           />
 
           <div className="relative z-[81] flex max-h-[90dvh] w-full max-w-2xl flex-col overflow-hidden rounded-[2rem] border border-zinc-200/70 bg-white/95 shadow-2xl shadow-black/25 ring-1 ring-black/5 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-black/90 dark:ring-white/10 sm:max-h-[88vh]">
@@ -3827,14 +3852,14 @@ function FeedContent() {
                 type="button"
                 onClick={handleCloseReplyModal}
                 className="flex h-10 w-10 items-center justify-center rounded-full text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-950 dark:hover:bg-zinc-900 dark:hover:text-white"
-                aria-label="Fechar"
-                title="Fechar"
+                aria-label={t('common.close')}
+                title={t('common.close')}
               >
                 ×
               </button>
 
               <p className="text-sm font-bold text-zinc-950 dark:text-white">
-                Responder publicação
+                {t('feed.replyTitle')}
               </p>
 
               <button
@@ -3922,7 +3947,7 @@ function FeedContent() {
                         [replyModalPost.id]: event.target.value,
                       }))
                     }
-                    placeholder="Postar sua resposta..."
+                    placeholder={t('feed.replyPlaceholder')}
                     className="min-h-32 w-full resize-none bg-transparent py-2 text-lg text-zinc-950 outline-none placeholder:text-zinc-400 dark:text-white"
                   />
 
@@ -3941,7 +3966,7 @@ function FeedContent() {
                           src={commentMediaDrafts[replyModalPost.id]?.url}
                           loading="lazy"
                           decoding="async"
-                          alt="Prévia da mídia do comentário"
+                          alt={t('post.comments.mediaPreview')}
                           className="max-h-72 w-full object-contain"
                         />
                       )}
@@ -4083,7 +4108,7 @@ function FeedContent() {
                     <div className="flex items-center gap-1.5 text-blue-600 dark:text-blue-400">
                       <label
                         className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full transition hover:bg-blue-50 dark:hover:bg-blue-950/40"
-                        title="Adicionar imagem ou vídeo"
+                        title={t('composer.addMedia')}
                       >
                         <input
                           type="file"
@@ -4213,17 +4238,17 @@ function FeedContent() {
             <div className="mb-4 rounded-[1.5rem] border border-zinc-200/70 bg-white/90 p-3 shadow-sm ring-1 ring-black/5 backdrop-blur dark:border-zinc-800/70 dark:bg-zinc-950/80 dark:ring-white/10">
               <div className="mb-3 flex flex-col gap-1 px-1">
                 <p className="text-sm font-black text-zinc-950 dark:text-white">
-                  Comunidades
+                  {t('feed.communitiesTitle')}
                 </p>
                 <p className="text-xs leading-5 text-zinc-500 dark:text-zinc-400">
-                  Geral mostra apenas posts seguros. Escolha uma comunidade para mudar de ambiente.
+                  {t('feed.communitiesGuidance')}
                 </p>
               </div>
 
               <div className="flex gap-2 overflow-x-auto pb-1">
                 {allowedCommunityFilters.map((filter) => {
                   const active = communityFilter === filter
-                  const label = getCommunityLabel(filter)
+                  const label = getLocalizedCommunityLabel(filter)
 
                   return (
                     <button
@@ -4244,7 +4269,7 @@ function FeedContent() {
 
               {!canAccessAdult18Plus && (
                 <p className="mt-2 px-1 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
-                  Area 18+ exige verificacao de idade e nao aparece no feed geral.
+                  {t('feed.adultCommunityGuidance')}
                 </p>
               )}
             </div>
@@ -4434,7 +4459,7 @@ function FeedContent() {
                     <div className="mb-3 flex flex-wrap items-center gap-2">
                       <p className="text-sm text-zinc-500">
                         {post.category === 'gift_received'
-                          ? 'Presente recebido'
+                          ? t('post.giftReceived')
                           : t(getCategoryKey(post.category))}
                       </p>
 
@@ -4443,18 +4468,18 @@ function FeedContent() {
                       </span>
 
                       <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700 ring-1 ring-blue-200/80 dark:bg-blue-950/30 dark:text-blue-200 dark:ring-blue-900/60">
-                        {getCommunityLabel(post.community_type)}
+                        {getLocalizedCommunityLabel(post.community_type)}
                       </span>
 
                       {isSensitivePostItem && (
                         <span className="rounded-full bg-yellow-50 px-2.5 py-1 text-xs font-bold text-yellow-700 ring-1 ring-yellow-200/80 dark:bg-yellow-950/30 dark:text-yellow-300 dark:ring-yellow-900/60">
-                          {normalizeContentRating(post.content_rating) === 'adult_18plus' ? '18+' : 'Sensivel'}
+                          {normalizeContentRating(post.content_rating) === 'adult_18plus' ? '18+' : t('communities.sensitive')}
                         </span>
                       )}
 
                       {postPaid && (
                         <span className="rounded-full bg-cyan-50 px-2.5 py-1 text-xs font-bold text-cyan-700 ring-1 ring-cyan-200/80 dark:bg-cyan-950/30 dark:text-cyan-200 dark:ring-cyan-900/60">
-                          {postPaidUnlocked ? 'Desbloqueado' : <ItaCashAmount amount={postPrice} size="xs" />}
+                          {postPaidUnlocked ? t('post.unlocked') : <ItaCashAmount amount={postPrice} size="xs" />}
                         </span>
                       )}
 
@@ -4484,9 +4509,9 @@ function FeedContent() {
                             <Lock className="h-5 w-5" />
                           </span>
                           <div className="min-w-0 flex-1">
-                            <h3 className="font-black">Post pago</h3>
+                            <h3 className="font-black">{t('post.paidTitle')}</h3>
                             <p className="mt-1 text-sm leading-6 text-cyan-900/75 dark:text-cyan-100/75">
-                              Desbloqueie por <ItaCashAmount amount={postPrice} size="sm" className="mx-1" /> para ver o conteudo e as midias.
+                              <ItaCashAmount amount={postPrice} size="sm" className="mr-1" /> {t('post.paidAccessDescription')}
                             </p>
                             <div className="mt-3 flex flex-wrap items-center gap-2">
                               <button
@@ -4496,11 +4521,11 @@ function FeedContent() {
                                 className="inline-flex items-center gap-2 rounded-full bg-cyan-600 px-4 py-2 text-sm font-black text-white transition hover:bg-cyan-500 disabled:cursor-not-allowed disabled:opacity-60"
                               >
                                 {paidUnlockingPostId === post.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Coins className="h-4 w-4" />}
-                                Desbloquear
+                                {t('post.unlock')}
                               </button>
                               {paidUnlockMessage === getPaidPostErrorMessage('insufficient_balance') && (
                                 <Link href="/buy-itacash" className="rounded-full border border-cyan-300/50 px-4 py-2 text-sm font-black text-cyan-800 transition hover:bg-cyan-100 dark:text-cyan-100 dark:hover:bg-cyan-950">
-                                  Comprar ItaCash
+                                  {t('post.buyItaCash')}
                                 </Link>
                               )}
                             </div>
@@ -4555,7 +4580,7 @@ function FeedContent() {
                               />
                             )}
 
-                            <TranslatePostButton content={post.content} />
+                            <TranslatePostButton postId={post.id} content={post.content} />
 
                             <LinkPreview content={post.content} enableExternalEmbeds />
 
@@ -4591,7 +4616,7 @@ function FeedContent() {
                               />
                             )}
 
-                            <TranslatePostButton content={post.content} />
+                            <TranslatePostButton postId={post.id} content={post.content} />
 
                             <LinkPreview content={post.content} enableExternalEmbeds />
 
@@ -4897,7 +4922,7 @@ function FeedContent() {
                   <div className="mx-auto max-w-xl rounded-[1.5rem] border border-zinc-200/70 bg-white/85 p-4 shadow-sm dark:border-zinc-800/70 dark:bg-zinc-950/80">
                     <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" />
                     <p className="text-sm font-semibold text-zinc-500 dark:text-zinc-400">
-                      Carregando mais posts...
+                      {t('feed.loadingMore')}
                     </p>
                   </div>
                 ) : loadMoreError ? (
@@ -4908,7 +4933,7 @@ function FeedContent() {
                       onClick={loadMorePosts}
                       className="mt-3 rounded-full bg-red-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-red-500"
                     >
-                      Tentar novamente
+                      {t('common.retry')}
                     </button>
                   </div>
                 ) : hasMorePosts ? (
@@ -4917,11 +4942,11 @@ function FeedContent() {
                     onClick={loadMorePosts}
                     className="rounded-full border border-blue-300/30 bg-blue-500/10 px-5 py-2.5 text-sm font-bold text-blue-700 transition hover:bg-blue-500 hover:text-white dark:text-blue-200 dark:hover:text-white"
                   >
-                    Carregar mais
+                    {t('feed.loadMore')}
                   </button>
                 ) : posts.length > 0 ? (
                   <p className="rounded-full border border-zinc-200/70 bg-white/75 px-4 py-2 text-sm font-semibold text-zinc-500 dark:border-zinc-800/70 dark:bg-zinc-950/70 dark:text-zinc-400">
-                    Voce chegou ao fim por enquanto.
+                    {t('feed.endReached')}
                   </p>
                 ) : null}
               </div>
@@ -4962,7 +4987,7 @@ function FeedContent() {
                     <div className="rounded-[1.5rem] border border-blue-400/20 bg-blue-950/20 p-4 ring-1 ring-white/10">
                       <div className="mb-3 flex items-center gap-2 text-blue-200">
                         <Trophy className="h-5 w-5" />
-                        <h3 className="font-bold">Destaques da Comunidade</h3>
+                        <h3 className="font-bold">{t('feed.highlightsTitle')}</h3>
                       </div>
 
                       <div className="space-y-3">
@@ -4975,11 +5000,11 @@ function FeedContent() {
                           const title =
                             highlight.title ||
                             highlight.community_challenges?.title ||
-                            'Post em destaque'
+                            t('feed.highlightFallbackTitle')
                           const description =
                             highlight.description ||
                             highlight.posts?.content ||
-                            'Selecionado pelos desafios da comunidade.'
+                            t('feed.highlightFallbackDescription')
 
                           return (
                             <Link
@@ -5000,7 +5025,7 @@ function FeedContent() {
                         href="/challenges"
                         className="mt-4 inline-flex rounded-full bg-blue-500 px-4 py-2 text-sm font-bold text-white shadow-sm shadow-blue-500/25 transition hover:bg-blue-400"
                       >
-                        Ver desafios
+                        {t('feed.viewChallenges')}
                       </Link>
                     </div>
                   )}
@@ -5032,12 +5057,12 @@ function FeedContent() {
                     <div className="mb-3 flex items-center gap-2 text-yellow-200">
                       <Award className="h-5 w-5" />
                       <h3 className="font-bold">
-                        Selos <EntreUSWordmark />
+                        {renderEntreUSWordmark(t('feed.badgesTitle'))}
                       </h3>
                     </div>
 
                     <p className="text-sm leading-6 text-yellow-100/80">
-                      Ganhe destaque na comunidade com selos especiais, como Engajador, VIP Premium e Ancião.
+                      {t('feed.badgesDescription')}
                     </p>
 
                     <div className="mt-4 overflow-hidden rounded-2xl border border-yellow-300/20 bg-black/40 shadow-lg shadow-blue-500/10 ring-1 ring-blue-400/10">
@@ -5053,7 +5078,7 @@ function FeedContent() {
                     </div>
 
                     <span className="mt-4 inline-flex rounded-full bg-yellow-400 px-4 py-2 text-sm font-bold text-black shadow-sm shadow-yellow-500/20 transition group-hover:bg-yellow-300">
-                      Ver meus selos
+                      {t('feed.viewBadges')}
                     </span>
                   </Link>
 
@@ -5061,12 +5086,12 @@ function FeedContent() {
                     <div className="mb-3 flex items-center gap-2 text-green-200">
                       <Heart className="h-5 w-5" />
                       <h3 className="font-bold">
-                        Apoie o projeto
+                        {t('feed.supportTitle')}
                       </h3>
                     </div>
 
                     <p className="text-sm leading-6 text-green-100/80">
-                      Ajude o <EntreUSWordmark /> Lab a continuar evoluindo com ferramentas gratuitas. Se puder, prefira Pix Nubank, pois não tem taxa para o projeto.
+                      {renderEntreUSWordmark(t('feed.supportDescription'))}
                     </p>
 
                     <div className="mt-4 space-y-3">
@@ -5077,7 +5102,7 @@ function FeedContent() {
                         className="flex items-center justify-center gap-2 rounded-full bg-green-500 px-4 py-2 text-sm font-bold text-white shadow-sm shadow-green-500/20 transition hover:bg-green-400"
                       >
                         <Landmark className="h-4 w-4" />
-                        Pix Nubank — sem taxa
+                        {t('feed.pixNoFee')}
                       </a>
 
                       <a
@@ -5087,7 +5112,7 @@ function FeedContent() {
                         className="flex items-center justify-center gap-2 rounded-full border border-green-400/30 bg-white/[0.03] px-4 py-2 text-sm font-bold text-green-100 transition hover:border-green-300/50 hover:bg-green-900/40"
                       >
                         <CreditCard className="h-4 w-4" />
-                        Mercado Pago — pode ter taxa
+                        {t('feed.mercadoPagoFee')}
                       </a>
                     </div>
                   </div>
@@ -5137,7 +5162,7 @@ function FeedContent() {
                   <MessageCircle className="h-4 w-4" />
                   <EntreUSWordmark />
                 </div>
-                O mural é uma área experimental. Depois podemos colocar criadores em destaque, anúncios internos, ItaCash, eventos, lives e novidades da comunidade.
+                {t('feed.experimental')}
               </div>
 
               <div className="rounded-[1.5rem] border border-zinc-200/60 bg-white/70 p-4 text-sm leading-6 text-zinc-500 shadow-sm ring-1 ring-black/5 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-black/45 dark:text-zinc-400 dark:ring-white/10">

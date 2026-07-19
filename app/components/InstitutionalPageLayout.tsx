@@ -1,6 +1,8 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import type { ReactNode } from 'react'
+import { getRequestLocale } from '@/lib/i18n/server'
+import { translate } from '@/lib/i18n'
 
 type InstitutionalSection = {
   title: string
@@ -16,14 +18,16 @@ type InstitutionalPageLayoutProps = {
   children?: ReactNode
 }
 
-export default function InstitutionalPageLayout({
+export default async function InstitutionalPageLayout({
   title,
-  eyebrow = 'Transparência EntreUS',
+  eyebrow,
   description,
   sections = [],
   notice,
   children,
 }: InstitutionalPageLayoutProps) {
+  const locale = await getRequestLocale()
+  const t = (key: Parameters<typeof translate>[1]) => translate(locale, key)
   const brandTextShadow =
     '0 2px 12px rgba(0,0,0,0.55), 0 0 18px rgba(100,180,251,0.20)'
 
@@ -56,7 +60,7 @@ export default function InstitutionalPageLayout({
                 className="mt-1 text-xs font-bold uppercase tracking-[0.18em] sm:text-[13px]"
                 style={{ color: '#64b4fb', textShadow: brandTextShadow }}
               >
-                S&oacute; Entre N&oacute;s
+                {t('institutional.tagline')}
               </p>
             </div>
           </Link>
@@ -65,14 +69,14 @@ export default function InstitutionalPageLayout({
             href="/feed"
             className="inline-flex items-center justify-center rounded-full border border-blue-300/30 bg-blue-500/10 px-5 py-2.5 text-sm font-bold text-blue-100 shadow-sm shadow-blue-950/20 transition hover:border-blue-200/70 hover:bg-blue-500/20"
           >
-            Voltar ao feed
+            {t('institutional.backToFeed')}
           </Link>
         </header>
 
         <section className="grid gap-6 lg:grid-cols-[0.82fr_1.18fr] lg:items-start">
           <div className="rounded-[2rem] border border-blue-400/20 bg-zinc-950/80 p-6 shadow-2xl shadow-blue-950/20 ring-1 ring-white/10 backdrop-blur-xl sm:p-8">
             <p className="text-sm font-bold uppercase tracking-[0.22em] text-blue-300">
-              {eyebrow}
+              {eyebrow || t('institutional.eyebrow')}
             </p>
             <h1 className="mt-4 text-4xl font-black tracking-tight text-white sm:text-5xl">
               {title}

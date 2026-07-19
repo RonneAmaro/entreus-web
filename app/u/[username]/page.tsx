@@ -28,6 +28,7 @@ import {
   getProfileTheme,
 } from "@/lib/profile-themes";
 import { canViewAdultContent } from "@/lib/content-access";
+import { useLanguage } from "../../components/LanguageProvider";
 import {
   getExclusiveAccessState,
   isExclusiveCreatorProfilePost,
@@ -162,6 +163,7 @@ export default function PublicProfilePage() {
   const params = useParams();
   const router = useRouter();
   const { theme, setTheme } = useTheme();
+  const { language, t } = useLanguage();
   const username = typeof params.username === "string" ? params.username : "";
 
   const [mounted, setMounted] = useState(false);
@@ -285,7 +287,7 @@ export default function PublicProfilePage() {
       setLoggedProfile(normalizedLoggedProfile);
 
       if (!username) {
-        setMessage("Usuário inválido.");
+        setMessage(t("publicProfile.errors.invalidUser"));
         setLoading(false);
         return;
       }
@@ -310,13 +312,13 @@ export default function PublicProfilePage() {
       }
 
       if (profileError) {
-        setMessage("Erro ao carregar perfil: " + profileError.message);
+        setMessage(t("publicProfile.errors.loadProfile", { error: profileError.message }));
         setLoading(false);
         return;
       }
 
       if (!profileData) {
-        setMessage("Perfil não encontrado.");
+        setMessage(t("publicProfile.errors.notFound"));
         setLoading(false);
         return;
       }
@@ -351,7 +353,7 @@ export default function PublicProfilePage() {
             .maybeSingle();
 
         if (blockedByMeError) {
-          setMessage("Erro ao verificar bloqueio: " + blockedByMeError.message);
+          setMessage(t("publicProfile.errors.checkBlock", { error: blockedByMeError.message }));
           setLoading(false);
           return;
         }
@@ -366,7 +368,7 @@ export default function PublicProfilePage() {
 
         if (hasBlockedMeError) {
           setMessage(
-            "Erro ao verificar bloqueio: " + hasBlockedMeError.message,
+            t("publicProfile.errors.checkBlock", { error: hasBlockedMeError.message }),
           );
           setLoading(false);
           return;
@@ -435,7 +437,7 @@ export default function PublicProfilePage() {
       .eq("read", false);
 
     if (error) {
-      setMessage("Erro ao carregar notificações: " + error.message);
+      setMessage(t("publicProfile.errors.loadNotifications", { error: error.message }));
       return;
     }
 
@@ -449,7 +451,7 @@ export default function PublicProfilePage() {
       .eq("following_id", profileId);
 
     if (followersError) {
-      setMessage("Erro ao carregar seguidores: " + followersError.message);
+      setMessage(t("publicProfile.errors.loadFollowers", { error: followersError.message }));
       return;
     }
 
@@ -461,7 +463,7 @@ export default function PublicProfilePage() {
       .eq("follower_id", profileId);
 
     if (followingError) {
-      setMessage("Erro ao carregar seguindo: " + followingError.message);
+      setMessage(t("publicProfile.errors.loadFollowing", { error: followingError.message }));
       return;
     }
 
@@ -573,7 +575,7 @@ export default function PublicProfilePage() {
       .select("id, post_id, user_id");
 
     if (error) {
-      setMessage("Erro ao carregar curtidas: " + error.message);
+      setMessage(t("publicProfile.errors.loadLikes", { error: error.message }));
       return;
     }
 
@@ -586,7 +588,7 @@ export default function PublicProfilePage() {
       .select("id, post_id, user_id");
 
     if (error) {
-      setMessage("Erro ao carregar comentários: " + error.message);
+      setMessage(t("publicProfile.errors.loadComments", { error: error.message }));
       return;
     }
 
@@ -602,7 +604,7 @@ export default function PublicProfilePage() {
       .eq("user_id", currentUserId);
 
     if (error) {
-      setMessage("Erro ao carregar salvos: " + error.message);
+      setMessage(t("publicProfile.errors.loadBookmarks", { error: error.message }));
       return;
     }
 
@@ -616,7 +618,7 @@ export default function PublicProfilePage() {
       .order("created_at", { ascending: false });
 
     if (error) {
-      setMessage("Erro ao carregar reposts: " + error.message);
+      setMessage(t("publicProfile.errors.loadReposts", { error: error.message }));
       return;
     }
 
@@ -707,7 +709,7 @@ export default function PublicProfilePage() {
     } | null;
 
     if (!response.ok || !payload) {
-      setMessage(payload?.error || "Erro ao carregar publicacoes do perfil.");
+      setMessage(t("publicProfile.errors.loadPosts"));
       setPosts([]);
       return;
     }
@@ -785,7 +787,7 @@ export default function PublicProfilePage() {
     if (!profile || !loggedUserId) return;
     if (loggedUserId === profile.id) return;
     if (isBlockedByMe || hasBlockedMe) {
-      setMessage("Não é possível seguir enquanto houver bloqueio entre vocês.");
+      setMessage(t("publicProfile.errors.followBlocked"));
       return;
     }
 
@@ -800,7 +802,7 @@ export default function PublicProfilePage() {
       .maybeSingle();
 
     if (checkError) {
-      setMessage("Erro ao verificar seguimento: " + checkError.message);
+      setMessage(t("publicProfile.errors.checkFollow", { error: checkError.message }));
       setFollowLoading(false);
       return;
     }
@@ -812,7 +814,7 @@ export default function PublicProfilePage() {
         .eq("id", existingFollow.id);
 
       if (error) {
-        setMessage("Erro ao deixar de seguir: " + error.message);
+        setMessage(t("publicProfile.errors.unfollow", { error: error.message }));
         setFollowLoading(false);
         return;
       }
@@ -823,7 +825,7 @@ export default function PublicProfilePage() {
       });
 
       if (error) {
-        setMessage("Erro ao seguir: " + error.message);
+        setMessage(t("publicProfile.errors.follow", { error: error.message }));
         setFollowLoading(false);
         return;
       }
@@ -854,12 +856,12 @@ export default function PublicProfilePage() {
         .eq("blocked_id", profile.id);
 
       if (error) {
-        setMessage("Erro ao desbloquear usuário: " + error.message);
+        setMessage(t("publicProfile.errors.unblock", { error: error.message }));
         setBlockLoading(false);
         return;
       }
 
-      setMessage("Usuário desbloqueado com sucesso.");
+      setMessage(t("publicProfile.success.unblocked"));
     } else {
       await supabase
         .from("follows")
@@ -879,12 +881,12 @@ export default function PublicProfilePage() {
       });
 
       if (error) {
-        setMessage("Erro ao bloquear usuário: " + error.message);
+        setMessage(t("publicProfile.errors.block", { error: error.message }));
         setBlockLoading(false);
         return;
       }
 
-      setMessage("Usuário bloqueado com sucesso.");
+      setMessage(t("publicProfile.success.blocked"));
     }
 
     await refreshProfileState(profile.id, loggedUserId);
@@ -894,12 +896,12 @@ export default function PublicProfilePage() {
   async function handleReportUser() {
     if (!profile || !loggedUserId) return;
     if (loggedUserId === profile.id) {
-      setMessage("Você não pode denunciar seu próprio perfil.");
+      setMessage(t("publicProfile.errors.reportOwnProfile"));
       return;
     }
 
     const reason = window.prompt(
-      "Informe o motivo da denúncia.\nEx.: assédio, perfil falso, conteúdo ofensivo, spam",
+      t("publicProfile.reportProfilePrompt"),
     );
 
     if (!reason || !reason.trim()) return;
@@ -914,13 +916,13 @@ export default function PublicProfilePage() {
     });
 
     if (error) {
-      setMessage("Erro ao denunciar usuário: " + error.message);
+      setMessage(t("publicProfile.errors.reportUser", { error: error.message }));
       setReportingUser(false);
       return;
     }
 
     setReportedUser(true);
-    setMessage("Usuário denunciado com sucesso.");
+    setMessage(t("publicProfile.success.reportedUser"));
     setReportingUser(false);
   }
 
@@ -944,7 +946,7 @@ export default function PublicProfilePage() {
         .eq("user_id", loggedUserId);
 
       if (error) {
-        setMessage("Erro ao remover dos salvos: " + error.message);
+        setMessage(t("publicProfile.errors.removeBookmark", { error: error.message }));
         await loadBookmarks(loggedUserId);
       }
 
@@ -970,7 +972,7 @@ export default function PublicProfilePage() {
       .single();
 
     if (error) {
-      setMessage("Erro ao salvar post: " + error.message);
+      setMessage(t("publicProfile.errors.savePost", { error: error.message }));
       await loadBookmarks(loggedUserId);
       return;
     }
@@ -990,7 +992,7 @@ export default function PublicProfilePage() {
     const repostedPost = posts.find((post) => post.id === postId);
 
     if (repostedPost?.user_id === loggedUserId) {
-      setMessage("Você não precisa repostar sua própria publicação.");
+      setMessage(t("publicProfile.errors.repostOwn"));
       return;
     }
 
@@ -1010,7 +1012,7 @@ export default function PublicProfilePage() {
         .eq("user_id", loggedUserId);
 
       if (error) {
-        setMessage("Erro ao remover repost: " + error.message);
+        setMessage(t("publicProfile.errors.removeRepost", { error: error.message }));
         if (profile) await loadAllReposts(profile);
       }
 
@@ -1041,7 +1043,7 @@ export default function PublicProfilePage() {
       .single();
 
     if (error) {
-      setMessage("Erro ao repostar: " + error.message);
+      setMessage(t("publicProfile.errors.repost", { error: error.message }));
       if (profile) await loadAllReposts(profile);
       return;
     }
@@ -1087,7 +1089,7 @@ export default function PublicProfilePage() {
         .eq("id", existingLike.id);
 
       if (error) {
-        setMessage("Erro ao remover curtida: " + error.message);
+        setMessage(t("publicProfile.errors.removeLike", { error: error.message }));
         await loadLikes();
       }
 
@@ -1112,7 +1114,7 @@ export default function PublicProfilePage() {
       .single();
 
     if (error) {
-      setMessage("Erro ao curtir: " + error.message);
+      setMessage(t("publicProfile.errors.like", { error: error.message }));
       await loadLikes();
       return;
     }
@@ -1146,7 +1148,7 @@ export default function PublicProfilePage() {
         setCopiedPostId((current) => (current === postId ? null : current));
       }, 2000);
     } catch {
-      setMessage("Não foi possível copiar o link do post.");
+      setMessage(t("publicProfile.errors.copyPostLink"));
     }
   }
 
@@ -1154,12 +1156,12 @@ export default function PublicProfilePage() {
     if (!loggedUserId) return;
 
     if (postOwnerId === loggedUserId) {
-      setMessage("Você não pode denunciar sua própria publicação.");
+      setMessage(t("publicProfile.errors.reportOwnPost"));
       return;
     }
 
     const reason = window.prompt(
-      "Informe o motivo da denúncia.\nEx.: spam, nudez indevida, assédio, conteúdo ofensivo",
+      t("publicProfile.reportPostPrompt"),
     );
 
     if (!reason || !reason.trim()) return;
@@ -1175,13 +1177,13 @@ export default function PublicProfilePage() {
     });
 
     if (error) {
-      setMessage("Erro ao denunciar publicação: " + error.message);
+      setMessage(t("publicProfile.errors.reportPost", { error: error.message }));
       setReportingPostId(null);
       return;
     }
 
     setReportedPostIds((prev) => [...prev, postId]);
-    setMessage("Publicação denunciada com sucesso.");
+    setMessage(t("publicProfile.success.reportedPost"));
     setReportingPostId(null);
   }
 
@@ -1196,7 +1198,7 @@ export default function PublicProfilePage() {
       .eq("following_id", profile.id);
 
     if (followsError) {
-      setMessage("Erro ao carregar seguidores: " + followsError.message);
+      setMessage(t("publicProfile.errors.loadFollowers", { error: followsError.message }));
       setLoadingFollowers(false);
       return;
     }
@@ -1217,7 +1219,7 @@ export default function PublicProfilePage() {
       .in("id", followerIds);
 
     if (profilesError) {
-      setMessage("Erro ao carregar seguidores: " + profilesError.message);
+      setMessage(t("publicProfile.errors.loadFollowers", { error: profilesError.message }));
       setLoadingFollowers(false);
       return;
     }
@@ -1237,7 +1239,7 @@ export default function PublicProfilePage() {
       .eq("follower_id", profile.id);
 
     if (followsError) {
-      setMessage("Erro ao carregar seguindo: " + followsError.message);
+      setMessage(t("publicProfile.errors.loadFollowing", { error: followsError.message }));
       setLoadingFollowing(false);
       return;
     }
@@ -1258,7 +1260,7 @@ export default function PublicProfilePage() {
       .in("id", followingIds);
 
     if (profilesError) {
-      setMessage("Erro ao carregar seguindo: " + profilesError.message);
+      setMessage(t("publicProfile.errors.loadFollowing", { error: profilesError.message }));
       setLoadingFollowing(false);
       return;
     }
@@ -1352,21 +1354,21 @@ export default function PublicProfilePage() {
     }
 
     const item = giftToShare;
-    const giftName = item.gift?.name || "Presente EntreUS";
+    const giftName = item.gift?.name || t("publicProfile.giftFallback");
     const senderUsername = item.sender?.username
       ? `@${item.sender.username}`
-      : "alguem especial";
+      : t("publicProfile.someoneSpecial");
     const receiverUsername = `@${profile.username}`;
     const mediaUrl = item.gift?.media_url || null;
     const isVideo = item.gift?.media_type === "video";
     const content = [
       shareGiftText.trim() ||
-        `Ganhei um presente na EntreUS! Recebi ${giftName} de ${senderUsername}.`,
+        t("publicProfile.defaultGiftPost", { gift: giftName, sender: senderUsername }),
       "",
-      "Presente recebido",
-      `Presente: ${giftName}`,
-      `De: ${senderUsername}`,
-      `Para: ${receiverUsername}`,
+      t("publicProfile.giftReceived"),
+      t("publicProfile.giftLine", { gift: giftName }),
+      t("publicProfile.fromLine", { sender: senderUsername }),
+      t("publicProfile.toLine", { receiver: receiverUsername }),
     ].join("\n");
 
     setSharingGiftId(item.id);
@@ -1391,7 +1393,7 @@ export default function PublicProfilePage() {
     setSharingGiftId(null);
 
     if (error) {
-      setMessage("Erro ao compartilhar presente no feed: " + error.message);
+      setMessage(t("publicProfile.errors.shareGift", { error: error.message }));
       return;
     }
 
@@ -1424,7 +1426,7 @@ export default function PublicProfilePage() {
     setGiftToShare(null);
     setShareGiftText("");
     setActiveProfileTab("posts");
-    setMessage("Presente compartilhado no feed.");
+    setMessage(t("publicProfile.success.giftShared"));
   }
 
   function buildFeedItems(visiblePosts: Post[]): FeedItem[] {
@@ -1520,8 +1522,8 @@ export default function PublicProfilePage() {
   }, [publicFeedItems, profile?.username]);
 
   const profileTabs: { id: ProfileTab; label: string; count?: number }[] = [
-    { id: "posts", label: "Publicações", count: publicFeedItems.length },
-    { id: "exclusive", label: "Exclusivo", count: exclusiveFeedItems.length },
+    { id: "posts", label: t("publicProfile.tabs.posts"), count: publicFeedItems.length },
+    { id: "exclusive", label: t("publicProfile.tabs.exclusive"), count: exclusiveFeedItems.length },
   ];
   const repostsCount = publicFeedItems.filter((item) => item.type === "repost").length;
 
@@ -1541,7 +1543,7 @@ export default function PublicProfilePage() {
   if (loading) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-zinc-50 text-black dark:bg-black dark:text-white">
-        <p>Carregando perfil...</p>
+        <p>{t("publicProfile.loading")}</p>
       </main>
     );
   }
@@ -1562,7 +1564,7 @@ export default function PublicProfilePage() {
           displayName={
             loggedProfile?.display_name ||
             loggedProfile?.username ||
-            "Minha conta"
+            t("navigation.myAccount")
           }
           avatarUrl={loggedProfile?.avatar_url || null}
           unreadNotificationsCount={unreadNotificationsCount}
@@ -1575,21 +1577,21 @@ export default function PublicProfilePage() {
 
         <section className="w-full overflow-x-hidden px-3 py-16 pb-24 sm:px-6 sm:py-20 lg:mx-auto lg:max-w-[1280px] lg:px-0 lg:py-8 lg:pl-[104px]">
           <BrandHeader
-            subtitle="Perfil público"
-            description="Veja informações públicas, publicações e atividades de usuários do EntreUS."
+            subtitle={t("publicProfile.title")}
+            description={t("publicProfile.description")}
             compact
           />
 
           <div className="mt-5 rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900">
             <p className="text-zinc-700 dark:text-zinc-300">
-              {message || "Perfil não encontrado."}
+              {message || t("publicProfile.errors.notFound")}
             </p>
 
             <Link
               href="/feed"
               className="mt-5 inline-flex rounded-full border border-zinc-300 bg-white px-5 py-2 text-sm font-semibold text-zinc-900 transition hover:bg-zinc-100 dark:border-zinc-700 dark:bg-black dark:text-white dark:hover:bg-zinc-900"
             >
-              Voltar ao feed
+              {t("publicProfile.backToFeed")}
             </Link>
           </div>
         </section>
@@ -1645,7 +1647,7 @@ export default function PublicProfilePage() {
         repostInfo={item.type === "repost" ? item.repost : null}
         footerLabel={
           item.type === "post"
-            ? `Publicado em ${new Date(post.created_at).toLocaleString("pt-BR")}`
+            ? t("publicProfile.publishedAt", { date: new Date(post.created_at).toLocaleString(language) })
             : undefined
         }
         showMenu
@@ -1685,7 +1687,7 @@ export default function PublicProfilePage() {
         displayName={
           loggedProfile?.display_name ||
           loggedProfile?.username ||
-          "Minha conta"
+          t("navigation.myAccount")
         }
         avatarUrl={loggedProfile?.avatar_url || null}
         unreadNotificationsCount={unreadNotificationsCount}
@@ -1726,7 +1728,7 @@ export default function PublicProfilePage() {
           <button
             type="button"
             className="absolute inset-0 cursor-default"
-            aria-label="Fechar compartilhamento"
+            aria-label={t("publicProfile.closeSharing")}
             onClick={() => setGiftToShare(null)}
           />
 
@@ -1734,10 +1736,10 @@ export default function PublicProfilePage() {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-xs font-black uppercase tracking-[0.22em] text-blue-300">
-                  Compartilhar presente
+                  {t("publicProfile.shareGift")}
                 </p>
                 <h2 className="mt-2 text-2xl font-black">
-                  Personalize seu agradecimento
+                  {t("publicProfile.customizeThanks")}
                 </h2>
               </div>
 
@@ -1745,7 +1747,7 @@ export default function PublicProfilePage() {
                 type="button"
                 onClick={() => setGiftToShare(null)}
                 className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/5 transition hover:bg-white/10"
-                aria-label="Fechar"
+                aria-label={t("common.close")}
               >
                 <X className="h-5 w-5" />
               </button>
@@ -1783,24 +1785,24 @@ export default function PublicProfilePage() {
 
               <div className="min-w-0">
                 <span className="inline-flex rounded-full bg-blue-500/10 px-3 py-1 text-xs font-black uppercase tracking-[0.16em] text-blue-100 ring-1 ring-blue-300/20">
-                  Presente recebido
+                  {t("publicProfile.giftReceived")}
                 </span>
                 <h3 className="mt-3 text-2xl font-black">
-                  {giftToShare.gift?.name || "Presente EntreUS"}
+                  {giftToShare.gift?.name || t("publicProfile.giftFallback")}
                 </h3>
                 <p className="mt-2 text-sm text-zinc-400">
                   De{" "}
                   {giftToShare.sender?.username
                     ? `@${giftToShare.sender.username}`
-                    : "alguem especial"}{" "}
-                  para @{profile.username}
+                    : t("publicProfile.someoneSpecial")}{" "}
+                  {t("publicProfile.toUser", { username: profile.username })}
                 </p>
               </div>
             </div>
 
             <label className="mt-5 block">
               <span className="text-sm font-black">
-                Texto do post
+                {t("publicProfile.postText")}
               </span>
               <textarea
                 value={shareGiftText}
@@ -1816,7 +1818,7 @@ export default function PublicProfilePage() {
                 onClick={() => setGiftToShare(null)}
                 className="inline-flex items-center justify-center rounded-full border border-white/10 px-5 py-3 text-sm font-black text-zinc-200 transition hover:bg-white/10"
               >
-                Cancelar
+                {t("common.cancel")}
               </button>
 
               <button
@@ -1830,7 +1832,7 @@ export default function PublicProfilePage() {
                 ) : (
                   <Gift className="h-4 w-4" />
                 )}
-                Publicar no feed
+                {t("publicProfile.publishToFeed")}
               </button>
             </div>
           </div>
@@ -1839,7 +1841,7 @@ export default function PublicProfilePage() {
 
       <section className="w-full overflow-x-hidden px-3 py-16 pb-24 sm:px-6 sm:py-20 lg:mx-auto lg:max-w-[1280px] lg:px-0 lg:py-8 lg:pl-[104px]">
         <BrandHeader
-          subtitle="Perfil público"
+          subtitle={t("publicProfile.title")}
           description={`Acompanhe publicações, reposts e informações públicas de ${displayName}.`}
           compact
         />
@@ -1852,22 +1854,22 @@ export default function PublicProfilePage() {
             onClick={() => profile.banner_url && setSelectedAvatarUrl(profile.banner_url)}
             disabled={!profile.banner_url}
             className={`group relative flex h-44 w-full items-center justify-center overflow-hidden bg-gradient-to-br from-zinc-100 via-zinc-200 to-zinc-100 text-zinc-500 transition hover:opacity-95 disabled:cursor-default dark:from-zinc-900 dark:via-zinc-800 dark:to-black dark:text-zinc-400 sm:h-60 ${effectiveProfileTheme.bannerClassName}`}
-            title={profile.banner_url ? "Abrir capa do perfil" : "Capa do perfil"}
-            aria-label={profile.banner_url ? "Abrir capa do perfil" : "Capa do perfil"}
+            title={profile.banner_url ? t("publicProfile.openCover") : t("publicProfile.cover")}
+            aria-label={profile.banner_url ? t("publicProfile.openCover") : t("publicProfile.cover")}
           >
             {profile.banner_url ? (
               <img
                 src={profile.banner_url}
-                alt={`Capa de ${displayName}`}
+                alt={t("publicProfile.coverOf", { name: displayName })}
                 className="h-full w-full object-cover"
               />
             ) : (
               <div className="px-4 text-center">
                 <p className="text-sm font-semibold text-zinc-600 dark:text-zinc-300">
-                  Este perfil ainda não adicionou uma capa.
+                  {t("publicProfile.noCover")}
                 </p>
                 <p className="mt-1 text-xs text-zinc-400">
-                  A capa aparecerá aqui quando for adicionada.
+                  {t("publicProfile.coverHelp")}
                 </p>
               </div>
             )}
@@ -1895,8 +1897,8 @@ export default function PublicProfilePage() {
                         type="button"
                         onClick={() => setSelectedAvatarUrl(profile.avatar_url)}
                         className="group relative h-full w-full overflow-hidden rounded-full border-4 border-white bg-zinc-100 shadow-xl ring-1 ring-black/10 transition hover:scale-[1.02] dark:border-zinc-950 dark:bg-zinc-800 dark:ring-white/10"
-                        title="Abrir foto de perfil"
-                        aria-label="Abrir foto de perfil"
+                        title={t("publicProfile.openAvatar")}
+                        aria-label={t("publicProfile.openAvatar")}
                       >
                         <img
                           src={profile.avatar_url}
@@ -1927,7 +1929,7 @@ export default function PublicProfilePage() {
 
                   {profileTier !== 'standard' && (
                     <p className="mt-2 text-sm font-semibold text-zinc-600 dark:text-zinc-300">
-                      {profileTier === 'elder' ? 'Membro Anciao da comunidade EntreUS.' : 'Beneficios visuais e limite ampliado de video ativos.'}
+                      {profileTier === 'elder' ? t("publicProfile.elderMember") : t("publicProfile.vipBenefits")}
                     </p>
                   )}
 
@@ -1941,7 +1943,7 @@ export default function PublicProfilePage() {
                         href="/profile"
                         className="inline-flex h-9 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-white/80 px-3 text-xs font-bold text-zinc-900 shadow-sm transition hover:bg-white dark:border-zinc-800 dark:bg-zinc-950/80 dark:text-white dark:hover:bg-zinc-900 sm:text-sm"
                       >
-                        Meu perfil
+                        {t("publicProfile.myProfile")}
                       </Link>
                     )}
 
@@ -1949,7 +1951,7 @@ export default function PublicProfilePage() {
                       href="/feed"
                       className="inline-flex h-9 shrink-0 items-center justify-center rounded-full bg-zinc-950 px-3 text-xs font-bold text-white shadow-sm transition hover:scale-[1.02] hover:bg-black dark:bg-white dark:text-black sm:text-sm"
                     >
-                      Ir ao feed
+                      {t("publicProfile.goToFeed")}
                     </Link>
                   </div>
 
@@ -1962,7 +1964,7 @@ export default function PublicProfilePage() {
                       <span className="font-black text-zinc-950 dark:text-white">
                         {followersCount}
                       </span>
-                      <span>Seguidores</span>
+                      <span>{t("publicProfile.followers")}</span>
                     </button>
 
                     <span className="text-zinc-300 dark:text-zinc-700">
@@ -1977,7 +1979,7 @@ export default function PublicProfilePage() {
                       <span className="font-black text-zinc-950 dark:text-white">
                         {followingCount}
                       </span>
-                      <span>Seguindo</span>
+                      <span>{t("publicProfile.following")}</span>
                     </button>
 
                     <span className="text-zinc-300 dark:text-zinc-700">
@@ -1988,7 +1990,7 @@ export default function PublicProfilePage() {
                       <span className="font-black text-zinc-950 dark:text-white">
                         {feedItems.length}
                       </span>
-                      <span>Atividades</span>
+                      <span>{t("publicProfile.activities")}</span>
                     </span>
 
                     <span className="text-zinc-300 dark:text-zinc-700">
@@ -1999,26 +2001,26 @@ export default function PublicProfilePage() {
                       <span className="font-black text-zinc-950 dark:text-white">
                         {repostsCount}
                       </span>
-                      <span>Reposts</span>
+                      <span>{t("publicProfile.reposts")}</span>
                     </span>
                   </div>
 
                   <div className="mt-4 flex flex-wrap gap-2">
                     {isOwnProfile && (
                       <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-300">
-                        Este é o seu perfil
+                        {t("publicProfile.ownProfile")}
                       </span>
                     )}
 
                     {isFollowing && !isOwnProfile && (
                       <span className="rounded-full border border-green-200 bg-green-50 px-3 py-1 text-xs font-semibold text-green-700 dark:border-green-900/60 dark:bg-green-950/30 dark:text-green-300">
-                        Você segue este perfil
+                        {t("publicProfile.followsProfile")}
                       </span>
                     )}
 
                     {isBlockedByMe && (
                       <span className="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300">
-                        Perfil bloqueado por você
+                        {t("publicProfile.blockedByYou")}
                       </span>
                     )}
                   </div>
@@ -2033,17 +2035,17 @@ export default function PublicProfilePage() {
                     disabled={followLoading || isBlockedByMe}
                     title={
                       followLoading
-                        ? "Carregando..."
+                        ? t("common.loading")
                         : isFollowing
-                          ? "Seguindo"
-                          : "Seguir"
+                          ? t("publicProfile.following")
+                          : t("publicProfile.follow")
                     }
                     aria-label={
                       followLoading
-                        ? "Carregando..."
+                        ? t("common.loading")
                         : isFollowing
-                          ? "Seguindo"
-                          : "Seguir"
+                          ? t("publicProfile.following")
+                          : t("publicProfile.follow")
                     }
                     className={`inline-flex h-11 items-center justify-center gap-2 rounded-full border px-4 text-sm font-bold transition ${isFollowing
                         ? "border-green-300 bg-green-50 text-green-700 hover:bg-green-100 dark:border-green-800 dark:bg-green-950/30 dark:text-green-300 dark:hover:bg-green-950"
@@ -2056,7 +2058,7 @@ export default function PublicProfilePage() {
                       <UserPlus className="h-5 w-5" />
                     )}
                     <span className="hidden sm:inline">
-                      {isFollowing ? "Seguindo" : "Seguir"}
+                      {isFollowing ? t("publicProfile.following") : t("publicProfile.follow")}
                     </span>
                   </button>
 
@@ -2074,8 +2076,8 @@ export default function PublicProfilePage() {
                     type="button"
                     onClick={() => setGiftModalOpen(true)}
                     disabled={isOwnProfile || hasBlockedMe || isBlockedByMe}
-                    title="Presentear"
-                    aria-label="Presentear"
+                    title={t("publicProfile.gift")}
+                    aria-label={t("publicProfile.gift")}
                     className={`inline-flex h-11 items-center justify-center gap-2 rounded-full border px-4 text-sm font-bold transition ${
                       isOwnProfile || hasBlockedMe || isBlockedByMe
                         ? "cursor-not-allowed border-zinc-300 bg-zinc-100 text-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-600"
@@ -2083,15 +2085,15 @@ export default function PublicProfilePage() {
                     }`}
                   >
                     <Gift className="h-5 w-5" />
-                    <span className="hidden sm:inline">Presentear</span>
+                    <span className="hidden sm:inline">{t("publicProfile.gift")}</span>
                   </button>
 
                   <button
                     type="button"
                     onClick={() => setTipModalOpen(true)}
                     disabled={isOwnProfile || hasBlockedMe || isBlockedByMe}
-                    title="Apoiar criador"
-                    aria-label="Apoiar criador"
+                    title={t("publicProfile.supportCreator")}
+                    aria-label={t("publicProfile.supportCreator")}
                     className={`inline-flex h-11 items-center justify-center gap-2 rounded-full border px-4 text-sm font-bold transition ${
                       isOwnProfile || hasBlockedMe || isBlockedByMe
                         ? "cursor-not-allowed border-zinc-300 bg-zinc-100 text-zinc-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-600"
@@ -2099,7 +2101,7 @@ export default function PublicProfilePage() {
                     }`}
                   >
                     <Coins className="h-5 w-5" />
-                    <span className="hidden sm:inline">Apoiar criador</span>
+                    <span className="hidden sm:inline">{t("publicProfile.supportCreator")}</span>
                   </button>
 
                   <button
@@ -2108,17 +2110,17 @@ export default function PublicProfilePage() {
                     disabled={blockLoading}
                     title={
                       blockLoading
-                        ? "Carregando..."
+                        ? t("common.loading")
                         : isBlockedByMe
-                          ? "Desbloquear usuário"
-                          : "Bloquear usuário"
+                          ? t("publicProfile.unblockUser")
+                          : t("publicProfile.blockUser")
                     }
                     aria-label={
                       blockLoading
-                        ? "Carregando..."
+                        ? t("common.loading")
                         : isBlockedByMe
-                          ? "Desbloquear usuário"
-                          : "Bloquear usuário"
+                          ? t("publicProfile.unblockUser")
+                          : t("publicProfile.blockUser")
                     }
                     className={`flex h-11 w-11 items-center justify-center rounded-full border font-medium transition ${isBlockedByMe
                         ? "border-zinc-300 text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
@@ -2134,17 +2136,17 @@ export default function PublicProfilePage() {
                     disabled={reportingUser || reportedUser}
                     title={
                       reportingUser
-                        ? "Enviando..."
+                        ? t("common.sending")
                         : reportedUser
-                          ? "Usuário denunciado"
-                          : "Denunciar usuário"
+                          ? t("publicProfile.userReported")
+                          : t("publicProfile.reportUser")
                     }
                     aria-label={
                       reportingUser
-                        ? "Enviando..."
+                        ? t("common.sending")
                         : reportedUser
-                          ? "Usuário denunciado"
-                          : "Denunciar usuário"
+                          ? t("publicProfile.userReported")
+                          : t("publicProfile.reportUser")
                     }
                     className={`flex h-11 w-11 items-center justify-center rounded-full border font-medium transition ${reportedUser
                         ? "border-green-300 bg-green-50 text-green-600 dark:border-green-700 dark:bg-green-950 dark:text-green-400"
@@ -2159,24 +2161,21 @@ export default function PublicProfilePage() {
 
             <div className="mt-6 border-t border-zinc-200/70 pt-5 dark:border-zinc-800/70">
               <p className="mb-2 text-xs font-black uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
-                Sobre
+                {t("publicProfile.about")}
               </p>
 
               {hasBlockedMe ? (
                 <p className="text-zinc-700 dark:text-zinc-300">
-                  Você não pode visualizar este perfil porque este usuário te
-                  bloqueou.
+                  {t("publicProfile.blockedYou")}
                 </p>
               ) : isBlockedByMe ? (
                 <p className="text-zinc-700 dark:text-zinc-300">
-                  Você bloqueou este usuário. Desbloqueie para voltar a ver o
-                  conteúdo dele.
+                  {t("publicProfile.youBlocked")}
                 </p>
               ) : (
                 <>
                   <p className="whitespace-pre-wrap text-[15px] leading-7 text-zinc-800 dark:text-zinc-200">
-                    {profile.bio?.trim() ||
-                      "Este usuário ainda não adicionou uma bio."}
+                    {profile.bio?.trim() || t("publicProfile.noBio")}
                   </p>
 
                   <div className="mt-4 flex flex-wrap gap-2">
@@ -2225,8 +2224,8 @@ export default function PublicProfilePage() {
           <div className="mb-6">
             <UserBadgesPanel
               userId={profile.id}
-              title="Selos conquistados"
-              emptyMessage="Este usuário ainda não possui selos conquistados."
+              title={t("publicProfile.badges")}
+              emptyMessage={t("publicProfile.noBadges")}
             />
           </div>
         )}
@@ -2279,7 +2278,7 @@ export default function PublicProfilePage() {
               <div className="space-y-4 p-3 sm:p-4">
                 {feedItems.length === 0 && (
                   <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-6 text-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400">
-                    Nenhuma atividade visível ainda.
+                    {t("publicProfile.noActivity")}
                   </div>
                 )}
 
@@ -2291,17 +2290,17 @@ export default function PublicProfilePage() {
                 {exclusiveAccessState === "signed_out" && (
                   <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-6 text-zinc-700 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300">
                     <p className="font-bold text-zinc-950 dark:text-white">
-                      Entre na sua conta para acessar a area exclusiva deste criador.
+                      {t("publicProfile.signInExclusive")}
                     </p>
                     <Link href="/login" className="mt-4 inline-flex rounded-full bg-zinc-950 px-5 py-2 text-sm font-bold text-white dark:bg-white dark:text-black">
-                      Entrar
+                      {t("auth.login.submit")}
                     </Link>
                   </div>
                 )}
 
                 {exclusiveAccessState === "available" && exclusiveFeedItems.length === 0 && (
                   <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-6 text-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400">
-                    Nenhum conteudo exclusivo visivel para sua conta agora.
+                    {t("publicProfile.noExclusive")}
                   </div>
                 )}
 
@@ -2315,18 +2314,18 @@ export default function PublicProfilePage() {
           <div className="hidden">
             <div className="mb-4">
               <h3 className="text-lg font-semibold text-black dark:text-white">
-                Atividades de {displayName}
+                {t("publicProfile.activitiesOf", { name: displayName })}
               </h3>
 
               <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                Publicações e reposts deste perfil
+                {t("publicProfile.activityDescription")}
               </p>
             </div>
 
             <div className="space-y-4">
               {feedItems.length === 0 && (
                 <div className="rounded-2xl border border-zinc-200 bg-white p-6 text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
-                  Nenhuma atividade visível ainda.
+                  {t("publicProfile.noActivity")}
                 </div>
               )}
 
@@ -2385,7 +2384,7 @@ export default function PublicProfilePage() {
                     repostInfo={item.type === "repost" ? item.repost : null}
                     footerLabel={
                       item.type === "post"
-                        ? `Publicado em ${new Date(post.created_at).toLocaleString("pt-BR")}`
+                        ? t("publicProfile.publishedAt", { date: new Date(post.created_at).toLocaleString(language) })
                         : undefined
                     }
                     showMenu
@@ -2421,7 +2420,7 @@ export default function PublicProfilePage() {
                   <Search className="h-4 w-4" />
                   <input
                     type="search"
-                    placeholder="Buscar no EntreUS"
+                    placeholder={t("publicProfile.search")}
                     onFocus={() => router.push("/search")}
                     className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-zinc-500"
                   />
@@ -2430,13 +2429,13 @@ export default function PublicProfilePage() {
 
               <div className="rounded-[2rem] border border-zinc-200/70 bg-white/95 p-4 shadow-sm ring-1 ring-black/5 dark:border-zinc-800/70 dark:bg-black/80 dark:ring-white/10">
                 <h3 className="text-base font-black text-zinc-950 dark:text-white">
-                  Talvez você curta
+                  {t("publicProfile.suggestions")}
                 </h3>
 
                 <div className="mt-4 space-y-3">
                   {suggestedProfiles.length === 0 ? (
                     <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                      Explore o feed para descobrir mais perfis do EntreUS.
+                      {t("publicProfile.exploreProfiles")}
                     </p>
                   ) : (
                     suggestedProfiles.map((suggestedProfile) => {
@@ -2479,37 +2478,36 @@ export default function PublicProfilePage() {
 
               <div className="rounded-[2rem] border border-zinc-200/70 bg-white/95 p-4 shadow-sm ring-1 ring-black/5 dark:border-zinc-800/70 dark:bg-black/80 dark:ring-white/10">
                 <h3 className="text-base font-black text-zinc-950 dark:text-white">
-                  Mural EntreUS
+                  {t("publicProfile.wall")}
                 </h3>
                 <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-400">
-                  Conecte-se com pessoas reais, acompanhe publicações e
-                  descubra conversas que combinam com o seu momento.
+                  {t("publicProfile.wallDescription")}
                 </p>
                 <Link
                   href="/feed"
                   className="mt-4 inline-flex rounded-full bg-zinc-950 px-4 py-2 text-sm font-bold text-white transition hover:bg-black dark:bg-white dark:text-black"
                 >
-                  Ir ao feed
+                  {t("publicProfile.goToFeed")}
                 </Link>
               </div>
 
               <nav className="flex flex-wrap gap-x-3 gap-y-2 px-2 text-xs text-zinc-500 dark:text-zinc-500">
                 <Link href="/terms" className="hover:text-zinc-900 dark:hover:text-white">
-                  Termos de Uso
+                  {t("settings.terms")}
                 </Link>
                 <Link href="/privacy" className="hover:text-zinc-900 dark:hover:text-white">
-                  Política de Privacidade
+                  {t("settings.privacyPolicy")}
                 </Link>
                 <Link href="/cookies" className="hover:text-zinc-900 dark:hover:text-white">
                   Cookies
                 </Link>
                 <Link href="/accessibility" className="hover:text-zinc-900 dark:hover:text-white">
-                  Acessibilidade
+                {t("publicProfile.accessibility")}
                 </Link>
                 <Link href="/more" className="hover:text-zinc-900 dark:hover:text-white">
-                  Mais
+                  {t("publicProfile.more")}
                 </Link>
-                <span>© 2026 EntreUS</span>
+                <span>{t("publicProfile.copyright")}</span>
               </nav>
             </div>
           </aside>
@@ -2522,7 +2520,7 @@ export default function PublicProfilePage() {
             type="button"
             onClick={() => setSelectedAvatarUrl(null)}
             className="absolute inset-0 cursor-zoom-out"
-            aria-label="Fechar foto de perfil"
+            aria-label={t("publicProfile.closeAvatar")}
           />
 
           <div className="relative z-[90] w-full max-w-lg">
@@ -2530,8 +2528,8 @@ export default function PublicProfilePage() {
               type="button"
               onClick={() => setSelectedAvatarUrl(null)}
               className="absolute -right-2 -top-12 flex h-10 w-10 items-center justify-center rounded-full bg-white text-black shadow-xl transition hover:opacity-90 dark:bg-zinc-900 dark:text-white"
-              aria-label="Fechar foto"
-              title="Fechar"
+              aria-label={t("publicProfile.closePhoto")}
+              title={t("common.close")}
             >
               <X className="h-5 w-5" />
             </button>
@@ -2550,7 +2548,7 @@ export default function PublicProfilePage() {
           <div className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white shadow-xl dark:border-zinc-800 dark:bg-zinc-900">
             <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-4 dark:border-zinc-800">
               <h3 className="text-lg font-semibold text-black dark:text-white">
-                Seguidores
+                {t("publicProfile.followers")}
               </h3>
 
               <button
@@ -2558,18 +2556,18 @@ export default function PublicProfilePage() {
                 onClick={() => setShowFollowersModal(false)}
                 className="rounded-lg border border-zinc-300 px-3 py-1 hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
               >
-                Fechar
+                {t("common.close")}
               </button>
             </div>
 
             <div className="max-h-[70vh] overflow-y-auto p-4">
               {loadingFollowers ? (
                 <p className="text-zinc-500 dark:text-zinc-400">
-                  Carregando seguidores...
+                {t("publicProfile.loadingFollowers")}
                 </p>
               ) : followersList.length === 0 ? (
                 <p className="text-zinc-500 dark:text-zinc-400">
-                  Nenhum seguidor ainda.
+                {t("publicProfile.noFollowers")}
                 </p>
               ) : (
                 <div className="space-y-2">
@@ -2586,7 +2584,7 @@ export default function PublicProfilePage() {
           <div className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white shadow-xl dark:border-zinc-800 dark:bg-zinc-900">
             <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-4 dark:border-zinc-800">
               <h3 className="text-lg font-semibold text-black dark:text-white">
-                Seguindo
+                {t("publicProfile.following")}
               </h3>
 
               <button
@@ -2594,18 +2592,18 @@ export default function PublicProfilePage() {
                 onClick={() => setShowFollowingModal(false)}
                 className="rounded-lg border border-zinc-300 px-3 py-1 hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
               >
-                Fechar
+                {t("common.close")}
               </button>
             </div>
 
             <div className="max-h-[70vh] overflow-y-auto p-4">
               {loadingFollowing ? (
                 <p className="text-zinc-500 dark:text-zinc-400">
-                  Carregando usuários...
+                {t("publicProfile.loadingUsers")}
                 </p>
               ) : followingList.length === 0 ? (
                 <p className="text-zinc-500 dark:text-zinc-400">
-                  Este usuário ainda não segue ninguém.
+                {t("publicProfile.noFollowing")}
                 </p>
               ) : (
                 <div className="space-y-2">

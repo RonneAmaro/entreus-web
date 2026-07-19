@@ -276,3 +276,19 @@ bloqueios preexistentes documentados do lint/theme-audit.
 - [x] testes unitários e E2E isolado simulado;
 - [x] capturas em temas claro/escuro e breakpoints principais;
 - [x] nenhuma migration, dependência ou regra financeira nova.
+
+# Pacote 53 — Internacionalização global e tradução
+
+Status: implementação parcial preparada, aguardando validação manual e aplicação
+da migration em ambiente descartável.
+
+- [x] núcleo tipado para `pt-BR`, `en` e `es`, cookie e fallback;
+- [x] preferência autenticada e país separados no perfil;
+- [x] Feed/Home, compositor, filtros, comunidades, cartões, comentários e painel lateral;
+- [x] Hub, navegação, Configurações, login, cadastro, páginas principais de Lab/Meet, loading e erros prioritários;
+- [x] tradução de posts autenticada, sob RLS, com limites e retorno ao original;
+- [x] documentação e testes estruturais;
+- [ ] migrar todos os textos remanescentes de Lab, Meet, mensagens e notificações;
+- [ ] internacionalizar templates de e-mail por destinatário;
+- [ ] expor tradução de comentários após validação visual;
+- [ ] aplicar e validar a migration em PostgreSQL descartável.

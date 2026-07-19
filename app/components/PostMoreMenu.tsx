@@ -8,6 +8,7 @@ import {
   ShieldAlert,
   Trash2,
 } from 'lucide-react'
+import { useLanguage } from './LanguageProvider'
 
 type PostMoreMenuProps = {
   isOwnPost: boolean
@@ -32,6 +33,7 @@ export default function PostMoreMenu({
   onDelete,
   onReport,
 }: PostMoreMenuProps) {
+  const { t } = useLanguage()
   const [open, setOpen] = useState(false)
   const menuId = useId()
   const rootRef = useRef<HTMLDivElement>(null)
@@ -81,7 +83,7 @@ export default function PostMoreMenu({
         type="button"
         onClick={toggleMenu}
         className="flex h-9 w-9 items-center justify-center rounded-full text-text-muted transition hover:bg-surface-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand dark:hover:text-white"
-        aria-label="Mais opções"
+        aria-label={t('post.menu.more')}
         aria-expanded={open}
         aria-controls={menuId}
         aria-haspopup="menu"
@@ -93,7 +95,7 @@ export default function PostMoreMenu({
           <div
             id={menuId}
             role="menu"
-            aria-label="Opções da publicação"
+            aria-label={t('post.menu.label')}
             className="absolute right-0 top-10 z-50 w-56 overflow-hidden rounded-2xl border border-border bg-surface text-foreground shadow-xl"
           >
             <button
@@ -103,7 +105,7 @@ export default function PostMoreMenu({
               className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm transition hover:bg-surface-muted focus-visible:bg-surface-muted focus-visible:outline-none"
             >
               <Copy className="h-4 w-4" />
-              {copied ? 'Link copiado' : 'Copiar link'}
+              {copied ? t('post.actions.linkCopied') : t('post.menu.copy')}
             </button>
 
             {isOwnPost && (
@@ -115,7 +117,7 @@ export default function PostMoreMenu({
                   className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm transition hover:bg-surface-muted focus-visible:bg-surface-muted focus-visible:outline-none"
                 >
                   <Edit3 className="h-4 w-4" />
-                  Editar publicação
+                  {t('post.menu.edit')}
                 </button>
 
                 <button
@@ -125,7 +127,7 @@ export default function PostMoreMenu({
                   className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-danger transition hover:bg-danger/10 focus-visible:bg-danger/10 focus-visible:outline-none"
                 >
                   <Trash2 className="h-4 w-4" />
-                  Excluir publicação
+                  {t('post.menu.delete')}
                 </button>
               </>
             )}
@@ -143,7 +145,7 @@ export default function PostMoreMenu({
                 } ${reporting ? 'cursor-not-allowed opacity-60' : ''}`}
               >
                 <ShieldAlert className="h-4 w-4" />
-                {reporting ? 'Enviando...' : reported ? 'Denunciado' : 'Denunciar conteudo'}
+                {reporting ? t('post.menu.sending') : reported ? t('post.comments.reported') : t('post.menu.report')}
               </button>
             )}
           </div>

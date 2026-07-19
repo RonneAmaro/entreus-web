@@ -1,5 +1,7 @@
 'use client'
 
+/* eslint-disable react-hooks/immutability -- subscription effects intentionally call async loader declarations defined later in the component */
+
 import AppSidebar from '../components/AppSidebar'
 import MobileNavigation from '../components/MobileNavigation'
 import Link from 'next/link'
@@ -15,6 +17,7 @@ import {
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import UserBadges from '../components/UserBadges'
+import { useLanguage } from '../components/LanguageProvider'
 
 type CurrentProfile = {
   id: string
@@ -79,13 +82,13 @@ type ConversationUserState = {
 
 type ConversationView = 'recent' | 'archived'
 
-function getDisplayName(profile: ProfileSummary | CurrentProfile | null) {
-  if (!profile) return 'Usuário EntreUS'
-  return profile.display_name || profile.username || 'Usuário EntreUS'
+function getDisplayName(profile: ProfileSummary | CurrentProfile | null, fallback: string) {
+  if (!profile) return fallback
+  return profile.display_name || profile.username || fallback
 }
 
-function getUsername(profile: ProfileSummary | null) {
-  if (!profile?.username) return '@usuario'
+function getUsername(profile: ProfileSummary | null, fallback: string) {
+  if (!profile?.username) return fallback
   return `@${profile.username}`
 }
 
@@ -93,48 +96,49 @@ function getInitial(name: string) {
   return name.trim().charAt(0).toUpperCase() || 'U'
 }
 
-function formatDate(value: string) {
+function formatDate(value: string, locale: string) {
   const date = new Date(value)
   const now = new Date()
   const diffInMs = now.getTime() - date.getTime()
   const diffInHours = diffInMs / (1000 * 60 * 60)
 
   if (diffInHours < 24) {
-    return date.toLocaleTimeString('pt-BR', {
+    return date.toLocaleTimeString(locale, {
       hour: '2-digit',
       minute: '2-digit',
     })
   }
 
-  return date.toLocaleDateString('pt-BR', {
+  return date.toLocaleDateString(locale, {
     day: '2-digit',
     month: '2-digit',
   })
 }
 
-function getMessagePreview(message: MessageRow | null, currentUserId: string) {
-  if (!message) return 'Conversa iniciada.'
-  if (message.deleted_at) return 'Mensagem apagada'
+function getMessagePreview(message: MessageRow | null, currentUserId: string, t: (key: string) => string) {
+  if (!message) return t('messages.preview.started')
+  if (message.deleted_at) return t('messages.preview.deleted')
   if (message.type === 'call') {
-    if (message.call_status === 'declined') return 'Chamada recusada'
-    if (message.call_status === 'canceled') return 'Chamada cancelada'
+    if (message.call_status === 'declined') return t('messages.preview.callDeclined')
+    if (message.call_status === 'canceled') return t('messages.preview.callCanceled')
 
-    const kind = message.call_type === 'video' ? 'vídeo' : 'voz'
-    if (message.call_status === 'missed') return `Chamada de ${kind} não atendida`
-    if (message.call_status === 'ended') return `Chamada de ${kind} encerrada`
+    const kind = message.call_type === 'video' ? t('messages.preview.video') : t('messages.preview.voice')
+    if (message.call_status === 'missed') return `${t('messages.preview.call')} ${kind} ${t('messages.preview.missed')}`
+    if (message.call_status === 'ended') return `${t('messages.preview.call')} ${kind} ${t('messages.preview.ended')}`
 
-    return 'Evento de chamada'
+    return t('messages.preview.callEvent')
   }
 
-  const prefix = message.sender_id === currentUserId ? 'Você: ' : ''
+  const prefix = message.sender_id === currentUserId ? `${t('messages.preview.you')}: ` : ''
   const content = message.content?.trim()
 
-  return `${prefix}${content || 'Mídia enviada'}`
+  return `${prefix}${content || t('messages.preview.media')}`
 }
 
 export default function MessagesPage() {
   const router = useRouter()
   const { theme, setTheme } = useTheme()
+  const { language, t } = useLanguage()
 
   const [mounted, setMounted] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -176,15 +180,17 @@ export default function MessagesPage() {
     if (!query) return sortedConversations
 
     return sortedConversations.filter((conversation) => {
-      const name = getDisplayName(conversation.otherUser).toLowerCase()
-      const username = getUsername(conversation.otherUser).toLowerCase()
-      const preview = getMessagePreview(conversation.lastMessage, userId).toLowerCase()
+      const name = getDisplayName(conversation.otherUser, t('messages.userFallback')).toLowerCase()
+      const username = getUsername(conversation.otherUser, t('messages.usernameFallback')).toLowerCase()
+      const preview = getMessagePreview(conversation.lastMessage, userId, t).toLowerCase()
 
       return name.includes(query) || username.includes(query) || preview.includes(query)
     })
-  }, [searchQuery, sortedConversations, userId])
+  }, [searchQuery, sortedConversations, t, userId])
 
   useEffect(() => {
+    // Hydration state is intentionally established after the client mounts.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true)
   }, [])
 
@@ -315,7 +321,7 @@ export default function MessagesPage() {
       .eq('read', false)
 
     if (error) {
-      setMessage('Erro ao carregar notificações: ' + error.message)
+      setMessage(`${t('messages.errors.notifications')} ${error.message}`)
       return
     }
 
@@ -345,7 +351,7 @@ export default function MessagesPage() {
       .eq('user_id', currentUserId)
 
     if (myParticipantsError) {
-      setMessage('Erro ao carregar conversas: ' + myParticipantsError.message)
+      setMessage(`${t('messages.errors.conversations')} ${myParticipantsError.message}`)
       return
     }
 
@@ -372,7 +378,7 @@ export default function MessagesPage() {
       .in('conversation_id', conversationIds)
 
     if (conversationStatesError) {
-      setMessage('Erro ao carregar estado das conversas: ' + conversationStatesError.message)
+      setMessage(`${t('messages.errors.state')} ${conversationStatesError.message}`)
       return
     }
 
@@ -391,7 +397,7 @@ export default function MessagesPage() {
       .order('updated_at', { ascending: false })
 
     if (conversationsError) {
-      setMessage('Erro ao carregar conversas: ' + conversationsError.message)
+      setMessage(`${t('messages.errors.conversations')} ${conversationsError.message}`)
       return
     }
 
@@ -401,7 +407,7 @@ export default function MessagesPage() {
       .in('conversation_id', conversationIds)
 
     if (participantsError) {
-      setMessage('Erro ao carregar participantes: ' + participantsError.message)
+      setMessage(`${t('messages.errors.participants')} ${participantsError.message}`)
       return
     }
 
@@ -424,7 +430,7 @@ export default function MessagesPage() {
         .in('id', otherUserIds)
 
       if (profilesError) {
-        setMessage('Erro ao carregar perfis: ' + profilesError.message)
+        setMessage(`${t('messages.errors.profiles')} ${profilesError.message}`)
         return
       }
 
@@ -445,7 +451,7 @@ export default function MessagesPage() {
       .limit(300)
 
     if (messagesError) {
-      setMessage('Erro ao carregar últimas mensagens: ' + messagesError.message)
+      setMessage(`${t('messages.errors.latest')} ${messagesError.message}`)
       return
     }
 
@@ -543,7 +549,7 @@ export default function MessagesPage() {
       <main className="flex min-h-screen items-center justify-center bg-zinc-50 px-4 text-black dark:bg-black dark:text-white">
         <div className="flex items-center gap-3 text-zinc-500">
           <Loader2 className="h-5 w-5 animate-spin" />
-          <span>Carregando mensagens...</span>
+          <span>{t('messages.loading')}</span>
         </div>
       </main>
     )
@@ -565,7 +571,7 @@ export default function MessagesPage() {
 
       <MobileNavigation
         email={email}
-        displayName={getDisplayName(currentProfile)}
+        displayName={getDisplayName(currentProfile, t('messages.userFallback'))}
         avatarUrl={currentProfile?.avatar_url || null}
         unreadNotificationsCount={unreadNotificationsCount}
         mounted={mounted}
@@ -581,18 +587,18 @@ export default function MessagesPage() {
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h1 className="text-2xl font-black tracking-tight text-zinc-950 dark:text-white">
-                  Bate-papo
+                  {t('messages.title')}
                 </h1>
                 <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                  Suas conversas privadas
+                  {t('messages.subtitle')}
                 </p>
               </div>
 
               <Link
                 href="/search"
                 className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-zinc-900 transition hover:scale-105 hover:bg-zinc-200 dark:bg-zinc-900 dark:text-white dark:hover:bg-zinc-800"
-                aria-label="Nova conversa"
-                title="Nova conversa"
+                aria-label={t('messages.newConversation')}
+                title={t('messages.newConversation')}
               >
                 <MessageSquarePlus className="h-5 w-5" />
               </Link>
@@ -604,7 +610,7 @@ export default function MessagesPage() {
                 type="search"
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="Buscar conversas"
+                placeholder={t('messages.search')}
                 className="min-w-0 flex-1 bg-transparent text-sm text-zinc-900 outline-none placeholder:text-zinc-500 dark:text-white"
               />
             </div>
@@ -619,7 +625,7 @@ export default function MessagesPage() {
                     : 'text-zinc-600 hover:bg-white/70 hover:text-zinc-950 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-white'
                 }`}
               >
-                Recentes
+                {t('messages.recent')}
                 <span className="ml-1 text-xs opacity-75">{recentConversationsCount}</span>
               </button>
 
@@ -632,7 +638,7 @@ export default function MessagesPage() {
                     : 'text-zinc-600 hover:bg-white/70 hover:text-zinc-950 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-white'
                 }`}
               >
-                Arquivadas
+                {t('messages.archived')}
                 <span className="ml-1 text-xs opacity-75">{archivedConversationsCount}</span>
               </button>
             </div>
@@ -652,11 +658,11 @@ export default function MessagesPage() {
                 </div>
 
                 <h3 className="text-lg font-black text-zinc-950 dark:text-white">
-                  {conversationView === 'archived' ? 'Nenhuma conversa arquivada' : 'Nenhuma conversa ainda'}
+                  {conversationView === 'archived' ? t('messages.emptyArchived') : t('messages.empty')}
                 </h3>
 
                 <p className="mx-auto mt-2 max-w-xs text-sm leading-6 text-zinc-500 dark:text-zinc-400">
-                  Encontre uma pessoa, abra o perfil e toque em “Mensagem” para começar um bate-papo privado.
+                  {t('messages.emptyDescription')}
                 </p>
 
                 <Link
@@ -664,7 +670,7 @@ export default function MessagesPage() {
                   className="mt-5 inline-flex items-center gap-2 rounded-full bg-blue-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm shadow-blue-600/20 transition hover:scale-[1.02] hover:bg-blue-700"
                 >
                   <MessageSquarePlus className="h-4 w-4" />
-                  Explorar usuários
+                  {t('messages.exploreUsers')}
                 </Link>
               </div>
             </div>
@@ -672,8 +678,8 @@ export default function MessagesPage() {
             <div className="min-h-0 flex-1 overflow-y-auto">
               {filteredConversations.map((conversation) => {
                 const otherUser = conversation.otherUser
-                const name = getDisplayName(otherUser)
-                const preview = getMessagePreview(conversation.lastMessage, userId)
+                const name = getDisplayName(otherUser, t('messages.userFallback'))
+                const preview = getMessagePreview(conversation.lastMessage, userId, t)
 
                 return (
                   <Link
@@ -731,12 +737,12 @@ export default function MessagesPage() {
 
                     <div className="flex shrink-0 flex-col items-end gap-1 text-right text-xs text-zinc-500">
                       <span>
-                        {formatDate(conversation.lastMessage?.created_at || conversation.updated_at)}
+                        {formatDate(conversation.lastMessage?.created_at || conversation.updated_at, language)}
                       </span>
 
                       {conversation.isUnread && (
                         <span className="rounded-full bg-blue-600 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-white shadow-sm shadow-blue-600/30">
-                          Nova
+                          {t('messages.newBadge')}
                         </span>
                       )}
                     </div>
@@ -758,26 +764,26 @@ export default function MessagesPage() {
 
             <div className="relative">
               <p className="mb-2 text-xs font-black uppercase tracking-[0.22em] text-blue-600 dark:text-blue-300">
-                Mensagens privadas
+                {t('messages.private')}
               </p>
 
               <h2 className="text-3xl font-black tracking-tight text-zinc-950 dark:text-white">
-                Selecione uma conversa
+                {t('messages.selectConversation')}
               </h2>
 
               <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-zinc-500 dark:text-zinc-400">
-                Escolha alguém na lista ao lado para abrir o bate-papo. No celular, toque em uma conversa para abrir em tela cheia.
+                {t('messages.selectDescription')}
               </p>
 
               <div className="mt-6 flex flex-wrap items-center justify-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
                 <span className="rounded-full bg-white px-3 py-1.5 shadow-sm ring-1 ring-zinc-200 dark:bg-zinc-900 dark:ring-zinc-800">
-                  💬 Mensagens rápidas
+                  {t('messages.fast')}
                 </span>
                 <span className="rounded-full bg-white px-3 py-1.5 shadow-sm ring-1 ring-zinc-200 dark:bg-zinc-900 dark:ring-zinc-800">
-                  🎙️ Áudio e mídia
+                  {t('messages.audioMedia')}
                 </span>
                 <span className="rounded-full bg-white px-3 py-1.5 shadow-sm ring-1 ring-zinc-200 dark:bg-zinc-900 dark:ring-zinc-800">
-                  🔒 Conversas privadas
+                  {t('messages.private')}
                 </span>
               </div>
 
@@ -786,7 +792,7 @@ export default function MessagesPage() {
                 className="mt-7 inline-flex items-center gap-2 rounded-full bg-blue-600 px-6 py-3 text-sm font-black text-white shadow-lg shadow-blue-600/20 transition hover:scale-[1.02] hover:bg-blue-700"
               >
                 <MessageSquarePlus className="h-4 w-4" />
-                Nova conversa
+                {t('messages.newConversation')}
               </Link>
             </div>
           </div>

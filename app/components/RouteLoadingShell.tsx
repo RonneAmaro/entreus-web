@@ -1,12 +1,17 @@
+'use client'
+
+import { useLanguage } from './LanguageProvider'
+
 type RouteLoadingShellProps = {
   title: string
 }
 
 export default function RouteLoadingShell({ title }: RouteLoadingShellProps) {
+  const { t } = useLanguage()
   return (
     <main
       aria-busy="true"
-      aria-label={`Carregando ${title}`}
+      aria-label={t('loading.opening', { title })}
       className="min-h-screen bg-background px-4 py-6 text-foreground sm:px-6 lg:px-8"
     >
       <div className="mx-auto w-full max-w-6xl">
@@ -27,7 +32,7 @@ export default function RouteLoadingShell({ title }: RouteLoadingShellProps) {
           ))}
         </div>
         <p role="status" className="mt-6 text-center text-sm font-semibold text-text-muted">
-          Abrindo {title}…
+          {t('loading.opening', { title })}
         </p>
       </div>
     </main>

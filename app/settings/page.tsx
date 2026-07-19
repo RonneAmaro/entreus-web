@@ -8,6 +8,7 @@ import {
   ArrowLeft,
   Bell,
   CheckCircle2,
+  Languages,
   LogOut,
   Palette,
   Save,
@@ -17,22 +18,26 @@ import {
 import { supabase } from '@/lib/supabase'
 import {
   getSafeProfileContentMode,
-  PROFILE_CONTENT_MODE_ADULT_NOTICE,
-  PROFILE_CONTENT_MODE_NO_AUTO_ADULT_NOTICE,
   PROFILE_CONTENT_MODE_OPTIONS,
   profileContentModeRequiresConfirmation,
   type ProfileContentMode,
 } from '@/lib/profile-content-mode'
+import { useLanguage } from '../components/LanguageProvider'
+import { countryOptions } from '@/lib/i18n/countries'
+import { translate, type Locale } from '@/lib/i18n'
 
 type Profile = {
   username: string | null
   display_name: string | null
   avatar_url: string | null
   profile_content_mode?: string | null
+  interface_locale?: string | null
+  country_code?: string | null
 }
 
 export default function SettingsPage() {
   const router = useRouter()
+  const { language, languages, setLanguage, t } = useLanguage()
   const [loading, setLoading] = useState(true)
   const [email, setEmail] = useState('')
   const [profile, setProfile] = useState<Profile | null>(null)
@@ -42,6 +47,9 @@ export default function SettingsPage() {
   const [savingProfileContentMode, setSavingProfileContentMode] = useState(false)
   const [message, setMessage] = useState('')
   const [deleteConfirm, setDeleteConfirm] = useState('')
+  const [countryCode, setCountryCode] = useState('')
+  const [savingLocale, setSavingLocale] = useState(false)
+  const countries = useMemo(() => countryOptions(language), [language])
 
   useEffect(() => {
     let active = true
@@ -62,14 +70,14 @@ export default function SettingsPage() {
 
       const profileResult = await supabase
         .from('profiles')
-        .select('username, display_name, avatar_url, profile_content_mode')
+        .select('username, display_name, avatar_url, profile_content_mode, interface_locale, country_code')
         .eq('id', user.id)
         .maybeSingle()
 
       if (!active) return
 
       let data = profileResult.data as Profile | null
-      if (profileResult.error && /profile_content_mode/i.test(profileResult.error.message)) {
+      if (profileResult.error && /profile_content_mode|interface_locale|country_code/i.test(profileResult.error.message)) {
         const fallbackResult = await supabase
           .from('profiles')
           .select('username, display_name, avatar_url')
@@ -85,6 +93,7 @@ export default function SettingsPage() {
       setProfileContentMode(nextMode)
       setSavedProfileContentMode(nextMode)
       setProfileContentModeConfirmed(false)
+      setCountryCode(data?.country_code || '')
       setLoading(false)
     }
 
@@ -107,9 +116,31 @@ export default function SettingsPage() {
     router.replace('/login')
   }
 
+  async function saveLocale(nextLocale: Locale) {
+    setSavingLocale(true)
+    setMessage('')
+    const result = await setLanguage(nextLocale, countryCode || null)
+    setSavingLocale(false)
+    if (!result.ok) {
+      setMessage(t('language.localSaveError'))
+      return
+    }
+    if (result.synced) {
+      setMessage(translate(nextLocale, 'language.saved'))
+    } else if (result.reason === 'migration_missing') {
+      setMessage(translate(nextLocale, 'language.migrationMissing'))
+    } else {
+      setMessage(translate(nextLocale, 'language.localOnly'))
+    }
+  }
+
+  function handleSaveLocale() {
+    void saveLocale(language)
+  }
+
   async function handleSaveProfileContentMode() {
     if (profileContentModeNeedsConfirmation && !profileContentModeConfirmed) {
-      setMessage('Confirme que voce entendeu os limites publicos antes de salvar este modo.')
+      setMessage(t('settings.contentModeConfirm'))
       return
     }
 
@@ -122,7 +153,7 @@ export default function SettingsPage() {
 
     if (!session?.access_token) {
       setSavingProfileContentMode(false)
-      setMessage('Entre na sua conta para alterar esta configuracao.')
+      setMessage(t('settings.contentModeLogin'))
       return
     }
 
@@ -152,22 +183,22 @@ export default function SettingsPage() {
     setProfileContentMode(savedMode)
     setSavedProfileContentMode(savedMode)
     setProfileContentModeConfirmed(false)
-    setMessage('Tipo de conteudo do perfil atualizado.')
+    setMessage(t('settings.contentModeSaved'))
   }
 
   function handleDeletionRequest() {
-    if (deleteConfirm.trim().toUpperCase() !== 'EXCLUIR') {
-      setMessage('Digite EXCLUIR para confirmar que voce entendeu o aviso.')
+    if (deleteConfirm.trim().toUpperCase() !== t('settings.deleteConfirmationToken')) {
+      setMessage(t('settings.deleteConfirmMessage'))
       return
     }
 
-    setMessage('A exclusao definitiva da conta sera implementada com seguranca em breve. Por enquanto, fale com o suporte para orientar a solicitacao.')
+    setMessage(t('settings.deleteComingSoon'))
   }
 
   if (loading) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-black px-4 text-white">
-        <p className="text-sm font-bold text-zinc-400">Carregando configuracoes...</p>
+        <p className="text-sm font-bold text-zinc-400">{t('common.loading')}</p>
       </main>
     )
   }
@@ -181,19 +212,19 @@ export default function SettingsPage() {
             className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-black text-zinc-100 transition hover:bg-white/10"
           >
             <ArrowLeft className="h-4 w-4" />
-            Voltar ao feed
+            {t('settings.back')}
           </Link>
 
           <div className="mt-8 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <p className="text-xs font-black uppercase tracking-[0.28em] text-blue-300">
-                EntreUS
+                {t('settings.kicker')}
               </p>
               <h1 className="mt-3 text-4xl font-black tracking-tight text-white sm:text-5xl">
-                Configuracoes da conta
+                {t('settings.title')}
               </h1>
               <p className="mt-4 max-w-2xl text-sm leading-6 text-zinc-300 sm:text-base">
-                Gerencie informacoes basicas, privacidade, aparencia e opcoes sensiveis da sua conta.
+                {t('settings.description')}
               </p>
             </div>
 
@@ -230,11 +261,11 @@ export default function SettingsPage() {
               <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-500/15 text-blue-200">
                 <User className="h-5 w-5" />
               </span>
-              <h2 className="text-xl font-black">Conta</h2>
+              <h2 className="text-xl font-black">{t('settings.account')}</h2>
             </div>
             <dl className="mt-5 space-y-3 text-sm">
               <div>
-                <dt className="text-zinc-500">Nome</dt>
+                <dt className="text-zinc-500">{t('settings.name')}</dt>
                 <dd className="mt-1 font-bold text-zinc-100">{displayName}</dd>
               </div>
               <div>
@@ -242,9 +273,9 @@ export default function SettingsPage() {
                 <dd className="mt-1 break-all font-bold text-zinc-100">{email}</dd>
               </div>
               <div>
-                <dt className="text-zinc-500">Username</dt>
+                <dt className="text-zinc-500">{t('settings.username')}</dt>
                 <dd className="mt-1 font-bold text-zinc-100">
-                  {profile?.username ? `@${profile.username}` : 'Nao definido'}
+                  {profile?.username ? `@${profile.username}` : t('settings.undefined')}
                 </dd>
               </div>
             </dl>
@@ -252,8 +283,63 @@ export default function SettingsPage() {
               href="/profile"
               className="mt-6 inline-flex min-h-11 items-center justify-center rounded-full bg-white px-5 text-sm font-black text-black transition hover:bg-blue-50"
             >
-              Editar perfil
+              {t('settings.editProfile')}
             </Link>
+          </article>
+
+          <article data-testid="platform-language-settings" className="rounded-[1.75rem] border border-blue-300/20 bg-zinc-950 p-5 shadow-xl shadow-black/20 lg:col-span-2">
+            <div className="flex items-center gap-3">
+              <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-500/15 text-blue-200">
+                <Languages className="h-5 w-5" />
+              </span>
+              <div>
+                <h2 className="text-xl font-black">{t('settings.languageTitle')}</h2>
+                <p className="mt-1 text-sm text-zinc-400">{t('settings.languageDescription')}</p>
+              </div>
+            </div>
+
+            <div className="mt-5 grid gap-4 sm:grid-cols-2">
+              <label className="text-sm font-bold text-zinc-200">
+                {t('language.label')}
+                <select
+                  value={language}
+                  onChange={(event) => void saveLocale(event.target.value as Locale)}
+                  disabled={savingLocale}
+                  className="mt-2 min-h-11 w-full rounded-2xl border border-white/10 bg-black px-4 text-white outline-none focus:border-blue-300"
+                >
+                  {languages.map((option) => (
+                    <option key={option.code} value={option.code}>{option.nativeName}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="text-sm font-bold text-zinc-200">
+                {t('country.label')}
+                <select
+                  value={countryCode}
+                  onChange={(event) => setCountryCode(event.target.value)}
+                  className="mt-2 min-h-11 w-full rounded-2xl border border-white/10 bg-black px-4 text-white outline-none focus:border-blue-300"
+                >
+                  <option value="">{t('country.placeholder')}</option>
+                  {countries.map((country) => (
+                    <option key={country.code} value={country.code} suppressHydrationWarning>{country.label}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm leading-6 text-zinc-400">{t('language.helper')}</p>
+              <button
+                type="button"
+                onClick={handleSaveLocale}
+                disabled={savingLocale}
+                className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-full bg-blue-500 px-5 text-sm font-black text-white transition hover:bg-blue-400 disabled:opacity-50"
+              >
+                <Save className="h-4 w-4" />
+                {savingLocale ? t('language.saving') : t('language.save')}
+              </button>
+            </div>
           </article>
 
           <article className="rounded-[1.75rem] border border-white/10 bg-zinc-950 p-5 shadow-xl shadow-black/20">
@@ -261,14 +347,14 @@ export default function SettingsPage() {
               <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-500/15 text-blue-200">
                 <Shield className="h-5 w-5" />
               </span>
-              <h2 className="text-xl font-black">Privacidade e seguranca</h2>
+              <h2 className="text-xl font-black">{t('settings.privacySecurity')}</h2>
             </div>
             <div className="mt-5 grid gap-2">
               {[
-                { href: '/privacy', label: 'Politica de Privacidade' },
-                { href: '/terms', label: 'Termos de Uso' },
-                { href: '/safety', label: 'Seguranca e Denuncias' },
-                { href: '/blocked', label: 'Usuarios bloqueados' },
+                { href: '/privacy', label: t('settings.privacyPolicy') },
+                { href: '/terms', label: t('settings.terms') },
+                { href: '/safety', label: t('settings.safetyReports') },
+                { href: '/blocked', label: t('settings.blockedUsers') },
               ].map((item) => (
                 <Link
                   key={item.href}
@@ -288,13 +374,13 @@ export default function SettingsPage() {
                   <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-500/15 text-blue-200">
                     <Shield className="h-5 w-5" />
                   </span>
-                  <h2 className="text-xl font-black">Tipo de conteudo do perfil</h2>
+                  <h2 className="text-xl font-black">{t('settings.contentModeTitle')}</h2>
                 </div>
                 <p className="mt-4 max-w-3xl text-sm leading-6 text-zinc-400">
-                  Escolha como voce pretende usar seu perfil. Essa opcao ajuda o EntreUS a organizar sua experiencia, mas cada publicacao continua tendo sua propria classificacao.
+                  {t('settings.contentModeDescription')}
                 </p>
                 <p className="mt-2 text-sm font-black text-blue-100">
-                  Uma unica identidade. Conteudos organizados com limites claros.
+                  {t('settings.contentModeSlogan')}
                 </p>
               </div>
               <button
@@ -304,7 +390,7 @@ export default function SettingsPage() {
                 className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-full bg-white px-5 text-sm font-black text-black transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-45"
               >
                 <Save className="h-4 w-4" />
-                {savingProfileContentMode ? 'Salvando...' : 'Salvar modo'}
+                {savingProfileContentMode ? t('settings.contentModeSaving') : t('settings.contentModeSave')}
               </button>
             </div>
 
@@ -333,8 +419,8 @@ export default function SettingsPage() {
                       }}
                       className="sr-only"
                     />
-                    <span className="text-sm font-black">{option.label}</span>
-                    <span className="mt-3 text-sm leading-6 text-zinc-400">{option.description}</span>
+                    <span className="text-sm font-black">{t(`settings.contentModes.${option.value}.label`)}</span>
+                    <span className="mt-3 text-sm leading-6 text-zinc-400">{t(`settings.contentModes.${option.value}.description`)}</span>
                   </label>
                 )
               })}
@@ -342,8 +428,8 @@ export default function SettingsPage() {
 
             {profileContentModeNeedsConfirmation && (
               <div className="mt-5 rounded-2xl border border-yellow-200/25 bg-yellow-500/10 p-4 text-sm leading-6 text-yellow-50">
-                <p>{PROFILE_CONTENT_MODE_ADULT_NOTICE}</p>
-                <p className="mt-2">{PROFILE_CONTENT_MODE_NO_AUTO_ADULT_NOTICE}</p>
+                <p>{t('settings.contentModeAdultNotice')}</p>
+                <p className="mt-2">{t('settings.contentModeNoAutoAdultNotice')}</p>
                 <label className="mt-4 flex cursor-pointer items-start gap-3 font-bold">
                   <input
                     type="checkbox"
@@ -351,7 +437,7 @@ export default function SettingsPage() {
                     onChange={(event) => setProfileContentModeConfirmed(event.target.checked)}
                     className="mt-1 h-4 w-4 accent-blue-500"
                   />
-                  <span>Entendi que minha identidade publica deve continuar segura e que cada post precisa ser classificado individualmente.</span>
+                  <span>{t('settings.contentModeAcknowledge')}</span>
                 </label>
               </div>
             )}
@@ -362,16 +448,16 @@ export default function SettingsPage() {
               <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-500/15 text-blue-200">
                 <Bell className="h-5 w-5" />
               </span>
-              <h2 className="text-xl font-black">Notificacoes</h2>
+              <h2 className="text-xl font-black">{t('settings.notifications')}</h2>
             </div>
             <p className="mt-5 text-sm leading-6 text-zinc-400">
-              Preferencias avancadas de notificacoes chegam em um pacote futuro. Por enquanto, acompanhe alertas pela pagina de notificacoes.
+              {t('settings.notificationsDescription')}
             </p>
             <Link
               href="/notifications"
               className="mt-6 inline-flex min-h-11 items-center justify-center rounded-full border border-blue-300/25 bg-blue-500/10 px-5 text-sm font-black text-blue-100 transition hover:bg-blue-500/20"
             >
-              Abrir notificacoes
+              {t('settings.openNotifications')}
             </Link>
           </article>
 
@@ -380,10 +466,10 @@ export default function SettingsPage() {
               <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-500/15 text-blue-200">
                 <Palette className="h-5 w-5" />
               </span>
-              <h2 className="text-xl font-black">Aparencia</h2>
+              <h2 className="text-xl font-black">{t('settings.appearance')}</h2>
             </div>
             <p className="mt-5 text-sm leading-6 text-zinc-400">
-              O tema claro/escuro continua disponivel no menu Mais. Esta area vai concentrar preferencias visuais em uma proxima evolucao.
+              {t('settings.appearanceDescription')}
             </p>
           </article>
         </div>
@@ -394,9 +480,9 @@ export default function SettingsPage() {
               <AlertTriangle className="h-5 w-5" />
             </span>
             <div>
-              <h2 className="text-xl font-black">Zona de risco</h2>
+              <h2 className="text-xl font-black">{t('settings.riskZone')}</h2>
               <p className="mt-1 text-sm text-red-100/75">
-                Acoes sensiveis exigem confirmacao e fluxo seguro.
+                {t('settings.riskDescription')}
               </p>
             </div>
           </div>
@@ -404,16 +490,16 @@ export default function SettingsPage() {
           <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_auto] lg:items-end">
             <div>
               <label className="block text-sm font-bold text-red-50">
-                Solicitar exclusao da conta
+                {t('settings.deleteAccount')}
               </label>
               <p className="mt-2 text-sm leading-6 text-red-100/75">
-                Como sua conta pode ter posts, mensagens, compras, presentes, verificacoes e moderacao, a exclusao definitiva nao sera feita diretamente neste pacote. Digite EXCLUIR para registrar a solicitacao visual.
+                {t('settings.deleteInfo')}
               </p>
               <input
                 type="text"
                 value={deleteConfirm}
                 onChange={(event) => setDeleteConfirm(event.target.value)}
-                placeholder="Digite EXCLUIR"
+                placeholder={t('settings.deletePlaceholder')}
                 className="mt-4 w-full rounded-2xl border border-red-300/20 bg-black px-4 py-3 text-sm font-bold text-white outline-none transition placeholder:text-red-100/35 focus:border-red-200"
               />
             </div>
@@ -423,7 +509,7 @@ export default function SettingsPage() {
                 onClick={handleDeletionRequest}
                 className="inline-flex min-h-11 items-center justify-center rounded-full border border-red-300/30 bg-red-500/10 px-5 text-sm font-black text-red-100 transition hover:bg-red-500/20"
               >
-                Solicitar exclusao
+                {t('settings.deleteRequest')}
               </button>
               <button
                 type="button"
@@ -431,7 +517,7 @@ export default function SettingsPage() {
                 className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-white px-5 text-sm font-black text-black transition hover:bg-blue-50"
               >
                 <LogOut className="h-4 w-4" />
-                Sair da conta
+                {t('auth.logout')}
               </button>
             </div>
           </div>

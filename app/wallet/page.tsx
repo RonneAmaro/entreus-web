@@ -1,5 +1,7 @@
 'use client'
 
+/* eslint-disable react-hooks/immutability -- the initial effect intentionally calls the async wallet loader declared later in the component */
+
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -21,6 +23,9 @@ import {
   Wallet,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { useLanguage } from '../components/LanguageProvider'
+
+type Translate = (key: string, values?: Record<string, string | number>) => string
 
 type ItaCashWallet = {
   id: string
@@ -114,34 +119,34 @@ type CurrentProfile = {
   avatar_url: string | null
 }
 
-const transactionLabels: Record<string, string> = {
-  admin_credit: 'Credito administrativo',
-  reward: 'Recompensa',
-  gift_sent: 'Presente enviado',
-  gift_received: 'Presente recebido',
-  tip_sent: 'Gorjeta enviada',
-  tip_received: 'Gorjeta recebida liquida',
-  support_sent: 'Apoio enviado',
-  support_received: 'Apoio recebido',
-  paid_post_unlock: 'Desbloqueio de post',
-  paid_post_received: 'Post pago recebido liquido',
-  purchase_confirmed: 'Compra de ItaCash',
-  promotional_credit: 'Credito promocional',
-  withdrawal_requested: 'Saque solicitado',
-  withdrawal_refunded: 'Saque estornado',
-  refund: 'Reembolso',
-  adjustment: 'Ajuste',
+const transactionLabelKeys: Record<string, string> = {
+  admin_credit: 'wallet.transaction.adminCredit',
+  reward: 'wallet.transaction.reward',
+  gift_sent: 'wallet.transaction.giftSent',
+  gift_received: 'wallet.transaction.giftReceived',
+  tip_sent: 'wallet.transaction.tipSent',
+  tip_received: 'wallet.transaction.tipReceived',
+  support_sent: 'wallet.transaction.supportSent',
+  support_received: 'wallet.transaction.supportReceived',
+  paid_post_unlock: 'wallet.transaction.paidPostUnlock',
+  paid_post_received: 'wallet.transaction.paidPostReceived',
+  purchase_confirmed: 'wallet.transaction.purchaseConfirmed',
+  promotional_credit: 'wallet.transaction.promotionalCredit',
+  withdrawal_requested: 'wallet.transaction.withdrawalRequested',
+  withdrawal_refunded: 'wallet.transaction.withdrawalRefunded',
+  refund: 'wallet.transaction.refund',
+  adjustment: 'wallet.transaction.adjustment',
 }
 
-function formatBRLFromItaCash(value: number) {
-  return (value * 0.1).toLocaleString('pt-BR', {
+function formatBRLFromItaCash(value: number, locale: string) {
+  return (value * 0.1).toLocaleString(locale, {
     style: 'currency',
     currency: 'BRL',
   })
 }
 
-function formatDate(value: string) {
-  return new Date(value).toLocaleString('pt-BR', {
+function formatDate(value: string, locale: string) {
+  return new Date(value).toLocaleString(locale, {
     day: '2-digit',
     month: '2-digit',
     hour: '2-digit',
@@ -149,30 +154,28 @@ function formatDate(value: string) {
   })
 }
 
-function formatBRLFromCents(value: number) {
+function formatBRLFromCents(value: number, locale: string) {
   const safeValue = Number.isFinite(value) ? value : 0
 
-  return (safeValue / 100).toLocaleString('pt-BR', {
+  return (safeValue / 100).toLocaleString(locale, {
     style: 'currency',
     currency: 'BRL',
   })
 }
 
-function purchaseStatusLabel(status: string) {
+function purchaseStatusLabel(status: string, t: Translate) {
   const normalizedStatus = (status || '').toLowerCase()
 
-  if (normalizedStatus === 'paid') return 'Compra aprovada e saldo creditado'
-  if (normalizedStatus === 'approved') return 'Compra aprovada e saldo creditado'
-  if (normalizedStatus === 'processed') return 'Saldo creditado'
-  if (normalizedStatus === 'rejected') return 'Compra recusada'
-  if (normalizedStatus === 'canceled') return 'Cancelada'
-  if (normalizedStatus === 'cancelled') return 'Cancelada'
-  if (normalizedStatus === 'pending') return 'Aguardando analise'
-  if (normalizedStatus === 'in_process') return 'Aguardando pagamento'
-  if (normalizedStatus === 'authorized') return 'Aguardando confirmacao'
-  if (normalizedStatus === 'failed') return 'Falhou'
-  if (normalizedStatus === 'expired') return 'Expirada'
-  return 'Status em analise'
+  if (normalizedStatus === 'paid' || normalizedStatus === 'approved') return t('wallet.status.approved')
+  if (normalizedStatus === 'processed') return t('wallet.status.credited')
+  if (normalizedStatus === 'rejected') return t('wallet.status.rejected')
+  if (normalizedStatus === 'canceled' || normalizedStatus === 'cancelled') return t('wallet.status.canceled')
+  if (normalizedStatus === 'pending') return t('wallet.status.pendingReview')
+  if (normalizedStatus === 'in_process') return t('wallet.status.pendingPayment')
+  if (normalizedStatus === 'authorized') return t('wallet.status.pendingConfirmation')
+  if (normalizedStatus === 'failed') return t('wallet.status.failed')
+  if (normalizedStatus === 'expired') return t('wallet.status.expired')
+  return t('wallet.status.underReview')
 }
 
 function purchaseStatusClass(status: string) {
@@ -189,44 +192,42 @@ function purchaseStatusClass(status: string) {
   return 'bg-amber-500/10 text-amber-100 ring-amber-300/15'
 }
 
-function paymentMethodLabel(method: string | null) {
-  if (method === 'manual_pix') return 'Pix manual'
-  if (method === 'pix_manual') return 'Pix manual'
-  if (method === 'mercadopago_manual') return 'Compra Mercado Pago'
-  if (method === 'mercadopago_auto') return 'Compra Mercado Pago'
-  if (method === 'mercadopago_pix') return 'Mercado Pago Pix'
-  if (method === 'mercadopago_credit_30d') return 'Mercado Pago credito 30 dias'
-  if (method === 'mercadopago_credit_instant') return 'Mercado Pago credito'
+function paymentMethodLabel(method: string | null, t: Translate) {
+  if (method === 'manual_pix' || method === 'pix_manual') return t('wallet.payment.manualPix')
+  if (method === 'mercadopago_manual' || method === 'mercadopago_auto') return t('wallet.payment.mercadoPago')
+  if (method === 'mercadopago_pix') return t('wallet.payment.mercadoPagoPix')
+  if (method === 'mercadopago_credit_30d') return t('wallet.payment.credit30d')
+  if (method === 'mercadopago_credit_instant') return t('wallet.payment.credit')
   if (method === 'open_finance') return 'Open Finance'
-  return 'Pix manual'
+  return t('wallet.payment.manualPix')
 }
 
-function providerStatusLabel(status: string | null) {
+function providerStatusLabel(status: string | null, t: Translate) {
   const normalizedStatus = (status || '').toLowerCase()
 
   if (!normalizedStatus) return ''
-  if (normalizedStatus === 'approved') return 'Pagamento aprovado'
-  if (normalizedStatus === 'pending') return 'Pagamento pendente'
-  if (normalizedStatus === 'in_process') return 'Pagamento em analise'
-  if (normalizedStatus === 'authorized') return 'Pagamento autorizado'
-  if (normalizedStatus === 'rejected') return 'Pagamento recusado'
-  if (normalizedStatus === 'cancelled' || normalizedStatus === 'canceled') return 'Pagamento cancelado'
-  if (normalizedStatus === 'expired') return 'Pagamento expirado'
-  return 'Status do pagamento em analise'
+  if (normalizedStatus === 'approved') return t('wallet.providerStatus.approved')
+  if (normalizedStatus === 'pending') return t('wallet.providerStatus.pending')
+  if (normalizedStatus === 'in_process') return t('wallet.providerStatus.inProcess')
+  if (normalizedStatus === 'authorized') return t('wallet.providerStatus.authorized')
+  if (normalizedStatus === 'rejected') return t('wallet.providerStatus.rejected')
+  if (normalizedStatus === 'cancelled' || normalizedStatus === 'canceled') return t('wallet.providerStatus.canceled')
+  if (normalizedStatus === 'expired') return t('wallet.providerStatus.expired')
+  return t('wallet.providerStatus.underReview')
 }
 
-function purchaseStatusHelp(status: string) {
+function purchaseStatusHelp(status: string, t: Translate) {
   const normalizedStatus = (status || '').toLowerCase()
 
-  if (normalizedStatus === 'pending') return 'A equipe EntreUS ainda precisa analisar esta compra.'
+  if (normalizedStatus === 'pending') return t('wallet.statusHelp.pending')
   if (normalizedStatus === 'approved' || normalizedStatus === 'paid' || normalizedStatus === 'processed') {
-    return 'O saldo desta compra ja foi creditado.'
+    return t('wallet.statusHelp.credited')
   }
-  if (normalizedStatus === 'rejected') return 'Esta compra nao foi creditada.'
-  if (normalizedStatus === 'expired') return 'O prazo de pagamento terminou.'
-  if (normalizedStatus === 'failed') return 'O pagamento nao foi concluido.'
-  if (normalizedStatus === 'canceled' || normalizedStatus === 'cancelled') return 'Esta compra foi cancelada.'
-  return 'Acompanhe os detalhes desta compra aqui.'
+  if (normalizedStatus === 'rejected') return t('wallet.statusHelp.rejected')
+  if (normalizedStatus === 'expired') return t('wallet.statusHelp.expired')
+  if (normalizedStatus === 'failed') return t('wallet.statusHelp.failed')
+  if (normalizedStatus === 'canceled' || normalizedStatus === 'cancelled') return t('wallet.statusHelp.canceled')
+  return t('wallet.statusHelp.default')
 }
 
 function getGiftNameFromDescription(description: string | null) {
@@ -235,7 +236,7 @@ function getGiftNameFromDescription(description: string | null) {
   return parts.length > 1 ? parts.slice(1).join(':').trim() : ''
 }
 
-function formatRevenueSplitDetail(metadata: ItaCashTransaction['metadata']) {
+function formatRevenueSplitDetail(metadata: ItaCashTransaction['metadata'], t: Translate) {
   const grossAmount = metadata?.gross_amount
   const platformFeeAmount = metadata?.platform_fee_amount
 
@@ -248,12 +249,13 @@ function formatRevenueSplitDetail(metadata: ItaCashTransaction['metadata']) {
     return ''
   }
 
-  return `Bruto: ${grossAmount} | Taxa da plataforma: ${platformFeeAmount}`
+  return t('wallet.transaction.revenueSplit', { gross: grossAmount, fee: platformFeeAmount })
 }
 
 export default function WalletPage() {
   const router = useRouter()
   const { theme, setTheme } = useTheme()
+  const { language, t } = useLanguage()
 
   const [mounted, setMounted] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -268,6 +270,8 @@ export default function WalletPage() {
   const [paymentOrders, setPaymentOrders] = useState<PaymentOrder[]>([])
 
   useEffect(() => {
+    // Hydration state is intentionally established after the client mounts.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true)
   }, [])
 
@@ -368,7 +372,7 @@ export default function WalletPage() {
     } = await supabase.auth.getUser()
 
     if (!user) {
-      setMessage('Entre na sua conta para ver sua carteira ItaCash.')
+      setMessage(t('wallet.errors.signIn'))
       setLoading(false)
       return
     }
@@ -386,7 +390,7 @@ export default function WalletPage() {
       .rpc('ensure_itacash_wallet')
 
     if (walletError || !walletData) {
-      setMessage('Nao foi possivel carregar sua carteira: ' + (walletError?.message || 'tente novamente.'))
+      setMessage(t('wallet.errors.load', { error: walletError?.message || t('common.retry') }))
       setLoading(false)
       return
     }
@@ -402,7 +406,7 @@ export default function WalletPage() {
       .limit(60)
 
     if (transactionError) {
-      setMessage('Carteira carregada, mas o historico falhou: ' + transactionError.message)
+      setMessage(t('wallet.errors.history', { error: transactionError.message }))
       setTransactions([])
       setGiftContexts({})
     } else {
@@ -421,11 +425,11 @@ export default function WalletPage() {
     if (transaction.type === 'gift_sent') {
       const receiver = context?.receiverUsername
         ? `@${context.receiverUsername}`
-        : context?.receiverName || 'outro usuario'
+        : context?.receiverName || t('wallet.otherUser')
 
       return {
-        title: `Voce enviou ${giftName} para ${receiver}`,
-        detail: 'Presente enviado',
+        title: t('wallet.transaction.sentGiftTo', { gift: giftName, user: receiver }),
+        detail: t('wallet.transaction.giftSent'),
         tone: 'out',
       }
     }
@@ -433,62 +437,62 @@ export default function WalletPage() {
     if (transaction.type === 'gift_received') {
       const sender = context?.senderUsername
         ? `@${context.senderUsername}`
-        : context?.senderName || 'outro usuario'
+        : context?.senderName || t('wallet.otherUser')
 
       return {
-        title: `Voce recebeu ${giftName} de ${sender}`,
-        detail: 'Presente recebido',
+        title: t('wallet.transaction.receivedGiftFrom', { gift: giftName, user: sender }),
+        detail: t('wallet.transaction.giftReceived'),
         tone: 'in',
       }
     }
 
     if (transaction.type === 'tip_sent' || transaction.type === 'support_sent') {
-      const splitDetail = formatRevenueSplitDetail(transaction.metadata)
+      const splitDetail = formatRevenueSplitDetail(transaction.metadata, t)
       return {
-        title: 'Voce enviou uma gorjeta em ItaCash',
-        detail: splitDetail || transaction.description || 'Gorjeta enviada para criador',
+        title: t('wallet.transaction.tipSentTitle'),
+        detail: splitDetail || transaction.description || t('wallet.transaction.tipSentDetail'),
         tone: 'out',
       }
     }
 
     if (transaction.type === 'tip_received' || transaction.type === 'support_received') {
-      const splitDetail = formatRevenueSplitDetail(transaction.metadata)
+      const splitDetail = formatRevenueSplitDetail(transaction.metadata, t)
       return {
-        title: 'Voce recebeu uma gorjeta liquida em ItaCash',
-        detail: splitDetail || transaction.description || 'Gorjeta recebida liquida na carteira',
+        title: t('wallet.transaction.tipReceivedTitle'),
+        detail: splitDetail || transaction.description || t('wallet.transaction.tipReceivedDetail'),
         tone: 'in',
       }
     }
 
     if (transaction.type === 'paid_post_unlock') {
       return {
-        title: 'Voce desbloqueou um post pago',
-        detail: transaction.description || 'Desbloqueio de post com ItaCash',
+        title: t('wallet.transaction.unlockedPostTitle'),
+        detail: transaction.description || t('wallet.transaction.unlockedPostDetail'),
         tone: 'out',
       }
     }
 
     if (transaction.type === 'paid_post_received') {
-      const splitDetail = formatRevenueSplitDetail(transaction.metadata)
+      const splitDetail = formatRevenueSplitDetail(transaction.metadata, t)
       return {
-        title: 'Voce recebeu liquido por um post pago',
-        detail: splitDetail || transaction.description || 'Post pago recebido liquido',
+        title: t('wallet.transaction.paidPostReceivedTitle'),
+        detail: splitDetail || transaction.description || t('wallet.transaction.paidPostReceivedDetail'),
         tone: 'in',
       }
     }
 
     if (transaction.type === 'withdrawal_requested') {
       return {
-        title: 'Saque solicitado',
-        detail: transaction.description || 'Valor debitado para saque manual',
+        title: t('wallet.transaction.withdrawalRequested'),
+        detail: transaction.description || t('wallet.transaction.withdrawalRequestedDetail'),
         tone: 'out',
       }
     }
 
     if (transaction.type === 'withdrawal_refunded') {
       return {
-        title: 'Saque estornado',
-        detail: transaction.description || 'Valor devolvido apos recusa do saque',
+        title: t('wallet.transaction.withdrawalRefunded'),
+        detail: transaction.description || t('wallet.transaction.withdrawalRefundedDetail'),
         tone: 'in',
       }
     }
@@ -497,8 +501,8 @@ export default function WalletPage() {
       const isPaymentOrder = transaction.reference_type === 'payment_order'
 
       return {
-        title: isPaymentOrder ? 'Compra Mercado Pago creditada' : 'Compra de ItaCash creditada',
-        detail: transaction.description || (isPaymentOrder ? 'Saldo creditado automaticamente' : 'Credito aprovado pela equipe'),
+        title: isPaymentOrder ? t('wallet.transaction.mercadoPagoCredited') : t('wallet.transaction.purchaseCredited'),
+        detail: transaction.description || (isPaymentOrder ? t('wallet.transaction.automaticCredit') : t('wallet.transaction.teamCredit')),
         tone: 'in',
       }
     }
@@ -508,21 +512,21 @@ export default function WalletPage() {
       transaction.type === 'promotional_credit'
     ) {
       const details = [
-        transaction.metadata?.reason ? `Motivo: ${transaction.metadata.reason}` : '',
-        transaction.metadata?.campaign ? `Campanha: ${transaction.metadata.campaign}` : '',
+        transaction.metadata?.reason ? t('wallet.transaction.reason', { value: transaction.metadata.reason }) : '',
+        transaction.metadata?.campaign ? t('wallet.transaction.campaign', { value: transaction.metadata.campaign }) : '',
       ].filter(Boolean)
 
       return {
-        title: 'Credito promocional EntreUS',
-        detail: details.length > 0 ? details.join(' | ') : 'Credito promocional para uso na plataforma',
+        title: t('wallet.transaction.promotionalTitle'),
+        detail: details.length > 0 ? details.join(' | ') : t('wallet.transaction.promotionalDetail'),
         tone: 'in',
         promotional: true,
       }
     }
 
     return {
-      title: transactionLabels[transaction.type] || transaction.type,
-      detail: transaction.description || 'Movimentacao ItaCash',
+      title: transactionLabelKeys[transaction.type] ? t(transactionLabelKeys[transaction.type]) : transaction.type,
+      detail: transaction.description || t('wallet.transaction.movement'),
       tone: transaction.amount >= 0 ? 'in' : 'out',
     }
   }
@@ -615,7 +619,7 @@ export default function WalletPage() {
 
       <MobileNavigation
         email={email}
-        displayName={currentProfile?.display_name || currentProfile?.username || 'Minha conta'}
+        displayName={currentProfile?.display_name || currentProfile?.username || t('navigation.myAccount')}
         avatarUrl={currentProfile?.avatar_url || null}
         unreadNotificationsCount={unreadNotificationsCount}
         mounted={mounted}
@@ -634,7 +638,7 @@ export default function WalletPage() {
             className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-black transition hover:bg-white/10"
           >
             <ArrowLeft className="h-4 w-4" />
-            Feed
+            {t('navigation.feed')}
           </Link>
 
           <Link
@@ -656,27 +660,27 @@ export default function WalletPage() {
             </div>
 
             <h1 className="mt-6 max-w-3xl text-4xl font-black tracking-tight sm:text-6xl">
-              ItaCash para reconhecer, presentear e circular valor dentro da <EntreUSWordmark />.
+              {t('wallet.heroTitle')} <EntreUSWordmark />.
             </h1>
             <p className="mt-5 max-w-2xl text-base leading-7 text-zinc-300 sm:text-lg">
-              Seus creditos internos na <EntreUSWordmark /> ficam organizados aqui: saldo, equivalencia em reais e historico de presentes.
+              {t('wallet.heroDescriptionBefore')} <EntreUSWordmark /> {t('wallet.heroDescriptionAfter')}
             </p>
 
             <div className="mt-8 grid gap-4 sm:grid-cols-3">
               <div className="relative overflow-hidden rounded-3xl border border-blue-300/25 bg-blue-500/15 p-5 shadow-xl shadow-blue-950/20 ring-1 ring-blue-300/10">
                 <span className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-blue-400/20 blur-2xl" />
-                <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-200/70">Disponivel</p>
+                <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-200/70">{t('wallet.available')}</p>
                 <ItaCashAmount amount={availableBalance} size="xl" className="relative mt-3 text-blue-50" valueClassName="text-4xl" />
               </div>
               <div className="rounded-3xl border border-white/10 bg-zinc-950/70 p-5 ring-1 ring-white/5">
-                <p className="text-xs font-black uppercase tracking-[0.2em] text-zinc-500">Aproximado</p>
-                <p className="mt-3 text-2xl font-black">{formatBRLFromItaCash(availableBalance)}</p>
-                <p className="text-sm text-zinc-400">10 ItaCash = R$ 1,00</p>
+                <p className="text-xs font-black uppercase tracking-[0.2em] text-zinc-500">{t('wallet.approximate')}</p>
+                <p className="mt-3 text-2xl font-black">{formatBRLFromItaCash(availableBalance, language)}</p>
+                <p className="text-sm text-zinc-400">{t('wallet.exchangeRate')}</p>
               </div>
               <div className="rounded-3xl border border-white/10 bg-zinc-950/70 p-5 ring-1 ring-white/5">
-                <p className="text-xs font-black uppercase tracking-[0.2em] text-zinc-500">Bloqueado</p>
+                <p className="text-xs font-black uppercase tracking-[0.2em] text-zinc-500">{t('wallet.locked')}</p>
                 <ItaCashAmount amount={lockedBalance} size="lg" className="mt-3" />
-                <p className="text-sm text-zinc-400">Reservado</p>
+                <p className="text-sm text-zinc-400">{t('wallet.reserved')}</p>
               </div>
             </div>
           </div>
@@ -695,12 +699,12 @@ export default function WalletPage() {
                     {loading ? <Loader2 className="h-6 w-6 animate-spin" /> : <Wallet className="h-6 w-6" />}
                   </span>
                   <div>
-                    <p className="text-sm font-bold text-blue-100/80">Moeda interna</p>
+                    <p className="text-sm font-bold text-blue-100/80">{t('wallet.internalCurrency')}</p>
                     <ItaCashAmount amount={availableBalance} size="xl" valueClassName="text-3xl" />
                   </div>
                 </div>
                 <p className="mt-4 text-sm leading-6 text-zinc-300">
-                  Use ItaCash para presentes digitais e testes da economia interna da plataforma.
+                  {t('wallet.internalCurrencyDescription')}
                 </p>
               </div>
             </div>
@@ -711,9 +715,9 @@ export default function WalletPage() {
           <div className="rounded-3xl border border-amber-300/20 bg-amber-500/10 p-4 text-sm leading-6 text-amber-50">
             <div className="mb-2 flex items-center gap-2 font-black">
               <ShieldAlert className="h-5 w-5" />
-              Aviso importante
+              {t('wallet.importantNotice')}
             </div>
-            ItaCash e credito interno da plataforma, nao e moeda oficial e nao e investimento financeiro. Saques de criadores sao manuais e o Pix e pago fora da plataforma pelo administrador.
+            {t('wallet.legalNotice')}
           </div>
 
           <div className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
@@ -723,18 +727,18 @@ export default function WalletPage() {
                   <Coins className="h-5 w-5" />
                 </span>
               <div>
-                <h2 className="text-xl font-black">Comprar ItaCash</h2>
+                <h2 className="text-xl font-black">{t('wallet.buyItaCash')}</h2>
                 <p className="mt-2 text-sm leading-6 text-blue-50/80">
-                    Solicite uma compra manual com quantidade livre. A equipe confere o pagamento por fora e aprova o credito.
+                    {t('wallet.buyDescription')}
                 </p>
               </div>
             </div>
 
               <div className="mt-5 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
                 <div className="rounded-3xl border border-white/10 bg-black/35 p-4">
-                  <p className="text-2xl font-black">10 ItaCash = R$ 1,00</p>
+                  <p className="text-2xl font-black">{t('wallet.exchangeRate')}</p>
                   <p className="mt-2 text-sm leading-6 text-zinc-300">
-                    A taxa de servico EntreUS e de 2%. Mercado Pago manual pode incluir taxa da operadora separada.
+                    {t('wallet.serviceFee')}
                   </p>
                 </div>
 
@@ -743,7 +747,7 @@ export default function WalletPage() {
                   className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-black text-black transition hover:bg-blue-50"
                 >
                   <PlusCircle className="h-4 w-4" />
-                  Comprar ItaCash
+                  {t('wallet.buyItaCash')}
                 </Link>
 
                 <Link
@@ -757,55 +761,55 @@ export default function WalletPage() {
             </div>
 
             <div className="rounded-[2rem] border border-white/10 bg-zinc-950/80 p-5 ring-1 ring-white/10">
-              <h3 className="text-lg font-black">Presentes x Apoios</h3>
+              <h3 className="text-lg font-black">{t('wallet.giftsVsSupport')}</h3>
               <div className="mt-4 space-y-3 text-sm leading-6 text-zinc-300">
-                <p><span className="font-black text-blue-100">Presentear</span> envia um presente visual para a vitrine. Presentes nao aumentam saldo.</p>
-                <p><span className="font-black text-emerald-100">Apoiar</span> transfere ItaCash diretamente para a carteira do criador.</p>
+                <p><span className="font-black text-blue-100">{t('wallet.giftAction')}</span> {t('wallet.giftExplanation')}</p>
+                <p><span className="font-black text-emerald-100">{t('wallet.supportAction')}</span> {t('wallet.supportExplanation')}</p>
               </div>
 
               {purchaseRequests.length > 0 && (
                 <div className="mt-5 border-t border-white/10 pt-4">
-                  <p className="mb-3 text-sm font-black text-zinc-200">Solicitacoes recentes</p>
+                  <p className="mb-3 text-sm font-black text-zinc-200">{t('wallet.recentRequests')}</p>
                   <div className="space-y-3">
                     {purchaseRequests.map((request) => (
                       <div key={request.id} className="rounded-2xl border border-white/10 bg-black/30 p-3 text-sm text-zinc-300 transition hover:border-blue-300/20 hover:bg-blue-950/10">
                         <div className="grid gap-3 sm:grid-cols-2">
                           <div>
-                            <p className="text-[11px] font-black uppercase tracking-[0.16em] text-zinc-500">Metodo de pagamento</p>
-                            <p className="mt-1 font-semibold text-zinc-100">{paymentMethodLabel(request.payment_method)}</p>
+                            <p className="text-[11px] font-black uppercase tracking-[0.16em] text-zinc-500">{t('wallet.paymentMethod')}</p>
+                            <p className="mt-1 font-semibold text-zinc-100">{paymentMethodLabel(request.payment_method, t)}</p>
                           </div>
 
                           <div>
-                            <p className="text-[11px] font-black uppercase tracking-[0.16em] text-zinc-500">Quantidade</p>
+                            <p className="text-[11px] font-black uppercase tracking-[0.16em] text-zinc-500">{t('wallet.amount')}</p>
                             <ItaCashAmount amount={request.amount_itacash} size="sm" className="mt-1 text-white" />
                           </div>
 
                           <div>
-                            <p className="text-[11px] font-black uppercase tracking-[0.16em] text-zinc-500">Total pago</p>
-                            <p className="mt-1 font-semibold text-zinc-100">{formatBRLFromCents(request.total_brl_cents)}</p>
+                            <p className="text-[11px] font-black uppercase tracking-[0.16em] text-zinc-500">{t('wallet.totalPaid')}</p>
+                            <p className="mt-1 font-semibold text-zinc-100">{formatBRLFromCents(request.total_brl_cents, language)}</p>
                           </div>
 
                           <div>
-                            <p className="text-[11px] font-black uppercase tracking-[0.16em] text-zinc-500">Data da solicitacao</p>
-                            <p className="mt-1 font-semibold text-zinc-100">{formatDate(request.created_at)}</p>
+                            <p className="text-[11px] font-black uppercase tracking-[0.16em] text-zinc-500">{t('wallet.requestDate')}</p>
+                            <p className="mt-1 font-semibold text-zinc-100">{formatDate(request.created_at, language)}</p>
                           </div>
                         </div>
 
                         <div className="mt-3 rounded-xl border border-white/10 bg-black/30 px-3 py-2">
                           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                            <span className="text-xs font-black uppercase tracking-[0.16em] text-zinc-500">Status atual</span>
+                            <span className="text-xs font-black uppercase tracking-[0.16em] text-zinc-500">{t('wallet.currentStatus')}</span>
                             <span className={`w-fit rounded-full px-2.5 py-1 text-[11px] font-black ring-1 ${purchaseStatusClass(request.status)}`}>
-                              {purchaseStatusLabel(request.status)}
+                              {purchaseStatusLabel(request.status, t)}
                             </span>
                           </div>
 
                           <p className="mt-2 text-xs font-semibold leading-5 text-zinc-400">
-                            {purchaseStatusHelp(request.status)}
+                            {purchaseStatusHelp(request.status, t)}
                           </p>
 
                           {request.status === 'rejected' && request.rejection_reason && (
                             <p className="mt-3 rounded-xl bg-red-500/10 px-3 py-2 text-xs font-semibold leading-5 text-red-100 ring-1 ring-red-300/15">
-                              Motivo da recusa: {request.rejection_reason}
+                              {t('wallet.rejectionReason', { reason: request.rejection_reason })}
                             </p>
                           )}
                         </div>
@@ -817,7 +821,7 @@ export default function WalletPage() {
 
               {paymentOrders.length > 0 && (
                 <div className="mt-5 border-t border-white/10 pt-4">
-                  <p className="mb-3 text-sm font-black text-zinc-200">Pagamentos Mercado Pago</p>
+                  <p className="mb-3 text-sm font-black text-zinc-200">{t('wallet.mercadoPagoPayments')}</p>
                   <div className="space-y-3">
                     {paymentOrders.map((order) => (
                       <div key={order.id} className="rounded-2xl border border-white/10 bg-black/30 p-3 text-sm text-zinc-300 transition hover:border-blue-300/20 hover:bg-blue-950/10">
@@ -826,25 +830,25 @@ export default function WalletPage() {
                             <p className="font-black text-white">
                               {order.amount_itacash && order.amount_itacash > 0
                                 ? <ItaCashAmount amount={order.amount_itacash} size="sm" className="text-white" />
-                                : 'Compra de ItaCash'}
+                                : t('wallet.purchase')}
                             </p>
-                            <p className="mt-1 text-xs font-semibold text-zinc-500">{formatDate(order.created_at)}</p>
+                            <p className="mt-1 text-xs font-semibold text-zinc-500">{formatDate(order.created_at, language)}</p>
                           </div>
 
                           <span className={`w-fit rounded-full px-2.5 py-1 text-[11px] font-black ring-1 ${purchaseStatusClass(order.status)}`}>
-                            {purchaseStatusLabel(order.status)}
+                            {purchaseStatusLabel(order.status, t)}
                           </span>
                         </div>
 
                         <div className="mt-3 grid gap-2 text-xs font-semibold text-zinc-400 sm:grid-cols-2">
-                          <p>Metodo: <span className="text-zinc-200">{paymentMethodLabel(order.provider_payment_method || 'mercadopago_auto')}</span></p>
-                          <p>Total pago: <span className="text-zinc-200">{formatBRLFromCents(order.total_brl_cents)}</span></p>
+                          <p>{t('wallet.method')}: <span className="text-zinc-200">{paymentMethodLabel(order.provider_payment_method || 'mercadopago_auto', t)}</span></p>
+                          <p>{t('wallet.totalPaid')}: <span className="text-zinc-200">{formatBRLFromCents(order.total_brl_cents, language)}</span></p>
                           {order.provider_status && (
-                            <p>Status Mercado Pago: <span className="text-zinc-200">{providerStatusLabel(order.provider_status)}</span></p>
+                            <p>{t('wallet.mercadoPagoStatus')}: <span className="text-zinc-200">{providerStatusLabel(order.provider_status, t)}</span></p>
                           )}
-                          <p className="sm:col-span-2">{purchaseStatusHelp(order.status)}</p>
+                          <p className="sm:col-span-2">{purchaseStatusHelp(order.status, t)}</p>
                           {order.expires_at && order.status === 'pending' && (
-                            <p>Expira: <span className="text-zinc-200">{formatDate(order.expires_at)}</span></p>
+                            <p>{t('wallet.expires')}: <span className="text-zinc-200">{formatDate(order.expires_at, language)}</span></p>
                           )}
                         </div>
                       </div>
@@ -863,19 +867,19 @@ export default function WalletPage() {
                     <History className="h-5 w-5" />
                   </span>
                   <div>
-                    <h2 className="text-2xl font-black">Historico da carteira</h2>
-                    <p className="text-sm text-zinc-400">Presentes enviados, recebidos e creditos internos.</p>
+                    <h2 className="text-2xl font-black">{t('wallet.history')}</h2>
+                    <p className="text-sm text-zinc-400">{t('wallet.historyDescription')}</p>
                   </div>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-2 text-right">
                 <div className="rounded-2xl bg-emerald-500/10 px-4 py-2 text-emerald-100 ring-1 ring-emerald-300/15">
-                  <p className="text-xs font-bold text-emerald-200/70">Entradas</p>
+                  <p className="text-xs font-bold text-emerald-200/70">{t('wallet.income')}</p>
                   <p className="font-black">+{totals.income}</p>
                 </div>
                 <div className="rounded-2xl bg-red-500/10 px-4 py-2 text-red-100 ring-1 ring-red-300/15">
-                  <p className="text-xs font-bold text-red-200/70">Saidas</p>
+                  <p className="text-xs font-bold text-red-200/70">{t('wallet.outcome')}</p>
                   <p className="font-black">-{totals.outcome}</p>
                 </div>
               </div>
@@ -890,14 +894,14 @@ export default function WalletPage() {
             {loading ? (
               <div className="flex min-h-64 items-center justify-center text-zinc-400">
                 <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                Carregando...
+                {t('common.loading')}
               </div>
             ) : transactions.length === 0 ? (
               <div className="flex min-h-64 items-center justify-center rounded-3xl border border-dashed border-white/15 p-8 text-center">
                 <div>
                   <Coins className="mx-auto h-9 w-9 text-blue-200" />
-                  <h3 className="mt-4 text-lg font-black">Ainda nao ha transacoes.</h3>
-                  <p className="mt-2 text-sm text-zinc-400">Creditos de teste e presentes aparecerao aqui.</p>
+                  <h3 className="mt-4 text-lg font-black">{t('wallet.empty')}</h3>
+                  <p className="mt-2 text-sm text-zinc-400">{t('wallet.emptyDescription')}</p>
                 </div>
               </div>
             ) : (
@@ -906,8 +910,10 @@ export default function WalletPage() {
                   const context = renderTransactionContext(transaction)
                   const isIncome = transaction.amount >= 0
                   const transactionLabel = context.promotional
-                    ? 'Credito promocional'
-                    : transactionLabels[transaction.type] || 'Movimentacao ItaCash'
+                    ? t('wallet.transaction.promotionalCredit')
+                    : transactionLabelKeys[transaction.type]
+                      ? t(transactionLabelKeys[transaction.type])
+                      : t('wallet.transaction.movement')
 
                   return (
                     <article key={transaction.id} className="rounded-3xl border border-white/10 bg-black/30 p-4 transition hover:-translate-y-0.5 hover:border-blue-300/20 hover:bg-blue-950/10">
@@ -932,17 +938,17 @@ export default function WalletPage() {
                               <p className="mt-1 text-sm leading-6 text-zinc-300">{context.detail}</p>
                               {context.promotional && (
                                 <p className="mt-2 inline-flex rounded-full bg-blue-500/10 px-3 py-1 text-xs font-black text-blue-200 ring-1 ring-blue-300/15">
-                                  Credito promocional para uso na plataforma
+                                  {t('wallet.transaction.promotionalDetail')}
                                 </p>
                               )}
-                              <p className="mt-2 text-xs font-semibold text-zinc-500">{formatDate(transaction.created_at)}</p>
+                              <p className="mt-2 text-xs font-semibold text-zinc-500">{formatDate(transaction.created_at, language)}</p>
                             </div>
 
                             <div className="shrink-0 text-left sm:text-right">
                               <p className={`text-xl font-black ${isIncome ? 'text-emerald-300' : 'text-red-300'}`}>
                                 {isIncome ? '+' : ''}{transaction.amount}
                               </p>
-                              <p className="text-xs text-zinc-500">saldo {transaction.balance_after}</p>
+                              <p className="text-xs text-zinc-500">{t('wallet.balance', { value: transaction.balance_after })}</p>
                             </div>
                           </div>
                         </div>

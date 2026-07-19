@@ -66,22 +66,22 @@ function PostActions({
               ? 'text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30'
               : 'hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/30'
           }`}
-          aria-label={liked ? t('postActions.unlike') : t('postActions.like')}
+          aria-label={liked ? t('post.actions.unlike') : t('post.actions.like')}
         >
           <Heart className={`h-5 w-5 shrink-0 ${liked ? 'fill-current' : ''}`} />
           <span className={countClass}>{likesCount}</span>
-          <ActionTooltip label={t('postActions.like')} />
+          <ActionTooltip label={t('post.actions.like')} />
         </button>
 
         <button
           type="button"
           onClick={onCommentClick}
           className={`${actionButtonClass} hover:bg-blue-50 hover:text-blue-500 dark:hover:bg-blue-950/30`}
-          aria-label={t('postActions.comment')}
+          aria-label={t('post.actions.comment')}
         >
           <MessageCircle className="h-5 w-5 shrink-0" />
           <span className={countClass}>{commentsCount}</span>
-          <ActionTooltip label={t('postActions.comment')} />
+          <ActionTooltip label={t('post.actions.comment')} />
         </button>
 
         <button
@@ -92,11 +92,11 @@ function PostActions({
               ? 'text-green-500 hover:bg-green-50 dark:hover:bg-green-950/30'
               : 'hover:bg-green-50 hover:text-green-500 dark:hover:bg-green-950/30'
           }`}
-          aria-label={reposted ? t('postActions.removeRepost') : t('postActions.repost')}
+          aria-label={reposted ? t('post.actions.removeRepost') : t('post.actions.repost')}
         >
           <Repeat2 className="h-5 w-5 shrink-0" />
           <span className={countClass}>{repostsCount}</span>
-          <ActionTooltip label={t('postActions.repost')} />
+          <ActionTooltip label={t('post.actions.repost')} />
         </button>
 
         <button
@@ -107,10 +107,10 @@ function PostActions({
               ? 'text-yellow-500 hover:bg-yellow-50 dark:hover:bg-yellow-950/30'
               : 'hover:bg-yellow-50 hover:text-yellow-500 dark:hover:bg-yellow-950/30'
           }`}
-          aria-label={saved ? t('postActions.removeSaved') : t('postActions.savePost')}
+          aria-label={saved ? t('post.actions.removeSaved') : t('post.actions.save')}
         >
           <Bookmark className={`h-5 w-5 shrink-0 ${saved ? 'fill-current' : ''}`} />
-          <ActionTooltip label={t('postActions.save')} />
+          <ActionTooltip label={t('post.actions.save')} />
         </button>
 
         {showGift && (
@@ -118,11 +118,11 @@ function PostActions({
             type="button"
             onClick={onGift}
             className={`${actionButtonClass} overflow-visible text-blue-500 hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-950/30`}
-            aria-label="Presentear"
+            aria-label={t('post.actions.gift')}
           >
             <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-sky-300 opacity-70 motion-safe:animate-ping" aria-hidden="true" />
             <Gift className="h-5 w-5 shrink-0 transition duration-200 group-hover/action:-translate-y-0.5 group-hover/action:rotate-6 group-active/action:scale-95" />
-            <ActionTooltip label="Presentear" />
+            <ActionTooltip label={t('post.actions.gift')} />
           </button>
         )}
 
@@ -131,7 +131,7 @@ function PostActions({
             type="button"
             onClick={onTip}
             className={`${actionButtonClass} text-sky-500 hover:bg-sky-50 hover:text-sky-600 dark:hover:bg-sky-950/30`}
-            aria-label="Apoiar com ItaCash"
+            aria-label={t('post.actions.tip')}
           >
             <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-sky-500/10 ring-1 ring-sky-300/25">
               <img
@@ -141,7 +141,7 @@ function PostActions({
                 className="h-5 w-5 rounded-full object-contain"
               />
             </span>
-            <ActionTooltip label="Apoiar" />
+            <ActionTooltip label={t('post.actions.tip')} />
           </button>
         )}
 
@@ -153,10 +153,10 @@ function PostActions({
               ? 'text-green-500 hover:bg-green-50 dark:hover:bg-green-950/30'
               : 'hover:bg-green-50 hover:text-green-500 dark:hover:bg-green-950/30'
           }`}
-          aria-label={copied ? t('postActions.linkCopied') : t('postActions.share')}
+          aria-label={copied ? t('post.actions.linkCopied') : t('post.actions.share')}
         >
           <Share2 className="h-5 w-5 shrink-0" />
-          <ActionTooltip label={t('postActions.share')} />
+          <ActionTooltip label={t('post.actions.share')} />
         </button>
       </div>
     </div>

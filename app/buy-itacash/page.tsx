@@ -1,4 +1,5 @@
 'use client'
+/* eslint-disable react-hooks/set-state-in-effect, react-hooks/immutability */
 
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
@@ -27,6 +28,7 @@ import {
   paymentMethodOptions,
   type PaymentMethodOption,
 } from '@/lib/payment-fees'
+import { useLanguage } from '../components/LanguageProvider'
 
 type PixInfo = {
   pix_key: string
@@ -56,8 +58,8 @@ type CurrentProfile = {
 const PROOF_BUCKET = 'payment-proofs'
 const ACCEPTED_PROOF_TYPES = ['image/png', 'image/jpeg', 'application/pdf']
 
-function formatBRLFromCents(value: number) {
-  return (value / 100).toLocaleString('pt-BR', {
+function formatBRLFromCents(value: number, locale: string) {
+  return (value / 100).toLocaleString(locale, {
     style: 'currency',
     currency: 'BRL',
   })
@@ -66,6 +68,7 @@ function formatBRLFromCents(value: number) {
 export default function BuyItaCashPage() {
   const router = useRouter()
   const { theme, setTheme } = useTheme()
+  const { language, t } = useLanguage()
 
   const [mounted, setMounted] = useState(false)
   const [email, setEmail] = useState('')
@@ -129,7 +132,7 @@ export default function BuyItaCashPage() {
     } = await supabase.auth.getUser()
 
     if (!user) {
-      setMessage('Entre na sua conta para comprar ItaCash.')
+      setMessage(t('purchase.errors.signInToBuy'))
       setLoading(false)
       return
     }
@@ -204,7 +207,7 @@ export default function BuyItaCashPage() {
     setPixInfoLoading(false)
 
     if (!response.ok) {
-      setMessage(data?.error || 'Nao foi possivel carregar as instrucoes Pix.')
+      setMessage(t('purchase.errors.loadPixInstructions'))
       return
     }
 
@@ -242,7 +245,7 @@ export default function BuyItaCashPage() {
     if (!file) return
 
     if (!ACCEPTED_PROOF_TYPES.includes(file.type)) {
-      setMessage('Envie um comprovante em PNG, JPG, JPEG ou PDF.')
+      setMessage(t('purchase.errors.proofType'))
       setProofFile(null)
       event.target.value = ''
     }
@@ -266,12 +269,12 @@ export default function BuyItaCashPage() {
     } = await supabase.auth.getUser()
 
     if (!user) {
-      setMessage('Entre na sua conta para criar uma solicitacao.')
+      setMessage(t('purchase.errors.signInToRequest'))
       return
     }
 
     if (amountItacash <= 0) {
-      setMessage('Informe uma quantidade valida de ItaCash.')
+      setMessage(t('purchase.errors.invalidAmount'))
       return
     }
 
@@ -279,7 +282,7 @@ export default function BuyItaCashPage() {
 
     if (paymentMethod !== 'pix_manual') {
       if (!totals.method.available) {
-        setMessage('Este metodo de pagamento ainda nao esta disponivel.')
+        setMessage(t('purchase.errors.methodUnavailable'))
         setSubmitting(false)
         return
       }
@@ -289,7 +292,7 @@ export default function BuyItaCashPage() {
       } = await supabase.auth.getSession()
 
       if (!session?.access_token) {
-        setMessage('Entre na sua conta para iniciar o pagamento.')
+        setMessage(t('purchase.errors.signInToPay'))
         setSubmitting(false)
         return
       }
@@ -318,7 +321,7 @@ export default function BuyItaCashPage() {
 
       if (isMercadoPagoPix) {
         if (!response.ok || (!data?.qr_code && !data?.qr_code_base64)) {
-          setMessage('Não foi possível gerar o Pix pelo Mercado Pago. Verifique a URL de notificação e tente novamente.')
+          setMessage(t('purchase.errors.generatePix'))
           return
         }
 
@@ -333,12 +336,12 @@ export default function BuyItaCashPage() {
           expires_at: data.expires_at || null,
         })
         setSuccess(true)
-        setMessage('Pix Mercado Pago gerado. Apos o pagamento, a confirmacao pode levar alguns instantes.')
+        setMessage(t('purchase.success.pixGenerated'))
         return
       }
 
       if (!response.ok || !data?.provider_init_point) {
-        setMessage(data?.error || 'Nao foi possivel criar pagamento Mercado Pago.')
+        setMessage(t('purchase.errors.createMercadoPago'))
         return
       }
 
@@ -346,26 +349,26 @@ export default function BuyItaCashPage() {
       setSuccess(true)
       setMessage(
         paymentMethod === 'mercadopago_debit'
-          ? 'Pagamento criado. Cartão de débito depende da disponibilidade do Mercado Pago para sua conta e cartão.'
-          : 'Pagamento criado. Siga para o Mercado Pago para concluir.'
+          ? t('purchase.success.debitCreated')
+          : t('purchase.success.paymentCreated')
       )
       return
     }
 
     if (!pixInfo?.configured || !pixInfo.pix_key) {
-      setMessage('Pix manual ainda nao esta configurado pela equipe.')
+      setMessage(t('purchase.errors.manualPixUnavailable'))
       setSubmitting(false)
       return
     }
 
     if (!proofFile) {
-      setMessage('Envie o comprovante Pix antes de criar a solicitacao.')
+      setMessage(t('purchase.errors.proofRequired'))
       setSubmitting(false)
       return
     }
 
     if (!ACCEPTED_PROOF_TYPES.includes(proofFile.type)) {
-      setMessage('Envie um comprovante em PNG, JPG, JPEG ou PDF.')
+      setMessage(t('purchase.errors.proofType'))
       setSubmitting(false)
       return
     }
@@ -382,7 +385,7 @@ export default function BuyItaCashPage() {
       })
 
     if (uploadError) {
-      setMessage('Nao foi possivel enviar o comprovante: ' + uploadError.message)
+      setMessage(t('purchase.errors.uploadProof', { error: uploadError.message }))
       setSubmitting(false)
       return
     }
@@ -409,14 +412,14 @@ export default function BuyItaCashPage() {
     setSubmitting(false)
 
     if (error) {
-      setMessage('Nao foi possivel criar a solicitacao: ' + error.message)
+      setMessage(t('purchase.errors.createRequest', { error: error.message }))
       return
     }
 
     setSuccess(true)
     setUserNote('')
     setProofFile(null)
-    setMessage('Comprovante enviado e solicitacao criada. Aguarde a confirmacao da equipe.')
+    setMessage(t('purchase.success.requestCreated'))
   }
 
   return (
@@ -435,7 +438,7 @@ export default function BuyItaCashPage() {
 
       <MobileNavigation
         email={email}
-        displayName={currentProfile?.display_name || currentProfile?.username || 'Minha conta'}
+        displayName={currentProfile?.display_name || currentProfile?.username || t('navigation.myAccount')}
         avatarUrl={currentProfile?.avatar_url || null}
         unreadNotificationsCount={unreadNotificationsCount}
         mounted={mounted}
@@ -454,7 +457,7 @@ export default function BuyItaCashPage() {
             className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-black transition hover:bg-white/10"
           >
             <ArrowLeft className="h-4 w-4" />
-            Carteira
+            {t('purchase.wallet')}
           </Link>
 
           <Link
@@ -462,7 +465,7 @@ export default function BuyItaCashPage() {
             className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-black text-black transition hover:bg-blue-50"
           >
             <Wallet className="h-4 w-4" />
-            Usar ItaCash
+            {t('purchase.useItaCash')}
           </Link>
         </header>
 
@@ -472,37 +475,37 @@ export default function BuyItaCashPage() {
               <span className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-500 text-white">
                 <Coins className="h-4 w-4" />
               </span>
-              <span className="text-sm font-black text-blue-50">Compra manual ou automatica</span>
+              <span className="text-sm font-black text-blue-50">{t('purchase.kicker')}</span>
             </div>
 
             <h1 className="mt-6 text-4xl font-black tracking-tight sm:text-6xl">
-              Comprar ItaCash
+              {t('purchase.title')}
             </h1>
             <p className="mt-5 max-w-2xl text-base leading-7 text-zinc-300 sm:text-lg">
-              Escolha qualquer quantidade, veja as taxas separadas e use Mercado Pago automatico ou mantenha a solicitacao manual como alternativa.
+              {t('purchase.description')}
             </p>
 
             <div className="mt-6 rounded-3xl border border-blue-300/20 bg-blue-500/10 p-4 text-sm leading-6 text-blue-50 ring-1 ring-blue-300/10">
-              As taxas sao mostradas antes da confirmacao. A EntreUS cobra 2% de taxa de servico. A operadora de pagamento pode cobrar uma taxa propria conforme o metodo escolhido.
+              {t('purchase.feeNotice')}
             </div>
 
             <div className="mt-5 grid gap-3 sm:grid-cols-3">
               <div className="rounded-3xl border border-white/10 bg-zinc-950/75 p-4 ring-1 ring-white/5">
-                <p className="text-xs font-black uppercase tracking-[0.2em] text-zinc-500">Conversao</p>
+                <p className="text-xs font-black uppercase tracking-[0.2em] text-zinc-500">{t('purchase.conversion')}</p>
                 <p className="mt-2 flex flex-wrap items-center gap-2 text-2xl font-black">
                   <ItaCashAmount amount={10} size="lg" />
-                  <span>= R$ 1,00</span>
+                  <span>= {formatBRLFromCents(100, language)}</span>
                 </p>
               </div>
               <div className="rounded-3xl border border-blue-300/20 bg-blue-500/10 p-4 ring-1 ring-blue-300/10">
-                <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-200/70">Taxa EntreUS</p>
+                <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-200/70">{t('purchase.entreusFee')}</p>
                 <p className="mt-2 text-2xl font-black">2%</p>
-                <p className="text-sm text-blue-100/70">Sempre separada</p>
+                <p className="text-sm text-blue-100/70">{t('purchase.alwaysSeparate')}</p>
               </div>
               <div className="rounded-3xl border border-emerald-300/20 bg-emerald-500/10 p-4 ring-1 ring-emerald-300/10">
-                <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-200/70">Recomendado</p>
+                <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-200/70">{t('common.recommended')}</p>
                 <p className="mt-2 text-2xl font-black">Pix MP</p>
-                <p className="text-sm text-emerald-100/70">Menor taxa</p>
+                <p className="text-sm text-emerald-100/70">{t('purchase.lowestFee')}</p>
               </div>
             </div>
           </div>
@@ -522,23 +525,23 @@ export default function BuyItaCashPage() {
                     <ReceiptText className="h-6 w-6" />
                   </span>
                   <div>
-                    <p className="text-sm font-bold text-zinc-400">Total a pagar</p>
-                    <p className="text-3xl font-black">{formatBRLFromCents(totals.totalBrlCents)}</p>
+                    <p className="text-sm font-bold text-zinc-400">{t('purchase.totalToPay')}</p>
+                    <p className="text-3xl font-black">{formatBRLFromCents(totals.totalBrlCents, language)}</p>
                   </div>
                 </div>
 
                 <div className="mt-5 space-y-3 text-sm">
                   <div className="flex items-center justify-between gap-4 rounded-2xl bg-black/35 px-4 py-3">
-                    <span className="text-zinc-400">Valor base</span>
-                    <strong>{formatBRLFromCents(totals.baseAmountBrlCents)}</strong>
+                    <span className="text-zinc-400">{t('purchase.baseAmount')}</span>
+                    <strong>{formatBRLFromCents(totals.baseAmountBrlCents, language)}</strong>
                   </div>
                   <div className="flex items-center justify-between gap-4 rounded-2xl bg-black/35 px-4 py-3">
-                    <span className="text-zinc-400">Taxa de servico EntreUS</span>
-                    <strong>{formatBRLFromCents(totals.platformFeeBrlCents)}</strong>
+                    <span className="text-zinc-400">{t('purchase.entreusServiceFee')}</span>
+                    <strong>{formatBRLFromCents(totals.platformFeeBrlCents, language)}</strong>
                   </div>
                   <div className="flex items-center justify-between gap-4 rounded-2xl bg-black/35 px-4 py-3">
-                    <span className="text-zinc-400">Taxa da operadora</span>
-                    <strong>{formatBRLFromCents(totals.operatorFeeBrlCents)}</strong>
+                    <span className="text-zinc-400">{t('purchase.operatorFee')}</span>
+                    <strong>{formatBRLFromCents(totals.operatorFeeBrlCents, language)}</strong>
                   </div>
                 </div>
               </div>
@@ -552,7 +555,7 @@ export default function BuyItaCashPage() {
         >
           <section className="rounded-[2rem] border border-white/10 bg-zinc-950/80 p-5 ring-1 ring-white/10">
             <label className="block">
-              <span className="text-sm font-black text-zinc-200">Quantidade de ItaCash</span>
+              <span className="text-sm font-black text-zinc-200">{t('purchase.amount')}</span>
               <input
                 type="number"
                 min="1"
@@ -565,12 +568,12 @@ export default function BuyItaCashPage() {
             </label>
 
             <div className="mt-5 rounded-3xl border border-emerald-300/20 bg-emerald-500/10 p-4 text-sm font-black text-emerald-100">
-              Recomendado: Pix Mercado Pago, menor taxa da operadora.
+              {t('purchase.recommendedPix')}
             </div>
 
             {paymentMethod === 'mercadopago_debit' && (
               <div className="mt-5 rounded-3xl border border-blue-300/20 bg-blue-500/10 p-4 text-sm font-semibold leading-6 text-blue-50">
-                Cartão de débito depende da disponibilidade do Mercado Pago para sua conta e cartão.
+                {t('purchase.debitAvailability')}
               </div>
             )}
 
@@ -593,16 +596,16 @@ export default function BuyItaCashPage() {
                     }`}
                   >
                     {method.recommended ? <Sparkles className="h-5 w-5" /> : <CreditCard className="h-5 w-5" />}
-                    <p className="mt-3 font-black">{method.label}</p>
+                    <p className="mt-3 font-black">{t(`purchase.methods.${method.value}.label`)}</p>
                     <p className="mt-1 text-sm text-zinc-400">
                       {method.operatorFeeFixedCents > 0
-                        ? `Taxa operadora ${formatBRLFromCents(method.operatorFeeFixedCents)}`
-                        : `Taxa operadora ${method.operatorFeePercent}%`}
+                        ? t('purchase.operatorFeeValue', { value: formatBRLFromCents(method.operatorFeeFixedCents, language) })
+                        : t('purchase.operatorFeePercent', { value: method.operatorFeePercent })}
                     </p>
-                    <p className="mt-2 text-xs text-zinc-500">{method.note}</p>
+                    <p className="mt-2 text-xs text-zinc-500">{t(`purchase.methods.${method.value}.note`)}</p>
                     {method.recommended && (
                       <span className="mt-3 inline-flex rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-black text-emerald-200">
-                        Recomendado
+                        {t('common.recommended')}
                       </span>
                     )}
                   </button>
@@ -617,18 +620,18 @@ export default function BuyItaCashPage() {
                     <FileCheck2 className="h-5 w-5" />
                   </span>
                   <div>
-                    <h2 className="text-lg font-black">Pix manual em 4 passos</h2>
+                    <h2 className="text-lg font-black">{t('purchase.manualPixTitle')}</h2>
                     <p className="mt-2 text-sm leading-6 text-blue-50/80">
-                      1. Escolha a quantidade. 2. Pague via Pix. 3. Envie o comprovante. 4. Aguarde analise.
+                      {t('purchase.manualPixSteps')}
                     </p>
                   </div>
                 </div>
 
                 <div className="mt-5 space-y-3 text-sm">
                   <div className="rounded-2xl bg-black/35 px-4 py-3">
-                    <p className="text-xs font-black uppercase tracking-[0.2em] text-zinc-500">Chave Pix</p>
+                    <p className="text-xs font-black uppercase tracking-[0.2em] text-zinc-500">{t('purchase.pixKey')}</p>
                     {pixInfoLoading ? (
-                      <p className="mt-2 text-zinc-400">Carregando chave Pix...</p>
+                      <p className="mt-2 text-zinc-400">{t('purchase.loadingPixKey')}</p>
                     ) : pixInfo?.configured ? (
                       <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center">
                         <code className="min-w-0 flex-1 break-all rounded-xl bg-black px-3 py-2 text-blue-100">
@@ -640,15 +643,15 @@ export default function BuyItaCashPage() {
                           className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-4 py-2 text-xs font-black text-black transition hover:bg-blue-50"
                         >
                           <Copy className="h-3.5 w-3.5" />
-                          {copiedPixKey ? 'Copiada' : 'Copiar chave Pix'}
+                          {copiedPixKey ? t('common.copied') : t('purchase.copyPixKey')}
                         </button>
                       </div>
                     ) : (
-                      <p className="mt-2 text-amber-100">Pix manual ainda nao esta configurado pela equipe.</p>
+                      <p className="mt-2 text-amber-100">{t('purchase.errors.manualPixUnavailable')}</p>
                     )}
                     {(pixInfo?.receiver_name || pixInfo?.receiver_city) && (
                       <p className="mt-2 text-xs text-zinc-500">
-                        Favorecido: {pixInfo.receiver_name || 'Nao informado'}
+                        {t('purchase.recipient')}: {pixInfo.receiver_name || t('common.notProvided')}
                         {pixInfo.receiver_city ? ` - ${pixInfo.receiver_city}` : ''}
                       </p>
                     )}
@@ -656,14 +659,14 @@ export default function BuyItaCashPage() {
 
                   {pixInfo?.pixPaymentLink && (
                     <div className="rounded-2xl bg-black/35 px-4 py-3">
-                      <p className="text-xs font-black uppercase tracking-[0.2em] text-zinc-500">Link Pix</p>
+                      <p className="text-xs font-black uppercase tracking-[0.2em] text-zinc-500">{t('purchase.pixLink')}</p>
                       <div className="mt-2 flex flex-col gap-3 sm:flex-row">
                         <Link
                           href={pixInfo.pixPaymentLink}
                           target="_blank"
                           className="inline-flex flex-1 items-center justify-center rounded-full bg-blue-500 px-4 py-2 text-xs font-black text-white transition hover:bg-blue-400"
                         >
-                          Abrir link de pagamento Pix
+                          {t('purchase.openPixPaymentLink')}
                         </Link>
                         <button
                           type="button"
@@ -671,7 +674,7 @@ export default function BuyItaCashPage() {
                           className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-4 py-2 text-xs font-black text-black transition hover:bg-blue-50"
                         >
                           <Copy className="h-3.5 w-3.5" />
-                          {copiedPixLink ? 'Link copiado' : 'Copiar link Pix'}
+                          {copiedPixLink ? t('purchase.linkCopied') : t('purchase.copyPixLink')}
                         </button>
                       </div>
                     </div>
@@ -679,14 +682,14 @@ export default function BuyItaCashPage() {
 
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div className="rounded-2xl bg-black/35 px-4 py-3">
-                      <p className="text-zinc-400">Total do Pix</p>
-                      <p className="mt-1 text-2xl font-black">{formatBRLFromCents(totals.totalBrlCents)}</p>
+                      <p className="text-zinc-400">{t('purchase.pixTotal')}</p>
+                      <p className="mt-1 text-2xl font-black">{formatBRLFromCents(totals.totalBrlCents, language)}</p>
                       <p className="mt-2 text-xs font-semibold text-amber-100">
-                        Pague exatamente o valor total informado. Depois envie o comprovante para analise.
+                        {t('purchase.exactAmountNotice')}
                       </p>
                     </div>
                     <label className="rounded-2xl bg-black/35 px-4 py-3">
-                      <span className="text-sm font-black text-zinc-200">Comprovante</span>
+                      <span className="text-sm font-black text-zinc-200">{t('purchase.proof')}</span>
                       <input
                         type="file"
                         accept=".png,.jpg,.jpeg,.pdf,image/png,image/jpeg,application/pdf"
@@ -694,7 +697,7 @@ export default function BuyItaCashPage() {
                         className="mt-3 block w-full text-sm text-zinc-300 file:mr-3 file:rounded-full file:border-0 file:bg-white file:px-4 file:py-2 file:text-xs file:font-black file:text-black"
                       />
                       <span className="mt-2 block text-xs text-zinc-500">
-                        PNG, JPG, JPEG ou PDF. Depois do pagamento, envie o comprovante para analise.
+                        {t('purchase.proofHelp')}
                       </span>
                     </label>
                   </div>
@@ -709,9 +712,9 @@ export default function BuyItaCashPage() {
                     <ReceiptText className="h-5 w-5" />
                   </span>
                   <div>
-                    <h2 className="text-lg font-black">Pix Mercado Pago gerado</h2>
+                    <h2 className="text-lg font-black">{t('purchase.mercadoPagoPixGenerated')}</h2>
                     <p className="mt-2 text-sm leading-6 text-emerald-50/80">
-                      Escaneie o QR Code ou copie o codigo Pix. Apos o pagamento, a confirmacao pode levar alguns instantes.
+                      {t('purchase.mercadoPagoPixInstructions')}
                     </p>
                   </div>
                 </div>
@@ -721,20 +724,20 @@ export default function BuyItaCashPage() {
                     <div className="rounded-3xl border border-white/10 bg-white p-3">
                       <img
                         src={`data:image/png;base64,${mercadoPagoPixPayment.qr_code_base64}`}
-                        alt="QR Code Pix Mercado Pago"
+                        alt={t('purchase.pixQrAlt')}
                         className="aspect-square w-full rounded-2xl object-contain"
                       />
                     </div>
                   ) : (
                     <div className="flex min-h-56 items-center justify-center rounded-3xl border border-dashed border-emerald-200/30 bg-black/25 p-4 text-center text-sm text-emerald-100/80">
-                      QR Code indisponivel. Use o Pix Copia e Cola.
+                      {t('purchase.qrUnavailable')}
                     </div>
                   )}
 
                   <div className="min-w-0 space-y-3">
                     {mercadoPagoPixPayment.qr_code && (
                       <div className="rounded-2xl bg-black/35 p-4">
-                        <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-200/70">Pix Copia e Cola</p>
+                        <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-200/70">{t('purchase.pixCopyPaste')}</p>
                         <code className="mt-2 block max-h-32 overflow-y-auto break-all rounded-xl bg-black px-3 py-2 text-xs text-emerald-100">
                           {mercadoPagoPixPayment.qr_code}
                         </code>
@@ -744,22 +747,22 @@ export default function BuyItaCashPage() {
                           className="mt-3 inline-flex items-center justify-center gap-2 rounded-full bg-white px-4 py-2 text-xs font-black text-black transition hover:bg-emerald-50"
                         >
                           <Copy className="h-3.5 w-3.5" />
-                          {copiedMercadoPagoPix ? 'Codigo copiado' : 'Copiar codigo Pix'}
+                          {copiedMercadoPagoPix ? t('purchase.codeCopied') : t('purchase.copyPixCode')}
                         </button>
                       </div>
                     )}
 
                     <div className="grid gap-3 sm:grid-cols-2">
                       <div className="rounded-2xl bg-black/35 px-4 py-3">
-                        <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-200/70">Status</p>
+                        <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-200/70">{t('common.status')}</p>
                         <p className="mt-1 font-black">{mercadoPagoPixPayment.status}</p>
                       </div>
                       <div className="rounded-2xl bg-black/35 px-4 py-3">
-                        <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-200/70">Expira em</p>
+                        <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-200/70">{t('purchase.expiresAt')}</p>
                         <p className="mt-1 font-black">
                           {mercadoPagoPixPayment.expires_at
-                            ? new Date(mercadoPagoPixPayment.expires_at).toLocaleString('pt-BR')
-                            : 'Nao informado'}
+                            ? new Date(mercadoPagoPixPayment.expires_at).toLocaleString(language)
+                            : t('common.notProvided')}
                         </p>
                       </div>
                     </div>
@@ -770,7 +773,7 @@ export default function BuyItaCashPage() {
                         target="_blank"
                         className="inline-flex w-full items-center justify-center rounded-full border border-emerald-200/20 bg-emerald-500/10 px-4 py-2 text-xs font-black text-emerald-50 transition hover:bg-emerald-500/20"
                       >
-                        Abrir pagina Pix Mercado Pago
+                        {t('purchase.openMercadoPagoPix')}
                       </Link>
                     )}
                   </div>
@@ -779,12 +782,12 @@ export default function BuyItaCashPage() {
             )}
 
             <label className="mt-5 block">
-              <span className="text-sm font-black text-zinc-200">Observacao opcional</span>
+              <span className="text-sm font-black text-zinc-200">{t('purchase.optionalNote')}</span>
               <textarea
                 value={userNote}
                 onChange={(event) => setUserNote(event.target.value)}
                 rows={4}
-                placeholder="Ex.: pagamento feito em nome de..."
+                placeholder={t('purchase.notePlaceholder')}
                 className="mt-2 w-full resize-none rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm text-white outline-none transition placeholder:text-zinc-600 focus:border-blue-300"
               />
             </label>
@@ -806,10 +809,10 @@ export default function BuyItaCashPage() {
             >
               {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
               {paymentMethod === 'pix_manual'
-                ? 'Enviar comprovante e criar solicitacao'
+                ? t('purchase.submitManual')
                 : paymentMethod === 'mercadopago_pix'
-                  ? 'Gerar QR Code Pix'
-                  : 'Criar pagamento Mercado Pago'}
+                  ? t('purchase.generatePixQr')
+                  : t('purchase.createMercadoPagoPayment')}
             </button>
 
             {paymentLink && (
@@ -818,7 +821,7 @@ export default function BuyItaCashPage() {
                 target="_blank"
                 className="mt-3 inline-flex w-full items-center justify-center rounded-full bg-blue-500 px-5 py-3 text-sm font-black text-white transition hover:bg-blue-400"
               >
-                Pagar com Mercado Pago
+                {t('purchase.payWithMercadoPago')}
               </Link>
             )}
           </section>
@@ -829,10 +832,10 @@ export default function BuyItaCashPage() {
                 <ShieldCheck className="h-5 w-5" />
               </span>
               <div>
-                <h2 className="text-lg font-black">Resumo</h2>
+                <h2 className="text-lg font-black">{t('purchase.summary')}</h2>
                 <p className="flex flex-wrap items-center gap-1.5 text-sm text-zinc-500">
                   <ItaCashAmount amount={10} size="xs" />
-                  <span>= R$ 1,00</span>
+                  <span>= {formatBRLFromCents(100, language)}</span>
                 </p>
               </div>
             </div>
@@ -845,22 +848,22 @@ export default function BuyItaCashPage() {
                 </strong>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-zinc-400">Metodo</span>
-                <strong>{totals.method.label}</strong>
+                <span className="text-zinc-400">{t('purchase.method')}</span>
+                <strong>{t(`purchase.methods.${totals.method.value}.label`)}</strong>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-zinc-400">EntreUS 2%</span>
-                <strong>{formatBRLFromCents(totals.platformFeeBrlCents)}</strong>
+                <strong>{formatBRLFromCents(totals.platformFeeBrlCents, language)}</strong>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-zinc-400">Operadora {totals.operatorFeePercent}%</span>
-                <strong>{formatBRLFromCents(totals.operatorFeeBrlCents)}</strong>
+                <span className="text-zinc-400">{t('purchase.operatorPercent', { value: totals.operatorFeePercent })}</span>
+                <strong>{formatBRLFromCents(totals.operatorFeeBrlCents, language)}</strong>
               </div>
             </div>
 
             <div className="mt-5 rounded-3xl border border-blue-300/20 bg-blue-500/10 p-4">
-              <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-200/70">Total</p>
-              <p className="mt-2 text-3xl font-black">{formatBRLFromCents(totals.totalBrlCents)}</p>
+              <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-200/70">{t('common.total')}</p>
+              <p className="mt-2 text-3xl font-black">{formatBRLFromCents(totals.totalBrlCents, language)}</p>
             </div>
           </aside>
         </form>

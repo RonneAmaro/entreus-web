@@ -2,37 +2,28 @@ import type { Metadata } from 'next'
 import Image from 'next/image'
 import Link from 'next/link'
 import InstitutionalPageLayout from '../components/InstitutionalPageLayout'
+import { getRequestLocale } from '@/lib/i18n/server'
+import { formatCurrency, translate } from '@/lib/i18n'
 
 export const metadata: Metadata = {
   title: 'ItaCash',
   description: 'Informações sobre o ItaCash no EntreUS.',
 }
 
-const itacashCards = [
-  {
-    title: 'O que é a ItaCash',
-    body: 'Um crédito interno futuro do EntreUS para experiências digitais, recompensas, recursos pagos e interações especiais dentro da plataforma.',
-  },
-  {
-    title: 'Como conseguir',
-    body: 'Poderá ser obtida por compra futura, campanhas internas, conquistas, participação positiva e recompensas ligadas a selos como o Selo Comunidade.',
-  },
-  {
-    title: 'Como usar',
-    body: 'A ItaCash poderá liberar serviços, recursos premium, presentes digitais, destaques e experiências pagas definidas pelas regras internas.',
-  },
-  {
-    title: 'Presentes e recompensas',
-    body: 'A economia interna poderá permitir apoio entre usuários, presentes digitais, benefícios por engajamento e ações especiais da comunidade.',
-  },
-]
-
-export default function ItaCashPage() {
+export default async function ItaCashPage() {
+  const locale = await getRequestLocale()
+  const t = translate.bind(null, locale)
+  const itacashCards = [
+    { title: t('itacash.whatTitle'), body: t('itacash.whatBody') },
+    { title: t('itacash.getTitle'), body: t('itacash.getBody') },
+    { title: t('itacash.useTitle'), body: t('itacash.useBody') },
+    { title: t('itacash.rewardsTitle'), body: t('itacash.rewardsBody') },
+  ]
   return (
     <InstitutionalPageLayout
       title="ItaCash"
-      description="ItaCash será a camada de crédito interno da EntreUS: uma forma de impulsionar recompensas, presentes digitais e recursos premium sem sair da plataforma."
-      notice="ItaCash não é moeda oficial, não é investimento financeiro e será usada apenas dentro da plataforma EntreUS conforme regras próprias."
+      description={t('itacash.description')}
+      notice={t('itacash.notice')}
     >
       <div className="space-y-5">
         <section className="overflow-hidden rounded-[2rem] border border-blue-300/20 bg-blue-500/10 shadow-2xl shadow-blue-950/20 ring-1 ring-white/10 backdrop-blur-xl">
@@ -50,13 +41,13 @@ export default function ItaCashPage() {
 
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.2em] text-blue-200">
-                Crédito interno EntreUS
+                {t('itacash.internalCredit')}
               </p>
               <h2 className="mt-2 text-3xl font-black text-white">
-                Economia digital para a comunidade
+                {t('itacash.economyTitle')}
               </h2>
               <p className="mt-3 text-sm leading-7 text-blue-50/85">
-                A ItaCash foi pensada para conectar participação, reconhecimento e recursos pagos em uma experiência simples, transparente e interna ao EntreUS.
+                {t('itacash.economyDescription')}
               </p>
             </div>
           </div>
@@ -64,9 +55,9 @@ export default function ItaCashPage() {
 
         <section className="grid gap-3 sm:grid-cols-3">
           {[
-            ['Conversao', '10 ItaCash = R$ 1,00'],
-            ['Apoios', 'Reconheca criadores'],
-            ['Presentes', 'Envie presentes digitais'],
+            [t('itacash.conversion'), t('itacash.conversionValue', { value: formatCurrency(locale, 1, 'BRL') })],
+            [t('itacash.supports'), t('itacash.supportsValue')],
+            [t('itacash.gifts'), t('itacash.giftsValue')],
           ].map(([title, body]) => (
             <article key={title} className="rounded-[1.5rem] border border-blue-300/15 bg-blue-500/10 p-4 ring-1 ring-blue-400/10 transition hover:-translate-y-0.5 hover:bg-blue-500/15">
               <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-200/70">{title}</p>
@@ -77,10 +68,10 @@ export default function ItaCashPage() {
 
         <div className="flex flex-wrap gap-2">
           <Link href="/buy-itacash" className="inline-flex rounded-full bg-white px-4 py-2 text-sm font-black text-black transition hover:-translate-y-0.5 hover:bg-blue-50 active:scale-95">
-            Comprar ItaCash
+            {t('itacash.buy')}
           </Link>
           <Link href="/wallet" className="inline-flex rounded-full border border-blue-300/20 bg-blue-500/10 px-4 py-2 text-sm font-black text-blue-50 transition hover:-translate-y-0.5 hover:bg-blue-500/20 active:scale-95">
-            Abrir carteira
+            {t('itacash.openWallet')}
           </Link>
         </div>
 
@@ -102,10 +93,10 @@ export default function ItaCashPage() {
 
         <section className="rounded-[1.5rem] border border-blue-300/20 bg-black/25 p-5 text-sm leading-7 text-zinc-300 ring-1 ring-white/10">
           <h2 className="text-lg font-black text-white">
-            Observações futuras
+            {t('itacash.futureTitle')}
           </h2>
           <p className="mt-3">
-            A carteira ItaCash, compra de créditos, validade, limites, reembolsos e usos permitidos dependerão de regras próprias, apresentadas antes da ativação pública desses recursos.
+            {t('itacash.futureBody')}
           </p>
         </section>
       </div>

@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import { CheckCircle2, Circle } from 'lucide-react'
 import type { CreatorMetric } from '@/lib/creator-dashboard'
+import { useLanguage } from './LanguageProvider'
 
 type StatCard = {
   label: string
@@ -19,12 +20,14 @@ type ChecklistItem = {
   description?: string
 }
 
-function formatMetric(metric: CreatorMetric, suffix = '') {
-  if (!metric.available) return 'Em preparação'
-  return `${metric.value.toLocaleString('pt-BR')}${suffix}`
+function formatMetric(metric: CreatorMetric, locale: string, preparationLabel: string, suffix = '') {
+  if (!metric.available) return preparationLabel
+  return `${metric.value.toLocaleString(locale)}${suffix}`
 }
 
 export function CreatorDashboardStats({ items }: { items: StatCard[] }) {
+  const { language, t } = useLanguage()
+
   return (
     <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
       {items.map((item) => {
@@ -36,7 +39,9 @@ export function CreatorDashboardStats({ items }: { items: StatCard[] }) {
               <div className="min-w-0">
                 <p className="text-xs font-black uppercase tracking-[0.16em] text-zinc-500">{item.label}</p>
                 <div className="mt-3 min-w-0 break-words text-xl font-black leading-tight text-white sm:text-2xl">
-                  {item.metric.available && item.renderValue ? item.renderValue : formatMetric(item.metric, item.suffix)}
+                  {item.metric.available && item.renderValue
+                    ? item.renderValue
+                    : formatMetric(item.metric, language, t('creator.dashboard.preparing'), item.suffix)}
                 </div>
                 {!item.metric.available && item.unavailableLabel && (
                   <p className="mt-2 text-xs leading-5 text-zinc-500">{item.unavailableLabel}</p>

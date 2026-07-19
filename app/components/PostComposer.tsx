@@ -1137,7 +1137,7 @@ export default function PostComposer({
       }
 
       if (!trimmedContent && media.length === 0 && !expression) {
-        setError('Escreva algo ou adicione uma foto ou video antes de publicar.')
+        setError(t('composer.emptyError'))
         return
       }
 
@@ -1181,7 +1181,7 @@ export default function PostComposer({
       })
 
       if (result === false) {
-        setError('Nao foi possivel publicar agora. Tente novamente.')
+        setError(t('composer.publishError'))
         return
       }
 
@@ -1258,7 +1258,7 @@ export default function PostComposer({
       ? 'Sugerir legenda com IA da EntreUS'
       : 'Melhorar texto com IA da EntreUS'
   }
-  const placeholderText = 'O que voce quer compartilhar hoje?'
+  const placeholderText = t('composer.placeholder')
 
   return (
     <>
@@ -1351,7 +1351,7 @@ export default function PostComposer({
             }}
             className="hidden rounded-full bg-blue-600 px-5 py-2.5 text-sm font-bold text-white shadow-sm shadow-blue-600/20 transition hover:bg-blue-700 sm:inline-flex"
           >
-            Publicar
+            {t('composer.publish')}
           </button>
         </div>
 
@@ -1366,7 +1366,7 @@ export default function PostComposer({
                   setIsModalOpen(true)
                 }}
                 className="flex h-8 w-8 items-center justify-center rounded-full transition hover:bg-blue-50 dark:hover:bg-blue-950/40"
-                aria-label="Abrir criador de post"
+                aria-label={t('composer.open')}
               >
                 <Icon className="h-4 w-4" />
               </button>
@@ -1380,7 +1380,7 @@ export default function PostComposer({
               setIsModalOpen(true)
             }}
             className="flex h-8 w-8 items-center justify-center rounded-full transition hover:bg-blue-50 dark:hover:bg-blue-950/40"
-            aria-label="Abrir criador de post"
+            aria-label={t('composer.open')}
           >
             <span className="scale-90">{selectedVisibility?.icon}</span>
           </button>
@@ -1410,14 +1410,14 @@ export default function PostComposer({
                   setShowEmojiPicker(false)
                 }}
                 className="flex h-10 w-10 items-center justify-center rounded-full text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-950 dark:hover:bg-zinc-900 dark:hover:text-white"
-                aria-label="Fechar"
-                title="Fechar"
+                aria-label={t('common.close')}
+                title={t('common.close')}
               >
                 <X className="h-5 w-5" />
               </button>
 
               <p className="text-sm font-black text-zinc-950 dark:text-white">
-                Criar post
+                {t('composer.create')}
               </p>
 
               <button
@@ -1426,7 +1426,7 @@ export default function PostComposer({
                 onClick={handleSubmit}
                 className="rounded-full bg-blue-600 px-4 py-2 text-sm font-black text-white shadow-sm shadow-blue-600/20 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-zinc-300 disabled:text-zinc-600 dark:disabled:bg-zinc-800 dark:disabled:text-zinc-500"
               >
-                {isOptimizingVideo ? 'Otimizando...' : isSubmitting ? t('postComposer.posting') : 'Publicar'}
+                {isOptimizingVideo ? t('composer.optimizing') : isSubmitting ? t('composer.posting') : t('composer.publish')}
               </button>
             </div>
 
@@ -1455,7 +1455,7 @@ export default function PostComposer({
             placeholder={placeholderText}
             className="min-h-[76px] w-full resize-none border-0 bg-transparent px-0 py-2 text-lg text-zinc-900 outline-none placeholder:text-zinc-500 dark:text-zinc-100 dark:placeholder:text-zinc-500 sm:min-h-[92px] sm:text-xl"
           />
-          {expression && <div className="mt-3 flex items-start gap-2"><ExpressionAttachment expression={expression} /><button type="button" onClick={() => setExpression(null)} className="rounded-full border border-zinc-300 px-3 py-1 text-xs font-bold dark:border-zinc-700">Remover</button></div>}
+          {expression && <div className="mt-3 flex items-start gap-2"><ExpressionAttachment expression={expression} /><button type="button" onClick={() => setExpression(null)} className="rounded-full border border-zinc-300 px-3 py-1 text-xs font-bold dark:border-zinc-700">{t('common.remove')}</button></div>}
 
           {media.length > 0 && (
             <div
@@ -1508,8 +1508,8 @@ export default function PostComposer({
                       type="button"
                       onClick={() => openMediaPicker(item.id)}
                       className="flex h-8 w-8 items-center justify-center rounded-full bg-black/70 text-white transition hover:bg-black"
-                      title="Trocar midia"
-                      aria-label="Trocar midia"
+                      title={t('composer.changeMedia')}
+                      aria-label={t('composer.changeMedia')}
                     >
                       <ImagePlus className="h-4 w-4" />
                     </button>
@@ -1517,8 +1517,8 @@ export default function PostComposer({
                     <Link
                       href="/editor"
                       className="flex h-8 w-8 items-center justify-center rounded-full bg-black/70 text-white transition hover:bg-black"
-                      title="Editar midia"
-                      aria-label="Editar midia"
+                      title={t('composer.editMedia')}
+                      aria-label={t('composer.editMedia')}
                     >
                       <Scissors className="h-4 w-4" />
                     </Link>
@@ -1529,8 +1529,8 @@ export default function PostComposer({
                         onClick={() => handleAttachedVideoCompression(item)}
                         disabled={isOptimizingVideo}
                         className="flex h-8 w-8 items-center justify-center rounded-full bg-black/70 text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-50"
-                        title="Comprimir video"
-                        aria-label="Comprimir video"
+                        title={t('composer.compressVideo')}
+                        aria-label={t('composer.compressVideo')}
                       >
                         {isOptimizingVideo ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
@@ -1587,7 +1587,7 @@ export default function PostComposer({
                   ) : (
                     <Scissors className="h-4 w-4" />
                   )}
-                  Comprimir
+                  {t('composer.compress')}
                 </button>
 
                 <button
@@ -1596,7 +1596,7 @@ export default function PostComposer({
                   disabled={isOptimizingVideo}
                   className="inline-flex h-9 items-center rounded-full border border-amber-300 px-3 text-xs font-bold text-amber-900 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-amber-800 dark:text-amber-100 dark:hover:bg-amber-950/60"
                 >
-                  Cancelar
+                  {t('common.cancel')}
                 </button>
               </div>
             </div>
@@ -1643,15 +1643,15 @@ export default function PostComposer({
             <div className="flex flex-col gap-2 rounded-2xl border border-zinc-200 bg-zinc-50/80 px-3 py-2.5 text-xs dark:border-zinc-800 dark:bg-zinc-950/70 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex min-w-0 flex-wrap items-center gap-2">
                 <span className="rounded-full border border-zinc-200 bg-white px-2.5 py-1 font-bold text-zinc-700 dark:border-zinc-800 dark:bg-black dark:text-zinc-200">
-                  Comunidade: {selectedCommunity.label}
+                  {t('composer.communitySummary', { community: t(`communities.${selectedCommunity.key}`) })}
                 </span>
                 <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 font-bold text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-200">
-                  {contentRating === 'safe' ? 'Conteudo seguro' : contentRatingLabel}
+                  {contentRating === 'safe' ? t('composer.safeContent') : t(`communities.${contentRating}`)}
                 </span>
               </div>
 
               <p className="text-zinc-500 dark:text-zinc-400">
-                Seu post sera exibido na comunidade escolhida.
+                {t('composer.communityGuidance')}
               </p>
             </div>
 
@@ -1672,12 +1672,12 @@ export default function PostComposer({
                           ? 'border-blue-200 bg-blue-50 text-blue-700 ring-1 ring-blue-200 dark:border-blue-500/30 dark:bg-blue-950/40 dark:text-blue-200'
                           : 'border-zinc-200 bg-white text-blue-600 hover:bg-blue-50 dark:border-zinc-800 dark:bg-black dark:text-blue-300 dark:hover:bg-blue-950/30'
                       } disabled:cursor-not-allowed disabled:opacity-50`}
-                      title="Adicionar foto ou video"
-                      aria-label="Adicionar foto ou video"
+                      title={t('composer.addMedia')}
+                      aria-label={t('composer.addMedia')}
                       aria-expanded={showMediaMenu}
                     >
                       <ImagePlus className="h-4 w-4" />
-                      Adicionar foto ou video
+                      {t('composer.addMedia')}
                     </button>
 
                     {showMediaMenu && (
@@ -1689,7 +1689,7 @@ export default function PostComposer({
                           className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-bold transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-blue-950/30"
                         >
                           <ImagePlus className="h-4 w-4 text-blue-500" />
-                          Adicionar foto
+                          {t('composer.addPhoto')}
                         </button>
 
                         <button
@@ -1699,7 +1699,7 @@ export default function PostComposer({
                           className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-bold transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-blue-950/30"
                         >
                           <Video className="h-4 w-4 text-blue-500" />
-                          Adicionar vídeo
+                          {t('composer.addVideo')}
                         </button>
 
                         <button
@@ -1709,7 +1709,7 @@ export default function PostComposer({
                           className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-bold transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-blue-950/30"
                         >
                           <ImagePlus className="h-4 w-4 text-blue-500" />
-                          Galeria
+                          {t('composer.gallery')}
                         </button>
 
                         <button
@@ -1719,7 +1719,7 @@ export default function PostComposer({
                           className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-bold transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-blue-950/30"
                         >
                           <Camera className="h-4 w-4 text-blue-500" />
-                          Camera
+                          {t('composer.camera')}
                         </button>
 
                         <button
@@ -1729,18 +1729,18 @@ export default function PostComposer({
                           className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-bold transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-blue-950/30"
                         >
                           <Video className="h-4 w-4 text-blue-500" />
-                          Gravar video
+                          {t('composer.recordVideo')}
                         </button>
 
                         <Link
                           href="/editor"
                           onClick={() => setShowMediaMenu(false)}
                           className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-bold transition hover:bg-blue-50 dark:hover:bg-blue-950/30"
-                          title="Editar midia"
-                          aria-label="Editar midia"
+                          title={t('composer.editMedia')}
+                          aria-label={t('composer.editMedia')}
                         >
                           <Scissors className="h-4 w-4 text-blue-500" />
-                          Editar midia
+                          {t('composer.editMedia')}
                         </Link>
                       </div>
                     )}
@@ -1755,8 +1755,8 @@ export default function PostComposer({
                           ? 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-500/30 dark:bg-blue-950/40 dark:text-blue-200'
                           : 'border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-black dark:text-zinc-300 dark:hover:bg-zinc-900'
                       }`}
-                      title="Adicionar emoji"
-                      aria-label="Adicionar emoji"
+                      title={t('composer.addEmoji')}
+                      aria-label={t('composer.addEmoji')}
                       aria-expanded={showEmojiPicker}
                     >
                       <Smile className="h-5 w-5" />
@@ -1773,7 +1773,7 @@ export default function PostComposer({
                     aria-controls="composer-advanced-options"
                   >
                     <SlidersHorizontal className="h-4 w-4" />
-                    Opcoes avancadas
+                    {t('composer.advancedOptions')}
                     <ChevronDown className={`h-4 w-4 transition ${showAdvancedOptions ? 'rotate-180' : ''}`} />
                   </button>
                 </div>
@@ -1785,7 +1785,7 @@ export default function PostComposer({
                   className="flex h-10 w-full items-center justify-center gap-2 rounded-full bg-zinc-900 px-6 text-sm font-bold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-black sm:w-auto sm:min-w-[110px]"
                 >
                   {isOptimizingVideo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                  {isOptimizingVideo ? 'Otimizando...' : isSubmitting ? t('postComposer.posting') : 'Publicar'}
+                  {isOptimizingVideo ? t('composer.optimizing') : isSubmitting ? t('composer.posting') : t('composer.publish')}
                 </button>
               </div>
 
@@ -1809,21 +1809,21 @@ export default function PostComposer({
                   <div>
                     <p className="flex items-center gap-2 text-sm font-black text-zinc-900 dark:text-white">
                       <SlidersHorizontal className="h-4 w-4" />
-                      Opcoes avancadas
+                      {t('composer.advancedOptions')}
                     </p>
                     <p className="mt-1 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
-                      Ajuste comunidade, visibilidade, post pago e 18+ quando precisar.
+                      {t('composer.advancedGuidance')}
                     </p>
                   </div>
                   <span className="rounded-full border border-zinc-200 px-2.5 py-1 text-xs font-bold text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
-                    {activeAdvancedChips.length > 0 ? 'Ativas' : 'Padrao simples'}
+                    {activeAdvancedChips.length > 0 ? t('composer.activeOptions') : t('composer.simpleDefault')}
                   </span>
                 </div>
 
                 <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <label className="block">
                     <span className="mb-1.5 block text-xs font-bold text-zinc-600 dark:text-zinc-300">
-                      Comunidade
+                      {t('composer.community')}
                     </span>
                     <select
                       value={communityType}
@@ -1836,18 +1836,18 @@ export default function PostComposer({
                           value={community.key}
                           disabled={community.requires18Plus && !canAccessAdult18Plus}
                         >
-                          {community.label}
+                          {t(`communities.${community.key}`)}
                         </option>
                       ))}
                     </select>
                     <span className="mt-1.5 block text-xs leading-5 text-zinc-500 dark:text-zinc-400">
-                      Seu post sera exibido na comunidade escolhida.
+                      {t('composer.communityGuidance')}
                     </span>
                   </label>
 
                   <label className="block">
                     <span className="mb-1.5 block text-xs font-bold text-zinc-600 dark:text-zinc-300">
-                      Categoria
+                      {t('composer.category')}
                     </span>
                     <select
                       value={category}
@@ -1870,7 +1870,7 @@ export default function PostComposer({
 
                   <label className="block">
                     <span className="mb-1.5 block text-xs font-bold text-zinc-600 dark:text-zinc-300">
-                      Visibilidade
+                      {t('composer.visibility')}
                     </span>
                     <select
                       value={visibility}
@@ -1889,7 +1889,7 @@ export default function PostComposer({
 
                   <label className="block">
                     <span className="mb-1.5 block text-xs font-bold text-zinc-600 dark:text-zinc-300">
-                      Classificacao do conteudo
+                      {t('composer.contentRating')}
                     </span>
                     <select
                       value={contentRating}
@@ -1903,7 +1903,7 @@ export default function PostComposer({
                           value={rating.key}
                           disabled={rating.requires18Plus && !canAccessAdult18Plus}
                         >
-                          {rating.label}
+                          {t(`communities.${rating.key}`)}
                         </option>
                       ))}
                     </select>
@@ -1922,16 +1922,16 @@ export default function PostComposer({
                     <span className="min-w-0 flex-1">
                       <span className="flex items-center gap-2 text-sm font-black text-amber-950 dark:text-amber-100">
                         <Lock className="h-4 w-4" />
-                        Conteudo 18+
+                        {t('composer.adultTitle')}
                       </span>
                       <span className="mt-1 block text-xs leading-5 text-amber-900/80 dark:text-amber-100/75">
-                        Conteudo 18+ so aparece para usuarios verificados e autorizados.
+                        {t('composer.adultDescription')}
                       </span>
                       {!canAccessAdult18Plus && (
                         <span className="mt-1 block text-xs leading-5 text-amber-900 dark:text-amber-100">
                           Conteudo adulto 18+ exige verificacao aprovada.{' '}
                           <Link href="/age-verification" className="font-black underline underline-offset-2">
-                            Verificar idade
+                            {t('composer.verifyAge')}
                           </Link>
                         </span>
                       )}
@@ -1950,10 +1950,10 @@ export default function PostComposer({
                     <span className="min-w-0 flex-1">
                       <span className="flex items-center gap-2 text-sm font-black text-cyan-900 dark:text-cyan-100">
                         <Coins className="h-4 w-4" />
-                        Transformar em post pago
+                        {t('composer.paidTitle')}
                       </span>
                       <span className="mt-1 block text-xs leading-5 text-cyan-800/75 dark:text-cyan-100/70">
-                        O publico paga ItaCash para desbloquear este conteudo.
+                        {t('composer.paidDescription')}
                       </span>
                     </span>
                   </label>
@@ -1961,7 +1961,7 @@ export default function PostComposer({
                   {isPaidPost && (
                     <label className="mt-3 block">
                       <span className="mb-1.5 block text-xs font-bold text-cyan-900 dark:text-cyan-100">
-                        Definir preco em ItaCash
+                        {t('composer.paidPrice')}
                       </span>
                       <input
                         type="number"
@@ -1973,7 +1973,7 @@ export default function PostComposer({
                         className="h-11 w-full rounded-xl border border-cyan-200 bg-white px-3 text-sm font-semibold text-zinc-900 outline-none transition focus:border-cyan-400 focus:ring-4 focus:ring-cyan-500/10 dark:border-cyan-900/60 dark:bg-black dark:text-white"
                       />
                       <span className="mt-1.5 block text-xs leading-5 text-cyan-800/75 dark:text-cyan-100/70">
-                        Voce recebe 85%. A plataforma retem 15%.
+                        {t('composer.paidSplit')}
                       </span>
                     </label>
                   )}
@@ -2005,7 +2005,7 @@ export default function PostComposer({
                       onClick={() => handleAiAssist('improve_post')}
                       disabled={!canUseAi}
                       className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-full border border-violet-200 bg-white px-3 text-xs font-bold text-violet-700 transition hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-violet-900/60 dark:bg-zinc-950 dark:text-violet-200 dark:hover:bg-violet-950/50"
-                      aria-label="Melhorar texto com IA da EntreUS"
+                      aria-label={t('composer.aiImprove')}
                       aria-describedby="ai-assistance-note"
                       title={getAiButtonTitle('improve_post')}
                     >
@@ -2017,7 +2017,7 @@ export default function PostComposer({
                       <span>
                         {activeAiMode === 'improve_post'
                           ? AI_LOADING_LABELS.improve_post
-                          : 'Melhorar com IA'}
+                          : t('composer.aiImprove')}
                       </span>
                     </button>
 
@@ -2026,7 +2026,7 @@ export default function PostComposer({
                       onClick={() => handleAiAssist('suggest_caption')}
                       disabled={!canUseAi}
                       className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-full border border-violet-200/80 bg-white px-3 text-xs font-bold text-violet-700 transition hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-violet-900/60 dark:bg-zinc-950 dark:text-violet-200 dark:hover:bg-violet-950/30"
-                      aria-label="Sugerir legenda com IA da EntreUS"
+                      aria-label={t('composer.aiCaption')}
                       aria-describedby="ai-assistance-note"
                       title={getAiButtonTitle('suggest_caption')}
                     >
@@ -2038,7 +2038,7 @@ export default function PostComposer({
                       <span>
                         {activeAiMode === 'suggest_caption'
                           ? AI_LOADING_LABELS.suggest_caption
-                          : 'Sugerir legenda'}
+                          : t('composer.aiCaption')}
                       </span>
                     </button>
                   </div>
@@ -2048,13 +2048,13 @@ export default function PostComposer({
                     className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] leading-5 text-violet-700 dark:text-violet-200"
                   >
                     <Sparkles className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                    <span>A IA apenas sugere melhorias e legendas. Revise antes de publicar.</span>
+                    <span>{t('composer.aiGuidance')}</span>
                     <Link
                       href="/help/ia"
                       className="font-bold underline decoration-violet-300 underline-offset-2 transition hover:text-violet-900 dark:decoration-violet-700 dark:hover:text-white"
-                      aria-label="Saiba mais sobre a IA da EntreUS"
+                      aria-label={t('composer.learnMore')}
                     >
-                      Saiba mais
+                      {t('composer.learnMore')}
                     </Link>
                   </div>
                 </div>

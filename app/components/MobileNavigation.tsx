@@ -11,6 +11,7 @@ import { useAdminPendingAlerts } from '../hooks/useAdminPendingAlerts'
 import { useNavigationRuntime } from '../hooks/useNavigationRuntime'
 import EntreUSHub from './EntreUSHub'
 import EntreUSWordmark from './EntreUSWordmark'
+import { useLanguage } from './LanguageProvider'
 
 type MobileNavigationProps = {
   email: string
@@ -37,6 +38,7 @@ export default function MobileNavigation({
   onPostClick,
 }: MobileNavigationProps) {
   const pathname = usePathname()
+  const { t } = useLanguage()
   const hubButtonRef = useRef<HTMLButtonElement>(null)
   const [hubOpen, setHubOpen] = useState(false)
   const [mobileActive, setMobileActive] = useState(false)
@@ -61,15 +63,15 @@ export default function MobileNavigation({
 
   return (
     <>
-      <nav aria-label="Navegação principal" className="fixed inset-x-0 bottom-0 z-50 grid grid-cols-5 items-end border-t border-zinc-200 bg-white/95 px-1 pb-[max(env(safe-area-inset-bottom),4px)] pt-1 backdrop-blur-xl dark:border-white/10 dark:bg-black/95 lg:hidden">
-        <Link href="/feed" className={itemClass(isNavigationItemActive(pathname, '/feed'))} aria-label="Casa" aria-current={isNavigationItemActive(pathname, '/feed') ? 'page' : undefined}><Home className="h-5 w-5" /><span>Casa</span></Link>
-        <Link href="/messages" className={itemClass(isNavigationItemActive(pathname, '/messages'))} aria-label="Mensagens" aria-current={isNavigationItemActive(pathname, '/messages') ? 'page' : undefined}><span className="relative"><MessageCircle className="h-5 w-5" />{badge}</span><span>Mensagens</span></Link>
-        <button ref={hubButtonRef} type="button" onClick={() => setHubOpen(true)} aria-label="Abrir Hub EntreUS" aria-expanded={hubOpen} aria-controls="entreus-hub" data-active={hubOpen} className="relative -mt-5 flex min-h-16 flex-col items-center justify-center gap-0.5 rounded-2xl text-[10px] font-black text-zinc-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 dark:text-zinc-100"><span className="entreus-hub-trigger flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-400 to-blue-700 shadow-lg shadow-blue-500/30 data-[active=true]:ring-2 data-[active=true]:ring-blue-200/80" data-active={hubOpen}><Image src="/logo-icon.png" alt="" width={34} height={34} className="h-8 w-8 rounded-full object-contain" /></span><EntreUSWordmark /></button>
-        <Link href="/profile" className={itemClass(isNavigationItemActive(pathname, '/profile'))} aria-label="Perfil" aria-current={isNavigationItemActive(pathname, '/profile') ? 'page' : undefined}>{avatarUrl ? (
+      <nav aria-label={t('nav.mainLabel')} className="fixed inset-x-0 bottom-0 z-50 grid grid-cols-5 items-end border-t border-zinc-200 bg-white/95 px-1 pb-[max(env(safe-area-inset-bottom),4px)] pt-1 backdrop-blur-xl dark:border-white/10 dark:bg-black/95 lg:hidden">
+        <Link href="/feed" className={itemClass(isNavigationItemActive(pathname, '/feed'))} aria-label={t('nav.home')} aria-current={isNavigationItemActive(pathname, '/feed') ? 'page' : undefined}><Home className="h-5 w-5" /><span>{t('nav.home')}</span></Link>
+        <Link href="/messages" className={itemClass(isNavigationItemActive(pathname, '/messages'))} aria-label={t('nav.messages')} aria-current={isNavigationItemActive(pathname, '/messages') ? 'page' : undefined}><span className="relative"><MessageCircle className="h-5 w-5" />{badge}</span><span>{t('nav.messages')}</span></Link>
+        <button ref={hubButtonRef} type="button" onClick={() => setHubOpen(true)} aria-label={t('nav.openHub')} aria-expanded={hubOpen} aria-controls="entreus-hub" data-active={hubOpen} className="relative -mt-5 flex min-h-16 flex-col items-center justify-center gap-0.5 rounded-2xl text-[10px] font-black text-zinc-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 dark:text-zinc-100"><span className="entreus-hub-trigger flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-400 to-blue-700 shadow-lg shadow-blue-500/30 data-[active=true]:ring-2 data-[active=true]:ring-blue-200/80" data-active={hubOpen}><Image src="/logo-icon.png" alt="" width={34} height={34} className="h-8 w-8 rounded-full object-contain" /></span><EntreUSWordmark /></button>
+        <Link href="/profile" className={itemClass(isNavigationItemActive(pathname, '/profile'))} aria-label={t('nav.profile')} aria-current={isNavigationItemActive(pathname, '/profile') ? 'page' : undefined}>{avatarUrl ? (
           // eslint-disable-next-line @next/next/no-img-element -- Profile media can use approved runtime hosts outside next/image config.
           <img src={avatarUrl} alt="" className="h-6 w-6 rounded-full object-cover" />
-        ) : <User className="h-5 w-5" />}<span>Perfil</span></Link>
-        <button type="button" onClick={() => onPostClick('text')} className={itemClass(false)} aria-label="Postar"><PenLine className="h-5 w-5" /><span>Postar</span></button>
+        ) : <User className="h-5 w-5" />}<span>{t('nav.profile')}</span></Link>
+        <button type="button" onClick={() => onPostClick('text')} className={itemClass(false)} aria-label={t('nav.post')}><PenLine className="h-5 w-5" /><span>{t('nav.post')}</span></button>
       </nav>
 
       <EntreUSHub open={hubOpen} onClose={closeHub} userId={runtime.userId} isAdmin={runtime.isAdmin} unreadNotificationsCount={unreadNotificationsCount} unreadMessagesCount={runtime.unreadMessages} adminPendingCount={adminPendingCount} mounted={mounted} theme={theme} displayName={displayName} avatarUrl={avatarUrl} onToggleTheme={onToggleTheme} onLogout={onLogout} />

@@ -1,11 +1,15 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { CreditCard, Heart, ImageIcon, Landmark, Monitor, QrCode, Scissors, Video, Wand2 } from 'lucide-react'
+import { translate, type TranslationKey } from '@/lib/i18n'
+import { getRequestLocale } from '@/lib/i18n/server'
 
 const PIX_DONATION_URL = 'https://nubank.com.br/cobrar/u2kum/69fca421-184d-459c-a125-f760fc56c264'
 const MERCADO_PAGO_DONATION_URL = 'https://link.mercadopago.com.br/entreuslab'
 
-export default function LabPage() {
+export default async function LabPage() {
+  const locale = await getRequestLocale()
+  const t = (key: TranslationKey) => translate(locale, key)
   return (
     <main className="min-h-screen bg-zinc-50 px-4 py-10 text-zinc-950 dark:bg-black dark:text-white sm:px-6">
       <section className="mx-auto max-w-6xl">
@@ -14,7 +18,7 @@ export default function LabPage() {
             href="/feed"
             className="inline-flex items-center justify-center rounded-full border border-zinc-200 bg-white px-4 py-2 text-sm font-bold text-zinc-800 shadow-sm transition hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100 dark:hover:bg-zinc-900"
           >
-            Voltar para o feed
+            {t('lab.back')}
           </Link>
 
 
@@ -46,13 +50,11 @@ export default function LabPage() {
                 </p>
 
                 <h1 className="mt-3 text-3xl font-black tracking-tight sm:text-5xl">
-                  Ferramentas criativas para escola, imagem e PDF
+                  {t('lab.title')}
                 </h1>
 
                 <p className="mt-4 max-w-3xl text-base leading-7 text-zinc-600 dark:text-zinc-400">
-                  Um laboratório dentro do ecossistema EntreUS para criar materiais,
-                  ampliar imagens, dividir arquivos em folhas e facilitar o trabalho
-                  de professores, escolas e criadores.
+                  {t('lab.description')}
                 </p>
               </div>
 
@@ -63,7 +65,7 @@ export default function LabPage() {
                   href="#doacao"
                   className="inline-flex items-center justify-center rounded-full border border-blue-200 bg-blue-50 px-6 py-3 text-sm font-bold text-blue-700 shadow-sm transition hover:bg-blue-100 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-200 dark:hover:bg-blue-950/60"
                 >
-                  Apoiar o EntreUS Lab
+                  {t('lab.support')}
                 </a>
               </div>
             </div>
@@ -83,15 +85,15 @@ export default function LabPage() {
             </div>
 
             <h2 className="relative mt-5 text-xl font-black">
-              Editor de Video
+              {t('lab.video')}
             </h2>
 
             <p className="relative mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-400">
-              Edite videos, adicione textos, figurinhas, imagens, musica e baixe o resultado final.
+              {t('lab.videoDescription')}
             </p>
 
             <span className="relative mt-5 inline-flex text-sm font-bold text-blue-600 transition group-hover:translate-x-1 group-hover:text-blue-500 dark:text-blue-400">
-              Abrir editor
+              {t('lab.openLab')}
             </span>
           </Link>
 
@@ -107,15 +109,15 @@ export default function LabPage() {
             </div>
 
             <h2 className="relative mt-5 text-xl font-black">
-              Gravador de Tela
+              {t('lab.recorder')}
             </h2>
 
             <p className="relative mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-400">
-              Grave aulas, tutoriais e apresentaÃ§Ãµes com tela, Ã¡udio, webcam e download local.
+              {t('lab.recorderDescription')}
             </p>
 
             <span className="relative mt-5 inline-flex text-sm font-bold text-emerald-600 transition group-hover:translate-x-1 group-hover:text-emerald-500 dark:text-emerald-400">
-              Abrir gravador
+              {t('lab.openLab')}
             </span>
           </Link>
 
@@ -131,15 +133,15 @@ export default function LabPage() {
             </div>
 
             <h2 className="relative mt-5 text-xl font-black">
-              Pôster em folhas
+              {t('lab.poster')}
             </h2>
 
             <p className="relative mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-400">
-              Transforme imagem ou PDF em um arquivo PDF dividido em várias folhas para imprimir e montar.
+              {t('lab.posterDescription')}
             </p>
 
             <span className="relative mt-5 inline-flex text-sm font-bold text-cyan-600 transition group-hover:translate-x-1 group-hover:text-cyan-500 dark:text-cyan-400">
-              Abrir ferramenta
+              {t('lab.openLab')}
             </span>
           </Link>
 
@@ -155,15 +157,15 @@ export default function LabPage() {
             </div>
 
             <h2 className="relative mt-5 text-xl font-black">
-              Redimensionar imagem
+              {t('lab.resize')}
             </h2>
 
             <p className="relative mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-400">
-              Ajuste tamanho, proporção, formato e qualidade de imagens para posts, cartazes e redes sociais.
+              {t('lab.resizeDescription')}
             </p>
 
             <span className="relative mt-5 inline-flex text-sm font-bold text-fuchsia-600 transition group-hover:translate-x-1 group-hover:text-fuchsia-500 dark:text-fuchsia-400">
-              Abrir ferramenta
+              {t('lab.openLab')}
             </span>
           </Link>
 
@@ -179,15 +181,15 @@ export default function LabPage() {
             </div>
 
             <h2 className="relative mt-5 text-xl font-black">
-              QR Code
+              {t('lab.qr')}
             </h2>
 
             <p className="relative mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-400">
-              Gere QR Codes para links, Wi-Fi, WhatsApp, textos, e-mails, telefones e comunicados.
+              {t('lab.qrDescription')}
             </p>
 
             <span className="relative mt-5 inline-flex text-sm font-bold text-emerald-600 transition group-hover:translate-x-1 group-hover:text-emerald-500 dark:text-emerald-400">
-              Abrir ferramenta
+              {t('lab.openLab')}
             </span>
           </Link>
 
@@ -203,15 +205,15 @@ export default function LabPage() {
             </div>
 
             <h2 className="relative mt-5 text-xl font-black">
-              Cartazes rápidos
+              {t('lab.quickPosters')}
             </h2>
 
             <p className="relative mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-400">
-              Crie avisos, eventos, comunicados e projetos com modelos prontos para baixar em PNG ou imprimir.
+              {t('lab.quickPostersDescription')}
             </p>
 
             <span className="relative mt-5 inline-flex text-sm font-bold text-blue-600 transition group-hover:translate-x-1 group-hover:text-blue-500 dark:text-blue-400">
-              Abrir ferramenta
+              {t('lab.openLab')}
             </span>
           </Link>
         </div>
@@ -222,15 +224,12 @@ export default function LabPage() {
               <div className="mb-3 flex items-center gap-2 text-green-700 dark:text-green-300">
                 <Heart className="h-5 w-5" />
                 <h2 className="text-2xl font-black text-zinc-950 dark:text-white">
-                  Apoie o EntreUS Lab
+                  {t('lab.support')}
                 </h2>
               </div>
 
               <p className="max-w-3xl text-sm leading-6 text-zinc-700 dark:text-zinc-300">
-                O EntreUS Lab nasceu para ajudar professores, escolas e criadores a transformar
-                imagens e PDFs em materiais prontos para impressão. Se puder, prefira o Pix Nubank:
-                ele ajuda mais porque não desconta taxa do projeto. O Mercado Pago continua disponível
-                como alternativa, mas pode cobrar taxa.
+                {t('lab.donationDescription')}
               </p>
             </div>
 
@@ -242,7 +241,7 @@ export default function LabPage() {
                 className="inline-flex items-center justify-center gap-2 rounded-full bg-green-600 px-6 py-3 text-sm font-bold text-white shadow-lg transition hover:bg-green-700"
               >
                 <Landmark className="h-4 w-4" />
-                Pix Nubank — sem taxa
+                {t('feed.pixNoFee')}
               </a>
 
               <a
@@ -252,7 +251,7 @@ export default function LabPage() {
                 className="inline-flex items-center justify-center gap-2 rounded-full border border-green-300 bg-white px-6 py-3 text-sm font-bold text-green-700 shadow-sm transition hover:bg-green-100 dark:border-green-800 dark:bg-green-950 dark:text-green-300 dark:hover:bg-green-900"
               >
                 <CreditCard className="h-4 w-4" />
-                Mercado Pago — pode ter taxa
+                {t('feed.mercadoPagoFee')}
               </a>
             </div>
           </div>

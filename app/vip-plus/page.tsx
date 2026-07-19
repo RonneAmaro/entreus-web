@@ -1,5 +1,7 @@
 'use client'
 
+/* eslint-disable react-hooks/immutability -- mount effects intentionally call async loader declarations defined later in the component */
+
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -25,11 +27,10 @@ import { supabase } from '@/lib/supabase'
 import { calculatePaymentTotals } from '@/lib/payment-fees'
 import {
   getSafeCheckoutUrl,
-  getVipCheckoutButtonLabel,
-  getVipPaymentReturnMessage,
   type VipPaymentReturnStatus,
 } from '@/lib/vip-checkout-flow'
 import { VIP_PURCHASE_PLANS, type VipPlanKey } from '@/lib/vip-plans'
+import { useLanguage } from '../components/LanguageProvider'
 
 type CurrentProfile = {
   username: string | null
@@ -91,33 +92,33 @@ const BADGE_MEDIA = {
 
 const benefits = [
   {
-    title: 'Personalizacao visivel no feed',
-    description: 'Destaque seu avatar e seus posts com anel, faixa de cor e temas VIP.',
+    titleKey: 'vip.benefits.feedStyle.title',
+    descriptionKey: 'vip.benefits.feedStyle.description',
     icon: BadgeCheck,
   },
   {
-    title: 'Meet de 1 hora',
-    description: 'Salas criadas por VIP ativo duram ate 60 minutos no EntreUS Meet.',
+    titleKey: 'vip.benefits.meet.title',
+    descriptionKey: 'vip.benefits.meet.description',
     icon: Crown,
   },
   {
-    title: 'Prioridade em recursos futuros',
-    description: 'Base pronta para liberar vantagens antes para quem estiver com VIP ativo.',
+    titleKey: 'vip.benefits.priority.title',
+    descriptionKey: 'vip.benefits.priority.description',
     icon: Star,
   },
   {
-    title: 'Gravacao em fase futura',
-    description: 'Estrutura preparada para beneficios de gravacao quando o produto autorizar.',
+    titleKey: 'vip.benefits.recording.title',
+    descriptionKey: 'vip.benefits.recording.description',
     icon: ShieldCheck,
   },
   {
-    title: 'Traducao em fase futura',
-    description: 'Acesso previsto para experiencias multilingues nas proximas etapas.',
+    titleKey: 'vip.benefits.translation.title',
+    descriptionKey: 'vip.benefits.translation.description',
     icon: WandSparkles,
   },
   {
-    title: 'Beneficios expansiveis',
-    description: 'O VIP sera ampliado sem depender de pagamentos nesta primeira base.',
+    titleKey: 'vip.benefits.expandable.title',
+    descriptionKey: 'vip.benefits.expandable.description',
     icon: Zap,
   },
 ]
@@ -127,18 +128,18 @@ function isVipActive(profile: CurrentProfile | null) {
   return new Date(profile.vip_expires_at).getTime() > Date.now()
 }
 
-function formatVipDate(value: string | null | undefined) {
-  if (!value) return 'data indisponivel'
+function formatVipDate(value: string | null | undefined, locale: string, fallback: string) {
+  if (!value) return fallback
 
   try {
-    return new Date(value).toLocaleDateString('pt-BR')
+    return new Date(value).toLocaleDateString(locale)
   } catch {
-    return 'data indisponivel'
+    return fallback
   }
 }
 
-function formatBRLFromCents(value: number) {
-  return (value / 100).toLocaleString('pt-BR', {
+function formatBRLFromCents(value: number, locale: string) {
+  return (value / 100).toLocaleString(locale, {
     style: 'currency',
     currency: 'BRL',
   })
@@ -147,6 +148,7 @@ function formatBRLFromCents(value: number) {
 export default function VipPlusPage() {
   const router = useRouter()
   const { theme, setTheme } = useTheme()
+  const { language, t } = useLanguage()
 
   const [mounted, setMounted] = useState(false)
   const [email, setEmail] = useState('')
@@ -163,6 +165,8 @@ export default function VipPlusPage() {
   const [paymentReturnStatus, setPaymentReturnStatus] = useState<VipPaymentReturnStatus>(null)
 
   useEffect(() => {
+    // Hydration state is intentionally established after the client mounts.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true)
   }, [])
 
@@ -174,6 +178,8 @@ export default function VipPlusPage() {
     const paymentStatus = new URLSearchParams(window.location.search).get('payment')
 
     if (paymentStatus === 'success' || paymentStatus === 'pending' || paymentStatus === 'failure') {
+      // The query string is an external browser input synchronized on mount.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPaymentReturnStatus(paymentStatus)
     }
   }, [])
@@ -187,7 +193,9 @@ export default function VipPlusPage() {
     () => calculatePaymentTotals(selectedPlan.amountBrlCents, 'mercadopago_pix'),
     [selectedPlan],
   )
-  const paymentReturnMessage = getVipPaymentReturnMessage(paymentReturnStatus, vipActive)
+  const paymentReturnMessage = paymentReturnStatus
+    ? t(`vip.paymentReturn.${paymentReturnStatus}${paymentReturnStatus === 'success' && vipActive ? 'Active' : ''}`)
+    : null
 
   async function loadNavigationShell() {
     const {
@@ -274,7 +282,7 @@ export default function VipPlusPage() {
     } = await supabase.auth.getSession()
 
     if (!session?.access_token) {
-      setPurchaseMessage('Entre na sua conta para abrir o pagamento VIP.')
+      setPurchaseMessage(t('vip.errors.signInPayment'))
       setPreparingPurchase(false)
       return
     }
@@ -283,7 +291,7 @@ export default function VipPlusPage() {
       const checkoutUrlFromPendingOrder = getSafeCheckoutUrl(preparedOrder?.checkoutUrl)
 
       if (checkoutUrlFromPendingOrder) {
-        setPurchaseMessage('Abrindo pagamento...')
+        setPurchaseMessage(t('vip.openingPayment'))
         window.location.assign(checkoutUrlFromPendingOrder)
         return
       }
@@ -306,7 +314,7 @@ export default function VipPlusPage() {
       const checkoutUrl = getSafeCheckoutUrl(data?.checkout_url)
 
       if (!response.ok || !checkoutUrl || !data?.order_id || !data.external_reference) {
-        setPurchaseMessage('Não foi possível abrir o pagamento agora. Tente novamente em instantes.')
+        setPurchaseMessage(t('vip.errors.openPayment'))
         return
       }
 
@@ -319,10 +327,10 @@ export default function VipPlusPage() {
         days: selectedPlan.days,
         checkoutUrl,
       })
-      setPurchaseMessage('Abrindo pagamento...')
+      setPurchaseMessage(t('vip.openingPayment'))
       window.location.assign(checkoutUrl)
     } catch {
-      setPurchaseMessage('Não foi possível abrir o pagamento agora. Tente novamente em instantes.')
+      setPurchaseMessage(t('vip.errors.openPayment'))
     } finally {
       setPreparingPurchase(false)
     }
@@ -337,7 +345,7 @@ export default function VipPlusPage() {
     } = await supabase.auth.getSession()
 
     if (!session?.access_token) {
-      setPurchaseMessage('Entre na sua conta para ver as instruções de Pix manual.')
+      setPurchaseMessage(t('vip.errors.signInPix'))
       setLoadingManualPix(false)
       return
     }
@@ -350,14 +358,14 @@ export default function VipPlusPage() {
 
       if (!response.ok || !data?.configured) {
         setManualPix(null)
-        setPurchaseMessage('Pix manual indisponível no momento.')
+        setPurchaseMessage(t('vip.errors.pixUnavailable'))
         return
       }
 
       setManualPix(data)
     } catch {
       setManualPix(null)
-      setPurchaseMessage('Não foi possível carregar o Pix manual agora. Tente novamente em instantes.')
+      setPurchaseMessage(t('vip.errors.loadPix'))
     } finally {
       setLoadingManualPix(false)
     }
@@ -379,7 +387,7 @@ export default function VipPlusPage() {
 
       <MobileNavigation
         email={email}
-        displayName={currentProfile?.display_name || currentProfile?.username || 'Minha conta'}
+        displayName={currentProfile?.display_name || currentProfile?.username || t('navigation.myAccount')}
         avatarUrl={currentProfile?.avatar_url || null}
         unreadNotificationsCount={unreadNotificationsCount}
         mounted={mounted}
@@ -399,7 +407,7 @@ export default function VipPlusPage() {
             className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-black transition hover:bg-white/10"
           >
             <ArrowLeft className="h-4 w-4" />
-            Feed
+            {t('navigation.feed')}
           </Link>
 
           <Link
@@ -407,7 +415,7 @@ export default function VipPlusPage() {
             className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-black text-black transition hover:bg-blue-50"
           >
             <Coins className="h-4 w-4" />
-            Carteira
+            {t('vip.wallet')}
           </Link>
         </header>
 
@@ -426,21 +434,21 @@ export default function VipPlusPage() {
               EntreUS VIP Plus
             </h1>
             <p className="mt-5 max-w-2xl text-base leading-7 text-zinc-300 sm:text-lg">
-              Mais destaque, mais estilo e mais possibilidades dentro da plataforma.
+              {t('vip.subtitle')}
             </p>
 
             <div className="mt-8 grid gap-3 sm:grid-cols-3">
               <div className="rounded-3xl border border-blue-300/20 bg-blue-500/10 p-4 ring-1 ring-blue-300/10">
-                <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-200/70">Plano</p>
+                <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-200/70">{t('vip.plan')}</p>
                 <p className="mt-2 text-2xl font-black">VIP</p>
               </div>
               <div className="rounded-3xl border border-white/10 bg-zinc-950/75 p-4 ring-1 ring-white/5">
-                <p className="text-xs font-black uppercase tracking-[0.2em] text-zinc-500">Assinatura</p>
-                <p className="mt-2 text-2xl font-black">Preparada</p>
+                <p className="text-xs font-black uppercase tracking-[0.2em] text-zinc-500">{t('vip.subscription')}</p>
+                <p className="mt-2 text-2xl font-black">{t('vip.ready')}</p>
               </div>
               <div className="rounded-3xl border border-emerald-300/20 bg-emerald-500/10 p-4">
-                <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-200/70">Status</p>
-                <p className="mt-2 text-2xl font-black">{vipActive ? 'Ativo' : 'Comprar'}</p>
+                <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-200/70">{t('vip.status')}</p>
+                <p className="mt-2 text-2xl font-black">{vipActive ? t('vip.active') : t('vip.buy')}</p>
               </div>
             </div>
           </div>
@@ -468,7 +476,7 @@ export default function VipPlusPage() {
                 <div className="flex aspect-square w-full flex-col items-center justify-center bg-[radial-gradient(circle_at_center,rgba(59,130,246,0.28),rgba(2,6,23,0.96)_62%)] p-8 text-center">
                   <img
                     src={BADGE_MEDIA.vipPlus.poster}
-                    alt="Selo VIP Plus"
+                    alt={t('vip.badgeAlt')}
                     className="h-48 w-48 rounded-full object-contain drop-shadow-[0_22px_50px_rgba(59,130,246,0.32)]"
                     onError={(event) => {
                       event.currentTarget.style.display = 'none'
@@ -479,15 +487,15 @@ export default function VipPlusPage() {
                     <Crown className="h-10 w-10 text-blue-100" />
                   </div>
                   <p className="mt-6 text-4xl font-black">VIP Plus</p>
-                  <p className="mt-2 text-sm font-bold text-blue-100/70">Selo visual EntreUS</p>
+                  <p className="mt-2 text-sm font-bold text-blue-100/70">{t('vip.visualBadge')}</p>
                 </div>
               )}
 
               <div className="absolute bottom-4 left-4 right-4 rounded-3xl border border-white/10 bg-black/55 p-4 backdrop-blur-xl">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-200/70">Selo VIP</p>
-                    <p className="text-xl font-black">{vipActive ? 'Ativo' : 'Disponivel em breve'}</p>
+                    <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-200/70">{t('vip.badge')}</p>
+                    <p className="text-xl font-black">{vipActive ? t('vip.active') : t('vip.availableSoon')}</p>
                   </div>
                   <span className="rounded-full bg-blue-500 px-3 py-1 text-xs font-black text-white">
                     Base 1
@@ -505,8 +513,8 @@ export default function VipPlusPage() {
                 <Sparkles className="h-5 w-5" />
               </span>
               <div>
-                <h2 className="text-2xl font-black">O que voce ganha</h2>
-                <p className="text-sm text-zinc-500">Beneficios iniciais e base para vantagens futuras.</p>
+                <h2 className="text-2xl font-black">{t('vip.whatYouGet')}</h2>
+                <p className="text-sm text-zinc-500">{t('vip.whatYouGetDescription')}</p>
               </div>
             </div>
 
@@ -515,12 +523,12 @@ export default function VipPlusPage() {
                 const Icon = benefit.icon
 
                 return (
-                  <article key={benefit.title} className="rounded-[2rem] border border-white/10 bg-zinc-950/80 p-5 ring-1 ring-white/5 transition hover:-translate-y-0.5 hover:border-blue-300/25">
+                  <article key={benefit.titleKey} className="rounded-[2rem] border border-white/10 bg-zinc-950/80 p-5 ring-1 ring-white/5 transition hover:-translate-y-0.5 hover:border-blue-300/25">
                     <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-500/15 text-blue-100">
                       <Icon className="h-5 w-5" />
                     </span>
-                    <h3 className="mt-4 text-lg font-black">{benefit.title}</h3>
-                    <p className="mt-2 text-sm leading-6 text-zinc-400">{benefit.description}</p>
+                    <h3 className="mt-4 text-lg font-black">{t(benefit.titleKey)}</h3>
+                    <p className="mt-2 text-sm leading-6 text-zinc-400">{t(benefit.descriptionKey)}</p>
                   </article>
                 )
               })}
@@ -529,21 +537,21 @@ export default function VipPlusPage() {
             <div className="mt-5 rounded-[2rem] border border-white/10 bg-zinc-950/90 p-5 ring-1 ring-white/5">
               <div className="flex items-center gap-3">
                 <Palette className="h-6 w-6 text-blue-200" />
-                <h2 className="text-xl font-black">Gravacao e traducao em fase futura</h2>
+                <h2 className="text-xl font-black">{t('vip.futureTitle')}</h2>
               </div>
               <p className="mt-3 text-sm leading-6 text-zinc-400">
-                Gravacao de sala, traducao simultanea e recursos premium futuros serao liberados em pacotes posteriores.
+                {t('vip.futureDescription')}
               </p>
             </div>
 
             <div className="mt-5 rounded-[2rem] border border-blue-300/20 bg-blue-500/10 p-5 ring-1 ring-blue-300/10">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <h2 className="text-xl font-black">Planos iniciais</h2>
-                  <p className="mt-1 text-sm text-blue-50/70">Valores placeholder configuraveis no codigo.</p>
+                  <h2 className="text-xl font-black">{t('vip.initialPlans')}</h2>
+                  <p className="mt-1 text-sm text-blue-50/70">{t('vip.initialPlansDescription')}</p>
                 </div>
                 <span className="rounded-full border border-blue-200/20 bg-black/30 px-3 py-1 text-xs font-black text-blue-100">
-                  Pedido pendente seguro
+                  {t('vip.securePendingOrder')}
                 </span>
               </div>
 
@@ -569,16 +577,16 @@ export default function VipPlusPage() {
                       }`}
                     >
                       <div className="flex items-center justify-between gap-2">
-                        <p className="font-black">{plan.label}</p>
+                        <p className="font-black">{t(`vip.plans.${plan.planKey}`)}</p>
                         {plan.featured && (
                           <span className={`rounded-full px-2 py-1 text-[10px] font-black ${selected ? 'bg-blue-100 text-blue-700' : 'bg-blue-500/15 text-blue-100'}`}>
-                            Popular
+                            {t('vip.popular')}
                           </span>
                         )}
                       </div>
-                      <p className="mt-3 text-2xl font-black">{formatBRLFromCents(plan.amountBrlCents)}</p>
+                      <p className="mt-3 text-2xl font-black">{formatBRLFromCents(plan.amountBrlCents, language)}</p>
                       <p className={`mt-2 text-xs font-semibold ${selected ? 'text-zinc-600' : 'text-blue-50/65'}`}>
-                        {plan.days} dias de VIP apos pagamento confirmado.
+                        {t('vip.daysAfterPayment', { days: plan.days })}
                       </p>
                     </button>
                   )
@@ -593,7 +601,7 @@ export default function VipPlusPage() {
                 <ShieldCheck className="h-6 w-6" />
               </span>
               <div>
-                <p className="text-sm font-bold text-zinc-400">Resumo</p>
+                <p className="text-sm font-bold text-zinc-400">{t('vip.summary')}</p>
                 <p className="text-2xl font-black">VIP Base</p>
               </div>
             </div>
@@ -603,31 +611,31 @@ export default function VipPlusPage() {
                 ? 'border-emerald-300/20 bg-emerald-500/10 text-emerald-100'
                 : 'border-blue-300/20 bg-blue-500/10 text-blue-100'
             }`}>
-              <p className="text-xs font-black uppercase tracking-[0.2em] opacity-70">Status da conta</p>
+              <p className="text-xs font-black uppercase tracking-[0.2em] opacity-70">{t('vip.accountStatus')}</p>
               <p className="mt-2 text-2xl font-black">
-                {vipActive ? 'Você já é VIP' : 'Escolha um plano para pagar'}
+                {vipActive ? t('vip.alreadyVip') : t('vip.choosePlan')}
               </p>
               {vipActive && (
                 <p className="mt-2 text-sm font-semibold opacity-80">
-                  Seu VIP expira em {formatVipDate(currentProfile?.vip_expires_at)}.
+                  {t('vip.expiresAt', { date: formatVipDate(currentProfile?.vip_expires_at, language, t('vip.dateUnavailable')) })}
                 </p>
               )}
             </div>
 
             <div className="mt-4 grid gap-3 text-sm text-zinc-300">
               <div className="rounded-2xl border border-white/10 bg-black/35 px-4 py-3">
-                <strong className="block text-white">{selectedPlan.label}</strong>
-                <span className="mt-1 block text-zinc-400">{selectedPlan.days} dias de VIP após confirmação do pagamento.</span>
+                <strong className="block text-white">{t(`vip.plans.${selectedPlan.planKey}`)}</strong>
+                <span className="mt-1 block text-zinc-400">{t('vip.daysAfterPayment', { days: selectedPlan.days })}</span>
               </div>
               <div className="rounded-2xl border border-white/10 bg-black/35 px-4 py-3">
-                <strong className="block text-white">Total previsto</strong>
+                <strong className="block text-white">{t('vip.estimatedTotal')}</strong>
                 <span className="mt-1 block text-zinc-400">
-                  {formatBRLFromCents(selectedPlanTotals.totalBrlCents)} com taxa estimada de Pix Mercado Pago.
+                  {t('vip.estimatedTotalDescription', { total: formatBRLFromCents(selectedPlanTotals.totalBrlCents, language) })}
                 </span>
               </div>
               <div className="rounded-2xl border border-white/10 bg-black/35 px-4 py-3">
-                <strong className="block text-white">Plano atual</strong>
-                <span className="mt-1 block text-zinc-400">{currentProfile?.vip_plan || 'Sem plano VIP ativo'}</span>
+                <strong className="block text-white">{t('vip.currentPlan')}</strong>
+                <span className="mt-1 block text-zinc-400">{currentProfile?.vip_plan || t('vip.noActivePlan')}</span>
               </div>
             </div>
 
@@ -639,8 +647,12 @@ export default function VipPlusPage() {
             >
               {preparingPurchase ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
               {preparingPurchase
-                ? 'Abrindo pagamento...'
-                : getVipCheckoutButtonLabel(Boolean(preparedOrder?.checkoutUrl), checkoutRequested)}
+                ? t('vip.openingPayment')
+                : preparedOrder?.checkoutUrl
+                  ? t('vip.continuePayment')
+                  : checkoutRequested
+                    ? t('vip.generatePaymentLink')
+                    : t('vip.payMercadoPago')}
             </button>
 
             <button
@@ -649,7 +661,7 @@ export default function VipPlusPage() {
               disabled={loadingManualPix}
               className="mt-3 inline-flex w-full items-center justify-center rounded-full border border-blue-200/35 bg-blue-500/10 px-5 py-3 text-sm font-bold text-blue-100 transition hover:bg-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {loadingManualPix ? 'Carregando Pix manual...' : 'Ver Pix manual'}
+              {loadingManualPix ? t('vip.loadingManualPix') : t('vip.viewManualPix')}
             </button>
 
             {paymentReturnMessage && (
@@ -666,7 +678,7 @@ export default function VipPlusPage() {
 
             {purchaseMessage && (
               <div className={`mt-4 rounded-2xl border px-4 py-3 text-sm font-semibold ${
-                purchaseMessage === 'Abrindo pagamento...'
+                purchaseMessage === t('vip.openingPayment')
                   ? 'border-emerald-300/20 bg-emerald-500/10 text-emerald-100'
                   : 'border-amber-300/20 bg-amber-500/10 text-amber-100'
               }`}>
@@ -676,21 +688,21 @@ export default function VipPlusPage() {
 
             {preparedOrder && (
               <div className="mt-4 rounded-3xl border border-emerald-300/20 bg-emerald-500/10 p-4 text-sm text-emerald-50">
-                <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-200/70">Pedido pendente</p>
-                <p className="mt-2 font-black">{preparedOrder.planLabel}</p>
-                <p className="mt-1 break-all text-xs text-emerald-50/70">Referencia: {preparedOrder.externalReference}</p>
+                <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-200/70">{t('vip.pendingOrder')}</p>
+                <p className="mt-2 font-black">{t(`vip.plans.${preparedOrder.planKey}`)}</p>
+                <p className="mt-1 break-all text-xs text-emerald-50/70">{t('vip.reference', { value: preparedOrder.externalReference })}</p>
               </div>
             )}
 
             {manualPix && (
               <div className="mt-4 rounded-3xl border border-blue-300/20 bg-blue-500/10 p-4 text-sm text-blue-50">
-                <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-200/70">Pix manual</p>
-                <p className="mt-2 font-semibold">O VIP só será ativado após confirmação do pagamento.</p>
-                {manualPix.receiver_name && <p className="mt-3 text-blue-50/80">Recebedor: {manualPix.receiver_name}</p>}
-                {manualPix.receiver_city && <p className="text-blue-50/80">Cidade: {manualPix.receiver_city}</p>}
+                <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-200/70">{t('vip.manualPix')}</p>
+                <p className="mt-2 font-semibold">{t('vip.activationNotice')}</p>
+                {manualPix.receiver_name && <p className="mt-3 text-blue-50/80">{t('vip.receiver', { value: manualPix.receiver_name })}</p>}
+                {manualPix.receiver_city && <p className="text-blue-50/80">{t('vip.city', { value: manualPix.receiver_city })}</p>}
                 {manualPix.pix_key && (
                   <p className="mt-3 break-all rounded-xl border border-white/10 bg-black/25 px-3 py-2 text-xs text-blue-50/90">
-                    Chave Pix: {manualPix.pix_key}
+                    {t('vip.pixKey', { value: manualPix.pix_key })}
                   </p>
                 )}
                 {getSafeCheckoutUrl(manualPix.pixPaymentLink) && (
@@ -700,7 +712,7 @@ export default function VipPlusPage() {
                     rel="noreferrer"
                     className="mt-3 inline-flex rounded-full bg-white px-4 py-2 text-xs font-black text-black transition hover:bg-blue-50"
                   >
-                    Abrir instruções de Pix
+                    {t('vip.openPixInstructions')}
                   </a>
                 )}
               </div>

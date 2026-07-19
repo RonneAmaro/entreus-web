@@ -10,7 +10,10 @@ export default defineConfig({
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 2 : 0,
   reporter: [['list'], ['html', { open: 'never' }]],
-  webServer: process.env.PLAYWRIGHT_EXTERNAL_SERVER === '1' ? undefined : {
+  globalSetup: process.env.PLAYWRIGHT_PRODUCTION_BUILD === '1'
+    ? './tests/e2e/production-server-global-setup.ts'
+    : undefined,
+  webServer: process.env.PLAYWRIGHT_EXTERNAL_SERVER === '1' || process.env.PLAYWRIGHT_PRODUCTION_BUILD === '1' ? undefined : {
     command: 'node node_modules/next/dist/bin/next dev --webpack --hostname localhost --port 3000',
     url: 'http://localhost:3000',
     reuseExistingServer: true,

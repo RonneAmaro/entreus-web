@@ -23,8 +23,7 @@ import { getPaidPostErrorMessage, getPaidPostPrice, isPaidPost } from '@/lib/pai
 import { getProfileVisuals } from '@/lib/profile-visuals'
 import type { UserTier } from '@/lib/user-tiers'
 import {
-  getPostCommunityLabel as getCommunityLabel,
-  getPostContentRatingLabel as getContentRatingLabel,
+  getSafePostCommunity as normalizeCommunity,
   getSafePostContentRating as normalizeContentRating,
   isAdultPostClassification as isAdultCommunityOrRating,
 } from '@/lib/post-classification'
@@ -364,6 +363,7 @@ export default function PostCard({
   )
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Reset unlock state when a recycled card receives another post.
     setPaidUnlocked(Boolean(post.paid_unlocked))
     setPaidUnlockMessage('')
   }, [post.id, post.paid_unlocked])
@@ -371,9 +371,9 @@ export default function PostCard({
   if (adultPost && !canViewAdultContent) {
     return (
       <article className="rounded-[1.65rem] border border-zinc-200/70 bg-white/95 p-5 text-zinc-700 shadow-sm ring-1 ring-black/5 dark:border-zinc-800/70 dark:bg-slate-950/85 dark:text-zinc-300 dark:ring-white/10">
-        <h2 className="text-base font-black text-zinc-950 dark:text-white">Publicação restrita</h2>
+        <h2 className="text-base font-black text-zinc-950 dark:text-white">{t('post.restrictedTitle')}</h2>
         <p className="mt-2 text-sm leading-6">
-          Este conteúdo não está disponível para sua conta.
+          {t('post.restrictedDescription')}
         </p>
       </article>
     )
@@ -399,8 +399,9 @@ export default function PostCard({
   const useProtectedMedia = adultPost || hasProtectedPostMedia(postMedia)
   const isSharedGiftPost = post.category === 'gift_received'
   const sensitive = isSensitivePost(post)
-  const ratingLabel = getContentRatingLabel(post.content_rating)
-  const communityLabel = getCommunityLabel(post.community_type)
+  const normalizedRating = normalizeContentRating(post.content_rating)
+  const ratingLabel = t(`communities.${normalizedRating}`)
+  const communityLabel = t(`communities.${normalizeCommunity(post.community_type)}`)
   const moderatedHidden = isModeratedHidden(post)
   const shouldProtectSensitive = sensitive && !showSensitiveContent
 
@@ -586,44 +587,44 @@ export default function PostCard({
 
         {sensitive && (
           <span className="rounded-full border border-yellow-200 bg-yellow-50 px-2 py-1 text-xs text-yellow-700 dark:border-yellow-800 dark:bg-yellow-950 dark:text-yellow-300">
-            {ratingLabel === 'Adulto 18+' ? '18+' : ratingLabel}
+            {normalizedRating === 'adult_18plus' ? '18+' : ratingLabel}
           </span>
         )}
 
         {postPaid && (
           <span className="rounded-full border border-cyan-200 bg-cyan-50 px-2 py-1 text-xs font-semibold text-cyan-700 dark:border-cyan-900/60 dark:bg-cyan-950/30 dark:text-cyan-200">
-            {postPaidUnlocked ? 'Desbloqueado' : <ItaCashAmount amount={postPrice} size="xs" />}
+            {postPaidUnlocked ? t('post.unlocked') : <ItaCashAmount amount={postPrice} size="xs" />}
           </span>
         )}
 
         {reposted && (
           <span className="rounded-full border border-green-200 bg-green-50 px-2 py-1 text-xs text-green-700 dark:border-green-800 dark:bg-green-950 dark:text-green-300">
-            Repostado
+            {t('post.reposted')}
           </span>
         )}
 
         {saved && (
           <span className="rounded-full border border-yellow-200 bg-yellow-50 px-2 py-1 text-xs text-yellow-700 dark:border-yellow-800 dark:bg-yellow-950 dark:text-yellow-300">
-            Salvo
+            {t('post.saved')}
           </span>
         )}
 
         {highlighted && (
           <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-1 text-xs text-blue-700 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300">
-            Destaque
+            {t('post.highlighted')}
           </span>
         )}
 
         {moderatedHidden && (
           <span className="rounded-full border border-red-200 bg-red-50 px-2 py-1 text-xs text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-200">
-            Ocultado pela moderacao
+            {t('post.moderatedBadge')}
           </span>
         )}
       </div>
 
       {moderatedHidden ? (
         <div className="mb-4 rounded-2xl border border-red-200/70 bg-red-50/80 p-4 text-sm font-semibold text-red-800 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-100">
-          Este conteudo foi ocultado pela moderacao.
+          {t('post.moderatedDescription')}
         </div>
       ) : postPaidLocked ? (
         <div className="mb-4 rounded-[1.5rem] border border-cyan-200/70 bg-cyan-50/80 p-4 text-cyan-950 ring-1 ring-cyan-100 dark:border-cyan-900/60 dark:bg-cyan-950/25 dark:text-cyan-50 dark:ring-cyan-900/30">
@@ -632,9 +633,9 @@ export default function PostCard({
               <Lock className="h-5 w-5" />
             </span>
             <div className="min-w-0 flex-1">
-              <h3 className="font-black">Post pago</h3>
+              <h3 className="font-black">{t('post.paidTitle')}</h3>
               <p className="mt-1 text-sm leading-6 text-cyan-900/75 dark:text-cyan-100/75">
-                Desbloqueie por <ItaCashAmount amount={postPrice} size="sm" className="mx-1" /> para ver o conteudo e as midias.
+                <ItaCashAmount amount={postPrice} size="sm" className="mr-1" /> {t('post.paidAccessDescription')}
               </p>
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <button
@@ -644,11 +645,11 @@ export default function PostCard({
                   className="inline-flex items-center gap-2 rounded-full bg-cyan-600 px-4 py-2 text-sm font-black text-white transition hover:bg-cyan-500 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {paidUnlocking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Coins className="h-4 w-4" />}
-                  Desbloquear
+                  {t('post.unlock')}
                 </button>
                 {paidUnlockMessage === getPaidPostErrorMessage('insufficient_balance') && (
                   <Link href="/buy-itacash" className="rounded-full border border-cyan-300/50 px-4 py-2 text-sm font-black text-cyan-800 transition hover:bg-cyan-100 dark:text-cyan-100 dark:hover:bg-cyan-950">
-                    Comprar ItaCash
+                    {t('post.buyItaCash')}
                   </Link>
                 )}
               </div>
@@ -671,7 +672,7 @@ export default function PostCard({
             />
           )}
 
-          <TranslatePostButton content={post.content} />
+          <TranslatePostButton postId={post.id} content={post.content} />
 
           <LinkPreview content={post.content} enableExternalEmbeds />
 
@@ -692,7 +693,7 @@ export default function PostCard({
             />
           )}
 
-          <TranslatePostButton content={post.content} />
+          <TranslatePostButton postId={post.id} content={post.content} />
 
           <LinkPreview content={post.content} enableExternalEmbeds />
 

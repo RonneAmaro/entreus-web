@@ -1,0 +1,71 @@
+{
+  "strictRoutes": [
+    "/settings",
+    "/itacash",
+    "/messages",
+    "/wallet",
+    "/vip-plus",
+    "/creator-dashboard",
+    "/messages/[id]",
+    "/buy-itacash",
+    "/u/[username]"
+  ],
+  "exceptions": [
+    {
+      "file": "app/settings/page.tsx",
+      "pattern": "E-mail",
+      "text": "E-mail",
+      "reason": "Padronização internacional amplamente reconhecida; não é texto em português.",
+      "category": "termo_tecnico",
+      "comment": "Rótulo universal do endereço eletrônico, preservado igual nos idiomas cobertos."
+    },
+    {
+      "file": "app/vip-plus/page.tsx",
+      "pattern": ">VIP Plus<",
+      "text": "VIP Plus",
+      "reason": "Nome oficial do produto e do plano; não é conteúdo textual em português.",
+      "category": "nome_proprio_ou_marca",
+      "comment": "A identidade VIP Plus é preservada em todos os idiomas."
+    },
+    {
+      "file": "app/vip-plus/page.tsx",
+      "pattern": ">VIP Base<",
+      "text": "VIP Base",
+      "reason": "Nome oficial da base do produto VIP; não deve ser traduzido.",
+      "category": "nome_proprio_ou_marca",
+      "comment": "Nome estável usado para identificar a geração do produto."
+    },
+    {
+      "file": "app/creator-dashboard/page.tsx",
+      "pattern": "type CountedQueryResult<T> = QueryResult<T>",
+      "text": "= QueryResult",
+      "reason": "O regex de JSX interpreta incorretamente um genérico TypeScript como texto visível.",
+      "category": "falso_positivo",
+      "comment": "Declaração de tipo sem qualquer renderização na interface."
+    },
+    {
+      "file": "app/creator-dashboard/page.tsx",
+      "pattern": "function metricFromQuery<T>(result: QueryResult<T>",
+      "text": "(result: QueryResult",
+      "reason": "O regex de JSX interpreta incorretamente a assinatura genérica de uma função.",
+      "category": "falso_positivo",
+      "comment": "Assinatura TypeScript sem qualquer renderização na interface."
+    },
+    {
+      "file": "app/buy-itacash/page.tsx",
+      "pattern": ">Pix MP<",
+      "text": "Pix MP",
+      "reason": "Nome abreviado do produto Pix oferecido pelo Mercado Pago.",
+      "category": "nome_proprio_ou_marca",
+      "comment": "A abreviação identifica o método recomendado e não constitui texto em português."
+    },
+    {
+      "file": "app/buy-itacash/page.tsx",
+      "pattern": ">EntreUS 2%<",
+      "text": "EntreUS 2%",
+      "reason": "Marca EntreUS acompanhada apenas do percentual numérico da taxa.",
+      "category": "nome_proprio_ou_marca",
+      "comment": "Não há palavra em português; a marca e o valor são invariáveis entre idiomas."
+    }
+  ]
+}

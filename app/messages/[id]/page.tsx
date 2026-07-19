@@ -41,6 +41,9 @@ import { supabase } from '@/lib/supabase'
 import ExpressionPicker from '../../components/expressions/ExpressionPicker'
 import ExpressionAttachment from '../../components/expressions/ExpressionAttachment'
 import type { ExpressionAsset } from '@/lib/expressions/expression-types'
+import { useLanguage } from '../../components/LanguageProvider'
+
+type Translate = (key: string, values?: Record<string, string | number>) => string
 
 type CurrentProfile = {
   id: string
@@ -189,13 +192,13 @@ type IncomingCall = {
   offer: RTCSessionDescriptionInit
 }
 
-function getDisplayName(profile: ProfileSummary | CurrentProfile | null) {
-  if (!profile) return 'Usuário EntreUS'
-  return profile.display_name || profile.username || 'Usuário EntreUS'
+function getDisplayName(profile: ProfileSummary | CurrentProfile | null, fallback: string) {
+  if (!profile) return fallback
+  return profile.display_name || profile.username || fallback
 }
 
-function getUsername(profile: ProfileSummary | null) {
-  if (!profile?.username) return '@usuario'
+function getUsername(profile: ProfileSummary | null, fallback: string) {
+  if (!profile?.username) return fallback
   return `@${profile.username}`
 }
 
@@ -203,8 +206,8 @@ function getInitial(name: string) {
   return name.trim().charAt(0).toUpperCase() || 'U'
 }
 
-function formatMessageTime(value: string) {
-  return new Date(value).toLocaleString('pt-BR', {
+function formatMessageTime(value: string, locale: string) {
+  return new Date(value).toLocaleString(locale, {
     day: '2-digit',
     month: '2-digit',
     hour: '2-digit',
@@ -212,58 +215,58 @@ function formatMessageTime(value: string) {
   })
 }
 
-function formatConversationDate(value: string) {
+function formatConversationDate(value: string, locale: string) {
   const date = new Date(value)
   const now = new Date()
   const diffInMs = now.getTime() - date.getTime()
   const diffInHours = diffInMs / (1000 * 60 * 60)
 
   if (diffInHours < 24) {
-    return date.toLocaleTimeString('pt-BR', {
+    return date.toLocaleTimeString(locale, {
       hour: '2-digit',
       minute: '2-digit',
     })
   }
 
-  return date.toLocaleDateString('pt-BR', {
+  return date.toLocaleDateString(locale, {
     day: '2-digit',
     month: '2-digit',
   })
 }
 
-function getMessagePreview(message: ConversationPreviewMessage | null, currentUserId: string) {
-  if (!message) return 'Conversa iniciada.'
-  if (message.deleted_at) return 'Mensagem apagada'
-  if (message.type === 'call') return getCallHistoryLabel(message)
+function getMessagePreview(message: ConversationPreviewMessage | null, currentUserId: string, t: Translate) {
+  if (!message) return t('messages.preview.started')
+  if (message.deleted_at) return t('messages.preview.deleted')
+  if (message.type === 'call') return getCallHistoryLabel(message, t)
 
-  const prefix = message.sender_id === currentUserId ? 'Você: ' : ''
+  const prefix = message.sender_id === currentUserId ? `${t('messages.preview.you')}: ` : ''
   const content = message.content?.trim()
 
-  return `${prefix}${content || 'Mídia enviada'}`
+  return `${prefix}${content || t('messages.preview.media')}`
 }
 
-function getCallHistoryLabel(message: Pick<MessageRow, 'call_type' | 'call_status'>) {
-  if (message.call_status === 'declined') return 'Chamada recusada'
-  if (message.call_status === 'canceled') return 'Chamada cancelada'
+function getCallHistoryLabel(message: Pick<MessageRow, 'call_type' | 'call_status'>, t: Translate) {
+  if (message.call_status === 'declined') return t('messages.preview.callDeclined')
+  if (message.call_status === 'canceled') return t('messages.preview.callCanceled')
 
-  const kind = message.call_type === 'video' ? 'vídeo' : 'voz'
+  const kind = message.call_type === 'video' ? t('messages.preview.video') : t('messages.preview.voice')
 
-  if (message.call_status === 'missed') return `Chamada de ${kind} não atendida`
-  if (message.call_status === 'ended') return `Chamada de ${kind} encerrada`
+  if (message.call_status === 'missed') return `${t('messages.preview.call')} ${kind} ${t('messages.preview.missed')}`
+  if (message.call_status === 'ended') return `${t('messages.preview.call')} ${kind} ${t('messages.preview.ended')}`
 
-  return 'Evento de chamada'
+  return t('messages.preview.callEvent')
 }
 
-function getMessageReplyPreviewText(message: Pick<MessageRow, 'content' | 'type' | 'deleted_at' | 'attachments'>) {
-  if (message.deleted_at) return 'Mensagem apagada'
-  if (message.type === 'call') return 'Evento de chamada'
+function getMessageReplyPreviewText(message: Pick<MessageRow, 'content' | 'type' | 'deleted_at' | 'attachments'>, t: Translate) {
+  if (message.deleted_at) return t('messages.preview.deleted')
+  if (message.type === 'call') return t('messages.preview.callEvent')
 
   const content = message.content?.trim()
   if (content) return content.length > 90 ? `${content.slice(0, 90)}...` : content
 
-  if ((message.attachments || []).length > 0) return 'Midia'
+  if ((message.attachments || []).length > 0) return t('messages.preview.media')
 
-  return 'Mensagem'
+  return t('messages.message')
 }
 
 function formatCallDuration(seconds: number | null | undefined) {
@@ -574,8 +577,6 @@ const MESSAGE_EMOJI_LOOKUP = new Map(
   MESSAGE_EMOJI_INDEX.map((item) => [item.emoji, item]),
 )
 
-const MESSAGE_EMOJIS = MESSAGE_EMOJI_INDEX.map((item) => item.emoji)
-
 const MESSAGE_QUICK_EMOJIS = ['❤️', '😂', '🔥', '😍', '👀', '✨', '😏', '💙']
 
 const CHAT_THEME_OPTIONS = [
@@ -705,6 +706,7 @@ export default function ConversationPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { theme, setTheme } = useTheme()
+  const { language, t } = useLanguage()
   const bottomRef = useRef<HTMLDivElement | null>(null)
   const messageRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -803,13 +805,13 @@ export default function ConversationPage() {
     if (!query) return sortedConversations
 
     return sortedConversations.filter((conversation) => {
-      const name = getDisplayName(conversation.otherUser).toLowerCase()
-      const username = getUsername(conversation.otherUser).toLowerCase()
-      const preview = getMessagePreview(conversation.lastMessage, userId).toLowerCase()
+      const name = getDisplayName(conversation.otherUser, t('messages.userFallback')).toLowerCase()
+      const username = getUsername(conversation.otherUser, t('messages.usernameFallback')).toLowerCase()
+      const preview = getMessagePreview(conversation.lastMessage, userId, t).toLowerCase()
 
       return name.includes(query) || username.includes(query) || preview.includes(query)
     })
-  }, [searchQuery, sortedConversations, userId])
+  }, [searchQuery, sortedConversations, t, userId])
 
   const selectedChatTheme = useMemo(() => {
     return (
@@ -876,6 +878,8 @@ export default function ConversationPage() {
   }
 
   useEffect(() => {
+    // Hydration state is intentionally established after the client mounts.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true)
 
     return () => {
@@ -933,7 +937,7 @@ export default function ConversationPage() {
   useEffect(() => {
     async function loadPage() {
       if (!conversationId) {
-        setMessage('Conversa inválida.')
+      setMessage(t('messages.detail.errors.invalidConversation'))
         setLoading(false)
         return
       }
@@ -1083,14 +1087,14 @@ export default function ConversationPage() {
                       ? {
                           id: replyTo.id,
                           sender_id: replyTo.sender_id,
-                          authorName: replyTo.sender_id === userId ? 'Voce' : otherName,
-                          preview: getMessageReplyPreviewText(replyTo),
+                          authorName: replyTo.sender_id === userId ? t('messages.preview.you') : otherName,
+                          preview: getMessageReplyPreviewText(replyTo, t),
                         }
                       : {
                           id: receivedMessage.reply_to_message_id,
                           sender_id: '',
-                          authorName: 'Mensagem',
-                          preview: 'Mensagem original indisponivel',
+                          authorName: t('messages.message'),
+                          preview: t('messages.detail.errors.originalUnavailable'),
                           unavailable: true,
                         }
                     : null,
@@ -1287,14 +1291,14 @@ export default function ConversationPage() {
 
   function handleJumpToReply(messageId: string | null | undefined) {
     if (!messageId) {
-      setMessage('Mensagem original nÃ£o estÃ¡ disponÃ­vel.')
+      setMessage(t('messages.detail.errors.originalUnavailable'))
       return
     }
 
     const target = messageRefs.current[messageId]
 
     if (!target) {
-      setMessage('Mensagem original nÃ£o estÃ¡ disponÃ­vel.')
+      setMessage(t('messages.detail.errors.originalUnavailable'))
       return
     }
 
@@ -1359,6 +1363,8 @@ export default function ConversationPage() {
 
     try {
       const parsedCall = JSON.parse(storedCall) as IncomingCall
+      // Restore the external sessionStorage call state after mount.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIncomingCall(parsedCall)
       setCallMode(parsedCall.mode)
       setCallStatus('ringing')
@@ -1405,7 +1411,7 @@ export default function ConversationPage() {
           }
         } catch {
           setCallStatus('error')
-          setCallError('Não foi possível conectar a chamada.')
+          setCallError(t('messages.detail.errors.connectCall'))
         }
       })
       .on('broadcast', { event: 'ice-candidate' }, async ({ payload }) => {
@@ -1433,7 +1439,7 @@ export default function ConversationPage() {
       .on('broadcast', { event: 'call-rejected' }, ({ payload }) => {
         if (payload?.fromUserId === userId) return
         setCallStatus('ended')
-        setCallError('Chamada recusada.')
+        setCallError(t('messages.detail.errors.callDeclined'))
         window.setTimeout(() => endCall(false), 1200)
       })
       .subscribe((status) => {
@@ -1463,7 +1469,7 @@ export default function ConversationPage() {
       .eq('read', false)
 
     if (error) {
-      setMessage('Erro ao carregar notificações: ' + error.message)
+      setMessage(t('messages.detail.errors.notifications', { error: error.message }))
       return
     }
 
@@ -1477,7 +1483,7 @@ export default function ConversationPage() {
       .eq('user_id', currentUserId)
 
     if (myParticipantsError) {
-      setMessage('Erro ao carregar conversas: ' + myParticipantsError.message)
+      setMessage(t('messages.detail.errors.conversations', { error: myParticipantsError.message }))
       return
     }
 
@@ -1504,7 +1510,7 @@ export default function ConversationPage() {
       .in('conversation_id', conversationIds)
 
     if (conversationStatesError) {
-      setMessage('Erro ao carregar estado das conversas: ' + conversationStatesError.message)
+      setMessage(t('messages.detail.errors.conversationState', { error: conversationStatesError.message }))
       return
     }
 
@@ -1523,7 +1529,7 @@ export default function ConversationPage() {
       .order('updated_at', { ascending: false })
 
     if (conversationsError) {
-      setMessage('Erro ao carregar conversas: ' + conversationsError.message)
+      setMessage(t('messages.detail.errors.conversations', { error: conversationsError.message }))
       return
     }
 
@@ -1533,7 +1539,7 @@ export default function ConversationPage() {
       .in('conversation_id', conversationIds)
 
     if (participantsError) {
-      setMessage('Erro ao carregar participantes: ' + participantsError.message)
+      setMessage(t('messages.detail.errors.participants', { error: participantsError.message }))
       return
     }
 
@@ -1556,7 +1562,7 @@ export default function ConversationPage() {
         .in('id', otherUserIds)
 
       if (profilesError) {
-        setMessage('Erro ao carregar perfis: ' + profilesError.message)
+        setMessage(t('messages.detail.errors.profiles', { error: profilesError.message }))
         return
       }
 
@@ -1577,7 +1583,7 @@ export default function ConversationPage() {
       .limit(300)
 
     if (messagesError) {
-      setMessage('Erro ao carregar últimas mensagens: ' + messagesError.message)
+      setMessage(t('messages.detail.errors.latestMessages', { error: messagesError.message }))
       return
     }
 
@@ -1668,12 +1674,12 @@ export default function ConversationPage() {
       .maybeSingle()
 
     if (membershipError) {
-      setMessage('Erro ao verificar conversa: ' + membershipError.message)
+      setMessage(t('messages.detail.errors.verifyConversation', { error: membershipError.message }))
       return
     }
 
     if (!membership) {
-      setMessage('Você não participa desta conversa.')
+      setMessage(t('messages.detail.errors.notParticipant'))
       return
     }
 
@@ -1683,7 +1689,7 @@ export default function ConversationPage() {
       .eq('conversation_id', conversationId)
 
     if (participantsError) {
-      setMessage('Erro ao carregar participantes: ' + participantsError.message)
+      setMessage(t('messages.detail.errors.participants', { error: participantsError.message }))
       return
     }
 
@@ -1699,7 +1705,7 @@ export default function ConversationPage() {
         .in('id', participantUserIds)
 
       if (profilesError) {
-        setMessage('Erro ao carregar perfil da conversa: ' + profilesError.message)
+        setMessage(t('messages.detail.errors.conversationProfile', { error: profilesError.message }))
         return
       }
 
@@ -1721,7 +1727,7 @@ export default function ConversationPage() {
       .maybeSingle()
 
     if (stateError) {
-      setMessage('Erro ao carregar preferÃªncias da conversa: ' + stateError.message)
+      setMessage(t('messages.detail.errors.preferences', { error: stateError.message }))
       return
     }
 
@@ -1793,7 +1799,7 @@ export default function ConversationPage() {
       .order('position', { ascending: true })
 
     if (error) {
-      setMessage('Erro ao carregar mídias da conversa: ' + error.message)
+      setMessage(t('messages.detail.errors.media', { error: error.message }))
       return {}
     }
 
@@ -1823,7 +1829,7 @@ export default function ConversationPage() {
       .order('created_at', { ascending: true })
 
     if (error) {
-      setMessage('Erro ao carregar reações da conversa: ' + error.message)
+      setMessage(t('messages.detail.errors.reactions', { error: error.message }))
       return {}
     }
 
@@ -1845,7 +1851,7 @@ export default function ConversationPage() {
       .order('created_at', { ascending: true })
 
     if (error) {
-      setMessage('Erro ao carregar mensagens: ' + error.message)
+      setMessage(t('messages.detail.errors.messages', { error: error.message }))
       return
     }
 
@@ -1858,7 +1864,7 @@ export default function ConversationPage() {
       .eq('user_id', currentUserId)
 
     if (hiddenError) {
-      setMessage('Erro ao carregar mensagens ocultas: ' + hiddenError.message)
+      setMessage(t('messages.detail.errors.hiddenMessages', { error: hiddenError.message }))
       return
     }
 
@@ -1874,7 +1880,7 @@ export default function ConversationPage() {
       .maybeSingle()
 
     if (stateError) {
-      setMessage('Erro ao carregar preferÃªncias da conversa: ' + stateError.message)
+      setMessage(t('messages.detail.errors.preferences', { error: stateError.message }))
       return
     }
 
@@ -1927,14 +1933,14 @@ export default function ConversationPage() {
               ? {
                   id: replyTo.id,
                   sender_id: replyTo.sender_id,
-                  authorName: replyTo.sender_id === currentUserId ? 'Voce' : otherName,
-                  preview: getMessageReplyPreviewText(replyTo),
+                  authorName: replyTo.sender_id === currentUserId ? t('messages.preview.you') : otherName,
+                  preview: getMessageReplyPreviewText(replyTo, t),
                 }
               : {
                   id: item.reply_to_message_id,
                   sender_id: '',
-                  authorName: 'Mensagem',
-                  preview: 'Mensagem original indisponivel',
+                  authorName: t('messages.message'),
+                  preview: t('messages.detail.errors.originalUnavailable'),
                   unavailable: true,
                 }
             : null,
@@ -2025,7 +2031,7 @@ export default function ConversationPage() {
     if (!userId || !conversationId || conversationActionLoading) return
 
     const confirmed = window.confirm(
-      'Limpar esta conversa somente para vocÃª? As mensagens antigas continuarÃ£o visÃ­veis para a outra pessoa.'
+      t('messages.detail.confirm.clear')
     )
 
     if (!confirmed) return
@@ -2053,7 +2059,7 @@ export default function ConversationPage() {
       .single()
 
     if (error) {
-      setMessage('Erro ao limpar conversa para vocÃª: ' + error.message)
+      setMessage(t('messages.detail.errors.clear', { error: error.message }))
       setConversationActionLoading(false)
       return
     }
@@ -2064,7 +2070,7 @@ export default function ConversationPage() {
     )
     setOpenConversationMenu(false)
     setConversationActionLoading(false)
-    setMessage('Conversa limpa somente para vocÃª.')
+    setMessage(t('messages.detail.success.cleared'))
     await loadConversationList(userId)
   }
 
@@ -2072,7 +2078,7 @@ export default function ConversationPage() {
     if (!userId || !conversationId || conversationActionLoading) return
 
     const confirmed = window.confirm(
-      'Ocultar esta conversa da sua lista principal? VocÃª ainda poderÃ¡ voltar a ela se abrir o link da conversa.'
+      t('messages.detail.confirm.hide')
     )
 
     if (!confirmed) return
@@ -2099,7 +2105,7 @@ export default function ConversationPage() {
       .single()
 
     if (error) {
-      setMessage('Erro ao ocultar conversa: ' + error.message)
+      setMessage(t('messages.detail.errors.hide', { error: error.message }))
       setConversationActionLoading(false)
       return
     }
@@ -2107,7 +2113,7 @@ export default function ConversationPage() {
     setConversationState(data as ConversationUserState)
     setOpenConversationMenu(false)
     setConversationActionLoading(false)
-    setMessage('Conversa ocultada da sua lista principal.')
+    setMessage(t('messages.detail.success.hidden'))
     await loadConversationList(userId)
     router.push('/messages')
   }
@@ -2118,8 +2124,8 @@ export default function ConversationPage() {
     const archived = !!conversationState?.archived_at
     const confirmed = window.confirm(
       archived
-        ? 'Desarquivar esta conversa e voltar para Recentes?'
-        : 'Arquivar esta conversa? Ela ficara disponivel na aba Arquivadas.'
+        ? t('messages.detail.confirm.unarchive')
+        : t('messages.detail.confirm.archive')
     )
 
     if (!confirmed) return
@@ -2147,7 +2153,7 @@ export default function ConversationPage() {
       .single()
 
     if (error) {
-      setMessage(archived ? 'Erro ao desarquivar conversa: ' + error.message : 'Erro ao arquivar conversa: ' + error.message)
+      setMessage(t(archived ? 'messages.detail.errors.unarchive' : 'messages.detail.errors.archive', { error: error.message }))
       setConversationActionLoading(false)
       return
     }
@@ -2155,14 +2161,14 @@ export default function ConversationPage() {
     setConversationState(data as ConversationUserState)
     setOpenConversationMenu(false)
     setConversationActionLoading(false)
-    setMessage(archived ? 'Conversa desarquivada.' : 'Conversa arquivada.')
+    setMessage(t(archived ? 'messages.detail.success.unarchived' : 'messages.detail.success.archived'))
     await loadConversationList(userId)
   }
 
   async function handleDeleteConversationForMe() {
     if (!userId || !conversationId || conversationActionLoading) return
 
-    const confirmed = window.confirm('Excluir esta conversa apenas para voce?')
+    const confirmed = window.confirm(t('messages.detail.confirm.deleteConversation'))
 
     if (!confirmed) return
 
@@ -2190,7 +2196,7 @@ export default function ConversationPage() {
       .single()
 
     if (error) {
-      setMessage('Erro ao excluir conversa para voce: ' + error.message)
+      setMessage(t('messages.detail.errors.deleteConversation', { error: error.message }))
       setConversationActionLoading(false)
       return
     }
@@ -2199,7 +2205,7 @@ export default function ConversationPage() {
     setMessages([])
     setOpenConversationMenu(false)
     setConversationActionLoading(false)
-    setMessage('Conversa excluida apenas para voce.')
+    setMessage(t('messages.detail.success.deletedConversation'))
     await loadConversationList(userId)
     router.push('/messages')
   }
@@ -2239,7 +2245,7 @@ export default function ConversationPage() {
       .single()
 
     if (error) {
-      setMessage('Erro ao salvar personalizacao: ' + error.message)
+      setMessage(t('messages.detail.errors.saveCustomization', { error: error.message }))
       setSavingCustomization(false)
       return
     }
@@ -2247,7 +2253,7 @@ export default function ConversationPage() {
     setConversationState(data as ConversationUserState)
     setCustomizeModalOpen(false)
     setSavingCustomization(false)
-    setMessage('Personalizacao da conversa salva.')
+    setMessage(t('messages.detail.success.customizationSaved'))
   }
 
   async function handleRestoreDefaultCustomization() {
@@ -2278,7 +2284,7 @@ export default function ConversationPage() {
       .single()
 
     if (error) {
-      setMessage('Erro ao restaurar padrao: ' + error.message)
+      setMessage(t('messages.detail.errors.restoreDefault', { error: error.message }))
       setSavingCustomization(false)
       return
     }
@@ -2288,14 +2294,14 @@ export default function ConversationPage() {
     setDraftBackgroundPreset(null)
     setCustomizeModalOpen(false)
     setSavingCustomization(false)
-    setMessage('Visual padrao restaurado.')
+    setMessage(t('messages.detail.success.defaultRestored'))
   }
 
   async function handleBlockUser() {
     if (!userId || !otherUserId || conversationActionLoading) return
 
     const confirmed = window.confirm(
-      `Bloquear ${otherName}? VocÃªs nÃ£o poderÃ£o trocar mensagens enquanto o bloqueio existir.`
+      t('messages.detail.confirm.block', { name: otherName })
     )
 
     if (!confirmed) return
@@ -2316,7 +2322,7 @@ export default function ConversationPage() {
       )
 
     if (error) {
-      setMessage('Erro ao bloquear usuÃ¡rio: ' + error.message)
+      setMessage(t('messages.detail.errors.blockUser', { error: error.message }))
       setConversationActionLoading(false)
       return
     }
@@ -2324,7 +2330,7 @@ export default function ConversationPage() {
     setBlockedForConversation(true)
     setOpenConversationMenu(false)
     setConversationActionLoading(false)
-    setMessage('UsuÃ¡rio bloqueado. O envio de mensagens e novas chamadas foram bloqueados.')
+    setMessage(t('messages.detail.success.userBlocked'))
   }
 
   function handleSelectMedia(files: FileList | null) {
@@ -2335,7 +2341,7 @@ export default function ConversationPage() {
     const currentCount = selectedMedia.length
 
     if (currentCount + selectedFiles.length > maxFiles) {
-      setMessage(`Você pode enviar no máximo ${maxFiles} mídias por mensagem.`)
+      setMessage(t('messages.detail.errors.maxMedia', { count: maxFiles }))
       return
     }
 
@@ -2346,7 +2352,7 @@ export default function ConversationPage() {
 
       if (!mediaType) {
         setMessage(
-          'Envie imagens JPG, PNG, WEBP, GIF, vídeos MP4/WEBM/OGG ou áudios WEBM/OGG/MP3/MP4/WAV.'
+          t('messages.detail.errors.mediaTypes')
         )
         return
       }
@@ -2354,7 +2360,7 @@ export default function ConversationPage() {
       const maxSize = 50 * 1024 * 1024
 
       if (file.size > maxSize) {
-        setMessage('Cada mídia deve ter no máximo 50MB.')
+        setMessage(t('messages.detail.errors.mediaSize'))
         return
       }
 
@@ -2393,17 +2399,17 @@ export default function ConversationPage() {
     if (recordingAudio || sending || uploadingMedia) return
 
     if (selectedMedia.length >= 3) {
-      setMessage('Você pode enviar no máximo 3 mídias por mensagem.')
+      setMessage(t('messages.detail.errors.maxMedia', { count: 3 }))
       return
     }
 
     if (!navigator.mediaDevices?.getUserMedia) {
-      setMessage('Seu navegador não permite gravação de áudio.')
+      setMessage(t('messages.detail.errors.recordingNotAllowed'))
       return
     }
 
     if (typeof MediaRecorder === 'undefined') {
-      setMessage('Seu navegador não suporta gravação de áudio.')
+      setMessage(t('messages.detail.errors.recordingUnsupported'))
       return
     }
 
@@ -2467,7 +2473,7 @@ export default function ConversationPage() {
         recordingTimerRef.current = null
       }
 
-      setMessage('Não foi possível acessar o microfone. Verifique a permissão do navegador.')
+      setMessage(t('messages.detail.errors.microphoneAccess'))
     }
   }
 
@@ -2507,7 +2513,7 @@ export default function ConversationPage() {
         .eq('user_id', userId)
 
       if (error) {
-        setMessage('Erro ao remover reação: ' + error.message)
+        setMessage(t('messages.detail.errors.removeReaction', { error: error.message }))
         return
       }
 
@@ -2544,7 +2550,7 @@ export default function ConversationPage() {
       .single()
 
     if (error || !data) {
-      setMessage('Erro ao reagir à mensagem: ' + (error?.message || 'tente novamente.'))
+      setMessage(t('messages.detail.errors.addReaction', { error: error?.message || t('common.retry') }))
       return
     }
 
@@ -2570,7 +2576,7 @@ export default function ConversationPage() {
     if (!userId || item.sender_id !== userId || item.deleted_at || item.type === 'call') return
 
     if (!item.content?.trim()) {
-      setMessage('Esta mensagem não tem texto para editar.')
+      setMessage(t('messages.detail.errors.noTextToEdit'))
       return
     }
 
@@ -2596,14 +2602,14 @@ export default function ConversationPage() {
     const content = (nextContent ?? editingMessageContent).trim()
 
     if (!content) {
-      setMessage('A mensagem não pode ficar vazia. Para remover, use “apagar para todos”.')
+      setMessage(t('messages.detail.errors.emptyEdit'))
       return
     }
 
     const targetMessage = messages.find((item) => item.id === messageId)
 
     if (!targetMessage || targetMessage.sender_id !== userId || targetMessage.deleted_at) {
-      setMessage('Você não pode editar esta mensagem.')
+      setMessage(t('messages.detail.errors.cannotEdit'))
       return
     }
 
@@ -2625,7 +2631,7 @@ export default function ConversationPage() {
       .is('deleted_at', null)
 
     if (error) {
-      setMessage('Erro ao editar mensagem: ' + error.message)
+      setMessage(t('messages.detail.errors.editMessage', { error: error.message }))
       setSavingMessageEdit(false)
       return
     }
@@ -2679,11 +2685,11 @@ export default function ConversationPage() {
     const targetMessage = messages.find((item) => item.id === messageId)
 
     if (!targetMessage) {
-      setMessage('Mensagem não encontrada.')
+      setMessage(t('messages.detail.errors.notFound'))
       return
     }
 
-    const confirmHide = window.confirm('Apagar esta mensagem só para você?')
+    const confirmHide = window.confirm(t('messages.detail.confirm.deleteForMe'))
 
     if (!confirmHide) return
 
@@ -2705,7 +2711,7 @@ export default function ConversationPage() {
       )
 
     if (error) {
-      setMessage('Erro ao apagar só para mim: ' + error.message)
+      setMessage(t('messages.detail.errors.deleteForMe', { error: error.message }))
       return
     }
 
@@ -2722,11 +2728,11 @@ export default function ConversationPage() {
     const targetMessage = messages.find((item) => item.id === messageId)
 
     if (!targetMessage || targetMessage.sender_id !== userId || targetMessage.deleted_at) {
-      setMessage('Você não pode apagar esta mensagem.')
+      setMessage(t('messages.detail.errors.cannotDelete'))
       return
     }
 
-    const confirmDelete = window.confirm('Apagar esta mensagem para todos?')
+    const confirmDelete = window.confirm(t('messages.detail.confirm.deleteForEveryone'))
 
     if (!confirmDelete) return
 
@@ -2786,7 +2792,7 @@ export default function ConversationPage() {
       .eq('sender_id', userId)
 
     if (error) {
-      setMessage('Erro ao apagar mensagem: ' + error.message)
+      setMessage(t('messages.detail.errors.deleteMessage', { error: error.message }))
       setDeletingMessageId(null)
       return
     }
@@ -2829,7 +2835,7 @@ export default function ConversationPage() {
   ) {
     if (!userId || attachment.sender_id !== userId) return
 
-    const confirmDelete = window.confirm('Deseja apagar esta mídia da conversa?')
+    const confirmDelete = window.confirm(t('messages.detail.confirm.deleteMedia'))
 
     if (!confirmDelete) return
 
@@ -2852,7 +2858,7 @@ export default function ConversationPage() {
       .eq('sender_id', userId)
 
     if (deleteError) {
-      setMessage('Erro ao apagar mídia: ' + deleteError.message)
+      setMessage(t('messages.detail.errors.deleteMedia', { error: deleteError.message }))
       return
     }
 
@@ -2924,7 +2930,7 @@ export default function ConversationPage() {
 
       if (uploadError) {
         setUploadingMedia(false)
-        throw new Error('Erro ao enviar mídia: ' + uploadError.message)
+        throw new Error(t('messages.detail.errors.sendMediaWithReason', { error: uploadError.message }))
       }
 
       attachmentsToInsert.push({
@@ -2955,7 +2961,7 @@ export default function ConversationPage() {
     setUploadingMedia(false)
 
     if (error) {
-      throw new Error('Erro ao salvar anexos da mensagem: ' + error.message)
+      throw new Error(t('messages.detail.errors.saveAttachments', { error: error.message }))
     }
 
     return Promise.all(
@@ -2981,7 +2987,7 @@ export default function ConversationPage() {
     const blocked = await hasBlockBetweenUsers(userId, otherUserId)
 
     if (blocked) {
-      setMessage('Não é possível enviar mensagem enquanto houver bloqueio entre vocês.')
+      setMessage(t('messages.detail.errors.blockedSend'))
       return
     }
 
@@ -3002,7 +3008,7 @@ export default function ConversationPage() {
       .single()
 
     if (error || !data) {
-      setMessage('Erro ao enviar mensagem: ' + (error?.message || 'tente novamente.'))
+      setMessage(t('messages.detail.errors.sendMessage', { error: error?.message || t('common.retry') }))
       setSending(false)
       return
     }
@@ -3012,7 +3018,7 @@ export default function ConversationPage() {
     try {
       uploadedAttachments = await uploadMessageMedia(data.id, selectedMedia)
     } catch (uploadError) {
-      setMessage(uploadError instanceof Error ? uploadError.message : 'Erro ao enviar mídia.')
+      setMessage(uploadError instanceof Error ? uploadError.message : t('messages.detail.errors.sendMedia'))
       setSending(false)
       return
     }
@@ -3040,8 +3046,8 @@ export default function ConversationPage() {
             ? {
                 id: replyingToMessage.id,
                 sender_id: replyingToMessage.sender_id,
-                authorName: replyingToMessage.sender_id === userId ? 'Voce' : otherName,
-                preview: getMessageReplyPreviewText(replyingToMessage),
+                authorName: replyingToMessage.sender_id === userId ? t('messages.preview.you') : otherName,
+                preview: getMessageReplyPreviewText(replyingToMessage, t),
               }
             : null,
         },
@@ -3178,7 +3184,7 @@ export default function ConversationPage() {
     const content = getCallHistoryLabel({
       call_type: mode,
       call_status: status,
-    })
+    }, t)
 
     const { data, error } = await supabase
       .from('messages')
@@ -3294,7 +3300,7 @@ export default function ConversationPage() {
         payload: {
           conversationId,
           callerId: userId,
-          callerName: getDisplayName(currentProfile),
+          callerName: getDisplayName(currentProfile, t('messages.userFallback')),
           callerAvatarUrl: currentProfile?.avatar_url || null,
           callType: mode === 'video' ? 'video' : 'audio',
           offer,
@@ -3437,7 +3443,7 @@ export default function ConversationPage() {
       if (audioTracks.length === 0 || audioTracks.every((track) => track.readyState !== 'live')) {
         stream.getTracks().forEach((track) => track.stop())
         setCallStatus('error')
-        setCallError('Não foi possível acessar o microfone.')
+        setCallError(t('messages.detail.errors.microphoneOnly'))
         return null
       }
 
@@ -3451,8 +3457,8 @@ export default function ConversationPage() {
       setCallStatus('error')
       setCallError(
         mode === 'voice'
-          ? 'Não foi possível acessar o microfone.'
-          : 'Permita acesso ao microfone/câmera para iniciar a chamada.'
+          ? t('messages.detail.errors.microphoneOnly')
+          : t('messages.detail.errors.mediaPermissions')
       )
       return null
     }
@@ -3465,7 +3471,7 @@ export default function ConversationPage() {
 
     if (blocked) {
       setBlockedForConversation(true)
-      setMessage('NÃ£o Ã© possÃ­vel iniciar chamada enquanto houver bloqueio entre vocÃªs.')
+      setMessage(t('messages.detail.errors.blockedCall'))
       return
     }
 
@@ -3623,14 +3629,14 @@ export default function ConversationPage() {
     setRemoteAudioBlocked(false)
   }
 
-  const otherName = getDisplayName(otherProfile)
+  const otherName = getDisplayName(otherProfile, t('messages.userFallback'))
 
   if (loading) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-zinc-50 px-4 text-black dark:bg-black dark:text-white">
         <div className="flex items-center gap-3 text-zinc-500">
           <Loader2 className="h-5 w-5 animate-spin" />
-          <span>Carregando conversa...</span>
+          <span>{t('messages.detail.loading')}</span>
         </div>
       </main>
     )
@@ -3643,7 +3649,7 @@ export default function ConversationPage() {
             <button
               type="button"
               className="fixed inset-0 z-[9998] cursor-default bg-transparent"
-              aria-label="Fechar opcoes da conversa"
+              aria-label={t('messages.detail.closeConversationOptions')}
               onClick={() => setOpenConversationMenu(false)}
             />
 
@@ -3661,7 +3667,7 @@ export default function ConversationPage() {
                 className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left font-semibold transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Trash2 className="h-4 w-4" />
-                Limpar mensagens para mim
+                {t('messages.detail.clearForMe')}
               </button>
 
               <button
@@ -3671,7 +3677,7 @@ export default function ConversationPage() {
                 className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left font-semibold transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Archive className="h-4 w-4" />
-                {conversationState?.archived_at ? 'Desarquivar conversa' : 'Arquivar conversa'}
+                {conversationState?.archived_at ? t('messages.detail.unarchiveConversation') : t('messages.detail.archiveConversation')}
               </button>
 
               <button
@@ -3681,7 +3687,7 @@ export default function ConversationPage() {
                 className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left font-semibold text-red-300 transition hover:bg-red-500/10 hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Trash2 className="h-4 w-4" />
-                Excluir conversa para mim
+                {t('messages.detail.deleteConversationForMe')}
               </button>
 
               <button
@@ -3691,7 +3697,7 @@ export default function ConversationPage() {
                 className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left font-semibold transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Palette className="h-4 w-4" />
-                Personalizar conversa
+                {t('messages.detail.customize')}
               </button>
 
               <button
@@ -3701,7 +3707,7 @@ export default function ConversationPage() {
                 className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left font-semibold text-red-300 transition hover:bg-red-500/10 hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Ban className="h-4 w-4" />
-                Bloquear usuario
+                {t('messages.detail.blockUser')}
               </button>
 
               <div className="my-1 h-px bg-white/10" />
@@ -3711,7 +3717,7 @@ export default function ConversationPage() {
                 onClick={() => setOpenConversationMenu(false)}
                 className="flex w-full items-center justify-center rounded-xl px-3 py-2.5 font-bold text-zinc-300 transition hover:bg-white/10 hover:text-white"
               >
-                Cancelar
+                {t('common.cancel')}
               </button>
             </div>
           </>,
@@ -3730,7 +3736,7 @@ export default function ConversationPage() {
             <button
               type="button"
               className="fixed inset-0 z-[9998] cursor-default bg-transparent"
-              aria-label="Fechar opcoes da mensagem"
+              aria-label={t('messages.detail.closeMessageOptions')}
               onClick={() => setOpenMessageMenuId(null)}
             />
 
@@ -3746,7 +3752,7 @@ export default function ConversationPage() {
                 onClick={() => handleStartReplyMessage(activeMessageMenuItem)}
                 className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left font-semibold transition hover:bg-white/10"
               >
-                Responder
+                {t('messages.detail.reply')}
               </button>
 
               {activeMessageMenuItem.sender_id === userId && activeMessageMenuItem.content?.trim() && activeMessageMenuItem.type !== 'call' && (
@@ -3756,7 +3762,7 @@ export default function ConversationPage() {
                   className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left font-semibold transition hover:bg-white/10"
                 >
                   <Pencil className="h-4 w-4" />
-                  Editar mensagem
+                  {t('messages.detail.editMessage')}
                 </button>
               )}
 
@@ -3766,7 +3772,7 @@ export default function ConversationPage() {
                 className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left font-semibold transition hover:bg-white/10"
               >
                 <Trash2 className="h-4 w-4" />
-                Excluir mensagem para mim
+                {t('messages.detail.deleteMessageForMe')}
               </button>
 
               {activeMessageMenuItem.sender_id === userId && (
@@ -3781,7 +3787,7 @@ export default function ConversationPage() {
                   ) : (
                     <Trash2 className="h-4 w-4" />
                   )}
-                  Excluir mensagem para todos
+                  {t('messages.detail.deleteMessageForEveryone')}
                 </button>
               )}
 
@@ -3792,7 +3798,7 @@ export default function ConversationPage() {
                 onClick={() => setOpenMessageMenuId(null)}
                 className="flex w-full items-center justify-center rounded-xl px-3 py-2.5 font-bold text-zinc-300 transition hover:bg-white/10 hover:text-white"
               >
-                Cancelar
+                {t('common.cancel')}
               </button>
             </div>
           </>,
@@ -3816,7 +3822,7 @@ export default function ConversationPage() {
 
       <MobileNavigation
         email={email}
-        displayName={getDisplayName(currentProfile)}
+        displayName={getDisplayName(currentProfile, t('messages.userFallback'))}
         avatarUrl={currentProfile?.avatar_url || null}
         unreadNotificationsCount={unreadNotificationsCount}
         mounted={mounted}
@@ -3834,23 +3840,23 @@ export default function ConversationPage() {
           <button
             type="button"
             className="absolute inset-0 cursor-default"
-            aria-label="Cancelar personalizacao"
+            aria-label={t('messages.detail.cancelCustomization')}
             onClick={() => setCustomizeModalOpen(false)}
           />
 
           <div className="relative z-[10000] flex max-h-[92dvh] w-full max-w-2xl flex-col overflow-hidden rounded-[2rem] border border-blue-400/20 bg-zinc-950 text-white shadow-2xl shadow-black/40 ring-1 ring-white/10">
             <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
               <div>
-                <h2 className="text-lg font-black">Personalizar conversa</h2>
-                <p className="mt-1 text-sm text-zinc-400">Escolha uma cor e um fundo para este bate-papo.</p>
+                <h2 className="text-lg font-black">{t('messages.detail.customize')}</h2>
+                <p className="mt-1 text-sm text-zinc-400">{t('messages.detail.customizeDescription')}</p>
               </div>
 
               <button
                 type="button"
                 onClick={() => setCustomizeModalOpen(false)}
                 className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
-                aria-label="Cancelar"
-                title="Cancelar"
+                aria-label={t('common.cancel')}
+                title={t('common.cancel')}
               >
                 <X className="h-5 w-5" />
               </button>
@@ -3858,7 +3864,7 @@ export default function ConversationPage() {
 
             <div className="min-h-0 flex-1 overflow-y-auto p-5">
               <section>
-                <h3 className="text-sm font-black text-zinc-100">Cor do chat</h3>
+                <h3 className="text-sm font-black text-zinc-100">{t('messages.detail.chatColor')}</h3>
                 <div className="mt-3 grid gap-2 sm:grid-cols-2">
                   {CHAT_THEME_OPTIONS.map((themeOption) => {
                     const active = draftThemeColor === themeOption.id || (!draftThemeColor && themeOption.id === DEFAULT_CHAT_THEME.id)
@@ -3875,7 +3881,7 @@ export default function ConversationPage() {
                         }`}
                       >
                         <span className={`h-7 w-7 rounded-full ${themeOption.swatchClass}`} />
-                        <span className="font-bold">{themeOption.label}</span>
+                        <span className="font-bold">{t(`messages.detail.themes.${themeOption.id}`)}</span>
                       </button>
                     )
                   })}
@@ -3883,7 +3889,7 @@ export default function ConversationPage() {
               </section>
 
               <section className="mt-6">
-                <h3 className="text-sm font-black text-zinc-100">Fundo sugerido</h3>
+                <h3 className="text-sm font-black text-zinc-100">{t('messages.detail.suggestedBackground')}</h3>
                 <div className="mt-3 grid gap-3 sm:grid-cols-2">
                   {CHAT_BACKGROUND_PRESETS.map((backgroundOption) => {
                     const active = draftBackgroundPreset === backgroundOption.id
@@ -3901,7 +3907,7 @@ export default function ConversationPage() {
                       >
                         <span className={`block h-24 ${backgroundOption.previewClass}`} />
                         <span className="block bg-white/5 px-3 py-2 text-sm font-bold">
-                          {backgroundOption.label}
+                          {t(`messages.detail.backgrounds.${backgroundOption.id}`)}
                         </span>
                       </button>
                     )
@@ -3917,7 +3923,7 @@ export default function ConversationPage() {
                 disabled={savingCustomization}
                 className="rounded-full border border-white/15 px-5 py-2.5 text-sm font-black text-zinc-200 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Restaurar padrao
+                {t('messages.detail.restoreDefault')}
               </button>
 
               <button
@@ -3926,7 +3932,7 @@ export default function ConversationPage() {
                 disabled={savingCustomization}
                 className="rounded-full border border-white/15 px-5 py-2.5 text-sm font-black text-zinc-200 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Cancelar
+                {t('common.cancel')}
               </button>
 
               <button
@@ -3935,7 +3941,7 @@ export default function ConversationPage() {
                 disabled={savingCustomization}
                 className={`${selectedChatTheme.buttonClass} rounded-full px-5 py-2.5 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-50`}
               >
-                {savingCustomization ? 'Salvando...' : 'Salvar visual'}
+                {savingCustomization ? t('common.saving') : t('messages.detail.saveAppearance')}
               </button>
             </div>
           </div>
@@ -3963,16 +3969,16 @@ export default function ConversationPage() {
                   <p className="truncate font-black">{otherName}</p>
                   <p className="text-xs text-blue-200">
                     {callStatus === 'calling'
-                      ? 'Chamando...'
+                      ? t('messages.detail.callStatus.calling')
                       : callStatus === 'ringing'
-                        ? 'Chamada recebida'
+                        ? t('messages.detail.callStatus.incoming')
                         : callStatus === 'connecting'
-                          ? 'Conectando...'
+                          ? t('messages.detail.callStatus.connecting')
                           : callStatus === 'connected'
-                            ? 'Chamada conectada'
+                            ? t('messages.detail.callStatus.connected')
                             : callStatus === 'error'
-                              ? 'Erro na chamada'
-                              : 'Chamada 1:1'}
+                              ? t('messages.detail.callStatus.error')
+                              : t('messages.detail.callStatus.oneToOne')}
                   </p>
                 </div>
               </div>
@@ -3988,8 +3994,8 @@ export default function ConversationPage() {
                   endCall()
                 }}
                 className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
-                aria-label="Fechar chamada"
-                title="Fechar chamada"
+                aria-label={t('messages.detail.closeCall')}
+                title={t('messages.detail.closeCall')}
               >
                 <X className="h-5 w-5" />
               </button>
@@ -4026,7 +4032,7 @@ export default function ConversationPage() {
                     />
                   ) : (
                     <div className="flex min-h-64 items-center justify-center text-sm text-zinc-400">
-                      Aguardando vídeo remoto...
+                    {t('messages.detail.waitingRemoteVideo')}
                     </div>
                   )}
 
@@ -4049,21 +4055,21 @@ export default function ConversationPage() {
                     <Phone className="h-10 w-10" />
                   </div>
                   <p className="text-lg font-black">{otherName}</p>
-                  <p className="mt-1 text-sm text-blue-100/70">Chamada de voz privada</p>
+                  <p className="mt-1 text-sm text-blue-100/70">{t('messages.detail.privateVoiceCall')}</p>
                 </div>
               )}
 
               {remoteAudioBlocked && (
                 <div className="mt-4 rounded-[1.5rem] border border-blue-300/25 bg-blue-500/10 p-4 text-center">
                   <p className="text-sm leading-6 text-blue-100">
-                    Seu navegador bloqueou a reprodução automática do áudio remoto.
+                  {t('messages.detail.remoteAudioBlocked')}
                   </p>
                   <button
                     type="button"
                     onClick={playRemoteAudio}
                     className="mt-3 inline-flex items-center justify-center rounded-full bg-blue-600 px-5 py-2.5 text-sm font-black text-white transition hover:bg-blue-500"
                   >
-                    Ativar áudio
+                  {t('messages.detail.enableAudio')}
                   </button>
                 </div>
               )}
@@ -4076,7 +4082,7 @@ export default function ConversationPage() {
                     className="flex flex-1 items-center justify-center gap-2 rounded-full bg-blue-600 px-5 py-3 text-sm font-black text-white transition hover:bg-blue-500"
                   >
                     <Phone className="h-4 w-4" />
-                    Aceitar
+                  {t('messages.detail.accept')}
                   </button>
 
                   <button
@@ -4085,7 +4091,7 @@ export default function ConversationPage() {
                     className="flex flex-1 items-center justify-center gap-2 rounded-full bg-red-600 px-5 py-3 text-sm font-black text-white transition hover:bg-red-500"
                   >
                     <PhoneOff className="h-4 w-4" />
-                    Recusar
+                  {t('messages.detail.decline')}
                   </button>
                 </div>
               )}
@@ -4098,8 +4104,8 @@ export default function ConversationPage() {
                 className={`flex h-12 w-12 items-center justify-center rounded-full transition ${
                   micEnabled ? 'bg-white/10 hover:bg-white/20' : 'bg-red-600 hover:bg-red-500'
                 }`}
-                aria-label="Ativar ou desativar microfone"
-                title="Ativar/desativar microfone"
+                  aria-label={t('messages.detail.toggleMicrophone')}
+                  title={t('messages.detail.toggleMicrophone')}
               >
                 {micEnabled ? <Mic className="h-5 w-5" /> : <MicOff className="h-5 w-5" />}
               </button>
@@ -4111,8 +4117,8 @@ export default function ConversationPage() {
                   className={`flex h-12 w-12 items-center justify-center rounded-full transition ${
                     cameraEnabled ? 'bg-white/10 hover:bg-white/20' : 'bg-red-600 hover:bg-red-500'
                   }`}
-                  aria-label="Ativar ou desativar câmera"
-                  title="Ativar/desativar câmera"
+                  aria-label={t('messages.detail.toggleCamera')}
+                  title={t('messages.detail.toggleCamera')}
                 >
                   {cameraEnabled ? <Video className="h-5 w-5" /> : <VideoOff className="h-5 w-5" />}
                 </button>
@@ -4122,8 +4128,8 @@ export default function ConversationPage() {
                 type="button"
                 onClick={() => endCall()}
                 className="flex h-12 min-w-12 items-center justify-center rounded-full bg-red-600 px-5 text-white transition hover:bg-red-500"
-                aria-label="Encerrar chamada"
-                title="Encerrar"
+                aria-label={t('messages.detail.endCall')}
+                title={t('messages.detail.end')}
               >
                 <PhoneOff className="h-5 w-5" />
               </button>
@@ -4139,18 +4145,18 @@ export default function ConversationPage() {
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h1 className="text-2xl font-black tracking-tight text-zinc-950 dark:text-white">
-                  Bate-papo
+                  {t('messages.title')}
                 </h1>
                 <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                  Suas conversas privadas
+                  {t('messages.subtitle')}
                 </p>
               </div>
 
               <Link
                 href="/search"
                 className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-zinc-200 bg-zinc-50 text-zinc-900 transition hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-950 dark:text-white dark:hover:bg-zinc-900"
-                aria-label="Nova conversa"
-                title="Nova conversa"
+                aria-label={t('messages.newConversation')}
+                title={t('messages.newConversation')}
               >
                 <MessageSquarePlus className="h-5 w-5" />
               </Link>
@@ -4162,7 +4168,7 @@ export default function ConversationPage() {
                 type="search"
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="Buscar conversas"
+                placeholder={t('messages.search')}
                 className="min-w-0 flex-1 bg-transparent text-sm text-zinc-900 outline-none placeholder:text-zinc-500 dark:text-white"
               />
             </div>
@@ -4176,11 +4182,11 @@ export default function ConversationPage() {
                 </div>
 
                 <h3 className="text-lg font-bold text-zinc-950 dark:text-white">
-                  Nenhuma conversa
+                  {t('messages.empty')}
                 </h3>
 
                 <p className="mx-auto mt-2 max-w-xs text-sm text-zinc-500 dark:text-zinc-400">
-                  Use o botão de nova conversa para buscar pessoas.
+                  {t('messages.detail.emptyConversationList')}
                 </p>
               </div>
             </div>
@@ -4188,8 +4194,8 @@ export default function ConversationPage() {
             <div className="min-h-0 flex-1 overflow-y-auto">
               {filteredConversations.map((conversation) => {
                 const otherUser = conversation.otherUser
-                const name = getDisplayName(otherUser)
-                const preview = getMessagePreview(conversation.lastMessage, userId)
+                const name = getDisplayName(otherUser, t('messages.userFallback'))
+                const preview = getMessagePreview(conversation.lastMessage, userId, t)
                 const active = conversation.id === conversationId
 
                 return (
@@ -4252,12 +4258,12 @@ export default function ConversationPage() {
                       <span>
                         {formatConversationDate(
                           conversation.lastMessage?.created_at || conversation.updated_at
-                        )}
+                        , language)}
                       </span>
 
                       {conversation.isUnread && (
                         <span className="rounded-full bg-blue-600 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-white shadow-sm shadow-blue-600/30">
-                          Nova
+                          {t('messages.newBadge')}
                         </span>
                       )}
                     </div>
@@ -4273,8 +4279,8 @@ export default function ConversationPage() {
             <Link
               href="/messages"
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-zinc-700 transition hover:scale-105 hover:bg-zinc-200 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
-              aria-label="Voltar para mensagens"
-              title="Voltar"
+              aria-label={t('messages.detail.backToMessages')}
+              title={t('messages.detail.back')}
             >
               <ArrowLeft className="h-5 w-5" />
             </Link>
@@ -4303,7 +4309,7 @@ export default function ConversationPage() {
               </div>
 
               <p className="truncate text-sm text-zinc-500">
-                {getUsername(otherProfile)}
+                {getUsername(otherProfile, t('messages.usernameFallback'))}
               </p>
             </div>
 
@@ -4313,8 +4319,8 @@ export default function ConversationPage() {
                 onClick={() => startCall('voice')}
                 disabled={blockedForConversation}
                 className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-100 text-zinc-700 transition hover:bg-blue-50 hover:text-blue-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-blue-950/40 dark:hover:text-blue-300"
-                aria-label="Iniciar chamada de voz"
-                title="Iniciar chamada de voz"
+                aria-label={t('messages.detail.startVoiceCall')}
+                title={t('messages.detail.startVoiceCall')}
               >
                 <Phone className="h-5 w-5" />
               </button>
@@ -4324,8 +4330,8 @@ export default function ConversationPage() {
                 onClick={() => startCall('video')}
                 disabled={blockedForConversation}
                 className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-100 text-zinc-700 transition hover:bg-blue-50 hover:text-blue-600 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-blue-950/40 dark:hover:text-blue-300"
-                aria-label="Iniciar chamada de vídeo"
-                title="Iniciar chamada de vídeo"
+                aria-label={t('messages.detail.startVideoCall')}
+                title={t('messages.detail.startVideoCall')}
               >
                 <Video className="h-5 w-5" />
               </button>
@@ -4343,8 +4349,8 @@ export default function ConversationPage() {
                       ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
                       : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800'
                   }`}
-                  aria-label="Opcoes da conversa"
-                  title="Opcoes da conversa"
+                  aria-label={t('messages.detail.conversationOptions')}
+                  title={t('messages.detail.conversationOptions')}
                   aria-expanded={openConversationMenu}
                 >
                   <MoreHorizontal className="h-5 w-5" />
@@ -4357,7 +4363,7 @@ export default function ConversationPage() {
                 href={`/u/${otherProfile.username}`}
                 className="hidden rounded-full bg-zinc-100 px-4 py-2 text-sm font-semibold text-zinc-800 transition hover:bg-zinc-200 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800 sm:inline-flex"
               >
-                Ver perfil
+                {t('messages.detail.viewProfile')}
               </Link>
             )}
           </div>
@@ -4382,11 +4388,11 @@ export default function ConversationPage() {
                   </div>
 
                   <h2 className="font-bold text-zinc-950 dark:text-white">
-                    Início da conversa
+                {t('messages.detail.conversationStart')}
                   </h2>
 
                   <p className="mt-1 max-w-sm text-sm text-zinc-500 dark:text-zinc-400">
-                    Envie a primeira mensagem para começar a conversa.
+                {t('messages.detail.firstMessage')}
                   </p>
                 </div>
               </div>
@@ -4407,7 +4413,7 @@ export default function ConversationPage() {
                 const deliveryStatus = getMessageDeliveryStatus(item, participants, userId)
 
                 if (isCallEvent) {
-                  const callLabel = getCallHistoryLabel(item)
+                  const callLabel = getCallHistoryLabel(item, t)
                   const duration = formatCallDuration(item.call_duration_seconds)
                   const CallIcon = item.call_type === 'video' ? Video : Phone
 
@@ -4434,7 +4440,7 @@ export default function ConversationPage() {
                         {duration && (
                           <span className="text-zinc-400">· {duration}</span>
                         )}
-                        <span className="text-zinc-500">· {formatMessageTime(item.created_at)}</span>
+                        <span className="text-zinc-500">· {formatMessageTime(item.created_at, language)}</span>
                       </div>
                     </div>
                   )
@@ -4502,7 +4508,7 @@ export default function ConversationPage() {
                                     }`}
                                   >
                                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                    Carregando mídia...
+                                      {t('messages.detail.loadingMedia')}
                                   </div>
                                 )
                               }
@@ -4521,7 +4527,7 @@ export default function ConversationPage() {
                                     >
                                       <img
                                         src={attachment.signed_url}
-                                        alt={attachment.file_name || 'Imagem enviada'}
+                                        alt={attachment.file_name || t('messages.detail.sentImage')}
                                         className="max-h-[260px] w-full object-contain sm:max-h-[340px]"
                                       />
                                     </a>
@@ -4531,8 +4537,8 @@ export default function ConversationPage() {
                                         type="button"
                                         onClick={() => handleDeleteAttachment(item.id, attachment)}
                                         className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/55 text-white opacity-100 shadow-lg backdrop-blur-md transition hover:scale-105 hover:bg-red-600 sm:opacity-0 sm:group-hover/media:opacity-100"
-                                        aria-label="Apagar mídia"
-                                        title="Apagar mídia"
+                                        aria-label={t('messages.detail.deleteMedia')}
+                                        title={t('messages.detail.deleteMedia')}
                                       >
                                         <X className="h-4 w-4" />
                                       </button>
@@ -4558,8 +4564,8 @@ export default function ConversationPage() {
                                         type="button"
                                         onClick={() => handleDeleteAttachment(item.id, attachment)}
                                         className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/55 text-white opacity-100 shadow-lg backdrop-blur-md transition hover:scale-105 hover:bg-red-600 sm:opacity-0 sm:group-hover/media:opacity-100"
-                                        aria-label="Apagar mídia"
-                                        title="Apagar mídia"
+                                        aria-label={t('messages.detail.deleteMedia')}
+                                        title={t('messages.detail.deleteMedia')}
                                       >
                                         <X className="h-4 w-4" />
                                       </button>
@@ -4598,8 +4604,8 @@ export default function ConversationPage() {
                                       type="button"
                                       onClick={() => handleDeleteAttachment(item.id, attachment)}
                                       className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/55 text-white opacity-100 shadow-lg backdrop-blur-md transition hover:scale-105 hover:bg-red-600 sm:opacity-0 sm:group-hover/media:opacity-100"
-                                      aria-label="Apagar áudio"
-                                      title="Apagar áudio"
+                                      aria-label={t('messages.detail.deleteAudio')}
+                                      title={t('messages.detail.deleteAudio')}
                                     >
                                       <X className="h-4 w-4" />
                                     </button>
@@ -4612,7 +4618,7 @@ export default function ConversationPage() {
 
                         {item.deleted_at ? (
                           <p className="whitespace-pre-wrap break-words text-sm italic opacity-70">
-                            Mensagem apagada.
+                              {t('messages.detail.deletedMessage')}
                           </p>
                         ) : isEditingThisMessage ? (
                           <div className="space-y-3">
@@ -4638,7 +4644,7 @@ export default function ConversationPage() {
                                 }`}
                               >
                                 <X className="h-3.5 w-3.5" />
-                                Cancelar
+                                {t('common.cancel')}
                               </button>
 
                               <button
@@ -4652,7 +4658,7 @@ export default function ConversationPage() {
                                 ) : (
                                   <Check className="h-3.5 w-3.5" />
                                 )}
-                                Salvar
+                                {t('common.save')}
                               </button>
                             </div>
                           </div>
@@ -4685,9 +4691,9 @@ export default function ConversationPage() {
                               isMine ? 'text-white/70' : 'text-zinc-500 dark:text-zinc-400'
                             }`}
                           >
-                            {formatMessageTime(item.created_at)}
+                            {formatMessageTime(item.created_at, language)}
                             {messageIsEdited && !item.deleted_at && (
-                              <span> · editada</span>
+                              <span> · {t('messages.detail.edited')}</span>
                             )}
                           </p>
 
@@ -4700,17 +4706,17 @@ export default function ConversationPage() {
                               }`}
                               aria-label={
                                 deliveryStatus === 'read'
-                                  ? 'Mensagem visualizada'
+                                  ? t('messages.detail.delivery.readLabel')
                                   : deliveryStatus === 'delivered'
-                                    ? 'Mensagem entregue'
-                                    : 'Mensagem enviada'
+                                    ? t('messages.detail.delivery.deliveredLabel')
+                                    : t('messages.detail.delivery.sentLabel')
                               }
                               title={
                                 deliveryStatus === 'read'
-                                  ? 'Visualizada'
+                                  ? t('messages.detail.delivery.read')
                                   : deliveryStatus === 'delivered'
-                                    ? 'Entregue'
-                                    : 'Enviada'
+                                    ? t('messages.detail.delivery.delivered')
+                                    : t('messages.detail.delivery.sent')
                               }
                             >
                               {deliveryStatus === 'sent' ? (
@@ -4736,8 +4742,8 @@ export default function ConversationPage() {
                                     ? 'bg-white/10 text-white/80 hover:bg-white/20 hover:text-white'
                                     : 'bg-white/70 text-zinc-500 hover:bg-white hover:text-zinc-900 dark:bg-zinc-800/70 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white'
                                 }`}
-                                aria-label="Reagir à mensagem"
-                                title="Reagir"
+                                aria-label={t('messages.detail.reactToMessage')}
+                                title={t('messages.detail.react')}
                               >
                                 <SmilePlus className="h-3.5 w-3.5" />
                               </button>
@@ -4756,8 +4762,8 @@ export default function ConversationPage() {
                                     ? 'bg-white/10 text-white/80 hover:bg-white/20 hover:text-white'
                                     : 'bg-white/70 text-zinc-500 hover:bg-white hover:text-zinc-900 dark:bg-zinc-800/70 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white'
                                 }`}
-                                aria-label="Opções da mensagem"
-                                title="Opções"
+                                aria-label={t('messages.detail.messageOptions')}
+                                title={t('messages.detail.options')}
                               >
                                 {isDeletingThisMessage ? (
                                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -4781,7 +4787,7 @@ export default function ConversationPage() {
                                   className="flex w-full items-center gap-2 rounded-2xl px-3 py-2.5 text-left font-semibold transition hover:bg-zinc-100 dark:hover:bg-zinc-800"
                                 >
                                   <Pencil className="h-4 w-4" />
-                                  Editar mensagem
+                                  {t('messages.detail.editMessage')}
                                 </button>
                               )}
 
@@ -4791,7 +4797,7 @@ export default function ConversationPage() {
                                 className="flex w-full items-center gap-2 rounded-2xl px-3 py-2.5 text-left font-semibold transition hover:bg-zinc-100 dark:hover:bg-zinc-800"
                               >
                                 <Trash2 className="h-4 w-4" />
-                                Apagar só para mim
+                                {t('messages.detail.deleteForMe')}
                               </button>
 
                               {isMine && (
@@ -4806,7 +4812,7 @@ export default function ConversationPage() {
                                   ) : (
                                     <Trash2 className="h-4 w-4" />
                                   )}
-                                  Apagar para todos
+                                  {t('messages.detail.deleteForEveryone')}
                                 </button>
                               )}
                             </div>
@@ -4844,12 +4850,12 @@ export default function ConversationPage() {
                               <button
                                 type="button"
                                 onClick={() => {
-                                  setMessage('Galeria completa de emojis em breve.')
+                                  setMessage(t('messages.detail.emojiGallerySoon'))
                                   setOpenReactionMessageId(null)
                                 }}
                                 className="flex h-9 w-9 items-center justify-center rounded-full bg-zinc-100 text-zinc-700 transition hover:scale-105 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
-                                aria-label="Mais emojis"
-                                title="Mais emojis em breve"
+                                aria-label={t('messages.detail.moreEmojis')}
+                                title={t('messages.detail.moreEmojisSoon')}
                               >
                                 <Plus className="h-4 w-4" />
                               </button>
@@ -4875,7 +4881,7 @@ export default function ConversationPage() {
                                   : 'bg-white text-zinc-700 ring-zinc-200 dark:bg-zinc-900 dark:text-zinc-200 dark:ring-zinc-700'
                               }`}
                               aria-label={`Reação ${reaction.emoji}`}
-                              title="Clique para trocar ou remover sua reação"
+                              title={t('messages.detail.changeReaction')}
                             >
                               <span>{reaction.emoji}</span>
                               {reaction.count > 1 && <span>{reaction.count}</span>}
@@ -4919,7 +4925,7 @@ export default function ConversationPage() {
                     ) : (
                       <div className="flex h-full w-full flex-col items-center justify-center gap-1 bg-zinc-200 px-2 text-center text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200">
                         <Mic className="h-5 w-5" />
-                        <span className="text-[10px] font-semibold">Áudio</span>
+                        <span className="text-[10px] font-semibold">{t('messages.detail.audio')}</span>
                       </div>
                     )}
 
@@ -4927,8 +4933,8 @@ export default function ConversationPage() {
                       type="button"
                       onClick={() => removeSelectedMedia(index)}
                       className="absolute right-1 top-1 flex h-7 w-7 items-center justify-center rounded-full bg-black/70 text-white"
-                      aria-label="Remover mídia"
-                      title="Remover"
+                      aria-label={t('messages.detail.removeMedia')}
+                      title={t('common.remove')}
                     >
                       <X className="h-4 w-4" />
                     </button>
@@ -4957,7 +4963,7 @@ export default function ConversationPage() {
 
           {recordingAudio && (
             <div className="mx-3 mb-2 shrink-0 rounded-full bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 shadow-sm dark:bg-red-950/40 dark:text-red-300 sm:mx-4">
-              Gravando áudio... {formatRecordingTime(recordingSeconds)}
+              {t('messages.detail.recordingAudio')} {formatRecordingTime(recordingSeconds)}
             </div>
           )}
 
@@ -4966,13 +4972,15 @@ export default function ConversationPage() {
               <div className={`flex items-center gap-3 rounded-2xl border px-3 py-2 text-sm ${selectedChatTheme.softClass}`}>
                 <div className="min-w-0 flex-1 border-l-4 border-blue-500/70 pl-3">
                   <p className={`font-black ${selectedChatTheme.accentTextClass}`}>
-                    {editingMessageId ? 'Editando mensagem' : `Respondendo ${replyingToMessage?.sender_id === userId ? 'voce' : otherName}`}
+                    {editingMessageId
+                      ? t('messages.detail.editingMessage')
+                      : t('messages.detail.replyingTo', { name: replyingToMessage?.sender_id === userId ? t('messages.preview.you') : otherName })}
                   </p>
                   <p className="mt-0.5 truncate text-xs text-zinc-600 dark:text-zinc-300">
                     {editingMessageId
-                      ? messages.find((item) => item.id === editingMessageId)?.content || 'Mensagem'
+                      ? messages.find((item) => item.id === editingMessageId)?.content || t('messages.message')
                       : replyingToMessage
-                        ? getMessageReplyPreviewText(replyingToMessage)
+                        ? getMessageReplyPreviewText(replyingToMessage, t)
                         : ''}
                   </p>
                 </div>
@@ -4981,8 +4989,8 @@ export default function ConversationPage() {
                   type="button"
                   onClick={editingMessageId ? handleCancelEditMessage : handleCancelReplyMessage}
                   className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-zinc-500 transition hover:bg-white hover:text-zinc-950 dark:hover:bg-zinc-900 dark:hover:text-white"
-                  aria-label="Cancelar"
-                  title="Cancelar"
+                  aria-label={t('common.cancel')}
+                  title={t('common.cancel')}
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -5001,10 +5009,10 @@ export default function ConversationPage() {
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-sm font-black text-zinc-950 dark:text-white">
-                        Emojis
+                        {t('messages.detail.emojis')}
                       </p>
                       <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">
-                        Rápidos, categorias e busca em um só lugar.
+                        {t('messages.detail.emojiPickerDescription')}
                       </p>
                     </div>
 
@@ -5012,8 +5020,8 @@ export default function ConversationPage() {
                       type="button"
                       onClick={() => setOpenMessageEmojiPicker(false)}
                       className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-zinc-500 transition hover:scale-105 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-900 dark:hover:text-white"
-                      aria-label="Fechar emojis"
-                      title="Fechar"
+                      aria-label={t('messages.detail.closeEmojis')}
+                      title={t('common.close')}
                     >
                       <X className="h-4 w-4" />
                     </button>
@@ -5027,7 +5035,7 @@ export default function ConversationPage() {
                       type="text"
                       value={messageEmojiSearch}
                       onChange={(event) => setMessageEmojiSearch(event.target.value)}
-                      placeholder="Buscar emoji..."
+                      placeholder={t('messages.detail.searchEmoji')}
                       className="min-w-0 flex-1 bg-transparent text-sm text-zinc-900 outline-none placeholder:text-zinc-500 dark:text-white"
                     />
                   </label>
@@ -5052,8 +5060,8 @@ export default function ConversationPage() {
                               ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20 dark:bg-blue-500'
                               : 'bg-zinc-100 text-zinc-700 hover:scale-105 hover:bg-zinc-200 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800'
                           } disabled:cursor-not-allowed disabled:opacity-35`}
-                          aria-label={category.title}
-                          title={category.description}
+                          aria-label={t(`messages.detail.emojiCategories.${category.id}.title`)}
+                          title={t(`messages.detail.emojiCategories.${category.id}.description`)}
                         >
                           {category.icon}
                         </button>
@@ -5065,16 +5073,14 @@ export default function ConversationPage() {
                 <div className="max-h-[360px] overflow-y-auto px-3 pb-3 sm:px-4 sm:pb-4">
                   <div className="mb-3 flex items-center gap-1.5 overflow-x-auto rounded-full bg-zinc-100 p-1.5 dark:bg-zinc-900">
                     {MESSAGE_QUICK_EMOJIS.map((emoji) => {
-                      const item = getMessageEmojiItem(emoji)
-
                       return (
                         <button
                           key={`quick-${emoji}`}
                           type="button"
                           onClick={() => handleInsertMessageEmoji(emoji)}
                           className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-2xl shadow-sm transition hover:scale-110 active:scale-95 dark:bg-zinc-950"
-                          aria-label={`Inserir emoji ${item.label}`}
-                          title={item.label}
+                          aria-label={t('messages.detail.insertEmoji', { emoji })}
+                          title={t('messages.detail.emoji', { emoji })}
                         >
                           {emoji}
                         </button>
@@ -5095,10 +5101,10 @@ export default function ConversationPage() {
                         <div className="rounded-[1.7rem] bg-zinc-100 p-6 text-center dark:bg-zinc-900">
                           <p className="text-3xl">🫣</p>
                           <p className="mt-2 text-sm font-bold text-zinc-900 dark:text-white">
-                            Nenhum emoji encontrado
+                            {t('messages.detail.noEmojiFound')}
                           </p>
                           <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                            Tente buscar por amor, fogo, risada, festa ou coração.
+                            {t('messages.detail.emojiSearchHint')}
                           </p>
                         </div>
                       )
@@ -5110,13 +5116,13 @@ export default function ConversationPage() {
                           <div>
                             <p className="text-sm font-black text-zinc-950 dark:text-white">
                               {messageEmojiSearch.trim()
-                                ? 'Resultado da busca'
-                                : activeCategory.title}
+                                ? t('messages.detail.searchResult')
+                                : t(`messages.detail.emojiCategories.${activeCategory.id}.title`)}
                             </p>
                             <p className="text-xs text-zinc-500 dark:text-zinc-400">
                               {messageEmojiSearch.trim()
-                                ? `${visibleEmojis.length} opção(ões)`
-                                : activeCategory.description}
+                                ? t('messages.detail.optionsCount', { count: visibleEmojis.length })
+                                : t(`messages.detail.emojiCategories.${activeCategory.id}.description`)}
                             </p>
                           </div>
                         </div>
@@ -5128,8 +5134,8 @@ export default function ConversationPage() {
                               type="button"
                               onClick={() => handleInsertMessageEmoji(item.emoji)}
                               className="group relative flex h-10 w-10 items-center justify-center rounded-full text-2xl transition hover:scale-110 hover:bg-zinc-100 active:scale-95 dark:hover:bg-zinc-900"
-                              aria-label={`Inserir emoji ${item.label}`}
-                              title={item.label}
+                              aria-label={t('messages.detail.insertEmoji', { emoji: item.emoji })}
+                              title={t('messages.detail.emoji', { emoji: item.emoji })}
                             >
                               <span className="transition group-hover:drop-shadow-md">
                                 {item.emoji}
@@ -5153,15 +5159,15 @@ export default function ConversationPage() {
               className="hidden"
             />
 
-            {messageExpression && <div className="absolute bottom-full left-3 mb-2 flex items-start gap-2 rounded-2xl bg-white p-2 shadow-xl dark:bg-zinc-950"><ExpressionAttachment expression={messageExpression} compact /><button type="button" onClick={() => setMessageExpression(null)} aria-label="Remover expressão"><X className="h-4 w-4" /></button></div>}
+            {messageExpression && <div className="absolute bottom-full left-3 mb-2 flex items-start gap-2 rounded-2xl bg-white p-2 shadow-xl dark:bg-zinc-950"><ExpressionAttachment expression={messageExpression} compact /><button type="button" onClick={() => setMessageExpression(null)} aria-label={t('messages.detail.removeExpression')}><X className="h-4 w-4" /></button></div>}
 
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
               disabled={sending || uploadingMedia || recordingAudio}
               className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-zinc-600 transition hover:scale-105 hover:bg-zinc-100 hover:text-zinc-950 disabled:cursor-not-allowed disabled:opacity-45 dark:text-zinc-300 dark:hover:bg-zinc-900 dark:hover:text-white sm:h-11 sm:w-11"
-              aria-label="Anexar mídia"
-              title="Anexar foto, vídeo ou áudio"
+              aria-label={t('messages.detail.attachMedia')}
+              title={t('messages.detail.attachMediaDescription')}
             >
               <Paperclip className="h-5 w-5" />
             </button>
@@ -5175,8 +5181,8 @@ export default function ConversationPage() {
                   ? selectedChatTheme.buttonClass
                   : 'text-zinc-600 hover:scale-105 hover:bg-zinc-100 hover:text-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-900 dark:hover:text-white'
               } disabled:cursor-not-allowed disabled:opacity-45`}
-              aria-label="Abrir emojis"
-              title="Emojis"
+              aria-label={t('messages.detail.openEmojis')}
+              title={t('messages.detail.emojis')}
             >
               <SmilePlus className="h-5 w-5" />
             </button>
@@ -5185,7 +5191,7 @@ export default function ConversationPage() {
               type="text"
               value={newMessage}
               onChange={(event) => setNewMessage(event.target.value)}
-              placeholder={recordingAudio ? 'Gravando áudio...' : 'Escreva uma mensagem...'}
+              placeholder={recordingAudio ? t('messages.detail.recordingAudio') : t('messages.detail.writeMessage')}
               disabled={recordingAudio}
               className="min-w-0 flex-1 rounded-full border-0 bg-zinc-100 px-4 py-3 text-sm outline-none transition placeholder:text-zinc-500 focus:bg-zinc-100 focus:ring-2 focus:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-900 dark:text-white dark:focus:bg-zinc-900 sm:text-base"
             />
@@ -5199,8 +5205,8 @@ export default function ConversationPage() {
                   ? 'bg-red-600 text-white shadow-lg shadow-red-600/20 hover:bg-red-700'
                   : 'text-zinc-600 hover:scale-105 hover:bg-zinc-100 hover:text-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-900 dark:hover:text-white'
               } disabled:cursor-not-allowed disabled:opacity-45`}
-              aria-label={recordingAudio ? 'Parar gravação' : 'Gravar áudio'}
-              title={recordingAudio ? 'Parar gravação' : 'Gravar áudio'}
+              aria-label={recordingAudio ? t('messages.detail.stopRecording') : t('messages.detail.recordAudio')}
+              title={recordingAudio ? t('messages.detail.stopRecording') : t('messages.detail.recordAudio')}
             >
               {recordingAudio ? (
                 <Square className="h-5 w-5 fill-current" />
@@ -5225,8 +5231,8 @@ export default function ConversationPage() {
                   ? 'cursor-not-allowed bg-zinc-200 text-zinc-400 dark:bg-zinc-900 dark:text-zinc-600'
                   : `${selectedChatTheme.buttonClass} hover:scale-105`
               }`}
-              aria-label="Enviar mensagem"
-              title="Enviar"
+              aria-label={t('messages.detail.sendMessage')}
+              title={t('messages.detail.send')}
             >
               {sending || uploadingMedia ? (
                 <Loader2 className="h-5 w-5 animate-spin" />

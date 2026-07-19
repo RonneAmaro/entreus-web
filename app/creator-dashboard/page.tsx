@@ -26,6 +26,7 @@ import {
   XCircle,
 } from 'lucide-react'
 import AppSidebar from '../components/AppSidebar'
+import { useLanguage } from '../components/LanguageProvider'
 import MobileNavigation from '../components/MobileNavigation'
 import { CreatorChecklist, CreatorDashboardStats } from '../components/CreatorDashboardStats'
 import ItaCashAmount from '../components/ItaCashAmount'
@@ -54,10 +55,6 @@ import {
   canRequestWithdrawal,
   convertItaCashToBrl,
   formatWithdrawalPaymentDetailsSummary,
-  formatWithdrawalStatus,
-  getBankAccountTypeLabel,
-  getWithdrawalPaymentMethodLabel,
-  getWithdrawalPaymentMethodNotice,
   validateWithdrawalRequestPayload,
   type BankAccountType,
   type CreatorWithdrawalPaymentDetails,
@@ -103,14 +100,6 @@ type CountedQueryResult<T> = QueryResult<T> & {
 
 const EMPTY_QUERY: QueryResult<PostReference> = { data: [], error: null }
 const EMPTY_VIEW_QUERY: CountedQueryResult<PostViewRow> = { data: [], error: null, count: 0 }
-const PIX_KEY_TYPE_LABELS: Record<PixKeyType, string> = {
-  cpf: 'CPF',
-  email: 'E-mail',
-  phone: 'Telefone',
-  random: 'Aleatoria',
-  cnpj: 'CNPJ',
-}
-
 const DEFAULT_WITHDRAWAL_FORM = {
   amountItacash: '',
   paymentMethod: 'pix' as CreatorWithdrawalPaymentMethod,
@@ -164,19 +153,19 @@ function mergeInteractionCounts(...sources: Record<string, number>[]) {
   }, {})
 }
 
-function formatNumber(value: number) {
-  return value.toLocaleString('pt-BR')
+function formatNumber(value: number, locale: string) {
+  return value.toLocaleString(locale)
 }
 
-function formatDate(value: string | null) {
-  if (!value) return 'Sem atividade ainda'
+function formatDate(value: string | null, locale: string, t: (key: string) => string) {
+  if (!value) return t('creator.dashboard.noActivity')
   const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return 'Data indisponível'
-  return date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })
+  if (Number.isNaN(date.getTime())) return t('creator.dashboard.dateUnavailable')
+  return date.toLocaleDateString(locale, { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
-function formatBRL(value: number) {
-  return value.toLocaleString('pt-BR', {
+function formatBRL(value: number, locale: string) {
+  return value.toLocaleString(locale, {
     style: 'currency',
     currency: 'BRL',
   })
@@ -197,24 +186,12 @@ function withdrawalStatusIcon(status: CreatorWithdrawalStatus) {
   return <Clock className="h-3.5 w-3.5" />
 }
 
-function labelCommunity(value: string) {
-  const labels: Record<string, string> = {
-    general: 'Geral',
-    sports: 'Esportes',
-    geopolitics: 'Geopolítica',
-    military: 'Militar',
-    adult_18plus: 'Adulto 18+',
-  }
-  return labels[value] || 'Geral'
+function labelCommunity(value: string, t: (key: string) => string) {
+  return t(`creator.dashboard.communities.${['general', 'sports', 'geopolitics', 'military', 'adult_18plus'].includes(value) ? value : 'general'}`)
 }
 
-function labelRating(value: string) {
-  const labels: Record<string, string> = {
-    safe: 'Seguro',
-    sensitive: 'Sensível',
-    adult_18plus: 'Adulto 18+',
-  }
-  return labels[value] || 'Seguro'
+function labelRating(value: string, t: (key: string) => string) {
+  return t(`creator.dashboard.ratings.${['safe', 'sensitive', 'adult_18plus'].includes(value) ? value : 'safe'}`)
 }
 
 function creatorMetric(value: number | undefined): CreatorMetric {
@@ -225,6 +202,7 @@ function creatorMetric(value: number | undefined): CreatorMetric {
 
 export default function CreatorDashboardPage() {
   const router = useRouter()
+  const { language, t } = useLanguage()
   const { theme, setTheme } = useTheme()
   const mounted = true
   const [loading, setLoading] = useState(true)
@@ -291,12 +269,12 @@ export default function CreatorDashboardPage() {
 
     if (!response.ok || !data?.ok) {
       setWithdrawals([])
-      setWithdrawalMessage(data?.error || 'Nao foi possivel carregar solicitacoes de saque.')
+      setWithdrawalMessage(t('creator.dashboard.errors.loadWithdrawals'))
       return
     }
 
     setWithdrawals(data.withdrawals || [])
-  }, [])
+  }, [t])
 
   const loadDashboard = useCallback(async () => {
     setLoading(true)
@@ -350,7 +328,7 @@ export default function CreatorDashboardPage() {
     }
 
     if (postsResult.error) {
-      setMessage('Não foi possível carregar suas publicações agora. Tente novamente em instantes.')
+      setMessage(t('creator.dashboard.errors.loadPosts'))
       setPosts([])
       setLoading(false)
       return
@@ -449,16 +427,16 @@ export default function CreatorDashboardPage() {
     )
 
     if (viewsResult.error && !isMissingPostAnalyticsSchemaError(viewsResult.error)) {
-      setMessage((current) => current || 'Metricas de visualizacao estao indisponiveis no momento.')
+      setMessage((current) => current || t('creator.dashboard.errors.viewsUnavailable'))
     }
 
     if ([likesResult, commentsResult, repostsResult, savesResult].some((result) => result.error)) {
-      setMessage('Algumas métricas de interação estão indisponíveis no momento. Seus posts continuam seguros e privados neste painel.')
+      setMessage(t('creator.dashboard.errors.metricsUnavailable'))
     }
 
     await loadWithdrawals()
     setLoading(false)
-  }, [loadWithdrawals, router])
+  }, [loadWithdrawals, router, t])
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -502,7 +480,7 @@ export default function CreatorDashboardPage() {
     })
 
     if (!validation.ok) {
-      setWithdrawalMessage(validation.message)
+      setWithdrawalMessage(t(`creator.withdrawal.errors.${validation.reason}`))
       return
     }
 
@@ -511,7 +489,7 @@ export default function CreatorDashboardPage() {
     } = await supabase.auth.getSession()
 
     if (!session?.access_token) {
-      setWithdrawalMessage('Entre na sua conta para solicitar saque.')
+      setWithdrawalMessage(t('creator.withdrawal.errors.not_authenticated'))
       return
     }
 
@@ -533,7 +511,7 @@ export default function CreatorDashboardPage() {
     setWithdrawalSubmitting(false)
 
     if (!response.ok || !data?.ok) {
-      setWithdrawalMessage(data?.error || 'Nao foi possivel solicitar saque agora.')
+      setWithdrawalMessage(t('creator.withdrawal.errors.internal'))
       return
     }
 
@@ -543,7 +521,7 @@ export default function CreatorDashboardPage() {
       pixKeyType: current.pixKeyType,
       bankAccountType: current.bankAccountType,
     }))
-    setWithdrawalMessage(data.message || 'Solicitacao de saque enviada.')
+    setWithdrawalMessage(t('creator.withdrawal.requestSent'))
     await loadDashboard()
   }
 
@@ -578,41 +556,41 @@ export default function CreatorDashboardPage() {
   )
 
   const statCards = [
-    { label: 'Posts publicados', metric: creatorMetric(summary.posts), icon: BarChart3, tone: 'bg-blue-500/15 text-blue-200' },
-    { label: 'Visualizacoes', metric: creatorMetric(viewActivity.available ? viewActivity.total : undefined), icon: Eye, tone: 'bg-emerald-500/15 text-emerald-200', unavailableLabel: 'Disponivel apos aplicar a migration de analytics.' },
-    { label: 'Views 7 dias', metric: creatorMetric(viewActivity.available ? viewActivity.last7 : undefined), icon: TrendingUp, tone: 'bg-lime-500/15 text-lime-200', unavailableLabel: 'Disponivel apos aplicar a migration de analytics.' },
-    { label: 'Views 30 dias', metric: creatorMetric(viewActivity.available ? viewActivity.last30 : undefined), icon: BarChart3, tone: 'bg-sky-500/15 text-sky-200', unavailableLabel: 'Disponivel apos aplicar a migration de analytics.' },
-    { label: 'Curtidas recebidas', metric: summary.likes, icon: Heart, tone: 'bg-rose-500/15 text-rose-200', unavailableLabel: 'Disponível quando a leitura de interações responder.' },
-    { label: 'Comentários recebidos', metric: summary.comments, icon: MessageCircle, tone: 'bg-emerald-500/15 text-emerald-200', unavailableLabel: 'Disponível quando a leitura de interações responder.' },
-    { label: 'Seguidores', metric: summary.followers, icon: Users, tone: 'bg-violet-500/15 text-violet-200', unavailableLabel: 'Disponível quando a lista de seguidores responder.' },
-    { label: 'Engajamento estimado', metric: summary.engagementRate, icon: BarChart3, tone: 'bg-amber-500/15 text-amber-200', suffix: summary.engagementRate.available ? '%' : '', unavailableLabel: 'Analytics de visualizações ainda está em preparação.' },
+    { label: t('creator.dashboard.stats.posts'), metric: creatorMetric(summary.posts), icon: BarChart3, tone: 'bg-blue-500/15 text-blue-200' },
+    { label: t('creator.dashboard.stats.views'), metric: creatorMetric(viewActivity.available ? viewActivity.total : undefined), icon: Eye, tone: 'bg-emerald-500/15 text-emerald-200', unavailableLabel: t('creator.dashboard.stats.analyticsMigration') },
+    { label: t('creator.dashboard.stats.views7'), metric: creatorMetric(viewActivity.available ? viewActivity.last7 : undefined), icon: TrendingUp, tone: 'bg-lime-500/15 text-lime-200', unavailableLabel: t('creator.dashboard.stats.analyticsMigration') },
+    { label: t('creator.dashboard.stats.views30'), metric: creatorMetric(viewActivity.available ? viewActivity.last30 : undefined), icon: BarChart3, tone: 'bg-sky-500/15 text-sky-200', unavailableLabel: t('creator.dashboard.stats.analyticsMigration') },
+    { label: t('creator.dashboard.stats.likes'), metric: summary.likes, icon: Heart, tone: 'bg-rose-500/15 text-rose-200', unavailableLabel: t('creator.dashboard.stats.interactionsUnavailable') },
+    { label: t('creator.dashboard.stats.comments'), metric: summary.comments, icon: MessageCircle, tone: 'bg-emerald-500/15 text-emerald-200', unavailableLabel: t('creator.dashboard.stats.interactionsUnavailable') },
+    { label: t('creator.dashboard.stats.followers'), metric: summary.followers, icon: Users, tone: 'bg-violet-500/15 text-violet-200', unavailableLabel: t('creator.dashboard.stats.followersUnavailable') },
+    { label: t('creator.dashboard.stats.engagement'), metric: summary.engagementRate, icon: BarChart3, tone: 'bg-amber-500/15 text-amber-200', suffix: summary.engagementRate.available ? '%' : '', unavailableLabel: t('creator.dashboard.stats.analyticsPreparing') },
     {
-      label: 'Gorjetas liquidas',
+      label: t('creator.dashboard.stats.netTips'),
       metric: summary.supports,
       icon: Coins,
       tone: 'bg-cyan-500/15 text-cyan-200',
       renderValue: summary.supports.available
         ? <ItaCashAmount amount={summary.supports.value} size="lg" className="text-white" valueClassName="text-2xl" />
         : undefined,
-      unavailableLabel: 'Mostra gorjetas ItaCash liquidas ja registradas.',
+      unavailableLabel: t('creator.dashboard.stats.netTipsUnavailable'),
     },
   ]
 
   const checklist = [
-    { label: 'Foto de perfil', complete: Boolean(profile?.avatar_url), description: 'Ajuda seu público a reconhecer sua conta.' },
-    { label: 'Bio preenchida', complete: Boolean(profile?.bio?.trim()), description: 'Explique que tipo de conteúdo você cria.' },
-    { label: 'Username configurado', complete: Boolean(profile?.username), description: 'Necessário para divulgar seu perfil.' },
-    { label: 'Primeira publicação', complete: summary.posts > 0, description: 'As métricas aparecem após a primeira publicação.' },
-    { label: 'Regras da comunidade aceitas', complete: Boolean(profile?.terms_accepted_at), description: 'Use a plataforma conforme os termos aceitos.' },
-    { label: 'Verificação 18+ para conteúdo adulto', complete: profile?.age_verification_status === 'approved', description: 'Opcional; exigida apenas para publicar na área adulta.' },
-    { label: 'Pronto para monetizacao', complete: Boolean(profile?.username && profile?.avatar_url && summary.posts > 0), description: 'Gorjetas, posts pagos e saques manuais usam ItaCash com conferencia da equipe.' },
+    { label: t('creator.dashboard.checklist.photo'), complete: Boolean(profile?.avatar_url), description: t('creator.dashboard.checklist.photoDescription') },
+    { label: t('creator.dashboard.checklist.bio'), complete: Boolean(profile?.bio?.trim()), description: t('creator.dashboard.checklist.bioDescription') },
+    { label: t('creator.dashboard.checklist.username'), complete: Boolean(profile?.username), description: t('creator.dashboard.checklist.usernameDescription') },
+    { label: t('creator.dashboard.checklist.firstPost'), complete: summary.posts > 0, description: t('creator.dashboard.checklist.firstPostDescription') },
+    { label: t('creator.dashboard.checklist.rules'), complete: Boolean(profile?.terms_accepted_at), description: t('creator.dashboard.checklist.rulesDescription') },
+    { label: t('creator.dashboard.checklist.adultVerification'), complete: profile?.age_verification_status === 'approved', description: t('creator.dashboard.checklist.adultVerificationDescription') },
+    { label: t('creator.dashboard.checklist.monetization'), complete: Boolean(profile?.username && profile?.avatar_url && summary.posts > 0), description: t('creator.dashboard.checklist.monetizationDescription') },
   ]
 
   const walletBalanceValue = summary.walletBalance.available ? summary.walletBalance.value : 0
   const canSubmitWithdrawal = summary.walletBalance.available && canRequestWithdrawal(walletBalanceValue)
   const withdrawalFormDisabled = !summary.walletBalance.available || withdrawalSubmitting
-  const selectedPaymentMethodLabel = getWithdrawalPaymentMethodLabel(withdrawalForm.paymentMethod)
-  const selectedPaymentMethodNotice = getWithdrawalPaymentMethodNotice(withdrawalForm.paymentMethod)
+  const selectedPaymentMethodLabel = t(`creator.withdrawal.methods.${withdrawalForm.paymentMethod}`)
+  const selectedPaymentMethodNotice = t(`creator.withdrawal.methodNotices.${withdrawalForm.paymentMethod}`)
   const withdrawalPreviewAmount = Number(withdrawalForm.amountItacash)
   const withdrawalPreviewBrl = Number.isFinite(withdrawalPreviewAmount)
     ? convertItaCashToBrl(withdrawalPreviewAmount)
@@ -640,7 +618,7 @@ export default function CreatorDashboardPage() {
 
       <MobileNavigation
         email={email}
-        displayName={profile?.display_name || profile?.username || 'Minha conta'}
+        displayName={profile?.display_name || profile?.username || t('navigation.myAccount')}
         avatarUrl={profile?.avatar_url || null}
         unreadNotificationsCount={unreadNotificationsCount}
         mounted={mounted}
@@ -653,7 +631,7 @@ export default function CreatorDashboardPage() {
       <section className="mx-auto min-h-screen w-full max-w-7xl px-4 py-20 pb-24 sm:px-6 lg:ml-[104px] lg:max-w-[calc(80rem-104px)] lg:px-8 lg:py-8">
         <Link href="/feed" className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-black transition hover:bg-white/10">
           <ArrowLeft className="h-4 w-4" />
-          Feed
+          {t('navigation.feed')}
         </Link>
 
         <header className="mt-6 flex flex-col gap-5 rounded-[2rem] border border-blue-300/20 bg-gradient-to-br from-blue-500/15 via-zinc-950 to-zinc-950 p-6 shadow-2xl shadow-blue-950/20 ring-1 ring-white/5 sm:flex-row sm:items-center sm:justify-between">
@@ -667,30 +645,30 @@ export default function CreatorDashboardPage() {
               </div>
             )}
             <div className="min-w-0">
-              <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-300">EntreUS para criadores</p>
-              <h1 className="mt-2 truncate text-3xl font-black tracking-tight sm:text-4xl">Painel do Criador</h1>
+              <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-300">{t('creator.dashboard.eyebrow')}</p>
+              <h1 className="mt-2 truncate text-3xl font-black tracking-tight sm:text-4xl">{t('creator.dashboard.title')}</h1>
               <p className="mt-1 truncate text-sm text-zinc-400">{profile?.display_name || profile?.username || 'Seu perfil'}</p>
               {profile?.username && <p className="mt-1 text-sm font-bold text-blue-100">@{profile.username}</p>}
             </div>
           </div>
           <div className="inline-flex items-center gap-2 self-start rounded-full bg-blue-500/15 px-4 py-2 text-sm font-black text-blue-100 ring-1 ring-blue-300/20 sm:self-auto">
             <BadgeCheck className="h-4 w-4" />
-            Métricas iniciais
+            {t('creator.dashboard.initialMetrics')}
           </div>
         </header>
 
-        <nav aria-label="Acoes rapidas do criador" className="mt-4 grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <nav aria-label={t('creator.dashboard.quickActionsLabel')} className="mt-4 grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <Link href="/feed#post-composer" className="flex min-w-0 items-center gap-3 rounded-2xl border border-blue-300/20 bg-blue-500/10 px-4 py-3 text-sm font-black text-blue-100 transition hover:-translate-y-0.5 hover:bg-blue-500/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300">
-            <Send className="h-4 w-4 shrink-0" /> Criar post pago
+            <Send className="h-4 w-4 shrink-0" /> {t('creator.dashboard.createPaidPost')}
           </Link>
           <Link href="#monetizacao" className="flex min-w-0 items-center gap-3 rounded-2xl border border-cyan-300/20 bg-cyan-500/10 px-4 py-3 text-sm font-black text-cyan-100 transition hover:-translate-y-0.5 hover:bg-cyan-500/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300">
-            <Coins className="h-4 w-4 shrink-0" /> Ver monetizacao
+            <Coins className="h-4 w-4 shrink-0" /> {t('creator.dashboard.viewMonetization')}
           </Link>
           <Link href="#saque" className="flex min-w-0 items-center gap-3 rounded-2xl border border-emerald-300/20 bg-emerald-500/10 px-4 py-3 text-sm font-black text-emerald-100 transition hover:-translate-y-0.5 hover:bg-emerald-500/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300">
-            <Banknote className="h-4 w-4 shrink-0" /> Solicitar saque
+            <Banknote className="h-4 w-4 shrink-0" /> {t('creator.dashboard.requestWithdrawal')}
           </Link>
           <Link href="/profile" className="flex min-w-0 items-center gap-3 rounded-2xl border border-violet-300/20 bg-violet-500/10 px-4 py-3 text-sm font-black text-violet-100 transition hover:-translate-y-0.5 hover:bg-violet-500/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300">
-            <BadgeCheck className="h-4 w-4 shrink-0" /> Editar perfil
+            <BadgeCheck className="h-4 w-4 shrink-0" /> {t('creator.dashboard.editProfile')}
           </Link>
         </nav>
 
@@ -699,7 +677,7 @@ export default function CreatorDashboardPage() {
         {loading ? (
           <div className="mt-6 flex min-h-80 items-center justify-center rounded-[2rem] border border-white/10 bg-zinc-950/90 text-zinc-300">
             <Loader2 className="mr-3 h-5 w-5 animate-spin" />
-            Carregando seu painel...
+            {t('creator.dashboard.loading')}
           </div>
         ) : (
           <div className="mt-6 space-y-6">
@@ -708,9 +686,9 @@ export default function CreatorDashboardPage() {
             {summary.posts === 0 && (
               <section className="rounded-[2rem] border border-blue-300/20 bg-blue-500/10 p-7 text-center ring-1 ring-blue-300/10">
                 <Send className="mx-auto h-9 w-9 text-blue-200" />
-                <h2 className="mt-4 text-2xl font-black">Publique seu primeiro conteúdo</h2>
-                <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-blue-100/75">Depois da primeira publicação, você verá aqui o resumo de conteúdo e as interações recebidas.</p>
-                <Link href="/feed#post-composer" className="mt-5 inline-flex rounded-full bg-white px-5 py-2.5 text-sm font-black text-black transition hover:bg-blue-50">Criar publicação</Link>
+                <h2 className="mt-4 text-2xl font-black">{t('creator.dashboard.firstPostTitle')}</h2>
+                <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-blue-100/75">{t('creator.dashboard.firstPostDescription')}</p>
+                <Link href="/feed#post-composer" className="mt-5 inline-flex rounded-full bg-white px-5 py-2.5 text-sm font-black text-black transition hover:bg-blue-50">{t('creator.dashboard.createPost')}</Link>
               </section>
             )}
 
@@ -718,102 +696,102 @@ export default function CreatorDashboardPage() {
                 <article className="rounded-[2rem] border border-white/10 bg-zinc-950/90 p-5 shadow-xl shadow-black/20 ring-1 ring-white/5">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-300">Resumo de conteúdo</p>
-                      <h2 className="mt-2 text-2xl font-black">Suas publicações</h2>
+                      <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-300">{t('creator.dashboard.contentSummary')}</p>
+                      <h2 className="mt-2 text-2xl font-black">{t('creator.dashboard.yourPosts')}</h2>
                     </div>
-                    <p className="text-sm text-zinc-500">Última atividade: {formatDate(summary.lastActivityAt)}</p>
+                    <p className="text-sm text-zinc-500">{t('creator.dashboard.lastActivity', { date: formatDate(summary.lastActivityAt, language, t) })}</p>
                   </div>
                   <div className="mt-5 grid gap-3 sm:grid-cols-3">
                     {Object.entries(summary.ratings).map(([rating, count]) => (
                       <div key={rating} className="rounded-2xl border border-white/10 bg-black/30 p-4">
-                        <p className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">{labelRating(rating)}</p>
-                        <p className="mt-2 text-2xl font-black">{formatNumber(count)}</p>
+                        <p className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">{labelRating(rating, t)}</p>
+                        <p className="mt-2 text-2xl font-black">{formatNumber(count, language)}</p>
                       </div>
                     ))}
                   </div>
                   <div className="mt-4 flex flex-wrap gap-2">
                     {Object.entries(summary.communities).filter(([, count]) => count > 0).map(([community, count]) => (
-                      <span key={community} className="rounded-full border border-blue-300/15 bg-blue-500/10 px-3 py-1.5 text-xs font-bold text-blue-100">{labelCommunity(community)} · {formatNumber(count)}</span>
+                      <span key={community} className="rounded-full border border-blue-300/15 bg-blue-500/10 px-3 py-1.5 text-xs font-bold text-blue-100">{labelCommunity(community, t)} · {formatNumber(count, language)}</span>
                     ))}
                   </div>
                   {summary.hiddenPosts > 0 && (
-                    <p className="mt-4 inline-flex items-center gap-2 rounded-xl border border-amber-300/20 bg-amber-500/10 px-3 py-2 text-sm font-semibold text-amber-100"><ShieldAlert className="h-4 w-4" />{summary.hiddenPosts} publicação(ões) com status de moderação diferente de ativo.</p>
+                    <p className="mt-4 inline-flex items-center gap-2 rounded-xl border border-amber-300/20 bg-amber-500/10 px-3 py-2 text-sm font-semibold text-amber-100"><ShieldAlert className="h-4 w-4" />{t('creator.dashboard.hiddenPosts', { count: summary.hiddenPosts })}</p>
                   )}
                 </article>
 
                 <article id="monetizacao" className="min-w-0 scroll-mt-24 overflow-hidden rounded-[2rem] border border-white/10 bg-zinc-950/90 p-4 shadow-xl shadow-black/20 ring-1 ring-white/5 sm:p-5">
-                  <p className="text-xs font-black uppercase tracking-[0.18em] text-violet-300">Monetização</p>
-                  <h2 className="mt-2 text-2xl font-black">Receita ItaCash</h2>
+                  <p className="text-xs font-black uppercase tracking-[0.18em] text-violet-300">{t('creator.dashboard.monetization')}</p>
+                  <h2 className="mt-2 text-2xl font-black">{t('creator.dashboard.itacashRevenue')}</h2>
                   {summary.walletBalance.available ? (
                     <div className="mt-4 rounded-2xl border border-cyan-300/20 bg-cyan-500/10 p-4">
-                      <p className="text-xs font-black uppercase tracking-[0.14em] text-cyan-100/70">Saldo liquido da carteira</p>
+                      <p className="text-xs font-black uppercase tracking-[0.14em] text-cyan-100/70">{t('creator.dashboard.netWalletBalance')}</p>
                       <ItaCashAmount amount={summary.walletBalance.value} size="lg" className="mt-2 text-cyan-50" valueClassName="text-2xl" />
-                      <p className="mt-2 text-xs leading-5 text-cyan-100/70">Equivalente aproximado: {formatBRL(convertItaCashToBrl(summary.walletBalance.value))}. Saques pendentes ja reduzem este saldo.</p>
+                      <p className="mt-2 text-xs leading-5 text-cyan-100/70">{t('creator.dashboard.balanceEquivalent', { value: formatBRL(convertItaCashToBrl(summary.walletBalance.value), language) })}</p>
                     </div>
                   ) : (
-                    <p className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-zinc-400">Carteira ItaCash indisponível no momento.</p>
+                    <p className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-zinc-400">{t('creator.dashboard.walletUnavailable')}</p>
                   )}
                   {revenueAvailable && (
                     <div className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-4">
-                      <p className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Resumo financeiro</p>
+                      <p className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">{t('creator.dashboard.financialSummary')}</p>
                       <div className="mt-3 grid gap-3 sm:grid-cols-3">
                         <div>
-                          <p className="text-xs font-bold text-zinc-500">Receita liquida recebida</p>
+                          <p className="text-xs font-bold text-zinc-500">{t('creator.dashboard.netRevenue')}</p>
                           <ItaCashAmount amount={netRevenueAmount} size="sm" className="mt-1 text-emerald-100" />
                         </div>
                         <div>
-                          <p className="text-xs font-bold text-zinc-500">Taxa da plataforma</p>
+                          <p className="text-xs font-bold text-zinc-500">{t('creator.dashboard.platformFee')}</p>
                           <ItaCashAmount amount={platformFeeAmount} size="sm" className="mt-1 text-amber-100" />
                         </div>
                         <div>
-                          <p className="text-xs font-bold text-zinc-500">Valor bruto movimentado</p>
+                          <p className="text-xs font-bold text-zinc-500">{t('creator.dashboard.grossAmount')}</p>
                           <ItaCashAmount amount={grossRevenueAmount} size="sm" className="mt-1 text-white" />
                         </div>
                       </div>
-                      <p className="mt-3 text-xs leading-5 text-zinc-500">Os valores exibidos ao criador ja sao liquidos, apos a taxa da plataforma. Historico anterior a aplicacao da migration pode aparecer com taxa zero.</p>
+                      <p className="mt-3 text-xs leading-5 text-zinc-500">{t('creator.dashboard.revenueNotice')}</p>
                     </div>
                   )}
                   {summary.supports.available ? (
                     <div className="mt-4 grid gap-3 sm:grid-cols-2">
                       <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
-                        <p className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Gorjetas liquidas recebidas</p>
+                        <p className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">{t('creator.dashboard.netTipsReceived')}</p>
                         <ItaCashAmount amount={summary.supports.value} size="lg" className="mt-2 text-white" valueClassName="text-xl" />
                       </div>
                       <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
-                        <p className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Gorjetas</p>
-                        <p className="mt-2 text-xl font-black text-white">{formatNumber(tipActivity.count || 0)}</p>
+                        <p className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">{t('creator.dashboard.tips')}</p>
+                        <p className="mt-2 text-xl font-black text-white">{formatNumber(tipActivity.count || 0, language)}</p>
                       </div>
                     </div>
                   ) : (
-                    <p className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-zinc-400">Gorjetas ItaCash indisponiveis no momento.</p>
+                    <p className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm text-zinc-400">{t('creator.dashboard.tipsUnavailable')}</p>
                   )}
                   <div className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-4">
-                    <p className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Ultimas gorjetas liquidas</p>
+                    <p className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">{t('creator.dashboard.latestNetTips')}</p>
                     {summary.supports.available && tipActivity.recentTips.length > 0 ? (
                       <div className="mt-3 space-y-2">
                         {tipActivity.recentTips.map((tip) => (
                           <div key={tip.id} className="flex items-center justify-between gap-3 rounded-xl bg-white/5 px-3 py-2 text-sm">
                             <ItaCashAmount amount={tip.amount} size="sm" className="text-zinc-100" />
-                            <span className="shrink-0 text-xs text-zinc-500">{formatDate(tip.createdAt)}</span>
+                            <span className="shrink-0 text-xs text-zinc-500">{formatDate(tip.createdAt, language, t)}</span>
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <p className="mt-3 text-sm leading-6 text-zinc-400">Quando alguem enviar uma gorjeta, o valor liquido aparecera aqui.</p>
+                      <p className="mt-3 text-sm leading-6 text-zinc-400">{t('creator.dashboard.noTips')}</p>
                     )}
                   </div>
                   <div className="mt-4 rounded-2xl border border-cyan-300/15 bg-cyan-500/10 p-4">
-                    <p className="text-xs font-black uppercase tracking-[0.14em] text-cyan-100/70">Posts pagos</p>
+                    <p className="text-xs font-black uppercase tracking-[0.14em] text-cyan-100/70">{t('creator.dashboard.paidPosts')}</p>
                     {paidPostActivity.total !== undefined ? (
                       <>
                         <div className="mt-3 grid gap-3 sm:grid-cols-2">
                           <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
-                            <p className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Posts pagos liquidos recebidos</p>
+                            <p className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">{t('creator.dashboard.netPaidPosts')}</p>
                             <ItaCashAmount amount={paidPostActivity.total} size="lg" className="mt-2 text-white" valueClassName="text-xl" />
                           </div>
                           <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
-                            <p className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Desbloqueios</p>
-                            <p className="mt-2 text-xl font-black text-white">{formatNumber(paidPostActivity.count || 0)}</p>
+                            <p className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">{t('creator.dashboard.unlocks')}</p>
+                            <p className="mt-2 text-xl font-black text-white">{formatNumber(paidPostActivity.count || 0, language)}</p>
                           </div>
                         </div>
                         {paidPostActivity.recentUnlocks.length > 0 ? (
@@ -821,16 +799,16 @@ export default function CreatorDashboardPage() {
                             {paidPostActivity.recentUnlocks.map((unlock) => (
                               <div key={unlock.id} className="flex items-center justify-between gap-3 rounded-xl bg-white/5 px-3 py-2 text-sm">
                                 <ItaCashAmount amount={unlock.amount} size="sm" className="text-zinc-100" />
-                                <span className="shrink-0 text-xs text-zinc-500">{formatDate(unlock.createdAt)}</span>
+                                <span className="shrink-0 text-xs text-zinc-500">{formatDate(unlock.createdAt, language, t)}</span>
                               </div>
                             ))}
                           </div>
                         ) : (
-                          <p className="mt-3 text-sm leading-6 text-cyan-100/75">Quando alguem desbloquear um post pago, ele aparecera aqui.</p>
+                          <p className="mt-3 text-sm leading-6 text-cyan-100/75">{t('creator.dashboard.noPaidUnlocks')}</p>
                         )}
                       </>
                     ) : (
-                      <p className="mt-3 text-sm leading-6 text-cyan-100/75">Recebimentos por posts pagos ficam disponiveis depois da migration aplicada.</p>
+                      <p className="mt-3 text-sm leading-6 text-cyan-100/75">{t('creator.dashboard.paidPostsUnavailable')}</p>
                     )}
                   </div>
                   <div id="saque" className="mt-4 min-w-0 scroll-mt-24 overflow-hidden rounded-2xl border border-emerald-300/20 bg-emerald-500/10 p-4">
@@ -839,30 +817,30 @@ export default function CreatorDashboardPage() {
                         <Banknote className="h-5 w-5" />
                       </span>
                       <div className="min-w-0">
-                        <p className="text-xs font-black uppercase tracking-[0.14em] text-emerald-100/70">Saque</p>
-                        <h3 className="mt-1 text-xl font-black">Solicitar saque manual</h3>
+                        <p className="text-xs font-black uppercase tracking-[0.14em] text-emerald-100/70">{t('creator.withdrawal.title')}</p>
+                        <h3 className="mt-1 text-xl font-black">{t('creator.withdrawal.requestManual')}</h3>
                         <p className="mt-1 text-sm leading-6 text-emerald-50/75">
-                          O saque e processado manualmente pela equipe EntreUS. O saque minimo e de <ItaCashAmount amount={MIN_WITHDRAWAL_ITACASH} size="sm" className="mx-1" /> = {formatBRL(MIN_WITHDRAWAL_BRL)}.
+                          {t('creator.withdrawal.manualPrefix')} <ItaCashAmount amount={MIN_WITHDRAWAL_ITACASH} size="sm" className="mx-1" /> = {formatBRL(MIN_WITHDRAWAL_BRL, language)}.
                         </p>
                       </div>
                     </div>
 
                     <div className="mt-4 grid gap-3 sm:grid-cols-2">
                       <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/30 p-4">
-                        <p className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Disponivel</p>
+                        <p className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">{t('wallet.available')}</p>
                         <ItaCashAmount amount={walletBalanceValue} size="lg" className="mt-2" valueClassName="text-xl" />
-                        <p className="mt-1 text-xs text-zinc-400">{formatBRL(convertItaCashToBrl(walletBalanceValue))}</p>
+                        <p className="mt-1 text-xs text-zinc-400">{formatBRL(convertItaCashToBrl(walletBalanceValue), language)}</p>
                       </div>
                       <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/30 p-4">
-                        <p className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Conversao</p>
+                        <p className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">{t('creator.withdrawal.conversion')}</p>
                         <ItaCashAmount amount={ITACASH_PER_BRL} size="lg" className="mt-2" valueClassName="text-xl" />
-                        <p className="mt-1 text-xs text-zinc-400">R$ 1,00</p>
+                        <p className="mt-1 text-xs text-zinc-400">{formatBRL(1, language)}</p>
                       </div>
                     </div>
 
                     {!canSubmitWithdrawal && (
                       <p className="mt-4 rounded-2xl border border-amber-300/20 bg-amber-500/10 p-3 text-sm font-semibold leading-6 text-amber-100">
-                        Voce precisa ter pelo menos <ItaCashAmount amount={MIN_WITHDRAWAL_ITACASH} size="sm" className="mx-1" /> ({formatBRL(MIN_WITHDRAWAL_BRL)}) para solicitar saque.
+                        {t('creator.withdrawal.minimumPrefix')} <ItaCashAmount amount={MIN_WITHDRAWAL_ITACASH} size="sm" className="mx-1" /> ({formatBRL(MIN_WITHDRAWAL_BRL, language)}) {t('creator.withdrawal.minimumSuffix')}
                       </p>
                     )}
 
@@ -874,7 +852,7 @@ export default function CreatorDashboardPage() {
 
                     <form onSubmit={handleWithdrawalSubmit} className="mt-4 grid gap-3">
                       <label className="block">
-                        <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Valor em ItaCash</span>
+                        <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">{t('creator.withdrawal.amount')}</span>
                         <input
                           type="number"
                           min={MIN_WITHDRAWAL_ITACASH}
@@ -885,12 +863,12 @@ export default function CreatorDashboardPage() {
                           disabled={withdrawalFormDisabled}
                         />
                         <span className="mt-1 block text-xs text-zinc-500">
-                          Previa: {formatBRL(withdrawalPreviewBrl > 0 ? withdrawalPreviewBrl : 0)}
+                          {t('creator.withdrawal.preview', { value: formatBRL(withdrawalPreviewBrl > 0 ? withdrawalPreviewBrl : 0, language) })}
                         </span>
                       </label>
 
                       <label className="block">
-                        <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Metodo de recebimento</span>
+                        <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">{t('creator.withdrawal.paymentMethod')}</span>
                         <select
                           value={withdrawalForm.paymentMethod}
                           onChange={(event) => setWithdrawalForm((current) => ({ ...current, paymentMethod: event.target.value as CreatorWithdrawalPaymentMethod }))}
@@ -898,22 +876,22 @@ export default function CreatorDashboardPage() {
                           disabled={withdrawalFormDisabled}
                         >
                           {CREATOR_WITHDRAWAL_PAYMENT_METHODS.map((method) => (
-                            <option key={method} value={method}>{getWithdrawalPaymentMethodLabel(method)}</option>
+                            <option key={method} value={method}>{t(`creator.withdrawal.methods.${method}`)}</option>
                           ))}
                         </select>
                         <span className="mt-1 block text-xs leading-5 text-zinc-500">
-                          {selectedPaymentMethodNotice} Confira seus dados antes de enviar.
+                          {selectedPaymentMethodNotice} {t('creator.withdrawal.checkDetails')}
                         </span>
                       </label>
 
                       {withdrawalForm.paymentMethod === 'pix' && (
                       <div className="grid gap-3">
                         <p className="rounded-2xl border border-emerald-300/15 bg-emerald-500/10 p-3 text-xs font-semibold leading-5 text-emerald-50/80">
-                          Pix e o metodo recomendado no Brasil.
+                          {t('creator.withdrawal.pixRecommended')}
                         </p>
                         <div className="grid gap-3 sm:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
                         <label className="block">
-                          <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Tipo Pix</span>
+                          <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">{t('creator.withdrawal.pixType')}</span>
                           <select
                             value={withdrawalForm.pixKeyType}
                             onChange={(event) => setWithdrawalForm((current) => ({ ...current, pixKeyType: event.target.value as PixKeyType }))}
@@ -921,13 +899,13 @@ export default function CreatorDashboardPage() {
                             disabled={withdrawalFormDisabled}
                           >
                             {PIX_KEY_TYPES.map((type) => (
-                              <option key={type} value={type}>{PIX_KEY_TYPE_LABELS[type]}</option>
+                              <option key={type} value={type}>{t(`creator.withdrawal.pixTypes.${type}`)}</option>
                             ))}
                           </select>
                         </label>
 
                         <label className="block">
-                          <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Chave Pix</span>
+                          <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">{t('creator.withdrawal.pixKey')}</span>
                           <input
                             value={withdrawalForm.pixKey}
                             onChange={(event) => setWithdrawalForm((current) => ({ ...current, pixKey: event.target.value }))}
@@ -938,7 +916,7 @@ export default function CreatorDashboardPage() {
                         </div>
 
                         <label className="block">
-                          <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Nome do titular</span>
+                          <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">{t('creator.withdrawal.holderName')}</span>
                           <input
                             value={withdrawalForm.pixHolderName}
                             onChange={(event) => setWithdrawalForm((current) => ({ ...current, pixHolderName: event.target.value }))}
@@ -952,11 +930,11 @@ export default function CreatorDashboardPage() {
                       {withdrawalForm.paymentMethod === 'bank_transfer' && (
                       <div className="grid gap-3">
                         <p className="rounded-2xl border border-amber-300/15 bg-amber-500/10 p-3 text-xs font-semibold leading-5 text-amber-50/80">
-                          Transferencia bancaria pode levar mais tempo. A equipe confere os dados manualmente.
+                          {t('creator.withdrawal.bankNotice')}
                         </p>
                         <div className="grid gap-3 sm:grid-cols-2">
                           <label className="block">
-                            <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Nome do titular</span>
+                            <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">{t('creator.withdrawal.holderName')}</span>
                             <input
                               value={withdrawalForm.bankHolderName}
                               onChange={(event) => setWithdrawalForm((current) => ({ ...current, bankHolderName: event.target.value }))}
@@ -965,7 +943,7 @@ export default function CreatorDashboardPage() {
                             />
                           </label>
                           <label className="block">
-                            <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">CPF/CNPJ do titular</span>
+                            <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">{t('creator.withdrawal.holderDocument')}</span>
                             <input
                               value={withdrawalForm.bankDocument}
                               onChange={(event) => setWithdrawalForm((current) => ({ ...current, bankDocument: event.target.value }))}
@@ -974,7 +952,7 @@ export default function CreatorDashboardPage() {
                             />
                           </label>
                           <label className="block">
-                            <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Banco</span>
+                            <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">{t('creator.withdrawal.bank')}</span>
                             <input
                               value={withdrawalForm.bankName}
                               onChange={(event) => setWithdrawalForm((current) => ({ ...current, bankName: event.target.value }))}
@@ -983,7 +961,7 @@ export default function CreatorDashboardPage() {
                             />
                           </label>
                           <label className="block">
-                            <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Tipo de conta</span>
+                            <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">{t('creator.withdrawal.accountType')}</span>
                             <select
                               value={withdrawalForm.bankAccountType}
                               onChange={(event) => setWithdrawalForm((current) => ({ ...current, bankAccountType: event.target.value as BankAccountType }))}
@@ -991,12 +969,12 @@ export default function CreatorDashboardPage() {
                               disabled={withdrawalFormDisabled}
                             >
                               {BANK_ACCOUNT_TYPES.map((type) => (
-                                <option key={type} value={type}>{getBankAccountTypeLabel(type)}</option>
+                                <option key={type} value={type}>{t(`creator.withdrawal.accountTypes.${type}`)}</option>
                               ))}
                             </select>
                           </label>
                           <label className="block">
-                            <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Agencia</span>
+                            <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">{t('creator.withdrawal.agency')}</span>
                             <input
                               value={withdrawalForm.bankAgency}
                               onChange={(event) => setWithdrawalForm((current) => ({ ...current, bankAgency: event.target.value }))}
@@ -1005,7 +983,7 @@ export default function CreatorDashboardPage() {
                             />
                           </label>
                           <label className="block">
-                            <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Conta</span>
+                            <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">{t('creator.withdrawal.account')}</span>
                             <input
                               value={withdrawalForm.bankAccount}
                               onChange={(event) => setWithdrawalForm((current) => ({ ...current, bankAccount: event.target.value }))}
@@ -1015,7 +993,7 @@ export default function CreatorDashboardPage() {
                           </label>
                         </div>
                         <label className="block">
-                          <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Observacao opcional</span>
+                          <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">{t('creator.withdrawal.optionalNote')}</span>
                           <textarea
                             value={withdrawalForm.bankNotes}
                             onChange={(event) => setWithdrawalForm((current) => ({ ...current, bankNotes: event.target.value }))}
@@ -1030,11 +1008,11 @@ export default function CreatorDashboardPage() {
                       {withdrawalForm.paymentMethod === 'international_manual' && (
                       <div className="grid gap-3">
                         <p className="rounded-2xl border border-amber-300/15 bg-amber-500/10 p-3 text-xs font-semibold leading-5 text-amber-50/80">
-                          Saques internacionais estao em analise e podem exigir conferencia manual. Nao ha saque internacional automatico.
+                          {t('creator.withdrawal.internationalNotice')}
                         </p>
                         <div className="grid gap-3 sm:grid-cols-2">
                           <label className="block">
-                            <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Nome do titular</span>
+                            <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">{t('creator.withdrawal.holderName')}</span>
                             <input
                               value={withdrawalForm.internationalHolderName}
                               onChange={(event) => setWithdrawalForm((current) => ({ ...current, internationalHolderName: event.target.value }))}
@@ -1043,7 +1021,7 @@ export default function CreatorDashboardPage() {
                             />
                           </label>
                           <label className="block">
-                            <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Pais</span>
+                            <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">{t('creator.withdrawal.country')}</span>
                             <input
                               value={withdrawalForm.internationalCountry}
                               onChange={(event) => setWithdrawalForm((current) => ({ ...current, internationalCountry: event.target.value }))}
@@ -1053,7 +1031,7 @@ export default function CreatorDashboardPage() {
                           </label>
                         </div>
                         <label className="block">
-                          <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Metodo desejado</span>
+                          <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">{t('creator.withdrawal.desiredMethod')}</span>
                           <input
                             value={withdrawalForm.internationalDesiredMethod}
                             onChange={(event) => setWithdrawalForm((current) => ({ ...current, internationalDesiredMethod: event.target.value }))}
@@ -1062,7 +1040,7 @@ export default function CreatorDashboardPage() {
                           />
                         </label>
                         <label className="block">
-                          <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Observacoes</span>
+                          <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">{t('creator.withdrawal.notes')}</span>
                           <textarea
                             value={withdrawalForm.internationalNotes}
                             onChange={(event) => setWithdrawalForm((current) => ({ ...current, internationalNotes: event.target.value }))}
@@ -1078,7 +1056,7 @@ export default function CreatorDashboardPage() {
                       <div className="grid gap-3">
                         <div className="grid gap-3 sm:grid-cols-2">
                           <label className="block">
-                            <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Nome do titular</span>
+                            <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">{t('creator.withdrawal.holderName')}</span>
                             <input
                               value={withdrawalForm.otherHolderName}
                               onChange={(event) => setWithdrawalForm((current) => ({ ...current, otherHolderName: event.target.value }))}
@@ -1087,7 +1065,7 @@ export default function CreatorDashboardPage() {
                             />
                           </label>
                           <label className="block">
-                            <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Descricao do metodo</span>
+                            <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">{t('creator.withdrawal.methodDescription')}</span>
                             <input
                               value={withdrawalForm.otherMethodDescription}
                               onChange={(event) => setWithdrawalForm((current) => ({ ...current, otherMethodDescription: event.target.value }))}
@@ -1097,7 +1075,7 @@ export default function CreatorDashboardPage() {
                           </label>
                         </div>
                         <label className="block">
-                          <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Observacoes</span>
+                          <span className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">{t('creator.withdrawal.notes')}</span>
                           <textarea
                             value={withdrawalForm.otherNotes}
                             onChange={(event) => setWithdrawalForm((current) => ({ ...current, otherNotes: event.target.value }))}
@@ -1110,7 +1088,7 @@ export default function CreatorDashboardPage() {
                       )}
 
                       <div className="rounded-2xl border border-white/10 bg-black/30 p-3 text-xs leading-5 text-zinc-400">
-                        Metodo escolhido: <span className="font-black text-zinc-100">{selectedPaymentMethodLabel}</span>. A equipe confere os dados, paga fora da plataforma e registra o status aqui.
+                        {t('creator.withdrawal.selectedMethod')} <span className="font-black text-zinc-100">{selectedPaymentMethodLabel}</span>. {t('creator.withdrawal.processingNotice')}
                       </div>
 
                       <button
@@ -1119,12 +1097,12 @@ export default function CreatorDashboardPage() {
                         className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-black text-black transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         {withdrawalSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Banknote className="h-4 w-4" />}
-                        Solicitar saque
+                        {t('creator.dashboard.requestWithdrawal')}
                       </button>
                     </form>
 
                     <div className="mt-5 border-t border-white/10 pt-4">
-                      <p className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">Solicitacoes recentes</p>
+                      <p className="text-xs font-black uppercase tracking-[0.14em] text-zinc-500">{t('creator.withdrawal.recentRequests')}</p>
                       {withdrawals.length > 0 ? (
                         <div className="mt-3 space-y-2">
                           {withdrawals.slice(0, 5).map((withdrawal) => (
@@ -1132,56 +1110,56 @@ export default function CreatorDashboardPage() {
                               <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                                 <div>
                                   <ItaCashAmount amount={withdrawal.amount_itacash} size="sm" className="text-white" />
-                                  <p className="mt-1 text-xs text-zinc-500">{formatBRL(Number(withdrawal.amount_brl) || 0)} - {formatDate(withdrawal.created_at)}</p>
+                                  <p className="mt-1 text-xs text-zinc-500">{formatBRL(Number(withdrawal.amount_brl) || 0, language)} - {formatDate(withdrawal.created_at, language, t)}</p>
                                   <p className="mt-1 text-xs font-semibold text-zinc-300">
                                     {withdrawal.payment_summary || formatWithdrawalPaymentDetailsSummary(withdrawal.payment_method, withdrawal.payment_details)}
                                   </p>
                                 </div>
                                 <span className={`inline-flex w-fit items-center gap-1 rounded-full px-2.5 py-1 text-xs font-black ring-1 ${withdrawalStatusClass(withdrawal.status)}`}>
                                   {withdrawalStatusIcon(withdrawal.status)}
-                                  {formatWithdrawalStatus(withdrawal.status)}
+                                  {t(`creator.withdrawal.statuses.${withdrawal.status}`)}
                                 </span>
                               </div>
                               {withdrawal.rejection_reason && (
                                 <p className="mt-2 rounded-xl bg-red-500/10 px-3 py-2 text-xs font-semibold leading-5 text-red-100 ring-1 ring-red-300/15">
-                                  Motivo: {withdrawal.rejection_reason}
+                                  {t('creator.withdrawal.rejectionReason', { reason: withdrawal.rejection_reason })}
                                 </p>
                               )}
                             </div>
                           ))}
                         </div>
                       ) : (
-                        <p className="mt-3 text-sm leading-6 text-emerald-50/75">Nenhuma solicitacao de saque registrada ainda.</p>
+                        <p className="mt-3 text-sm leading-6 text-emerald-50/75">{t('creator.withdrawal.noRequests')}</p>
                       )}
                     </div>
                   </div>
-                  <Link href="/wallet" className="mt-5 inline-flex items-center gap-2 text-sm font-black text-cyan-200 hover:text-cyan-100"><Wallet className="h-4 w-4" />Abrir carteira</Link>
+                  <Link href="/wallet" className="mt-5 inline-flex items-center gap-2 text-sm font-black text-cyan-200 hover:text-cyan-100"><Wallet className="h-4 w-4" />{t('creator.dashboard.openWallet')}</Link>
                 </article>
               </section>
 
             {summary.posts > 0 && (
               <section className="grid gap-6 xl:grid-cols-2">
                 <article className="rounded-[2rem] border border-white/10 bg-zinc-950/90 p-5 shadow-xl shadow-black/20 ring-1 ring-white/5">
-                  <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-300">Publicações recentes</p>
-                  <h2 className="mt-2 text-2xl font-black">Atividade recente</h2>
+                  <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-300">{t('creator.dashboard.recentPosts')}</p>
+                  <h2 className="mt-2 text-2xl font-black">{t('creator.dashboard.recentActivity')}</h2>
                   <div className="mt-4 space-y-3">
                     {summary.recentPosts.map((post) => (
                       <div key={post.id} className="flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-black/30 p-3">
-                        <div className="min-w-0"><p className="text-sm font-bold text-zinc-100">Publicação em {labelCommunity(post.community)}</p><p className="mt-1 text-xs text-zinc-500">{formatDate(post.createdAt)} · {labelRating(post.rating)}</p></div>
-                        <span className="shrink-0 rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-black text-emerald-200">{formatNumber(post.engagement)} interações</span>
+                        <div className="min-w-0"><p className="text-sm font-bold text-zinc-100">{t('creator.dashboard.postIn', { community: labelCommunity(post.community, t) })}</p><p className="mt-1 text-xs text-zinc-500">{formatDate(post.createdAt, language, t)} · {labelRating(post.rating, t)}</p></div>
+                        <span className="shrink-0 rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-black text-emerald-200">{t('creator.dashboard.interactions', { count: formatNumber(post.engagement, language) })}</span>
                       </div>
                     ))}
                   </div>
                 </article>
 
                 <article className="rounded-[2rem] border border-white/10 bg-zinc-950/90 p-5 shadow-xl shadow-black/20 ring-1 ring-white/5">
-                  <p className="text-xs font-black uppercase tracking-[0.18em] text-rose-300">Destaques</p>
-                  <h2 className="mt-2 text-2xl font-black">Mais engajadas</h2>
+                  <p className="text-xs font-black uppercase tracking-[0.18em] text-rose-300">{t('creator.dashboard.highlights')}</p>
+                  <h2 className="mt-2 text-2xl font-black">{t('creator.dashboard.mostEngaged')}</h2>
                   <div className="mt-4 space-y-3">
                     {summary.topPosts.map((post) => (
                       <div key={post.id} className="flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-black/30 p-3">
-                        <div className="min-w-0"><p className="text-sm font-bold text-zinc-100">Publicação em {labelCommunity(post.community)}</p><p className="mt-1 text-xs text-zinc-500">{formatDate(post.createdAt)} · {labelRating(post.rating)}</p></div>
-                        <span className="shrink-0 rounded-full bg-rose-500/10 px-2.5 py-1 text-xs font-black text-rose-200">{formatNumber(post.engagement)} interações</span>
+                        <div className="min-w-0"><p className="text-sm font-bold text-zinc-100">{t('creator.dashboard.postIn', { community: labelCommunity(post.community, t) })}</p><p className="mt-1 text-xs text-zinc-500">{formatDate(post.createdAt, language, t)} · {labelRating(post.rating, t)}</p></div>
+                        <span className="shrink-0 rounded-full bg-rose-500/10 px-2.5 py-1 text-xs font-black text-rose-200">{t('creator.dashboard.interactions', { count: formatNumber(post.engagement, language) })}</span>
                       </div>
                     ))}
                   </div>
@@ -1192,46 +1170,46 @@ export default function CreatorDashboardPage() {
             {summary.posts > 0 && (
               <section className="grid gap-6 xl:grid-cols-2">
                 <article className="rounded-[2rem] border border-white/10 bg-zinc-950/90 p-5 shadow-xl shadow-black/20 ring-1 ring-white/5">
-                  <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-300">Visualizacoes</p>
-                  <h2 className="mt-2 text-2xl font-black">Top por views</h2>
+                  <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-300">{t('creator.dashboard.views')}</p>
+                  <h2 className="mt-2 text-2xl font-black">{t('creator.dashboard.topByViews')}</h2>
                   {!viewActivity.available ? (
-                    <p className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm leading-6 text-zinc-400">Aplique a migration do Pacote 39 para liberar views autorizadas no painel.</p>
+                    <p className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm leading-6 text-zinc-400">{t('creator.dashboard.viewsMigration')}</p>
                   ) : topViewedPosts.some((item) => item.views > 0) ? (
                     <div className="mt-4 space-y-3">
                       {topViewedPosts.filter((item) => item.views > 0).map((post) => (
                         <div key={post.id} className="flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-black/30 p-3">
                           <div className="min-w-0">
-                            <p className="text-sm font-bold text-zinc-100">Publicacao em {labelCommunity(post.community)}</p>
-                            <p className="mt-1 text-xs text-zinc-500">{formatDate(post.createdAt)} - {labelRating(post.rating)}</p>
+                            <p className="text-sm font-bold text-zinc-100">{t('creator.dashboard.postIn', { community: labelCommunity(post.community, t) })}</p>
+                            <p className="mt-1 text-xs text-zinc-500">{formatDate(post.createdAt, language, t)} - {labelRating(post.rating, t)}</p>
                           </div>
-                          <span className="shrink-0 rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-black text-emerald-200">{formatNumber(post.views)} views</span>
+                          <span className="shrink-0 rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-black text-emerald-200">{t('creator.dashboard.viewsCount', { count: formatNumber(post.views, language) })}</span>
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <p className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm leading-6 text-zinc-400">Nenhuma view autorizada registrada ainda.</p>
+                    <p className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm leading-6 text-zinc-400">{t('creator.dashboard.noViews')}</p>
                   )}
                 </article>
 
                 <article className="rounded-[2rem] border border-white/10 bg-zinc-950/90 p-5 shadow-xl shadow-black/20 ring-1 ring-white/5">
-                  <p className="text-xs font-black uppercase tracking-[0.18em] text-amber-300">Engajamento</p>
-                  <h2 className="mt-2 text-2xl font-black">Taxa por post</h2>
+                  <p className="text-xs font-black uppercase tracking-[0.18em] text-amber-300">{t('creator.dashboard.engagement')}</p>
+                  <h2 className="mt-2 text-2xl font-black">{t('creator.dashboard.rateByPost')}</h2>
                   {!viewActivity.available ? (
-                    <p className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm leading-6 text-zinc-400">A taxa por post aparece quando a migration de analytics estiver aplicada.</p>
+                    <p className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm leading-6 text-zinc-400">{t('creator.dashboard.rateMigration')}</p>
                   ) : topEngagementByViewPosts.some((item) => item.engagementRate.available) ? (
                     <div className="mt-4 space-y-3">
                       {topEngagementByViewPosts.filter((item) => item.engagementRate.available).map((post) => (
                         <div key={post.id} className="flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-black/30 p-3">
                           <div className="min-w-0">
-                            <p className="text-sm font-bold text-zinc-100">Publicacao em {labelCommunity(post.community)}</p>
-                            <p className="mt-1 text-xs text-zinc-500">{formatNumber(post.interactions)} interacoes - {formatNumber(post.views)} views</p>
+                            <p className="text-sm font-bold text-zinc-100">{t('creator.dashboard.postIn', { community: labelCommunity(post.community, t) })}</p>
+                            <p className="mt-1 text-xs text-zinc-500">{t('creator.dashboard.interactionsAndViews', { interactions: formatNumber(post.interactions, language), views: formatNumber(post.views, language) })}</p>
                           </div>
-                          <span className="shrink-0 rounded-full bg-amber-500/10 px-2.5 py-1 text-xs font-black text-amber-200">{post.engagementRate.value.toLocaleString('pt-BR')}%</span>
+                          <span className="shrink-0 rounded-full bg-amber-500/10 px-2.5 py-1 text-xs font-black text-amber-200">{post.engagementRate.value.toLocaleString(language)}%</span>
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <p className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm leading-6 text-zinc-400">A taxa aparece quando houver views e interacoes no mesmo post.</p>
+                    <p className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-4 text-sm leading-6 text-zinc-400">{t('creator.dashboard.rateUnavailable')}</p>
                   )}
                 </article>
               </section>
@@ -1239,20 +1217,20 @@ export default function CreatorDashboardPage() {
 
             <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
               <article className="rounded-[2rem] border border-white/10 bg-zinc-950/90 p-5 shadow-xl shadow-black/20 ring-1 ring-white/5">
-                <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-300">Checklist do criador</p>
-                <h2 className="mt-2 text-2xl font-black">Próximos passos</h2>
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-blue-300">{t('creator.dashboard.creatorChecklist')}</p>
+                <h2 className="mt-2 text-2xl font-black">{t('creator.dashboard.nextSteps')}</h2>
                 <CreatorChecklist items={checklist} />
               </article>
 
               <article className="rounded-[2rem] border border-white/10 bg-zinc-950/90 p-5 shadow-xl shadow-black/20 ring-1 ring-white/5">
-                <p className="text-xs font-black uppercase tracking-[0.18em] text-zinc-400">Interações recebidas</p>
-                <h2 className="mt-2 text-2xl font-black">Visão complementar</h2>
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-zinc-400">{t('creator.dashboard.receivedInteractions')}</p>
+                <h2 className="mt-2 text-2xl font-black">{t('creator.dashboard.complementaryView')}</h2>
                 <div className="mt-5 grid gap-3 sm:grid-cols-3">
-                  <div className="rounded-2xl bg-black/30 p-4"><Repeat2 className="h-5 w-5 text-violet-200" /><p className="mt-3 text-xl font-black">{summary.reposts.available ? formatNumber(summary.reposts.value) : '—'}</p><p className="mt-1 text-xs text-zinc-500">Reposts</p></div>
-                  <div className="rounded-2xl bg-black/30 p-4"><Bookmark className="h-5 w-5 text-amber-200" /><p className="mt-3 text-xl font-black">{summary.saves.available ? formatNumber(summary.saves.value) : '—'}</p><p className="mt-1 text-xs text-zinc-500">Salvos</p></div>
-                  <div className="rounded-2xl bg-black/30 p-4"><Coins className="h-5 w-5 text-cyan-200" /><p className="mt-3 text-xl font-black">{summary.supports.available ? <ItaCashAmount amount={summary.supports.value} size="lg" valueClassName="text-xl" /> : '—'}</p><p className="mt-1 text-xs text-zinc-500">Gorjetas liquidas</p></div>
+                  <div className="rounded-2xl bg-black/30 p-4"><Repeat2 className="h-5 w-5 text-violet-200" /><p className="mt-3 text-xl font-black">{summary.reposts.available ? formatNumber(summary.reposts.value, language) : '—'}</p><p className="mt-1 text-xs text-zinc-500">{t('creator.dashboard.reposts')}</p></div>
+                  <div className="rounded-2xl bg-black/30 p-4"><Bookmark className="h-5 w-5 text-amber-200" /><p className="mt-3 text-xl font-black">{summary.saves.available ? formatNumber(summary.saves.value, language) : '—'}</p><p className="mt-1 text-xs text-zinc-500">{t('creator.dashboard.saved')}</p></div>
+                  <div className="rounded-2xl bg-black/30 p-4"><Coins className="h-5 w-5 text-cyan-200" /><p className="mt-3 text-xl font-black">{summary.supports.available ? <ItaCashAmount amount={summary.supports.value} size="lg" valueClassName="text-xl" /> : '—'}</p><p className="mt-1 text-xs text-zinc-500">{t('creator.dashboard.netTips')}</p></div>
                 </div>
-                <p className="mt-5 text-sm leading-6 text-zinc-500">Não carregamos conteúdo, mídia, URLs de storage ou dados de outros criadores neste painel.</p>
+                <p className="mt-5 text-sm leading-6 text-zinc-500">{t('creator.dashboard.privacyNotice')}</p>
               </article>
             </section>
           </div>

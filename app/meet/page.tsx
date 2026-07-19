@@ -17,6 +17,7 @@ import {
   Timer,
   Video,
 } from 'lucide-react'
+import { useLanguage } from '../components/LanguageProvider'
 
 type CreateRoomResponse =
   | {
@@ -57,6 +58,7 @@ function extractRoomName(value: string) {
 
 export default function MeetPage() {
   const router = useRouter()
+  const { t } = useLanguage()
   const [roomInput, setRoomInput] = useState('')
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
   const [creating, setCreating] = useState(false)
@@ -105,12 +107,12 @@ export default function MeetPage() {
       const data = (await response.json()) as CreateRoomResponse
 
       if (!response.ok || !data.ok) {
-        throw new Error(data.ok ? 'Não foi possível criar a sala.' : data.error)
+        throw new Error(data.ok ? t('meet.createError') : data.error)
       }
 
       router.push(`/meet/${data.roomName}`)
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Não foi possível criar a sala.')
+      setMessage(error instanceof Error ? error.message : t('meet.createError'))
       setCreating(false)
     }
   }
@@ -120,7 +122,7 @@ export default function MeetPage() {
     const roomName = extractRoomName(roomInput)
 
     if (!roomName) {
-      setMessage('Cole um link ou digite o código de uma sala.')
+      setMessage(t('meet.invalidRoom'))
       return
     }
 
@@ -136,7 +138,7 @@ export default function MeetPage() {
             className="inline-flex min-h-11 w-fit items-center justify-center gap-2 rounded-full border border-blue-500/40 bg-blue-500/10 px-4 py-2 text-sm font-bold text-blue-100 shadow-lg shadow-blue-500/10 transition hover:border-blue-400 hover:bg-blue-500/20 hover:shadow-blue-500/20"
           >
             <ArrowLeft className="h-4 w-4" />
-            Voltar ao <EntreUSWordmark />
+            {t('meet.back').replace('EntreUS', '')}<EntreUSWordmark />
           </Link>
 
           <Image
@@ -161,7 +163,7 @@ export default function MeetPage() {
                 <EntreUSWordmark suffix="Meet" />
               </h1>
               <p className="mt-5 max-w-xl text-base leading-7 text-zinc-300 sm:text-lg">
-                Salas privadas com link exclusivo, aprovação de entrada, 20 minutos no plano comum e até 60 minutos para VIP ativo.
+                {t('meet.description')}
               </p>
             </div>
 
@@ -170,12 +172,12 @@ export default function MeetPage() {
                 <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-blue-500/15 text-blue-200">
                   <LockKeyhole className="h-5 w-5" />
                 </div>
-                <h2 className="text-lg font-bold">Entre na sua conta para criar ou participar de uma sala.</h2>
+                <h2 className="text-lg font-bold">{t('meet.authRequired')}</h2>
                 <Link
                   href="/login"
                   className="mt-5 inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-blue-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-blue-600/25 transition hover:bg-blue-500"
                 >
-                  Entrar
+                  {t('meet.signIn')}
                   <ArrowRight className="h-4 w-4" />
                 </Link>
               </div>
@@ -188,14 +190,14 @@ export default function MeetPage() {
                   className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-blue-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-blue-600/25 transition hover:bg-blue-500 hover:shadow-blue-500/30 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                  {creating ? 'Criando sala...' : 'Criar sala'}
+                  {creating ? t('meet.creating') : t('meet.create')}
                 </button>
 
                 <a
                   href="#entrar-sala"
                   className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-blue-500/30 bg-black/35 px-6 py-3 text-sm font-bold text-blue-100 transition hover:border-blue-400 hover:bg-blue-500/15"
                 >
-                  Entrar por link
+                  {t('meet.joinLink')}
                   <Link2 className="h-4 w-4" />
                 </a>
               </div>
@@ -207,10 +209,10 @@ export default function MeetPage() {
               className="max-w-2xl rounded-[1.7rem] border border-blue-500/20 bg-blue-950/15 p-5 shadow-xl shadow-blue-950/20 ring-1 ring-blue-400/10"
             >
               <label htmlFor="room-name" className="block text-sm font-bold text-white">
-                Cole um link ou digite o código de uma sala.
+                {t('meet.roomLabel')}
               </label>
               <p className="mt-1 text-sm text-blue-100/60">
-                Depois de criar uma sala, copie o link para convidar outras pessoas.
+                {t('meet.roomHelper')}
               </p>
 
               <div className="mt-4 flex flex-col gap-3 sm:flex-row">
@@ -227,7 +229,7 @@ export default function MeetPage() {
                   type="submit"
                   className="inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-bold text-black transition hover:bg-blue-100"
                 >
-                  Entrar
+                  {t('meet.signIn')}
                   <ArrowRight className="h-4 w-4" />
                 </button>
               </div>
@@ -256,23 +258,23 @@ export default function MeetPage() {
             <div className="grid gap-3 sm:grid-cols-2">
               <article className="rounded-2xl border border-blue-500/15 bg-blue-950/15 p-4 ring-1 ring-blue-400/10">
                 <Timer className="mb-3 h-7 w-7 text-blue-300" />
-                <h2 className="text-sm font-bold text-white">Plano gratuito</h2>
-                <p className="mt-2 text-xs leading-5 text-zinc-400">Salas de até 20 minutos.</p>
+                <h2 className="text-sm font-bold text-white">{t('meet.free')}</h2>
+                <p className="mt-2 text-xs leading-5 text-zinc-400">{t('meet.freeDescription')}</p>
               </article>
               <article className="rounded-2xl border border-blue-500/15 bg-blue-950/15 p-4 ring-1 ring-blue-400/10">
                 <Crown className="mb-3 h-7 w-7 text-blue-300" />
-                <h2 className="text-sm font-bold text-white">VIP ativo</h2>
-                <p className="mt-2 text-xs leading-5 text-zinc-400">Salas criadas por VIP ativo duram até 60 minutos.</p>
+                <h2 className="text-sm font-bold text-white">{t('meet.vip')}</h2>
+                <p className="mt-2 text-xs leading-5 text-zinc-400">{t('meet.vipDescription')}</p>
               </article>
               <article className="rounded-2xl border border-blue-500/15 bg-blue-950/15 p-4 ring-1 ring-blue-400/10">
                 <Shield className="mb-3 h-7 w-7 text-blue-300" />
-                <h2 className="text-sm font-bold text-white">Aprovação de entrada</h2>
-                <p className="mt-2 text-xs leading-5 text-zinc-400">O dono aceita ou recusa novos participantes.</p>
+                <h2 className="text-sm font-bold text-white">{t('meet.approval')}</h2>
+                <p className="mt-2 text-xs leading-5 text-zinc-400">{t('meet.approvalDescription')}</p>
               </article>
               <article className="rounded-2xl border border-blue-500/15 bg-blue-950/15 p-4 ring-1 ring-blue-400/10">
                 <Video className="mb-3 h-7 w-7 text-blue-300" />
-                <h2 className="text-sm font-bold text-white">Sala única</h2>
-                <p className="mt-2 text-xs leading-5 text-zinc-400">Cada criação gera um link exclusivo.</p>
+                <h2 className="text-sm font-bold text-white">{t('meet.unique')}</h2>
+                <p className="mt-2 text-xs leading-5 text-zinc-400">{t('meet.uniqueDescription')}</p>
               </article>
             </div>
           </section>

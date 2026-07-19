@@ -25,7 +25,7 @@ import {
   Wallet,
 } from 'lucide-react'
 import { useLanguage } from './LanguageProvider'
-import type { LanguageCode } from '@/lib/translations'
+import type { Locale } from '@/lib/i18n'
 
 type MoreMenuProps = {
   mounted: boolean
@@ -198,7 +198,7 @@ export default function MoreMenu({
 
           <select
             value={language}
-            onChange={(event) => setLanguage(event.target.value as LanguageCode)}
+            onChange={(event) => void setLanguage(event.target.value as Locale)}
             className="w-full rounded-xl border border-white/10 bg-black/70 px-3 py-2 text-sm text-white outline-none transition focus:border-blue-400"
           >
             {languages.map((item) => (

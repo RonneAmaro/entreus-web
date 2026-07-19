@@ -310,6 +310,8 @@ export default function ProfilePage() {
   )
 
   useEffect(() => {
+    // Hydration gate: theme-dependent controls must render only after the client mounts.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true)
   }, [])
 
@@ -885,6 +887,8 @@ export default function ProfilePage() {
     }
 
     const ownPosts = (ownPostsData || [])
+      // Supabase returns a compatibility-dependent row shape while older migrations remain supported.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .map((post: any) => ({
         ...post,
         visibility: (post.visibility || 'public') as VisibilityType,
@@ -941,6 +945,8 @@ export default function ProfilePage() {
       }
 
       repostedPosts = (repostedPostsData || [])
+        // Supabase returns a compatibility-dependent row shape while older migrations remain supported.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .map((post: any) => ({
           ...post,
           visibility: (post.visibility || 'public') as VisibilityType,
@@ -1240,7 +1246,7 @@ export default function ProfilePage() {
 
     if (!session?.access_token) {
       setSavingProfileTheme(false)
-      setMessage('Entre novamente para salvar o tema do perfil.')
+      setMessage(t('profile.messages.themeLogin'))
       return
     }
 
@@ -1268,7 +1274,7 @@ export default function ProfilePage() {
     setSelectedProfileTheme(result.theme)
     setProfile((current) => current ? { ...current, profile_theme: result.theme } : current)
     setSavingProfileTheme(false)
-    setMessage('Tema do perfil salvo com sucesso.')
+    setMessage(t('profile.messages.themeSaved'))
   }
 
   async function handleToggleBookmark(postId: string) {
@@ -1998,7 +2004,7 @@ export default function ProfilePage() {
                           type="text"
                           value={stateName}
                           onChange={(e) => setStateName(e.target.value)}
-                          placeholder="Ex.: Rondônia"
+                          placeholder={t('profile.edit.statePlaceholder')}
                           className="w-full rounded-2xl border border-zinc-200/80 bg-zinc-100/70 px-4 py-3 text-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800/80 dark:bg-zinc-900/80 dark:focus:border-blue-500/70 dark:focus:bg-zinc-950 sm:text-base"
                         />
                       </div>
@@ -2015,7 +2021,7 @@ export default function ProfilePage() {
                           type="text"
                           value={websiteTitle}
                           onChange={(e) => setWebsiteTitle(e.target.value)}
-                          placeholder="Ex.: Minha loja, Meu portfólio"
+                          placeholder={t('profile.edit.websiteTitlePlaceholder')}
                           className="w-full rounded-2xl border border-zinc-200/80 bg-zinc-100/70 px-4 py-3 text-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800/80 dark:bg-zinc-900/80 dark:focus:border-blue-500/70 dark:focus:bg-zinc-950 sm:text-base"
                         />
                       </div>

@@ -12,6 +12,9 @@ import {
   isMissingProfileAcceptanceColumnError,
 } from '@/lib/profile-completion'
 import { getAuthErrorMessage, isExistingAccountError } from '@/lib/auth/auth-error-messages'
+import { useLanguage } from '../components/LanguageProvider'
+import { countryOptions, suggestedLocaleForCountry } from '@/lib/i18n/countries'
+import type { Locale } from '@/lib/i18n'
 
 function validatePassword(password: string) {
   if (password.length < 8) {
@@ -46,6 +49,7 @@ function calculateAge(birthDateValue: string) {
 
 export default function SignupPage() {
   const router = useRouter()
+  const { language, languages, setLanguage, t } = useLanguage()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -57,6 +61,8 @@ export default function SignupPage() {
   const [loading, setLoading] = useState(false)
   const [socialLoading, setSocialLoading] = useState(false)
   const [existingAccount, setExistingAccount] = useState(false)
+  const [countryCode, setCountryCode] = useState('')
+  const countries = countryOptions(language)
 
   async function handleSignup(e: React.FormEvent) {
     e.preventDefault()
@@ -106,6 +112,8 @@ export default function SignupPage() {
           privacy_accepted_at: acceptedAt,
           terms_version: CURRENT_TERMS_VERSION,
           privacy_version: CURRENT_PRIVACY_VERSION,
+          interface_locale: language,
+          country_code: countryCode || null,
         },
       },
     })
@@ -123,6 +131,8 @@ export default function SignupPage() {
         privacy_accepted_at: acceptedAt,
         terms_version: CURRENT_TERMS_VERSION,
         privacy_version: CURRENT_PRIVACY_VERSION,
+        interface_locale: language,
+        country_code: countryCode || null,
         updated_at: acceptedAt,
       }
       let { error: profileError } = await supabase.from('profiles').upsert(profilePayload)
@@ -196,6 +206,8 @@ export default function SignupPage() {
           privacy_accepted_at: acceptedAt,
           terms_version: CURRENT_TERMS_VERSION,
           privacy_version: CURRENT_PRIVACY_VERSION,
+          interface_locale: language,
+          country_code: countryCode || null,
           is_minor: isMinor,
           parental_consent_status: isMinor ? 'pending' : 'not_required',
           wants_18_plus: false,
@@ -217,10 +229,10 @@ export default function SignupPage() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-black px-6 py-10 text-white">
       <div className="w-full max-w-md rounded-3xl border border-zinc-800 bg-zinc-950 p-6 shadow-2xl sm:p-8">
-        <h1 className="mb-2 text-center text-3xl font-bold">Criar conta</h1>
+        <h1 className="mb-2 text-center text-3xl font-bold">{t('auth.signup.title')}</h1>
 
         <p className="mb-6 text-center text-zinc-400">
-          Entre para o EntreUS
+          {t('auth.signup.subtitle')}
         </p>
 
         <div className="mb-5 space-y-3">
@@ -228,13 +240,13 @@ export default function SignupPage() {
             type="button"
             onClick={handleGoogleSignup}
             disabled={loading || socialLoading}
-            aria-label="Continuar com Google"
+            aria-label={t('auth.login.google')}
             className="flex min-h-12 w-full items-center justify-center gap-3 rounded-xl border border-zinc-700 bg-white px-4 py-3 font-semibold text-zinc-950 transition hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white">
               <GoogleLogo />
             </span>
-            {socialLoading ? 'Conectando...' : 'Continuar com Google'}
+            {socialLoading ? t('auth.login.googleLoading') : t('auth.login.google')}
           </button>
 
           <button
@@ -243,12 +255,12 @@ export default function SignupPage() {
             className="flex w-full cursor-not-allowed items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900/60 px-4 py-3 text-sm font-semibold text-zinc-600"
             title="Facebook precisa ser configurado antes de ativar"
           >
-            Facebook em breve
+            {t('auth.facebookSoon')}
           </button>
 
           <div className="flex items-center gap-3 py-1 text-xs font-semibold uppercase text-zinc-500">
             <span className="h-px flex-1 bg-zinc-800" />
-            <span>E-mail</span>
+            <span>{t('auth.emailDivider')}</span>
             <span className="h-px flex-1 bg-zinc-800" />
           </div>
         </div>
@@ -256,7 +268,7 @@ export default function SignupPage() {
         <form onSubmit={handleSignup} className="space-y-4">
           <div>
             <label className="mb-2 block text-sm text-zinc-300">
-              E-mail
+              {t('auth.email')}
             </label>
 
             <input
@@ -271,13 +283,13 @@ export default function SignupPage() {
 
           <div>
             <label className="mb-2 block text-sm text-zinc-300">
-              Senha
+              {t('auth.password')}
             </label>
 
             <div className="relative">
               <input
                 type={showPassword ? 'text' : 'password'}
-                placeholder="Crie uma senha"
+                placeholder={t('auth.passwordCreate')}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 pr-12 outline-none transition focus:border-zinc-500"
@@ -288,7 +300,7 @@ export default function SignupPage() {
                 type="button"
                 onClick={() => setShowPassword((current) => !current)}
                 className="absolute right-3 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full text-zinc-400 transition hover:bg-zinc-800 hover:text-white"
-                aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                aria-label={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
               >
                 {showPassword ? (
                   <EyeOff className="h-5 w-5" />
@@ -305,13 +317,13 @@ export default function SignupPage() {
 
           <div>
             <label className="mb-2 block text-sm text-zinc-300">
-              Confirmar senha
+              {t('auth.passwordConfirm')}
             </label>
 
             <div className="relative">
               <input
                 type={showConfirmPassword ? 'text' : 'password'}
-                placeholder="Digite a senha novamente"
+                placeholder={t('auth.passwordConfirmPlaceholder')}
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 pr-12 outline-none transition focus:border-zinc-500"
@@ -323,7 +335,7 @@ export default function SignupPage() {
                 onClick={() => setShowConfirmPassword((current) => !current)}
                 className="absolute right-3 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full text-zinc-400 transition hover:bg-zinc-800 hover:text-white"
                 aria-label={
-                  showConfirmPassword ? 'Ocultar confirmação de senha' : 'Mostrar confirmação de senha'
+                  showConfirmPassword ? t('auth.hidePassword') : t('auth.showPassword')
                 }
               >
                 {showConfirmPassword ? (
@@ -335,9 +347,44 @@ export default function SignupPage() {
             </div>
           </div>
 
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="text-sm text-zinc-300">
+              {t('country.label')}
+              <select
+                value={countryCode}
+                onChange={(event) => {
+                  const code = event.target.value
+                  setCountryCode(code)
+                  const suggested = suggestedLocaleForCountry(code)
+                  if (suggested) {
+                    void setLanguage(suggested)
+                  }
+                }}
+                className="mt-2 min-h-12 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 outline-none focus:border-zinc-500"
+                required
+              >
+                <option value="">{t('country.placeholder')}</option>
+                {countries.map((country) => <option key={country.code} value={country.code} suppressHydrationWarning>{country.label}</option>)}
+              </select>
+            </label>
+            <label className="text-sm text-zinc-300">
+              {t('language.label')}
+              <select
+                value={language}
+                onChange={(event) => {
+                  const locale = event.target.value as Locale
+                  void setLanguage(locale)
+                }}
+                className="mt-2 min-h-12 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 outline-none focus:border-zinc-500"
+              >
+                {languages.map((option) => <option key={option.code} value={option.code}>{option.nativeName}</option>)}
+              </select>
+            </label>
+          </div>
+
           <div>
             <label className="mb-2 block text-sm text-zinc-300">
-              Data de nascimento
+              {t('auth.birthDate')}
             </label>
 
             <input
@@ -365,15 +412,15 @@ export default function SignupPage() {
             />
 
             <span>
-              Li e aceito os{' '}
+              {t('auth.termsPrefix')}{' '}
               <Link href="/terms" className="font-semibold text-blue-300 underline-offset-4 hover:underline">
-                Termos de Uso
+                {t('auth.terms')}
               </Link>{' '}
-              e a{' '}
+              {t('auth.privacyConnector')}{' '}
               <Link href="/privacy" className="font-semibold text-blue-300 underline-offset-4 hover:underline">
-                Política de Privacidade
+                {t('auth.privacy')}
               </Link>{' '}
-              do EntreUS.
+              {t('auth.termsSuffix')}
             </span>
           </label>
 
@@ -382,7 +429,7 @@ export default function SignupPage() {
             disabled={loading}
             className="w-full rounded-xl bg-white py-3 font-medium text-black transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {loading ? 'Criando conta...' : 'Criar conta'}
+            {loading ? t('auth.signup.submitting') : t('auth.signup.submit')}
           </button>
         </form>
 
@@ -400,9 +447,9 @@ export default function SignupPage() {
           {existingAccount && <div className="mt-3 flex flex-wrap gap-3 text-sm"><Link className="underline" href="/login">Entrar agora</Link><Link className="underline" href="/forgot-password">Esqueci minha senha</Link><button type="button" className="underline" onClick={async () => { await supabase.auth.resend({ type: 'signup', email: email.trim() }); setMessage('Se este e-mail estiver aguardando confirmação, enviaremos um novo link.') }}>Reenviar confirmação de e-mail</button></div>}
 
         <p className="mt-6 text-center text-sm text-zinc-400">
-          Já tem conta?{' '}
+          {t('auth.signup.hasAccount')}{' '}
           <Link href="/login" className="font-medium text-white underline-offset-4 hover:underline">
-            Entrar
+            {t('auth.signup.login')}
           </Link>
         </p>
       </div>

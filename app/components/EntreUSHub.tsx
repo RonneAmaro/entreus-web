@@ -13,7 +13,6 @@ import {
 } from 'lucide-react'
 import {
   HUB_ITEMS,
-  NAVIGATION_CATEGORY_LABELS,
   isNavigationItemAvailable,
   isNavigationRouteItem,
   navigationAccentFor,
@@ -24,6 +23,8 @@ import { COMPOSE_ACTION_EVENT, getComposeHref } from '@/lib/compose-intent'
 import { announceNavigationStart } from '@/lib/navigation/navigation-feedback'
 import type { NavigationAccent, NavigationCategory, NavigationIcon, NavigationItem } from '@/lib/navigation/navigation-types'
 import EntreUSWordmark from './EntreUSWordmark'
+import { useLanguage } from './LanguageProvider'
+import { localizeNavigationItems } from '@/lib/i18n/navigation'
 
 const ICONS: Record<NavigationIcon, typeof Home> = {
   admin: ShieldCheck, bell: Bell, bookmark: Bookmark, challenge: Trophy,
@@ -82,6 +83,7 @@ export default function EntreUSHub(props: EntreUSHubProps) {
   const { open, onClose, userId, isAdmin } = props
   const pathname = usePathname()
   const router = useRouter()
+  const { language, t } = useLanguage()
   const searchRef = useRef<HTMLInputElement>(null)
   const dialogRef = useRef<HTMLDivElement>(null)
   const navigationCloseTimerRef = useRef<number | null>(null)
@@ -126,13 +128,14 @@ export default function EntreUSHub(props: EntreUSHubProps) {
     }
   }, [open, closeHub, userId])
 
-  const results = useMemo(() => searchNavigationItems(query, { authenticated: Boolean(userId), isAdmin }), [query, userId, isAdmin])
-  const availableItems = useMemo(() => searchNavigationItems('', { authenticated: Boolean(userId), isAdmin }), [userId, isAdmin])
+  const localizedItems = useMemo(() => localizeNavigationItems(HUB_ITEMS, language), [language])
+  const results = useMemo(() => searchNavigationItems(query, { authenticated: Boolean(userId), isAdmin }, localizedItems), [query, userId, isAdmin, localizedItems])
+  const availableItems = useMemo(() => searchNavigationItems('', { authenticated: Boolean(userId), isAdmin }, localizedItems), [userId, isAdmin, localizedItems])
   const pinned = useMemo(() => availableItems.filter((item) => PINNED_IDS.has(item.id)), [availableItems])
   const recent = useMemo(() => usage.recent
-    .map((id) => HUB_ITEMS.find((item) => item.id === id))
+    .map((id) => localizedItems.find((item) => item.id === id))
     .filter((item): item is NavigationItem => item !== undefined)
-    .filter((item) => item.audience !== 'admin' || isAdmin), [usage, isAdmin])
+    .filter((item) => item.audience !== 'admin' || isAdmin), [usage, isAdmin, localizedItems])
   const frequent = useMemo(() => availableItems
     .filter((item) => !PINNED_IDS.has(item.id) && usage.counts[item.id])
     .sort((a, b) => (usage.counts[b.id] || 0) - (usage.counts[a.id] || 0))
@@ -221,7 +224,7 @@ export default function EntreUSHub(props: EntreUSHubProps) {
     const content = (
       <>
         <span className={`relative flex shrink-0 items-center justify-center shadow-lg ring-1 ring-inset transition duration-200 group-hover:-translate-y-1 group-hover:scale-[1.04] group-hover:shadow-lg group-focus-visible:-translate-y-1 group-focus-visible:scale-[1.04] motion-reduce:transform-none motion-reduce:transition-colors ${accentClass} ${compact ? 'h-10 w-10 rounded-xl' : 'h-12 w-12 rounded-2xl sm:h-14 sm:w-14'}`}><Icon className={compact ? 'h-5 w-5' : 'h-6 w-6'} />{badge > 0 && <span className="absolute -right-1.5 -top-1.5 min-w-5 rounded-full bg-red-600 px-1 text-center text-[10px] font-black leading-5 text-white">{badge > 99 ? '99+' : badge}</span>}</span>
-        <span className={`min-w-0 ${compact ? '' : 'flex w-full flex-col items-center text-center'}`}><span className={`block max-w-full font-bold text-zinc-950 dark:text-white ${compact ? 'truncate text-sm' : 'min-h-8 text-xs leading-4 sm:text-sm'}`}>{navigationTitle(item)}</span>{!compact && <span className="mt-0.5 hidden max-w-44 text-center text-[11px] leading-4 text-zinc-600 dark:text-zinc-400 sm:line-clamp-3">{item.description}</span>}{!available && <span className="mt-1 text-[10px] font-bold uppercase tracking-wide text-zinc-500">Em breve</span>}</span>
+        <span className={`min-w-0 ${compact ? '' : 'flex w-full flex-col items-center text-center'}`}><span className={`block max-w-full font-bold text-zinc-950 dark:text-white ${compact ? 'truncate text-sm' : 'min-h-8 text-xs leading-4 sm:text-sm'}`}>{navigationTitle(item)}</span>{!compact && <span className="mt-0.5 hidden max-w-44 text-center text-[11px] leading-4 text-zinc-600 dark:text-zinc-400 sm:line-clamp-3">{item.description}</span>}{!available && <span className="mt-1 text-[10px] font-bold uppercase tracking-wide text-zinc-500">{t('common.comingSoon')}</span>}</span>
       </>
     )
 
@@ -237,47 +240,47 @@ export default function EntreUSHub(props: EntreUSHubProps) {
         <div className="pointer-events-none absolute inset-x-0 top-0 h-44 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.18),transparent_55%)]" />
         <header className="relative shrink-0 px-4 pb-3 pt-[max(env(safe-area-inset-top),16px)] sm:px-8 sm:pb-5 sm:pt-7 lg:px-10">
           <div className="mb-4 flex items-center justify-between gap-4">
-            <div className="flex min-w-0 items-center gap-3"><Image src="/logo-icon.png" alt="" width={48} height={48} priority className="h-11 w-11 shrink-0 rounded-full object-contain sm:h-12 sm:w-12" /><div className="min-w-0"><h2 id="entreus-hub-title" className="text-xl font-black tracking-tight sm:text-2xl"><EntreUSWordmark /></h2><p className="text-xs font-medium tracking-wide text-zinc-400 sm:text-sm">Só Entre Nós</p></div></div>
-            <button type="button" onClick={closeHub} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-zinc-600 transition hover:bg-zinc-100 hover:text-zinc-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-zinc-300 dark:hover:bg-white/10 dark:hover:text-white" aria-label="Fechar EntreUS"><X className="h-5 w-5" /></button>
+            <div className="flex min-w-0 items-center gap-3"><Image src="/logo-icon.png" alt="" width={48} height={48} priority className="h-11 w-11 shrink-0 rounded-full object-contain sm:h-12 sm:w-12" /><div className="min-w-0"><h2 id="entreus-hub-title" className="text-xl font-black tracking-tight sm:text-2xl"><EntreUSWordmark /></h2><p className="text-xs font-medium tracking-wide text-zinc-400 sm:text-sm">{t('hub.tagline')}</p></div></div>
+            <button type="button" onClick={closeHub} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-zinc-600 transition hover:bg-zinc-100 hover:text-zinc-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-zinc-300 dark:hover:bg-white/10 dark:hover:text-white" aria-label={t('hub.close')}><X className="h-5 w-5" /></button>
           </div>
-          <label className="relative mx-auto block w-full max-w-4xl"><Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-blue-600 dark:text-blue-300" /><span className="sr-only">Buscar no Hub</span><input ref={searchRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar aplicativos, páginas e recursos" className="h-[52px] w-full rounded-2xl border border-zinc-300 bg-zinc-100 pl-12 pr-4 text-sm text-zinc-950 shadow-inner outline-none transition placeholder:text-zinc-500 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/15 dark:border-white/10 dark:bg-white/[0.07] dark:text-white dark:focus:border-blue-400/60 dark:focus:bg-white/[0.09] sm:h-14 sm:text-base" /></label>
+          <label className="relative mx-auto block w-full max-w-4xl"><Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-blue-600 dark:text-blue-300" /><span className="sr-only">{t('hub.searchLabel')}</span><input ref={searchRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('hub.searchPlaceholder')} className="h-[52px] w-full rounded-2xl border border-zinc-300 bg-zinc-100 pl-12 pr-4 text-sm text-zinc-950 shadow-inner outline-none transition placeholder:text-zinc-500 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/15 dark:border-white/10 dark:bg-white/[0.07] dark:text-white dark:focus:border-blue-400/60 dark:focus:bg-white/[0.09] sm:h-14 sm:text-base" /></label>
         </header>
 
         <main className="relative flex-1 overflow-y-auto overscroll-contain px-4 pb-6 sm:px-8 lg:px-10">
           {query ? (
             <section aria-live="polite" className="mx-auto max-w-5xl py-4 sm:py-6">
-              <h3 className="mb-4 text-sm font-black text-zinc-800 dark:text-zinc-200">Resultados <span className="ml-1 font-medium text-zinc-500 dark:text-zinc-400">{results.length}</span></h3>
-              {results.length === 0 ? <div className="flex min-h-52 flex-col items-center justify-center rounded-3xl bg-zinc-50 px-6 py-12 text-center dark:bg-white/[0.025]"><Search className="mb-3 h-8 w-8 text-zinc-500 dark:text-zinc-400" /><p className="font-bold">Nenhum resultado</p><p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">Tente outro nome, descrição ou palavra-chave.</p></div> : <div className="grid grid-cols-[repeat(auto-fit,minmax(6.5rem,1fr))] gap-1 sm:grid-cols-[repeat(auto-fit,minmax(8rem,1fr))]">{results.map((item) => appLink(item))}</div>}
+              <h3 className="mb-4 text-sm font-black text-zinc-800 dark:text-zinc-200">{t('hub.results')} <span className="ml-1 font-medium text-zinc-500 dark:text-zinc-400">{results.length}</span></h3>
+              {results.length === 0 ? <div className="flex min-h-52 flex-col items-center justify-center rounded-3xl bg-zinc-50 px-6 py-12 text-center dark:bg-white/[0.025]"><Search className="mb-3 h-8 w-8 text-zinc-500 dark:text-zinc-400" /><p className="font-bold">{t('hub.noResults')}</p><p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">{t('hub.noResultsHint')}</p></div> : <div className="grid grid-cols-[repeat(auto-fit,minmax(6.5rem,1fr))] gap-1 sm:grid-cols-[repeat(auto-fit,minmax(8rem,1fr))]">{results.map((item) => appLink(item))}</div>}
             </section>
           ) : showAll ? (
             <div className="mx-auto max-w-6xl py-4 sm:py-6">
-              <button type="button" onClick={() => setShowAll(false)} className="mb-5 inline-flex min-h-11 items-center gap-2 rounded-xl px-3 text-sm font-bold text-zinc-700 transition hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 dark:text-zinc-300 dark:hover:bg-white/[0.07]"><ArrowLeft className="h-4 w-4" />Voltar aos fixados</button>
+              <button type="button" onClick={() => setShowAll(false)} className="mb-5 inline-flex min-h-11 items-center gap-2 rounded-xl px-3 text-sm font-bold text-zinc-700 transition hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 dark:text-zinc-300 dark:hover:bg-white/[0.07]"><ArrowLeft className="h-4 w-4" />{t('hub.backPinned')}</button>
               <div className="grid items-start gap-x-10 gap-y-7 md:grid-cols-2">{CATEGORY_ORDER.map((category) => {
                 const items = availableItems.filter((item) => item.category === category)
                 if (!items.length) return null
-                return <section key={category}><h3 className="mb-2 px-2 text-xs font-black uppercase tracking-[0.16em] text-zinc-500">{NAVIGATION_CATEGORY_LABELS[category]}</h3><div className="grid grid-cols-2 gap-1 sm:grid-cols-[repeat(auto-fit,minmax(7rem,1fr))]">{items.map((item) => appLink(item))}</div></section>
+                return <section key={category}><h3 className="mb-2 px-2 text-xs font-black uppercase tracking-[0.16em] text-zinc-500">{t(`nav.categories.${category}`)}</h3><div className="grid grid-cols-2 gap-1 sm:grid-cols-[repeat(auto-fit,minmax(7rem,1fr))]">{items.map((item) => appLink(item))}</div></section>
               })}</div>
             </div>
           ) : (
             <div className="mx-auto max-w-6xl py-4 sm:py-6">
               <section>
-                <div className="mb-2 flex items-center justify-between"><h3 className="text-base font-black sm:text-lg">Fixados</h3><button type="button" onClick={() => setShowAll(true)} className="inline-flex min-h-11 items-center gap-1 rounded-xl px-3 text-sm font-bold text-blue-700 transition hover:bg-blue-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-blue-300">Ver todos <ChevronRight className="h-4 w-4" /></button></div>
+                <div className="mb-2 flex items-center justify-between"><h3 className="text-base font-black sm:text-lg">{t('hub.pinned')}</h3><button type="button" onClick={() => setShowAll(true)} className="inline-flex min-h-11 items-center gap-1 rounded-xl px-3 text-sm font-bold text-blue-700 transition hover:bg-blue-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-blue-300">{t('hub.viewAll')} <ChevronRight className="h-4 w-4" /></button></div>
                 <div data-testid="pinned-apps" className="grid grid-cols-[repeat(auto-fit,minmax(6.5rem,1fr))] gap-1 sm:grid-cols-[repeat(auto-fit,minmax(8rem,1fr))]">{pinned.map((item) => appLink(item))}</div>
               </section>
               <div className="mt-6 grid gap-6 border-t border-zinc-200 pt-6 dark:border-white/[0.07] md:grid-cols-2">
-                <section data-testid="recent-apps"><h3 className="mb-2 text-sm font-black">Recentes</h3>{recent.length ? <div className="grid gap-1 sm:grid-cols-2 md:grid-cols-1 xl:grid-cols-2">{recent.map((item) => appLink(item, true))}</div> : <p className="border-l-2 border-white/10 px-3 py-1 text-xs leading-5 text-zinc-500">Seus acessos recentes aparecerão aqui.</p>}</section>
-                <section><h3 className="mb-2 text-sm font-black">Mais utilizados</h3>{frequent.length ? <div className="grid gap-1 sm:grid-cols-2 md:grid-cols-1 xl:grid-cols-2">{frequent.map((item) => appLink(item, true))}</div> : <p className="border-l-2 border-white/10 px-3 py-1 text-xs leading-5 text-zinc-500">Os recursos que você mais usa aparecerão aqui.</p>}</section>
+                <section data-testid="recent-apps"><h3 className="mb-2 text-sm font-black">{t('hub.recent')}</h3>{recent.length ? <div className="grid gap-1 sm:grid-cols-2 md:grid-cols-1 xl:grid-cols-2">{recent.map((item) => appLink(item, true))}</div> : <p className="border-l-2 border-white/10 px-3 py-1 text-xs leading-5 text-zinc-500">{t('hub.recentEmpty')}</p>}</section>
+                <section><h3 className="mb-2 text-sm font-black">{t('hub.frequent')}</h3>{frequent.length ? <div className="grid gap-1 sm:grid-cols-2 md:grid-cols-1 xl:grid-cols-2">{frequent.map((item) => appLink(item, true))}</div> : <p className="border-l-2 border-white/10 px-3 py-1 text-xs leading-5 text-zinc-500">{t('hub.frequentEmpty')}</p>}</section>
               </div>
             </div>
           )}
         </main>
 
         <footer className="relative flex shrink-0 items-center justify-between gap-3 border-t border-zinc-200 bg-zinc-50/90 px-4 pb-[max(env(safe-area-inset-bottom),12px)] pt-3 backdrop-blur-xl dark:border-white/[0.07] dark:bg-black/25 sm:px-8 sm:py-3 lg:px-10">
-          <Link href="/profile" prefetch={false} onClick={(event) => handleRouteClick(event, HUB_ITEMS.find((item) => item.id === 'profile')!)} onNavigate={() => closeHubAfterNavigation(HUB_ITEMS.find((item) => item.id === 'profile')!)} className="flex min-w-0 items-center gap-3 rounded-xl p-1.5 pr-3 transition hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 dark:hover:bg-white/[0.07]">{props.avatarUrl ? (
+          <Link href="/profile" prefetch={false} onClick={(event) => handleRouteClick(event, localizedItems.find((item) => item.id === 'profile')!)} onNavigate={() => closeHubAfterNavigation(localizedItems.find((item) => item.id === 'profile')!)} className="flex min-w-0 items-center gap-3 rounded-xl p-1.5 pr-3 transition hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 dark:hover:bg-white/[0.07]">{props.avatarUrl ? (
             // eslint-disable-next-line @next/next/no-img-element -- Profile media can use approved runtime hosts outside next/image config.
             <img src={props.avatarUrl} alt="" className="h-9 w-9 rounded-full object-cover" />
-          ) : <span className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-500/15 text-blue-700 dark:text-blue-200"><User className="h-4 w-4" /></span>}<span className="min-w-0"><span className="block truncate text-sm font-bold">{props.displayName || props.username || 'Meu perfil'}</span><span className="hidden text-xs text-zinc-500 sm:block">Ver perfil</span></span></Link>
-          <div className="flex items-center gap-1">{props.mounted && <button type="button" onClick={props.onToggleTheme} className="flex h-10 items-center gap-2 rounded-xl px-3 text-sm font-bold text-zinc-700 transition hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-zinc-300 dark:hover:bg-white/10" aria-label="Alternar tema">{props.theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}<span className="hidden sm:inline">Tema</span></button>}<button type="button" onClick={() => { closeHub(); props.onLogout() }} className="flex h-10 items-center gap-2 rounded-xl px-3 text-sm font-bold text-red-700 transition hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:text-red-300"><LogOut className="h-4 w-4" /><span className="hidden sm:inline">Sair</span></button></div>
+          ) : <span className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-500/15 text-blue-700 dark:text-blue-200"><User className="h-4 w-4" /></span>}<span className="min-w-0"><span className="block truncate text-sm font-bold">{props.displayName || props.username || localizedItems.find((item) => item.id === 'profile')?.title}</span><span className="hidden text-xs text-zinc-500 sm:block">{t('hub.viewProfile')}</span></span></Link>
+          <div className="flex items-center gap-1">{props.mounted && <button type="button" onClick={props.onToggleTheme} className="flex h-10 items-center gap-2 rounded-xl px-3 text-sm font-bold text-zinc-700 transition hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-zinc-300 dark:hover:bg-white/10" aria-label={t('common.theme')}>{props.theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}<span className="hidden sm:inline">{t('common.theme')}</span></button>}<button type="button" onClick={() => { closeHub(); props.onLogout() }} className="flex h-10 items-center gap-2 rounded-xl px-3 text-sm font-bold text-red-700 transition hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:text-red-300"><LogOut className="h-4 w-4" /><span className="hidden sm:inline">{t('auth.logout')}</span></button></div>
         </footer>
       </div>
     </div>
