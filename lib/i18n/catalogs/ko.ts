@@ -37,4 +37,9 @@ export const ko = extendEnglishCatalog({
   'profile.edit.statePlaceholder': '예: Rondônia', 'profile.edit.websiteTitlePlaceholder': '예: 내 상점, 내 포트폴리오', 'profile.messages.themeLogin': '프로필 테마를 저장하려면 다시 로그인하세요.', 'profile.messages.themeSaved': '프로필 테마가 저장되었습니다.', 'settings.contentModeTitle': '프로필 콘텐츠 유형', 'settings.contentModeConfirm': '이 모드를 저장하기 전에 공개 범위를 이해했음을 확인하세요.', 'settings.contentModeLogin': '이 설정을 변경하려면 로그인하세요.', 'settings.contentModeSaved': '프로필 콘텐츠 유형이 업데이트되었습니다.', 'settings.deleteComingSoon': '안전한 계정 영구 삭제 기능이 곧 제공됩니다. 현재는 지원팀에 문의하세요.',
   'settings.contentModeDescription': '프로필 사용 방식을 선택하세요. EntreUS가 경험을 구성하는 데 도움이 되며 각 게시물은 자체 등급을 유지합니다.', 'settings.contentModeSlogan': '하나의 정체성. 명확한 경계로 정리된 콘텐츠.', 'settings.contentModeSave': '모드 저장', 'settings.contentModeSaving': '저장 중…',
   'settings.contentModes.general.label': '일반 프로필', 'settings.contentModes.general.description': '일상, 커뮤니티, 일반 콘텐츠 및 비성인 프리미엄 게시물용입니다.', 'settings.contentModes.adult.label': '성인 프로필', 'settings.contentModes.adult.description': '주요 활동에 18+ 콘텐츠가 포함된 크리에이터용입니다. 공개 정체성은 EntreUS 안전 규칙을 따라야 합니다.', 'settings.contentModes.mixed.label': '혼합 프로필', 'settings.contentModes.mixed.description': '일상을 공개하면서 성인 콘텐츠는 전용 보호 영역에 보관합니다.', 'settings.contentModeAdultNotice': '아바타, 커버, 이름 및 소개는 공개되며 일반 이용자에게 적합해야 합니다. 노골적인 성적 콘텐츠는 18+로만 게시해야 합니다.', 'settings.contentModeNoAutoAdultNotice': '이 모드는 18+ 접근을 자동 활성화하거나 모든 게시물을 성인 콘텐츠로 바꾸지 않습니다.', 'settings.contentModeAcknowledge': '공개 정체성을 안전하게 유지하고 각 게시물을 개별적으로 분류해야 함을 이해합니다.',
+  'admin.creatorWithdrawals.accessDeniedTitle': '접근 제한',
+  'admin.creatorWithdrawals.accessDeniedDescription': '이 영역은 관리자 전용입니다.',
+  'admin.creatorWithdrawals.admin': '관리자',
+  'admin.creatorWithdrawals.title': '크리에이터 수동 출금',
+  'admin.creatorWithdrawals.description': '플랫폼 밖에서 수동으로 지급한 뒤 지급 완료로 표시하세요. 이 화면은 검토, 승인, 지급 또는 거절만 기록합니다.',
 })

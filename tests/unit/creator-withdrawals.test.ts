@@ -171,8 +171,8 @@ describe('creator withdrawals helper', () => {
       pixKey: 'criador@example.com',
       holderName: 'Criador Pix',
     })).toEqual(expect.arrayContaining([
-      { label: 'Tipo da chave Pix', value: 'E-mail' },
-      { label: 'Chave Pix', value: 'criador@example.com' },
+      { label: 'pixKeyType', value: 'E-mail' },
+      { label: 'pixKey', value: 'criador@example.com' },
     ]))
   })
 })

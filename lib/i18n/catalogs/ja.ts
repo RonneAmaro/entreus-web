@@ -40,4 +40,9 @@ export const ja = extendEnglishCatalog({
   'messages.loading': 'メッセージを読み込み中…', 'messages.title': 'チャット', 'messages.subtitle': 'プライベートな会話', 'messages.newConversation': '新しい会話', 'messages.search': '会話を検索', 'messages.recent': '最近', 'messages.archived': 'アーカイブ', 'messages.emptyArchived': 'アーカイブされた会話はありません', 'messages.empty': 'まだ会話はありません', 'messages.emptyDescription': '相手を探してプロフィールを開き、「メッセージ」をタップしてプライベートチャットを始めましょう。', 'messages.exploreUsers': 'ユーザーを探す', 'messages.newBadge': '新着', 'messages.private': 'プライベートな会話', 'messages.selectConversation': '会話を選択', 'messages.selectDescription': '一覧から相手を選んでチャットを開きます。モバイルでは会話をタップすると全画面で開きます。', 'messages.fast': '💬 素早いメッセージ', 'messages.audioMedia': '🎙️ 音声とメディア', 'messages.userFallback': 'EntreUSユーザー', 'messages.usernameFallback': '@user',
   'messages.preview.started': '会話を開始しました。', 'messages.preview.deleted': '削除されたメッセージ', 'messages.preview.callDeclined': '通話が拒否されました', 'messages.preview.callCanceled': '通話がキャンセルされました', 'messages.preview.video': 'ビデオ', 'messages.preview.voice': '音声', 'messages.preview.call': '通話', 'messages.preview.missed': '不在着信', 'messages.preview.ended': '終了', 'messages.preview.callEvent': '通話イベント', 'messages.preview.you': 'あなた', 'messages.preview.media': 'メディアを送信しました',
   'messages.errors.notifications': '通知の読み込みエラー：', 'messages.errors.conversations': '会話の読み込みエラー：', 'messages.errors.state': '会話状態の読み込みエラー：', 'messages.errors.participants': '参加者の読み込みエラー：', 'messages.errors.profiles': 'プロフィールの読み込みエラー：', 'messages.errors.latest': '最新メッセージの読み込みエラー：',
+  'admin.creatorWithdrawals.accessDeniedTitle': 'アクセス制限',
+  'admin.creatorWithdrawals.accessDeniedDescription': 'このエリアは管理者専用です。',
+  'admin.creatorWithdrawals.admin': '管理',
+  'admin.creatorWithdrawals.title': 'クリエイターの手動出金',
+  'admin.creatorWithdrawals.description': 'プラットフォーム外で手動支払いを行い、その後支払い済みにします。この画面では確認、承認、支払い、却下のみを記録します。',
 })

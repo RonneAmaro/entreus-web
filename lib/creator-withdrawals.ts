@@ -147,8 +147,23 @@ export type CreatorWithdrawalValidationResult =
   | { ok: true; value: CreatorWithdrawalPayload }
   | { ok: false; reason: CreatorWithdrawalErrorReason; message: string }
 
+export type WithdrawalPaymentDisplayFieldLabel =
+  | 'pixKeyType'
+  | 'pixKey'
+  | 'holderName'
+  | 'holderDocument'
+  | 'bank'
+  | 'agency'
+  | 'account'
+  | 'accountType'
+  | 'note'
+  | 'country'
+  | 'desiredMethod'
+  | 'notes'
+  | 'methodDescription'
+
 export type WithdrawalPaymentDisplayField = {
-  label: string
+  label: WithdrawalPaymentDisplayFieldLabel
   value: string
 }
 
@@ -654,39 +669,43 @@ export function getWithdrawalPaymentDetailsForAdmin(
   const details = asRecord(detailsValue)
 
   if (method === 'pix') {
-    return [
-      { label: 'Tipo da chave Pix', value: getPixKeyTypeLabel(details.pixKeyType ?? details.pix_key_type) },
-      { label: 'Chave Pix', value: readDetailString(details, ['pixKey', 'pix_key']) },
-      { label: 'Nome do titular', value: readDetailString(details, ['holderName', 'holder_name']) },
-    ].filter((field) => field.value)
+    const fields: WithdrawalPaymentDisplayField[] = [
+      { label: 'pixKeyType', value: getPixKeyTypeLabel(details.pixKeyType ?? details.pix_key_type) },
+      { label: 'pixKey', value: readDetailString(details, ['pixKey', 'pix_key']) },
+      { label: 'holderName', value: readDetailString(details, ['holderName', 'holder_name']) },
+    ]
+    return fields.filter((field) => field.value)
   }
 
   if (method === 'bank_transfer') {
-    return [
-      { label: 'Nome do titular', value: readDetailString(details, ['holderName', 'holder_name']) },
-      { label: 'CPF/CNPJ do titular', value: readDetailString(details, ['document', 'holderDocument', 'holder_document']) },
-      { label: 'Banco', value: readDetailString(details, ['bank', 'bankName', 'bank_name']) },
-      { label: 'Agencia', value: readDetailString(details, ['agency', 'bankAgency', 'bank_agency']) },
-      { label: 'Conta', value: readDetailString(details, ['account', 'bankAccount', 'bank_account']) },
-      { label: 'Tipo de conta', value: getBankAccountTypeLabel(details.accountType ?? details.account_type) },
-      { label: 'Observacao', value: readDetailString(details, ['notes']) },
-    ].filter((field) => field.value)
+    const fields: WithdrawalPaymentDisplayField[] = [
+      { label: 'holderName', value: readDetailString(details, ['holderName', 'holder_name']) },
+      { label: 'holderDocument', value: readDetailString(details, ['document', 'holderDocument', 'holder_document']) },
+      { label: 'bank', value: readDetailString(details, ['bank', 'bankName', 'bank_name']) },
+      { label: 'agency', value: readDetailString(details, ['agency', 'bankAgency', 'bank_agency']) },
+      { label: 'account', value: readDetailString(details, ['account', 'bankAccount', 'bank_account']) },
+      { label: 'accountType', value: getBankAccountTypeLabel(details.accountType ?? details.account_type) },
+      { label: 'note', value: readDetailString(details, ['notes']) },
+    ]
+    return fields.filter((field) => field.value)
   }
 
   if (method === 'international_manual') {
-    return [
-      { label: 'Nome do titular', value: readDetailString(details, ['holderName', 'holder_name']) },
-      { label: 'Pais', value: readDetailString(details, ['country']) },
-      { label: 'Metodo desejado', value: readDetailString(details, ['desiredMethod', 'desired_method', 'method']) },
-      { label: 'Observacoes', value: readDetailString(details, ['notes']) },
-    ].filter((field) => field.value)
+    const fields: WithdrawalPaymentDisplayField[] = [
+      { label: 'holderName', value: readDetailString(details, ['holderName', 'holder_name']) },
+      { label: 'country', value: readDetailString(details, ['country']) },
+      { label: 'desiredMethod', value: readDetailString(details, ['desiredMethod', 'desired_method', 'method']) },
+      { label: 'notes', value: readDetailString(details, ['notes']) },
+    ]
+    return fields.filter((field) => field.value)
   }
 
-  return [
-    { label: 'Nome do titular', value: readDetailString(details, ['holderName', 'holder_name']) },
-    { label: 'Descricao do metodo', value: readDetailString(details, ['methodDescription', 'method_description', 'description']) },
-    { label: 'Observacoes', value: readDetailString(details, ['notes']) },
-  ].filter((field) => field.value)
+  const fields: WithdrawalPaymentDisplayField[] = [
+    { label: 'holderName', value: readDetailString(details, ['holderName', 'holder_name']) },
+    { label: 'methodDescription', value: readDetailString(details, ['methodDescription', 'method_description', 'description']) },
+    { label: 'notes', value: readDetailString(details, ['notes']) },
+  ]
+  return fields.filter((field) => field.value)
 }
 
 export function normalizeCreatorWithdrawalRpcError(error: unknown): CreatorWithdrawalErrorReason {
