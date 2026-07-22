@@ -15,6 +15,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react'
+import { useLanguage } from '@/app/components/LanguageProvider'
 import { isAdminRole } from '@/lib/admin'
 import {
   FINANCIAL_EXPENSE_CATEGORIES,
@@ -22,8 +23,6 @@ import {
   calculateFinancialSummary,
   formatCurrencyFromCents,
   getFinancialCategoriesForKind,
-  getFinancialCategoryLabel,
-  getFinancialRecordKindLabel,
   validateFinancialRecordInput,
   type FinancialCategory,
   type FinancialRecord,
@@ -53,24 +52,33 @@ type FinanceApiResponse = {
   records?: FinancialRecord[]
   record?: FinancialRecord
   summary?: FinancialSummary
+  reason?: string
   error?: string
   details?: string[]
 }
 
-const MONTHS = [
-  { value: '1', label: 'Janeiro' },
-  { value: '2', label: 'Fevereiro' },
-  { value: '3', label: 'Marco' },
-  { value: '4', label: 'Abril' },
-  { value: '5', label: 'Maio' },
-  { value: '6', label: 'Junho' },
-  { value: '7', label: 'Julho' },
-  { value: '8', label: 'Agosto' },
-  { value: '9', label: 'Setembro' },
-  { value: '10', label: 'Outubro' },
-  { value: '11', label: 'Novembro' },
-  { value: '12', label: 'Dezembro' },
-]
+const MONTH_VALUES = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'] as const
+const VALIDATION_MESSAGES = {
+  kindRequired: 'Selecione se o lancamento e entrada ou saida.',
+  categoryInvalid: 'Selecione uma categoria valida para o tipo escolhido.',
+  descriptionRequired: 'Informe uma descricao para o lancamento.',
+  amountPositive: 'Informe um valor maior que zero.',
+  dateInvalid: 'Informe uma data valida.',
+} as const
+const FINANCE_ERROR_REASONS = [
+  'not_authenticated',
+  'admin_required',
+  'invalid_payload',
+  'record_not_found',
+  'table_unavailable',
+  'internal',
+] as const
+
+type FinanceErrorReason = (typeof FINANCE_ERROR_REASONS)[number]
+
+function getLocaleFromLanguage(language: string) {
+  return language === 'pt-BR' ? 'pt-BR' : language
+}
 
 function todayDateInput() {
   return new Date().toISOString().slice(0, 10)
@@ -88,20 +96,20 @@ function makeInitialForm(): FormState {
   }
 }
 
-function formatDate(value: string | null | undefined) {
-  if (!value) return 'Nao informado'
+function formatDate(value: string | null | undefined, locale: string, fallback: string) {
+  if (!value) return fallback
 
-  return new Date(value).toLocaleDateString('pt-BR', {
+  return new Date(value).toLocaleDateString(locale, {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
   })
 }
 
-function formatDateTime(value: string | null | undefined) {
-  if (!value) return 'Nao informado'
+function formatDateTime(value: string | null | undefined, locale: string, fallback: string) {
+  if (!value) return fallback
 
-  return new Date(value).toLocaleString('pt-BR', {
+  return new Date(value).toLocaleString(locale, {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -116,6 +124,7 @@ function recordAmountClass(record: FinancialRecord) {
 
 export default function AdminFinancePage() {
   const router = useRouter()
+  const { language, t } = useLanguage()
   const currentDate = new Date()
   const [loading, setLoading] = useState(true)
   const [recordsLoading, setRecordsLoading] = useState(false)
@@ -136,6 +145,7 @@ export default function AdminFinancePage() {
   const [filterKind, setFilterKind] = useState<'all' | FinancialRecordKind>('all')
   const [filterCategory, setFilterCategory] = useState<'all' | FinancialCategory>('all')
 
+  const locale = getLocaleFromLanguage(language)
   const isAdmin = isAdminRole(adminProfile?.role)
   const monthlySummary = useMemo(() => calculateFinancialSummary(records), [records])
   const categoryOptions = getFinancialCategoriesForKind(form.kind)
@@ -143,6 +153,71 @@ export default function AdminFinancePage() {
     ...FINANCIAL_INCOME_CATEGORIES,
     ...FINANCIAL_EXPENSE_CATEGORIES,
   ]
+  const months = useMemo(
+    () => MONTH_VALUES.map((value) => ({ value, label: t(`admin.finance.month.${value}`) })),
+    [t],
+  )
+  const summaryCards = useMemo(() => [
+    { title: t('admin.finance.summary.incomeMonth'), value: monthlySummary.incomeCents, tone: 'emerald' },
+    { title: t('admin.finance.summary.expenseMonth'), value: monthlySummary.expenseCents, tone: 'red' },
+    {
+      title: t('admin.finance.summary.netMonth'),
+      value: monthlySummary.netCents,
+      tone: monthlySummary.netCents >= 0 ? 'cyan' : 'amber',
+    },
+    {
+      title: t('admin.finance.summary.historicalTotal'),
+      value: historicalSummary.netCents,
+      tone: historicalSummary.netCents >= 0 ? 'blue' : 'amber',
+    },
+    { title: t('admin.finance.summary.records'), value: monthlySummary.recordCount, tone: 'zinc', count: true },
+  ], [
+    historicalSummary.netCents,
+    monthlySummary.expenseCents,
+    monthlySummary.incomeCents,
+    monthlySummary.netCents,
+    monthlySummary.recordCount,
+    t,
+  ])
+
+  function translateKind(kind: FinancialRecordKind | 'all') {
+    if (kind === 'all') return t('admin.finance.filters.kind')
+    return t(`admin.finance.kind.${kind}`)
+  }
+
+  function translateCategory(category: FinancialCategory | 'all') {
+    if (category === 'all') return t('admin.finance.filters.category')
+    return t(`admin.finance.category.${category}`)
+  }
+
+  function translateValidationError(error: string) {
+    if (error === VALIDATION_MESSAGES.kindRequired) return t('admin.finance.validation.kindRequired')
+    if (error === VALIDATION_MESSAGES.categoryInvalid) return t('admin.finance.validation.categoryInvalid')
+    if (error === VALIDATION_MESSAGES.descriptionRequired) return t('admin.finance.validation.descriptionRequired')
+    if (error === VALIDATION_MESSAGES.amountPositive) return t('admin.finance.validation.amountPositive')
+    if (error === VALIDATION_MESSAGES.dateInvalid) return t('admin.finance.validation.dateInvalid')
+    return error
+  }
+
+  function translateFinanceReason(reason?: string, fallbackKey = 'admin.finance.messages.loadRecordsFailed') {
+    if (!reason) return t(fallbackKey)
+    const normalized = reason as FinanceErrorReason
+    if ((FINANCE_ERROR_REASONS as readonly string[]).includes(normalized)) {
+      return t(`admin.finance.errors.${normalized}`)
+    }
+    return t(fallbackKey)
+  }
+
+  function formatMoney(value: number) {
+    return value.toLocaleString(locale, {
+      style: 'currency',
+      currency: 'BRL',
+    })
+  }
+
+  function formatMoneyFromCents(value: number) {
+    return formatMoney(value / 100)
+  }
 
   useEffect(() => {
     void loadPage()
@@ -177,7 +252,7 @@ export default function AdminFinancePage() {
       .maybeSingle()
 
     if (profileError) {
-      setMessage('Nao foi possivel verificar permissao admin: ' + profileError.message)
+      setMessage(t('admin.finance.messages.adminCheckFailed', { error: profileError.message }))
       setLoading(false)
       return
     }
@@ -201,7 +276,7 @@ export default function AdminFinancePage() {
     const token = await getSessionToken()
 
     if (!token) {
-      throw new Error('Sessao expirada. Entre novamente.')
+      throw new Error(t('admin.finance.messages.sessionExpired'))
     }
 
     const query = params.toString()
@@ -213,7 +288,7 @@ export default function AdminFinancePage() {
     const data = (await response.json().catch(() => null)) as FinanceApiResponse | null
 
     if (!response.ok || !data?.ok) {
-      throw new Error(data?.error || 'Nao foi possivel carregar lancamentos financeiros.')
+      throw new Error(translateFinanceReason(data?.reason, 'admin.finance.messages.loadRecordsFailed'))
     }
 
     return data
@@ -239,7 +314,7 @@ export default function AdminFinancePage() {
       setHistoricalSummary(historicalData.summary || calculateFinancialSummary(historicalData.records || []))
     } catch (error) {
       setRecords([])
-      setMessage(error instanceof Error ? error.message : 'Nao foi possivel carregar financeiro.')
+      setMessage(error instanceof Error ? error.message : t('admin.finance.messages.loadFailed'))
     } finally {
       setRecordsLoading(false)
     }
@@ -264,7 +339,7 @@ export default function AdminFinancePage() {
       kind: record.kind,
       category: record.category,
       description: record.description,
-      amount: formatCurrencyFromCents(record.amount_cents),
+      amount: formatMoneyFromCents(record.amount_cents),
       occurred_on: record.occurred_on,
       payment_method: record.payment_method || '',
       notes: record.notes || '',
@@ -277,13 +352,13 @@ export default function AdminFinancePage() {
 
     const validation = validateFinancialRecordInput(form)
     if (!validation.ok) {
-      setMessage(validation.errors.join(' '))
+      setMessage(validation.errors.map(translateValidationError).join(' '))
       return
     }
 
     const token = await getSessionToken()
     if (!token) {
-      setMessage('Sessao expirada. Entre novamente.')
+      setMessage(t('admin.finance.messages.sessionExpired'))
       return
     }
 
@@ -304,15 +379,17 @@ export default function AdminFinancePage() {
       const data = (await response.json().catch(() => null)) as FinanceApiResponse | null
 
       if (!response.ok || !data?.ok) {
-        const details = Array.isArray(data?.details) ? data.details.join(' ') : ''
-        throw new Error(details || data?.error || 'Nao foi possivel salvar o lancamento.')
+        const details = Array.isArray(data?.details)
+          ? data.details.map((detail) => translateValidationError(detail)).join(' ')
+          : ''
+        throw new Error(details || translateFinanceReason(data?.reason, 'admin.finance.messages.saveFailed'))
       }
 
-      setMessage(editingId ? 'Lancamento atualizado.' : 'Lancamento criado.')
+      setMessage(editingId ? t('admin.finance.messages.updated') : t('admin.finance.messages.created'))
       resetForm()
       await loadRecords()
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Nao foi possivel salvar o lancamento.')
+      setMessage(error instanceof Error ? error.message : t('admin.finance.messages.saveFailed'))
     } finally {
       setSaving(false)
     }
@@ -320,11 +397,11 @@ export default function AdminFinancePage() {
 
   async function deleteRecord(record: FinancialRecord) {
     if (!record.id) return
-    if (!window.confirm('Remover este lancamento financeiro? Esta acao nao executa nenhum pagamento.')) return
+    if (!window.confirm(t('admin.finance.messages.deleteConfirm'))) return
 
     const token = await getSessionToken()
     if (!token) {
-      setMessage('Sessao expirada. Entre novamente.')
+      setMessage(t('admin.finance.messages.sessionExpired'))
       return
     }
 
@@ -339,11 +416,11 @@ export default function AdminFinancePage() {
     const data = (await response.json().catch(() => null)) as FinanceApiResponse | null
 
     if (!response.ok || !data?.ok) {
-      setMessage(data?.error || 'Nao foi possivel remover o lancamento.')
+      setMessage(translateFinanceReason(data?.reason, 'admin.finance.messages.deleteFailed'))
       return
     }
 
-    setMessage('Lancamento removido.')
+    setMessage(t('admin.finance.messages.deleted'))
     if (editingId === record.id) resetForm()
     await loadRecords()
   }
@@ -352,7 +429,7 @@ export default function AdminFinancePage() {
     return (
       <main className="flex min-h-screen items-center justify-center bg-black text-white">
         <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-        Carregando financeiro...
+        {t('common.loading')}
       </main>
     )
   }
@@ -362,12 +439,12 @@ export default function AdminFinancePage() {
       <main className="min-h-screen bg-black px-4 py-10 text-white">
         <section className="mx-auto max-w-xl rounded-[2rem] border border-red-300/20 bg-red-500/10 p-6 text-red-100">
           <ShieldAlert className="h-10 w-10" />
-          <h1 className="mt-4 text-2xl font-black">Acesso restrito</h1>
+          <h1 className="mt-4 text-2xl font-black">{t('post.restrictedTitle')}</h1>
           <p className="mt-2 text-sm leading-6">
-            Esta area e exclusiva para administradores da plataforma.
+            {t('admin.creatorWithdrawals.accessDeniedDescription')}
           </p>
           <Link href="/feed" className="mt-5 inline-flex rounded-full bg-white px-5 py-2.5 text-sm font-black text-black">
-            Voltar
+            {t('messages.detail.back')}
           </Link>
         </section>
       </main>
@@ -384,18 +461,18 @@ export default function AdminFinancePage() {
               className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-black transition hover:bg-white/10"
             >
               <ArrowLeft className="h-4 w-4" />
-              Admin
+              {t('admin.creatorWithdrawals.admin')}
             </Link>
-            <h1 className="text-3xl font-black tracking-tight sm:text-5xl">Financeiro da Plataforma</h1>
+            <h1 className="text-3xl font-black tracking-tight sm:text-5xl">{t('admin.finance.title')}</h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-zinc-400 sm:text-base">
-              Controle interno de entradas, saidas, custos e lucro da plataforma.
+              {t('admin.finance.description')}
             </p>
           </div>
 
           <div className="rounded-3xl border border-amber-300/20 bg-amber-500/10 p-4 text-sm leading-6 text-amber-100 lg:max-w-sm">
-            <p className="font-black">Painel administrativo manual</p>
+            <p className="font-black">{t('admin.finance.manualPanelTitle')}</p>
             <p className="mt-1 text-amber-100/80">
-              Este painel nao executa pagamentos automaticos. Repasses a criadores continuam manuais nesta fase.
+              {t('admin.finance.manualPanelDescription')}
             </p>
           </div>
         </header>
@@ -407,13 +484,7 @@ export default function AdminFinancePage() {
         )}
 
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-          {[
-            { title: 'Receitas do mes', value: monthlySummary.incomeCents, tone: 'emerald' },
-            { title: 'Despesas do mes', value: monthlySummary.expenseCents, tone: 'red' },
-            { title: 'Lucro liquido do mes', value: monthlySummary.netCents, tone: monthlySummary.netCents >= 0 ? 'cyan' : 'amber' },
-            { title: 'Total historico', value: historicalSummary.netCents, tone: historicalSummary.netCents >= 0 ? 'blue' : 'amber' },
-            { title: 'Lancamentos', value: monthlySummary.recordCount, tone: 'zinc', count: true },
-          ].map((item) => (
+          {summaryCards.map((item) => (
             <div
               key={item.title}
               className="rounded-[1.5rem] border border-white/10 bg-zinc-950/90 p-4 shadow-xl shadow-black/20 ring-1 ring-white/5"
@@ -432,7 +503,7 @@ export default function AdminFinancePage() {
                           ? 'text-blue-200'
                           : 'text-white'
               }`}>
-                {item.count ? item.value : formatCurrencyFromCents(item.value)}
+                {'count' in item && item.count ? item.value.toLocaleString(locale) : formatMoney(item.value)}
               </p>
             </div>
           ))}
@@ -442,16 +513,16 @@ export default function AdminFinancePage() {
           <form onSubmit={submitRecord} className="rounded-[1.5rem] border border-white/10 bg-zinc-950/90 p-5 ring-1 ring-white/5">
             <div className="mb-4 flex items-start justify-between gap-3">
               <div>
-                <h2 className="text-xl font-black">{editingId ? 'Editar lancamento' : 'Lancamento manual'}</h2>
-                <p className="mt-1 text-sm leading-5 text-zinc-500">Registre entradas e saidas gerenciais em reais.</p>
+                <h2 className="text-xl font-black">{editingId ? t('admin.finance.form.editTitle') : t('admin.finance.form.createTitle')}</h2>
+                <p className="mt-1 text-sm leading-5 text-zinc-500">{t('admin.finance.form.description')}</p>
               </div>
               {editingId && (
                 <button
                   type="button"
                   onClick={resetForm}
                   className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/5 text-zinc-200 hover:bg-white/10"
-                  aria-label="Cancelar edicao"
-                  title="Cancelar edicao"
+                  aria-label={t('admin.finance.form.cancelEdit')}
+                  title={t('admin.finance.form.cancelEdit')}
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -460,54 +531,54 @@ export default function AdminFinancePage() {
 
             <div className="grid gap-3">
               <label className="grid gap-1.5 text-sm font-bold text-zinc-200">
-                Tipo
+                {t('admin.finance.form.kind')}
                 <select
                   value={form.kind}
                   onChange={(event) => updateFormKind(event.target.value as FinancialRecordKind)}
                   className="h-11 rounded-2xl border border-white/10 bg-black px-3 text-white outline-none focus:border-cyan-300/60"
                 >
-                  <option value="income">Entrada</option>
-                  <option value="expense">Saida</option>
+                  <option value="income">{translateKind('income')}</option>
+                  <option value="expense">{translateKind('expense')}</option>
                 </select>
               </label>
 
               <label className="grid gap-1.5 text-sm font-bold text-zinc-200">
-                Categoria
+                {t('admin.finance.form.category')}
                 <select
                   value={form.category}
                   onChange={(event) => setForm((current) => ({ ...current, category: event.target.value as FinancialCategory }))}
                   className="h-11 rounded-2xl border border-white/10 bg-black px-3 text-white outline-none focus:border-cyan-300/60"
                 >
                   {categoryOptions.map((category) => (
-                    <option key={category} value={category}>{getFinancialCategoryLabel(category)}</option>
+                    <option key={category} value={category}>{translateCategory(category)}</option>
                   ))}
                 </select>
               </label>
 
               <label className="grid gap-1.5 text-sm font-bold text-zinc-200">
-                Descricao
+                {t('admin.finance.form.descriptionLabel')}
                 <input
                   value={form.description}
                   onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
                   className="h-11 rounded-2xl border border-white/10 bg-black px-3 text-white outline-none focus:border-cyan-300/60"
-                  placeholder="Ex.: Servidor do mes"
+                  placeholder={t('admin.finance.form.descriptionPlaceholder')}
                 />
               </label>
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="grid gap-1.5 text-sm font-bold text-zinc-200">
-                  Valor em R$
+                  {t('admin.finance.form.amount')}
                   <input
                     value={form.amount}
                     onChange={(event) => setForm((current) => ({ ...current, amount: event.target.value }))}
                     className="h-11 rounded-2xl border border-white/10 bg-black px-3 text-white outline-none focus:border-cyan-300/60"
-                    placeholder="R$ 0,00"
+                    placeholder={formatMoney(0)}
                     inputMode="decimal"
                   />
                 </label>
 
                 <label className="grid gap-1.5 text-sm font-bold text-zinc-200">
-                  Data
+                  {t('admin.finance.form.date')}
                   <input
                     type="date"
                     value={form.occurred_on}
@@ -518,22 +589,22 @@ export default function AdminFinancePage() {
               </div>
 
               <label className="grid gap-1.5 text-sm font-bold text-zinc-200">
-                Forma de pagamento
+                {t('admin.finance.form.paymentMethod')}
                 <input
                   value={form.payment_method}
                   onChange={(event) => setForm((current) => ({ ...current, payment_method: event.target.value }))}
                   className="h-11 rounded-2xl border border-white/10 bg-black px-3 text-white outline-none focus:border-cyan-300/60"
-                  placeholder="Pix, cartao, boleto..."
+                  placeholder={t('admin.finance.form.paymentMethodPlaceholder')}
                 />
               </label>
 
               <label className="grid gap-1.5 text-sm font-bold text-zinc-200">
-                Observacoes
+                {t('admin.finance.form.notes')}
                 <textarea
                   value={form.notes}
                   onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))}
                   className="min-h-24 rounded-2xl border border-white/10 bg-black px-3 py-3 text-white outline-none focus:border-cyan-300/60"
-                  placeholder="Detalhes internos do lancamento"
+                  placeholder={t('admin.finance.form.notesPlaceholder')}
                 />
               </label>
 
@@ -543,7 +614,7 @@ export default function AdminFinancePage() {
                 className="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-cyan-400 px-5 text-sm font-black text-zinc-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlusCircle className="h-4 w-4" />}
-                {editingId ? 'Salvar alteracoes' : 'Adicionar lancamento'}
+                {editingId ? t('admin.finance.form.saveChanges') : t('admin.finance.form.addRecord')}
               </button>
             </div>
           </form>
@@ -551,8 +622,8 @@ export default function AdminFinancePage() {
           <section className="rounded-[1.5rem] border border-white/10 bg-zinc-950/90 p-5 ring-1 ring-white/5">
             <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
               <div>
-                <h2 className="text-xl font-black">Lancamentos</h2>
-                <p className="mt-1 text-sm text-zinc-500">Dados gerenciais. Nao substituem contabilidade.</p>
+                <h2 className="text-xl font-black">{t('admin.finance.records.title')}</h2>
+                <p className="mt-1 text-sm text-zinc-500">{t('admin.finance.records.description')}</p>
               </div>
 
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
@@ -561,7 +632,7 @@ export default function AdminFinancePage() {
                   onChange={(event) => setFilterMonth(event.target.value)}
                   className="h-10 rounded-xl border border-white/10 bg-black px-3 text-sm text-white"
                 >
-                  {MONTHS.map((month) => (
+                  {months.map((month) => (
                     <option key={month.value} value={month.value}>{month.label}</option>
                   ))}
                 </select>
@@ -579,18 +650,18 @@ export default function AdminFinancePage() {
                   }}
                   className="h-10 rounded-xl border border-white/10 bg-black px-3 text-sm text-white"
                 >
-                  <option value="all">Tipo</option>
-                  <option value="income">Entrada</option>
-                  <option value="expense">Saida</option>
+                  <option value="all">{translateKind('all')}</option>
+                  <option value="income">{translateKind('income')}</option>
+                  <option value="expense">{translateKind('expense')}</option>
                 </select>
                 <select
                   value={filterCategory}
                   onChange={(event) => setFilterCategory(event.target.value as 'all' | FinancialCategory)}
                   className="h-10 rounded-xl border border-white/10 bg-black px-3 text-sm text-white"
                 >
-                  <option value="all">Categoria</option>
+                  <option value="all">{translateCategory('all')}</option>
                   {filterCategoryOptions.map((category) => (
-                    <option key={category} value={category}>{getFinancialCategoryLabel(category)}</option>
+                    <option key={category} value={category}>{translateCategory(category)}</option>
                   ))}
                 </select>
                 <button
@@ -600,54 +671,54 @@ export default function AdminFinancePage() {
                   className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-white px-4 text-sm font-black text-black transition hover:bg-zinc-200 disabled:opacity-60"
                 >
                   {recordsLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Banknote className="h-4 w-4" />}
-                  Filtrar
+                  {t('admin.finance.filters.apply')}
                 </button>
               </div>
             </div>
 
             <div className="mb-4 grid gap-2 rounded-2xl border border-white/10 bg-black/60 p-4 text-sm text-zinc-300 md:grid-cols-3">
-              <p className="flex items-center gap-2"><AlertTriangle className="h-4 w-4 text-amber-200" /> Nao executa pagamentos automaticos.</p>
-              <p className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-200" /> Repasses a criadores continuam manuais.</p>
-              <p className="flex items-center gap-2"><Banknote className="h-4 w-4 text-cyan-200" /> Controle gerencial interno.</p>
+              <p className="flex items-center gap-2"><AlertTriangle className="h-4 w-4 text-amber-200" /> {t('admin.finance.notices.noAutomaticPayments')}</p>
+              <p className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-200" /> {t('admin.finance.notices.manualPayouts')}</p>
+              <p className="flex items-center gap-2"><Banknote className="h-4 w-4 text-cyan-200" /> {t('admin.finance.notices.internalControl')}</p>
             </div>
 
             <div className="overflow-x-auto rounded-2xl border border-white/10">
               <table className="min-w-full divide-y divide-white/10 text-left text-sm">
                 <thead className="bg-white/[0.04] text-xs uppercase tracking-[0.14em] text-zinc-500">
                   <tr>
-                    <th className="px-4 py-3">Data</th>
-                    <th className="px-4 py-3">Tipo</th>
-                    <th className="px-4 py-3">Categoria</th>
-                    <th className="px-4 py-3">Descricao</th>
-                    <th className="px-4 py-3">Valor</th>
-                    <th className="px-4 py-3">Forma</th>
-                    <th className="px-4 py-3">Criado em</th>
-                    <th className="px-4 py-3">Acoes</th>
+                    <th className="px-4 py-3">{t('admin.finance.table.date')}</th>
+                    <th className="px-4 py-3">{t('admin.finance.table.kind')}</th>
+                    <th className="px-4 py-3">{t('admin.finance.table.category')}</th>
+                    <th className="px-4 py-3">{t('admin.finance.table.description')}</th>
+                    <th className="px-4 py-3">{t('admin.finance.table.amount')}</th>
+                    <th className="px-4 py-3">{t('admin.finance.table.paymentMethod')}</th>
+                    <th className="px-4 py-3">{t('admin.finance.table.createdAt')}</th>
+                    <th className="px-4 py-3">{t('admin.finance.table.actions')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/10">
                   {records.map((record) => (
                     <tr key={record.id} className="bg-black/30 align-top text-zinc-200">
-                      <td className="whitespace-nowrap px-4 py-3">{formatDate(record.occurred_on)}</td>
-                      <td className="whitespace-nowrap px-4 py-3">{getFinancialRecordKindLabel(record.kind)}</td>
-                      <td className="whitespace-nowrap px-4 py-3">{getFinancialCategoryLabel(record.category)}</td>
+                      <td className="whitespace-nowrap px-4 py-3">{formatDate(record.occurred_on, locale, t('common.notProvided'))}</td>
+                      <td className="whitespace-nowrap px-4 py-3">{translateKind(record.kind)}</td>
+                      <td className="whitespace-nowrap px-4 py-3">{translateCategory(record.category)}</td>
                       <td className="min-w-52 px-4 py-3">
                         <p className="font-bold text-white">{record.description}</p>
                         {record.notes && <p className="mt-1 line-clamp-2 text-xs text-zinc-500">{record.notes}</p>}
                       </td>
                       <td className={`whitespace-nowrap px-4 py-3 font-black ${recordAmountClass(record)}`}>
-                        {record.kind === 'expense' ? '-' : '+'}{formatCurrencyFromCents(record.amount_cents)}
+                        {record.kind === 'expense' ? '-' : '+'}{formatMoneyFromCents(record.amount_cents)}
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3">{record.payment_method || 'Nao informado'}</td>
-                      <td className="whitespace-nowrap px-4 py-3">{formatDateTime(record.created_at)}</td>
+                      <td className="whitespace-nowrap px-4 py-3">{record.payment_method || t('common.notProvided')}</td>
+                      <td className="whitespace-nowrap px-4 py-3">{formatDateTime(record.created_at, locale, t('common.notProvided'))}</td>
                       <td className="whitespace-nowrap px-4 py-3">
                         <div className="flex gap-2">
                           <button
                             type="button"
                             onClick={() => editRecord(record)}
                             className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/5 text-zinc-100 transition hover:bg-white/10"
-                            aria-label="Editar lancamento"
-                            title="Editar lancamento"
+                            aria-label={t('admin.finance.table.editRecord')}
+                            title={t('admin.finance.table.editRecord')}
                           >
                             <Pencil className="h-4 w-4" />
                           </button>
@@ -655,8 +726,8 @@ export default function AdminFinancePage() {
                             type="button"
                             onClick={() => deleteRecord(record)}
                             className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-red-300/20 bg-red-500/10 text-red-100 transition hover:bg-red-500/20"
-                            aria-label="Excluir lancamento"
-                            title="Excluir lancamento"
+                            aria-label={t('admin.finance.table.deleteRecord')}
+                            title={t('admin.finance.table.deleteRecord')}
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>
@@ -667,7 +738,7 @@ export default function AdminFinancePage() {
                   {records.length === 0 && (
                     <tr>
                       <td className="px-4 py-8 text-center text-zinc-500" colSpan={8}>
-                        Nenhum lancamento encontrado para os filtros atuais.
+                        {t('admin.finance.empty')}
                       </td>
                     </tr>
                   )}
