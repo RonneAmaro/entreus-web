@@ -7,13 +7,13 @@ import {
   AlertTriangle,
   ArrowLeft,
   CheckCircle2,
-  Coins,
   FileText,
   Loader2,
   ReceiptText,
   ShieldAlert,
   XCircle,
 } from 'lucide-react'
+import { useLanguage } from '@/app/components/LanguageProvider'
 import { supabase } from '@/lib/supabase'
 import { usePendingItaCashPurchasesCount } from '../../hooks/usePendingItaCashPurchasesCount'
 import { isAdminRole } from '@/lib/admin'
@@ -56,24 +56,20 @@ type ItaCashPurchaseRequest = {
   created_at: string
 }
 
-const FILTERS: { value: FilterStatus; label: string }[] = [
-  { value: 'pending', label: 'Pendentes' },
-  { value: 'approved', label: 'Aprovadas' },
-  { value: 'rejected', label: 'Recusadas' },
-  { value: 'all', label: 'Todas' },
-]
+const FILTERS: FilterStatus[] = ['pending', 'approved', 'rejected', 'all']
+const KNOWN_PROOF_API_ERRORS = new Set(['UNAUTHORIZED', 'FORBIDDEN', 'PROOF_NOT_AVAILABLE', 'SIGNED_URL_FAILED'])
 
-function formatBRLFromCents(value: number) {
-  return (value / 100).toLocaleString('pt-BR', {
+function formatBRLFromCents(value: number, locale: string) {
+  return (value / 100).toLocaleString(locale, {
     style: 'currency',
     currency: 'BRL',
   })
 }
 
-function formatDate(value: string | null) {
-  if (!value) return 'Nao informado'
+function formatDate(value: string | null, locale: string, fallback: string) {
+  if (!value) return fallback
 
-  return new Date(value).toLocaleString('pt-BR', {
+  return new Date(value).toLocaleString(locale, {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -82,26 +78,13 @@ function formatDate(value: string | null) {
   })
 }
 
-function statusLabel(status: string) {
-  if (status === 'approved') return 'Aprovada'
-  if (status === 'rejected') return 'Recusada'
-  if (status === 'canceled') return 'Cancelada'
-  return 'Pendente'
-}
-
-function paymentMethodLabel(method: string) {
-  if (method === 'mercadopago_manual') return 'Mercado Pago manual'
-  if (method === 'mercadopago_auto') return 'Mercado Pago automatico'
-  if (method === 'mercadopago_pix') return 'Mercado Pago Pix'
-  return 'Pix manual'
-}
-
 function hasPaymentProof(request: ItaCashPurchaseRequest) {
   return Boolean(request.proof_path || request.proof_url)
 }
 
 export default function AdminItaCashPurchasesPage() {
   const router = useRouter()
+  const { language, t } = useLanguage()
 
   const [loading, setLoading] = useState(true)
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null)
@@ -135,6 +118,11 @@ export default function AdminItaCashPurchasesPage() {
     loadPage()
   }, [])
 
+  const filters = useMemo(
+    () => FILTERS.map((value) => ({ value, label: t(`admin.itacashPurchases.filters.${value}`) })),
+    [t],
+  )
+
   const visibleRequests = useMemo(() => {
     if (filter === 'all') return requests
     return requests.filter((request) => request.status === filter)
@@ -145,6 +133,27 @@ export default function AdminItaCashPurchasesPage() {
   }, [requests])
 
   const visiblePendingCount = Math.max(pendingRequestsCount, livePendingCount)
+
+  const translateStatus = useCallback((status: string) => {
+    if (status === 'approved' || status === 'rejected' || status === 'canceled' || status === 'pending') {
+      return t(`admin.itacashPurchases.status.${status}`)
+    }
+    return t('admin.itacashPurchases.status.unknown')
+  }, [t])
+
+  const translatePaymentMethod = useCallback((method: string) => {
+    if (method === 'mercadopago_manual' || method === 'mercadopago_auto' || method === 'mercadopago_pix' || method === 'pix_manual') {
+      return t(`admin.itacashPurchases.paymentMethods.${method}`)
+    }
+    return t('admin.itacashPurchases.paymentMethods.unknown')
+  }, [t])
+
+  const translateProofApiError = useCallback((code?: string) => {
+    if (code && KNOWN_PROOF_API_ERRORS.has(code)) {
+      return t(`admin.itacashPurchases.proofErrors.${code}`)
+    }
+    return t('admin.itacashPurchases.proofErrors.unknown')
+  }, [t])
 
   async function loadPage() {
     setLoading(true)
@@ -166,7 +175,7 @@ export default function AdminItaCashPurchasesPage() {
       .maybeSingle()
 
     if (profileError) {
-      setMessage('Nao foi possivel verificar permissao admin: ' + profileError.message)
+      setMessage(t('admin.itacashPurchases.messages.adminCheckFailed'))
       setLoading(false)
       return
     }
@@ -217,7 +226,7 @@ export default function AdminItaCashPurchasesPage() {
       .order('created_at', { ascending: false })
 
     if (error) {
-      setMessage('Nao foi possivel carregar solicitacoes: ' + error.message)
+      setMessage(t('admin.itacashPurchases.messages.loadFailed'))
       return
     }
 
@@ -237,7 +246,7 @@ export default function AdminItaCashPurchasesPage() {
       .in('id', userIds)
 
     if (profilesError) {
-      setMessage('Solicitacoes carregadas, mas perfis falharam: ' + profilesError.message)
+      setMessage(t('admin.itacashPurchases.messages.profilesFailed'))
       return
     }
 
@@ -264,11 +273,11 @@ export default function AdminItaCashPurchasesPage() {
     setActionLoadingId(null)
 
     if (error) {
-      setMessage('Nao foi possivel aprovar solicitacao: ' + error.message)
+      setMessage(t('admin.itacashPurchases.messages.approveFailed'))
       return
     }
 
-    setMessage('Solicitacao aprovada e ItaCash creditado na carteira.')
+    setMessage(t('admin.itacashPurchases.messages.approvedSuccess'))
     setAdminNotes('')
     await loadRequests()
   }
@@ -277,7 +286,7 @@ export default function AdminItaCashPurchasesPage() {
     if (!rejectingRequest) return
 
     if (!rejectionReason.trim()) {
-      setMessage('Informe o motivo da recusa.')
+      setMessage(t('admin.itacashPurchases.messages.rejectionReasonRequired'))
       return
     }
 
@@ -293,11 +302,11 @@ export default function AdminItaCashPurchasesPage() {
     setActionLoadingId(null)
 
     if (error) {
-      setMessage('Nao foi possivel recusar solicitacao: ' + error.message)
+      setMessage(t('admin.itacashPurchases.messages.rejectFailed'))
       return
     }
 
-    setMessage('Solicitacao recusada sem credito de ItaCash.')
+    setMessage(t('admin.itacashPurchases.messages.rejectedSuccess'))
     setRejectingRequest(null)
     setRejectionReason('')
     setAdminNotes('')
@@ -306,7 +315,7 @@ export default function AdminItaCashPurchasesPage() {
 
   async function openProof(request: ItaCashPurchaseRequest) {
     if (!hasPaymentProof(request)) {
-      setMessage('Esta solicitacao nao possui comprovante enviado.')
+      setMessage(t('admin.itacashPurchases.messages.proofMissing'))
       return
     }
 
@@ -319,7 +328,7 @@ export default function AdminItaCashPurchasesPage() {
 
     if (!session?.access_token) {
       setProofLoadingId(null)
-      setMessage('Sessao expirada. Entre novamente para abrir o comprovante.')
+      setMessage(t('admin.itacashPurchases.messages.sessionExpired'))
       return
     }
 
@@ -335,12 +344,13 @@ export default function AdminItaCashPurchasesPage() {
     const data = (await response.json().catch(() => null)) as {
       ok?: boolean
       signedUrl?: string
+      error?: string
     } | null
 
     setProofLoadingId(null)
 
     if (!response.ok || !data?.ok || !data.signedUrl) {
-      setMessage('Nao foi possivel abrir comprovante. Tente novamente.')
+      setMessage(translateProofApiError(data?.error))
       return
     }
 
@@ -351,7 +361,7 @@ export default function AdminItaCashPurchasesPage() {
     return (
       <main className="flex min-h-screen items-center justify-center bg-black text-white">
         <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-        Carregando painel...
+        {t('admin.itacashPurchases.loading')}
       </main>
     )
   }
@@ -361,12 +371,12 @@ export default function AdminItaCashPurchasesPage() {
       <main className="min-h-screen bg-black px-4 py-10 text-white">
         <section className="mx-auto max-w-xl rounded-[2rem] border border-red-300/20 bg-red-500/10 p-6 text-red-100">
           <ShieldAlert className="h-10 w-10" />
-          <h1 className="mt-4 text-2xl font-black">Acesso restrito</h1>
+          <h1 className="mt-4 text-2xl font-black">{t('admin.itacashPurchases.accessDeniedTitle')}</h1>
           <p className="mt-2 text-sm leading-6">
-            Esta area e exclusiva para administradores.
+            {t('admin.itacashPurchases.accessDeniedDescription')}
           </p>
           <Link href="/feed" className="mt-5 inline-flex rounded-full bg-white px-5 py-2.5 text-sm font-black text-black">
-            Voltar
+            {t('messages.detail.back')}
           </Link>
         </section>
       </main>
@@ -383,18 +393,18 @@ export default function AdminItaCashPurchasesPage() {
               className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-black transition hover:bg-white/10"
             >
               <ArrowLeft className="h-4 w-4" />
-              Feed
+              {t('messages.detail.back')}
             </Link>
             <h1 className="text-3xl font-black tracking-tight sm:text-5xl">
-              Compras manuais de ItaCash
+              {t('admin.itacashPurchases.title')}
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-zinc-400">
-              Aprove somente depois de conferir o pagamento por fora. Nenhuma integracao automatica e executada aqui.
+              {t('admin.itacashPurchases.description')}
             </p>
           </div>
 
           <div className="rounded-3xl border border-blue-300/20 bg-blue-500/10 p-4 text-blue-100">
-            <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-200/70">Admin</p>
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-200/70">{t('admin.itacashPurchases.admin')}</p>
             <p className="mt-1 font-black">{adminProfile.email || adminProfile.id}</p>
           </div>
         </header>
@@ -414,24 +424,24 @@ export default function AdminItaCashPurchasesPage() {
               <div>
                 <p className="text-lg font-black">
                   {visiblePendingCount > 0
-                    ? 'Existem solicitacoes aguardando analise.'
-                    : 'Nenhuma solicitacao pendente agora.'}
+                    ? t('admin.itacashPurchases.summary.pendingTitle')
+                    : t('admin.itacashPurchases.summary.emptyTitle')}
                 </p>
                 <p className="mt-1 text-sm opacity-80">
                   {visiblePendingCount > 0
-                    ? 'Confira comprovantes e finalize a aprovacao ou recusa.'
-                    : 'A fila de compras ItaCash esta em dia.'}
+                    ? t('admin.itacashPurchases.summary.pendingDescription')
+                    : t('admin.itacashPurchases.summary.emptyDescription')}
                 </p>
               </div>
             </div>
           </div>
 
           <div className="rounded-[2rem] border border-white/10 bg-zinc-950/80 p-5 ring-1 ring-white/5">
-            <p className="text-xs font-black uppercase tracking-[0.2em] text-zinc-500">Pendentes</p>
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-zinc-500">{t('admin.itacashPurchases.summary.pendingCountTitle')}</p>
             <p className={`mt-2 text-4xl font-black ${visiblePendingCount > 0 ? 'text-red-200' : 'text-emerald-200'}`}>
               {visiblePendingCount}
             </p>
-            <p className="mt-1 text-sm text-zinc-400">compras ItaCash</p>
+            <p className="mt-1 text-sm text-zinc-400">{t('admin.itacashPurchases.summary.pendingCountUnit')}</p>
           </div>
         </div>
 
@@ -440,8 +450,8 @@ export default function AdminItaCashPurchasesPage() {
             <div className="flex items-start gap-3">
               <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-200" />
               <div>
-                <p className="font-black">Nova compra ItaCash aguardando analise.</p>
-                <p className="mt-1 text-sm text-red-100/80">A lista foi atualizada para voce conferir a solicitacao.</p>
+                <p className="font-black">{t('admin.itacashPurchases.alerts.newPendingTitle')}</p>
+                <p className="mt-1 text-sm text-red-100/80">{t('admin.itacashPurchases.alerts.newPendingDescription')}</p>
               </div>
             </div>
             <button
@@ -449,13 +459,13 @@ export default function AdminItaCashPurchasesPage() {
               onClick={() => setNewPendingAlert(false)}
               className="rounded-full border border-red-200/20 px-4 py-2 text-sm font-black text-red-50 transition hover:-translate-y-0.5 hover:bg-red-500/20 active:scale-95"
             >
-              Dispensar
+              {t('admin.itacashPurchases.actions.dismiss')}
             </button>
           </div>
         )}
 
         <div className="mb-5 flex flex-wrap gap-2">
-          {FILTERS.map((item) => (
+          {filters.map((item) => (
             <button
               key={item.value}
               type="button"
@@ -485,7 +495,7 @@ export default function AdminItaCashPurchasesPage() {
         <div className="grid gap-4">
           {visibleRequests.length === 0 ? (
             <div className="rounded-[2rem] border border-blue-300/15 bg-zinc-950/80 p-8 text-center text-zinc-400 ring-1 ring-blue-300/10">
-              Nenhuma solicitacao encontrada.
+              {t('admin.itacashPurchases.empty')}
             </div>
           ) : (
             visibleRequests.map((request) => {
@@ -505,50 +515,50 @@ export default function AdminItaCashPurchasesPage() {
                     <div className="min-w-0">
                       {isPending && (
                         <p className="mb-1 inline-flex rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.16em] text-white">
-                          Aguardando analise
+                          {t('admin.itacashPurchases.openStatus.pending')}
                         </p>
                       )}
                       <p className="truncate font-black">
-                        {profile?.display_name || profile?.username || 'Usuario'}
+                        {profile?.display_name || profile?.username || t('admin.itacashPurchases.fallback.user')}
                       </p>
                       <p className="truncate text-sm text-zinc-500">
-                        @{profile?.username || 'sem-username'}
+                        @{profile?.username || t('admin.itacashPurchases.fallback.username')}
                       </p>
                     </div>
 
                     <div>
-                      <p className="text-xs font-bold text-zinc-500">ItaCash</p>
+                      <p className="text-xs font-bold text-zinc-500">{t('admin.itacashPurchases.fields.itacash')}</p>
                       <p className="text-sm font-black">{request.amount_itacash}</p>
                     </div>
 
                     <div>
-                      <p className="text-xs font-bold text-zinc-500">Valor base</p>
-                      <p className="text-sm font-semibold">{formatBRLFromCents(request.base_amount_brl_cents)}</p>
+                      <p className="text-xs font-bold text-zinc-500">{t('admin.itacashPurchases.fields.baseAmount')}</p>
+                      <p className="text-sm font-semibold">{formatBRLFromCents(request.base_amount_brl_cents, language)}</p>
                     </div>
 
                     <div>
-                      <p className="text-xs font-bold text-zinc-500">Taxa EntreUS</p>
-                      <p className="text-sm font-semibold">{formatBRLFromCents(request.platform_fee_brl_cents)}</p>
+                      <p className="text-xs font-bold text-zinc-500">{t('admin.itacashPurchases.fields.platformFee')}</p>
+                      <p className="text-sm font-semibold">{formatBRLFromCents(request.platform_fee_brl_cents, language)}</p>
                     </div>
 
                     <div>
-                      <p className="text-xs font-bold text-zinc-500">Taxa operadora</p>
-                      <p className="text-sm font-semibold">{formatBRLFromCents(request.operator_fee_brl_cents)}</p>
+                      <p className="text-xs font-bold text-zinc-500">{t('admin.itacashPurchases.fields.operatorFee')}</p>
+                      <p className="text-sm font-semibold">{formatBRLFromCents(request.operator_fee_brl_cents, language)}</p>
                     </div>
 
                     <div>
-                      <p className="text-xs font-bold text-zinc-500">Total</p>
-                      <p className="text-sm font-black">{formatBRLFromCents(request.total_brl_cents)}</p>
+                      <p className="text-xs font-bold text-zinc-500">{t('admin.itacashPurchases.fields.total')}</p>
+                      <p className="text-sm font-black">{formatBRLFromCents(request.total_brl_cents, language)}</p>
                     </div>
 
                     <div>
-                      <p className="text-xs font-bold text-zinc-500">Metodo</p>
-                      <p className="text-sm font-semibold">{paymentMethodLabel(request.payment_method)}</p>
+                      <p className="text-xs font-bold text-zinc-500">{t('admin.itacashPurchases.fields.method')}</p>
+                      <p className="text-sm font-semibold">{translatePaymentMethod(request.payment_method)}</p>
                     </div>
 
                     <div>
-                      <p className="text-xs font-bold text-zinc-500">Data</p>
-                      <p className="text-sm font-semibold">{formatDate(request.created_at)}</p>
+                      <p className="text-xs font-bold text-zinc-500">{t('admin.itacashPurchases.fields.date')}</p>
+                      <p className="text-sm font-semibold">{formatDate(request.created_at, language, t('admin.itacashPurchases.notProvided'))}</p>
                     </div>
 
                     <div className="flex flex-col gap-2">
@@ -559,7 +569,7 @@ export default function AdminItaCashPurchasesPage() {
                             ? 'bg-red-500/10 text-red-300'
                             : 'bg-red-500/15 text-red-100 ring-1 ring-red-300/20'
                       }`}>
-                        {statusLabel(request.status)}
+                        {translateStatus(request.status)}
                       </span>
 
                       {isPending && (
@@ -569,20 +579,24 @@ export default function AdminItaCashPurchasesPage() {
                               type="button"
                               onClick={() => openProof(request)}
                               disabled={proofLoadingId === request.id}
+                              aria-label={t('admin.itacashPurchases.actions.openProof')}
+                              title={t('admin.itacashPurchases.actions.openProof')}
                               className="inline-flex items-center justify-center gap-1 rounded-full border border-blue-300/20 bg-blue-500/10 px-3 py-2 text-xs font-black text-blue-100 transition hover:bg-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60"
                             >
                               {proofLoadingId === request.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
-                              Ver comprovante
+                              {t('admin.itacashPurchases.actions.openProof')}
                             </button>
                           )}
                           <button
                             type="button"
                             onClick={() => approveRequest(request)}
                             disabled={actionLoadingId === request.id}
+                            aria-label={t('admin.itacashPurchases.actions.approve')}
+                            title={t('admin.itacashPurchases.actions.approve')}
                             className="inline-flex items-center justify-center gap-1 rounded-full bg-white px-3 py-2 text-xs font-black text-black transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
                           >
                             {actionLoadingId === request.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-                            Aprovar
+                            {t('admin.itacashPurchases.actions.approve')}
                           </button>
                           <button
                             type="button"
@@ -590,10 +604,12 @@ export default function AdminItaCashPurchasesPage() {
                               setRejectingRequest(request)
                               setRejectionReason('')
                             }}
+                            aria-label={t('admin.itacashPurchases.actions.reject')}
+                            title={t('admin.itacashPurchases.actions.reject')}
                             className="inline-flex items-center justify-center gap-1 rounded-full border border-red-300/20 bg-red-500/10 px-3 py-2 text-xs font-black text-red-100 transition hover:bg-red-500/20"
                           >
                             <XCircle className="h-3.5 w-3.5" />
-                            Recusar
+                            {t('admin.itacashPurchases.actions.reject')}
                           </button>
                         </div>
                       )}
@@ -602,23 +618,25 @@ export default function AdminItaCashPurchasesPage() {
 
                   {(request.user_note || request.rejection_reason || request.admin_notes || hasPaymentProof(request)) && (
                     <div className="mt-4 grid gap-3 border-t border-white/10 pt-4 text-sm text-zinc-300 md:grid-cols-4">
-                      <p><span className="font-black text-zinc-100">Observacao:</span> {request.user_note || 'Sem observacao.'}</p>
+                      <p><span className="font-black text-zinc-100">{t('admin.itacashPurchases.meta.note')}</span> {request.user_note || t('admin.itacashPurchases.meta.noNote')}</p>
                       <p>
-                        <span className="font-black text-zinc-100">Comprovante:</span>{' '}
+                        <span className="font-black text-zinc-100">{t('admin.itacashPurchases.meta.proof')}</span>{' '}
                         {hasPaymentProof(request) ? (
                           <button
                             type="button"
                             onClick={() => openProof(request)}
+                            aria-label={t('admin.itacashPurchases.actions.openProof')}
+                            title={t('admin.itacashPurchases.actions.openProof')}
                             className="font-black text-blue-200 underline-offset-4 hover:underline"
                           >
-                            Ver comprovante
+                            {t('admin.itacashPurchases.actions.openProof')}
                           </button>
                         ) : (
-                          'Nao enviado'
+                          t('admin.itacashPurchases.meta.proofMissing')
                         )}
                       </p>
-                      <p><span className="font-black text-zinc-100">Recusa:</span> {request.rejection_reason || 'N/D'}</p>
-                      <p><span className="font-black text-zinc-100">Revisao:</span> {formatDate(request.reviewed_at)}</p>
+                      <p><span className="font-black text-zinc-100">{t('admin.itacashPurchases.meta.rejection')}</span> {request.rejection_reason || t('admin.itacashPurchases.notProvided')}</p>
+                      <p><span className="font-black text-zinc-100">{t('admin.itacashPurchases.meta.reviewedAt')}</span> {formatDate(request.reviewed_at, language, t('admin.itacashPurchases.notProvided'))}</p>
                     </div>
                   )}
                 </article>
@@ -632,41 +650,47 @@ export default function AdminItaCashPurchasesPage() {
             <div className="mx-auto w-full max-w-xl rounded-[2rem] border border-white/10 bg-zinc-950 p-5 shadow-2xl shadow-black/50 ring-1 ring-white/10">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-xs font-black uppercase tracking-[0.22em] text-blue-300">Recusar compra</p>
+                  <p className="text-xs font-black uppercase tracking-[0.22em] text-blue-300">{t('admin.itacashPurchases.modal.kicker')}</p>
                   <h2 className="mt-2 text-2xl font-black">
                     {rejectingRequest.amount_itacash} ItaCash
                   </h2>
                   <p className="mt-1 text-sm text-zinc-500">
-                    Total: {formatBRLFromCents(rejectingRequest.total_brl_cents)}
+                    {t('admin.itacashPurchases.modal.total', { value: formatBRLFromCents(rejectingRequest.total_brl_cents, language) })}
                   </p>
                 </div>
 
                 <button
                   type="button"
                   onClick={() => setRejectingRequest(null)}
+                  aria-label={t('common.close')}
+                  title={t('common.close')}
                   className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-black transition hover:bg-white/10"
                 >
-                  Fechar
+                  {t('common.close')}
                 </button>
               </div>
 
               <label className="mt-5 block">
-                <span className="font-black">Motivo da recusa</span>
+                <span className="font-black">{t('admin.itacashPurchases.modal.rejectionReason')}</span>
                 <textarea
                   value={rejectionReason}
                   onChange={(event) => setRejectionReason(event.target.value)}
                   rows={4}
-                  placeholder="Obrigatorio para recusar"
+                  placeholder={t('admin.itacashPurchases.modal.rejectionReasonPlaceholder')}
+                  aria-label={t('admin.itacashPurchases.modal.rejectionReason')}
+                  title={t('admin.itacashPurchases.modal.rejectionReason')}
                   className="mt-2 w-full resize-none rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm text-white outline-none placeholder:text-zinc-500 focus:border-blue-300"
                 />
               </label>
 
               <label className="mt-4 block">
-                <span className="font-black">Notas internas</span>
+                <span className="font-black">{t('admin.itacashPurchases.modal.adminNotes')}</span>
                 <textarea
                   value={adminNotes}
                   onChange={(event) => setAdminNotes(event.target.value)}
                   rows={3}
+                  aria-label={t('admin.itacashPurchases.modal.adminNotes')}
+                  title={t('admin.itacashPurchases.modal.adminNotes')}
                   className="mt-2 w-full resize-none rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm text-white outline-none focus:border-blue-300"
                 />
               </label>
@@ -678,7 +702,7 @@ export default function AdminItaCashPurchasesPage() {
                 className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-full border border-red-300/20 bg-red-500/10 px-5 py-3 text-sm font-black text-red-100 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {actionLoadingId === rejectingRequest.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <ReceiptText className="h-4 w-4" />}
-                Confirmar recusa
+                {t('admin.itacashPurchases.modal.confirmReject')}
               </button>
             </div>
           </div>

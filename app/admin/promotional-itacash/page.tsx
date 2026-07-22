@@ -13,6 +13,7 @@ import {
   ShieldAlert,
   Sparkles,
 } from 'lucide-react'
+import { useLanguage } from '@/app/components/LanguageProvider'
 import { supabase } from '@/lib/supabase'
 import { isAdminRole } from '@/lib/admin'
 
@@ -42,19 +43,19 @@ type PromotionalGrant = {
 }
 
 function getInitial(text: string) {
-  if (!text) return 'U'
+  if (!text) return ''
   return text.slice(0, 1).toUpperCase()
 }
 
-function formatBRLFromItaCash(value: number) {
-  return (value * 0.1).toLocaleString('pt-BR', {
+function formatBRLFromItaCash(value: number, locale: string) {
+  return (value * 0.1).toLocaleString(locale, {
     style: 'currency',
     currency: 'BRL',
   })
 }
 
-function formatDate(value: string) {
-  return new Date(value).toLocaleString('pt-BR', {
+function formatDate(value: string, locale: string) {
+  return new Date(value).toLocaleString(locale, {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -65,6 +66,7 @@ function formatDate(value: string) {
 
 export default function AdminPromotionalItaCashPage() {
   const router = useRouter()
+  const { language, t } = useLanguage()
 
   const [loading, setLoading] = useState(true)
   const [searching, setSearching] = useState(false)
@@ -109,7 +111,7 @@ export default function AdminPromotionalItaCashPage() {
       .maybeSingle()
 
     if (profileError) {
-      setMessage('Nao foi possivel verificar permissao admin: ' + profileError.message)
+      setMessage(t('admin.promotionalItaCash.messages.adminCheckFailed'))
       setLoading(false)
       return
     }
@@ -138,7 +140,7 @@ export default function AdminPromotionalItaCashPage() {
     const cleanQuery = query.trim()
 
     if (cleanQuery.length < 2) {
-      setMessage('Digite pelo menos 2 caracteres para buscar usuario.')
+      setMessage(t('admin.promotionalItaCash.messages.queryTooShort'))
       return
     }
 
@@ -154,7 +156,7 @@ export default function AdminPromotionalItaCashPage() {
     setSearching(false)
 
     if (error) {
-      setMessage('Nao foi possivel buscar usuarios: ' + error.message)
+      setMessage(t('admin.promotionalItaCash.messages.searchFailed'))
       return
     }
 
@@ -169,7 +171,7 @@ export default function AdminPromotionalItaCashPage() {
       .limit(12)
 
     if (error) {
-      setMessage('Nao foi possivel carregar creditos recentes: ' + error.message)
+      setMessage(t('admin.promotionalItaCash.messages.loadGrantsFailed'))
       return
     }
 
@@ -189,7 +191,7 @@ export default function AdminPromotionalItaCashPage() {
       .in('id', userIds)
 
     if (profilesError) {
-      setMessage('Creditos carregados, mas perfis falharam: ' + profilesError.message)
+      setMessage(t('admin.promotionalItaCash.messages.profilesFailed'))
       return
     }
 
@@ -209,17 +211,17 @@ export default function AdminPromotionalItaCashPage() {
     setMessage('')
 
     if (!selectedUser) {
-      setMessage('Selecione um usuario para receber o credito promocional.')
+      setMessage(t('admin.promotionalItaCash.messages.userRequired'))
       return
     }
 
     if (amountItacash <= 0) {
-      setMessage('Informe uma quantidade valida de ItaCash.')
+      setMessage(t('admin.promotionalItaCash.messages.amountInvalid'))
       return
     }
 
     if (!reason.trim()) {
-      setMessage('Informe o motivo do credito promocional.')
+      setMessage(t('admin.promotionalItaCash.messages.reasonRequired'))
       return
     }
 
@@ -235,11 +237,11 @@ export default function AdminPromotionalItaCashPage() {
     setSubmitting(false)
 
     if (error) {
-      setMessage('Nao foi possivel enviar credito promocional: ' + error.message)
+      setMessage(t('admin.promotionalItaCash.messages.submitFailed'))
       return
     }
 
-    setMessage('Credito promocional enviado com sucesso.')
+    setMessage(t('admin.promotionalItaCash.messages.submitSuccess'))
     setSelectedUser(null)
     setResults([])
     setQuery('')
@@ -253,7 +255,7 @@ export default function AdminPromotionalItaCashPage() {
     return (
       <main className="flex min-h-screen items-center justify-center bg-black text-white">
         <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-        Carregando painel...
+        {t('admin.promotionalItaCash.loading')}
       </main>
     )
   }
@@ -263,12 +265,12 @@ export default function AdminPromotionalItaCashPage() {
       <main className="min-h-screen bg-black px-4 py-10 text-white">
         <section className="mx-auto max-w-xl rounded-[2rem] border border-red-300/20 bg-red-500/10 p-6 text-red-100">
           <ShieldAlert className="h-10 w-10" />
-          <h1 className="mt-4 text-2xl font-black">Acesso restrito</h1>
+          <h1 className="mt-4 text-2xl font-black">{t('admin.promotionalItaCash.accessDeniedTitle')}</h1>
           <p className="mt-2 text-sm leading-6">
-            Esta area e exclusiva para administradores.
+            {t('admin.promotionalItaCash.accessDeniedDescription')}
           </p>
           <Link href="/feed" className="mt-5 inline-flex rounded-full bg-white px-5 py-2.5 text-sm font-black text-black">
-            Voltar
+            {t('messages.detail.back')}
           </Link>
         </section>
       </main>
@@ -287,24 +289,24 @@ export default function AdminPromotionalItaCashPage() {
               className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-black transition hover:bg-white/10"
             >
               <ArrowLeft className="h-4 w-4" />
-              Feed
+              {t('messages.detail.back')}
             </Link>
             <h1 className="text-3xl font-black tracking-tight sm:text-5xl">
-              Credito promocional ItaCash
+              {t('admin.promotionalItaCash.title')}
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-zinc-400">
-              Envie ItaCash promocional para movimentar a rede. Esse credito fica marcado como nao sacavel no metadata da transacao.
+              {t('admin.promotionalItaCash.description')}
             </p>
           </div>
 
           <div className="rounded-3xl border border-blue-300/20 bg-blue-500/10 p-4 text-blue-100">
-            <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-200/70">Admin</p>
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-200/70">{t('admin.promotionalItaCash.admin')}</p>
             <p className="mt-1 font-black">{adminProfile.email || adminProfile.id}</p>
           </div>
         </header>
 
         <div className="relative z-10 mb-6 rounded-3xl border border-amber-300/20 bg-amber-500/10 p-4 text-sm leading-6 text-amber-50 ring-1 ring-amber-300/10">
-          Credito promocional nao representa moeda oficial e podera ter regras especificas de uso.
+          {t('admin.promotionalItaCash.notice')}
         </div>
 
         {message && (
@@ -317,13 +319,15 @@ export default function AdminPromotionalItaCashPage() {
           <section className="rounded-[2rem] border border-white/10 bg-zinc-950/80 p-5 ring-1 ring-white/10">
             <form onSubmit={searchUsers} className="flex flex-col gap-3 sm:flex-row">
               <label className="min-w-0 flex-1">
-                <span className="text-sm font-black text-zinc-200">Buscar usuario</span>
+                <span className="text-sm font-black text-zinc-200">{t('admin.promotionalItaCash.search.label')}</span>
                 <div className="mt-2 flex items-center gap-2 rounded-2xl border border-white/10 bg-black px-4 py-3 focus-within:border-blue-300">
                   <Search className="h-5 w-5 shrink-0 text-zinc-500" />
                   <input
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
-                    placeholder="username ou nome"
+                    placeholder={t('admin.promotionalItaCash.search.placeholder')}
+                    aria-label={t('admin.promotionalItaCash.search.label')}
+                    title={t('admin.promotionalItaCash.search.label')}
                     className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-zinc-600"
                   />
                 </div>
@@ -332,17 +336,23 @@ export default function AdminPromotionalItaCashPage() {
               <button
                 type="submit"
                 disabled={searching}
+                aria-label={t('admin.promotionalItaCash.search.button')}
+                title={t('admin.promotionalItaCash.search.button')}
                 className="mt-auto inline-flex items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-black text-black transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {searching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-                Buscar
+                {t('admin.promotionalItaCash.search.button')}
               </button>
             </form>
 
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
-              {results.map((profile) => {
+              {results.length === 0 && query.trim().length >= 2 && !searching ? (
+                <div className="sm:col-span-2 rounded-3xl border border-dashed border-white/10 p-6 text-center text-sm text-zinc-500">
+                  {t('admin.promotionalItaCash.search.empty')}
+                </div>
+              ) : results.map((profile) => {
                 const active = selectedUser?.id === profile.id
-                const name = profile.display_name || profile.username || 'Usuario'
+                const name = profile.display_name || profile.username || t('admin.promotionalItaCash.fallback.user')
 
                 return (
                   <button
@@ -359,16 +369,21 @@ export default function AdminPromotionalItaCashPage() {
                       <img
                         src={profile.avatar_url}
                         alt={name}
+                        title={name}
                         className="h-12 w-12 rounded-full border border-blue-300/20 object-cover"
                       />
                     ) : (
-                      <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-blue-300/20 bg-blue-950/40 text-sm font-black text-blue-100">
-                        {getInitial(name)}
+                      <span
+                        aria-label={name}
+                        title={name}
+                        className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-blue-300/20 bg-blue-950/40 text-sm font-black text-blue-100"
+                      >
+                        {getInitial(name) || getInitial(t('admin.promotionalItaCash.fallback.user'))}
                       </span>
                     )}
                     <span className="min-w-0">
                       <span className="block truncate font-black">{name}</span>
-                      <span className="block truncate text-sm text-zinc-500">@{profile.username || 'sem-username'}</span>
+                      <span className="block truncate text-sm text-zinc-500">@{profile.username || t('admin.promotionalItaCash.fallback.username')}</span>
                     </span>
                   </button>
                 )
@@ -377,17 +392,17 @@ export default function AdminPromotionalItaCashPage() {
 
             <form onSubmit={submitGrant} className="mt-6 border-t border-white/10 pt-5">
               <div className="mb-5 rounded-3xl border border-blue-300/20 bg-blue-500/10 p-4">
-                <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-200/70">Selecionado</p>
+                <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-200/70">{t('admin.promotionalItaCash.selected.label')}</p>
                 <p className="mt-1 text-lg font-black">
                   {selectedUser
                     ? selectedUser.display_name || selectedUser.username || selectedUser.id
-                    : 'Nenhum usuario selecionado'}
+                    : t('admin.promotionalItaCash.selected.empty')}
                 </p>
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="block">
-                  <span className="text-sm font-black text-zinc-200">Quantidade de ItaCash</span>
+                  <span className="text-sm font-black text-zinc-200">{t('admin.promotionalItaCash.form.amount')}</span>
                   <input
                     type="number"
                     min="1"
@@ -395,34 +410,40 @@ export default function AdminPromotionalItaCashPage() {
                     inputMode="numeric"
                     value={amount}
                     onChange={(event) => setAmount(event.target.value)}
+                    aria-label={t('admin.promotionalItaCash.form.amount')}
+                    title={t('admin.promotionalItaCash.form.amount')}
                     className="mt-2 w-full rounded-2xl border border-white/10 bg-black px-4 py-3 text-lg font-black text-white outline-none focus:border-blue-300"
                   />
                 </label>
 
                 <div className="rounded-3xl border border-white/10 bg-black/35 p-4">
-                  <p className="text-xs font-black uppercase tracking-[0.2em] text-zinc-500">Equivalente</p>
-                  <p className="mt-2 text-2xl font-black">{formatBRLFromItaCash(amountItacash)}</p>
-                  <p className="text-sm text-zinc-500">10 ItaCash = R$ 1,00</p>
+                  <p className="text-xs font-black uppercase tracking-[0.2em] text-zinc-500">{t('admin.promotionalItaCash.summary.equivalent')}</p>
+                  <p className="mt-2 text-2xl font-black">{formatBRLFromItaCash(amountItacash, language)}</p>
+                  <p className="text-sm text-zinc-500">{t('admin.promotionalItaCash.summary.conversion')}</p>
                 </div>
               </div>
 
               <label className="mt-4 block">
-                <span className="text-sm font-black text-zinc-200">Motivo</span>
+                <span className="text-sm font-black text-zinc-200">{t('admin.promotionalItaCash.form.reason')}</span>
                 <textarea
                   value={reason}
                   onChange={(event) => setReason(event.target.value)}
                   rows={3}
-                  placeholder="Ex.: incentivo inicial da comunidade"
+                  placeholder={t('admin.promotionalItaCash.form.reasonPlaceholder')}
+                  aria-label={t('admin.promotionalItaCash.form.reason')}
+                  title={t('admin.promotionalItaCash.form.reason')}
                   className="mt-2 w-full resize-none rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm text-white outline-none placeholder:text-zinc-600 focus:border-blue-300"
                 />
               </label>
 
               <label className="mt-4 block">
-                <span className="text-sm font-black text-zinc-200">Campanha opcional</span>
+                <span className="text-sm font-black text-zinc-200">{t('admin.promotionalItaCash.form.campaign')}</span>
                 <input
                   value={campaign}
                   onChange={(event) => setCampaign(event.target.value)}
-                  placeholder="Ex.: beta-maio"
+                  placeholder={t('admin.promotionalItaCash.form.campaignPlaceholder')}
+                  aria-label={t('admin.promotionalItaCash.form.campaign')}
+                  title={t('admin.promotionalItaCash.form.campaign')}
                   className="mt-2 w-full rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm text-white outline-none placeholder:text-zinc-600 focus:border-blue-300"
                 />
               </label>
@@ -430,10 +451,12 @@ export default function AdminPromotionalItaCashPage() {
               <button
                 type="submit"
                 disabled={submitting}
+                aria-label={t('admin.promotionalItaCash.form.submit')}
+                title={t('admin.promotionalItaCash.form.submit')}
                 className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-black text-black transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Gift className="h-4 w-4" />}
-                Enviar credito promocional
+                {t('admin.promotionalItaCash.form.submit')}
               </button>
             </form>
           </section>
@@ -444,20 +467,20 @@ export default function AdminPromotionalItaCashPage() {
                 <Sparkles className="h-5 w-5" />
               </span>
               <div>
-                <h2 className="text-lg font-black">Ultimos creditos</h2>
-                <p className="text-sm text-zinc-500">Promocionais enviados</p>
+                <h2 className="text-lg font-black">{t('admin.promotionalItaCash.history.title')}</h2>
+                <p className="text-sm text-zinc-500">{t('admin.promotionalItaCash.history.description')}</p>
               </div>
             </div>
 
             <div className="mt-5 space-y-3">
               {grants.length === 0 ? (
                 <div className="rounded-3xl border border-dashed border-white/10 p-6 text-center text-sm text-zinc-500">
-                  Nenhum credito promocional enviado ainda.
+                  {t('admin.promotionalItaCash.history.empty')}
                 </div>
               ) : (
                 grants.map((grant) => {
                   const profile = profilesById[grant.user_id]
-                  const name = profile?.display_name || profile?.username || 'Usuario'
+                  const name = profile?.display_name || profile?.username || t('admin.promotionalItaCash.fallback.user')
 
                   return (
                     <article key={grant.id} className="rounded-3xl border border-white/10 bg-black/30 p-4 transition hover:border-blue-300/20 hover:bg-blue-950/10">
@@ -469,7 +492,7 @@ export default function AdminPromotionalItaCashPage() {
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">
                               <p className="truncate font-black">{name}</p>
-                              <p className="truncate text-sm text-zinc-500">@{profile?.username || 'sem-username'}</p>
+                              <p className="truncate text-sm text-zinc-500">@{profile?.username || t('admin.promotionalItaCash.fallback.username')}</p>
                             </div>
                             <p className="shrink-0 text-lg font-black text-emerald-300">+{grant.amount_itacash}</p>
                           </div>
@@ -479,7 +502,7 @@ export default function AdminPromotionalItaCashPage() {
                               {grant.campaign}
                             </span>
                           )}
-                          <p className="mt-2 text-xs text-zinc-500">{formatDate(grant.created_at)}</p>
+                          <p className="mt-2 text-xs text-zinc-500">{formatDate(grant.created_at, language)}</p>
                         </div>
                       </div>
                     </article>
