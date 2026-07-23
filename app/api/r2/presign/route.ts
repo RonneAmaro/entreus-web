@@ -225,7 +225,7 @@ export async function POST(request: Request) {
         error: 'SERVER_UPLOAD_CONFIG_MISSING',
         message: 'Nao foi possivel preparar o upload agora. Tente novamente em instantes.',
       },
-      { status: 500 },
+      { status: 503 },
     )
   }
 
@@ -236,7 +236,7 @@ export async function POST(request: Request) {
         error: 'SERVER_AUTH_CONFIG_MISSING',
         message: 'Nao foi possivel preparar o upload agora. Tente novamente em instantes.',
       },
-      { status: 500 },
+      { status: 503 },
     )
   }
 
@@ -277,7 +277,8 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         ok: false,
-        error: 'JSON invalido.',
+        error: 'INVALID_JSON',
+        message: 'Nao foi possivel preparar o upload agora. Revise o arquivo e tente novamente.',
       },
       { status: 400 },
     )
@@ -287,7 +288,8 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         ok: false,
-        error: 'Nome do arquivo ausente.',
+        error: 'MISSING_FILE_NAME',
+        message: 'Escolha um arquivo valido antes de continuar.',
       },
       { status: 400 },
     )

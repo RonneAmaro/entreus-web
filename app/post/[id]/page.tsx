@@ -7,6 +7,7 @@ import { ArrowLeft } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import PostCard from '@/app/components/PostCard'
 import RichTextLinks from '@/app/components/RichTextLinks'
+import { useLanguage } from '@/app/components/LanguageProvider'
 import { isAdminRole } from '@/lib/admin'
 import {
   isMissingPostModerationColumnError,
@@ -158,6 +159,7 @@ async function recordAuthorizedPostView(targetPostId: string) {
 export default function PostPage() {
   const params = useParams()
   const router = useRouter()
+  const { language, t } = useLanguage()
   const postId = typeof params.id === 'string' ? params.id : ''
 
   const [loggedUserId, setLoggedUserId] = useState('')
@@ -228,7 +230,7 @@ export default function PostPage() {
       setModerationHiddenDenied(false)
 
       if (!postId) {
-        setMessage('Publicação inválida.')
+        setMessage(t('postPage.errors.invalidPost'))
         setLoading(false)
         return
       }
@@ -377,13 +379,14 @@ export default function PostPage() {
       }
 
       if (postError) {
-        setMessage('Erro ao carregar publicação: ' + postError.message)
+        console.error('Erro ao carregar publicacao:', postError.message)
+        setMessage(t('postPage.errors.loadPost'))
         setLoading(false)
         return
       }
 
       if (!postData) {
-        setMessage('Publicação não encontrada.')
+        setMessage(t('postPage.errors.notFound'))
         setLoading(false)
         return
       }
@@ -411,7 +414,7 @@ export default function PostPage() {
         }))
         setPermissionDenied(true)
         setModerationHiddenDenied(true)
-        setMessage('Este conteudo foi ocultado pela moderacao.')
+        setMessage(t('postPage.errors.moderatedHidden'))
         setLoading(false)
         return
       }
@@ -439,7 +442,7 @@ export default function PostPage() {
           hasPaidUnlock: false,
         }))
         setPermissionDenied(true)
-        setMessage('Este conteudo nao esta disponivel para sua conta.')
+        setMessage(t('postPage.errors.accountRestricted'))
         setLoading(false)
         return
       }
@@ -456,7 +459,7 @@ export default function PostPage() {
           hasPaidUnlock: false,
         }))
         setPermissionDenied(true)
-        setMessage('Você não tem permissão para visualizar esta publicação.')
+        setMessage(t('postPage.errors.permissionDenied'))
         setLoading(false)
         return
       }
@@ -571,7 +574,8 @@ export default function PostPage() {
         .maybeSingle()
 
       if (error) {
-        setMessage('Erro ao verificar permissão: ' + error.message)
+        console.error('Erro ao verificar permissao da publicação:', error.message)
+        setMessage(t('postPage.errors.checkPermission'))
         return false
       }
 
@@ -600,7 +604,8 @@ export default function PostPage() {
       .order('created_at', { ascending: true })
 
     if (error) {
-      setMessage('Erro ao carregar comentários: ' + error.message)
+      console.error('Erro ao carregar comentários:', error.message)
+      setMessage(t('postPage.errors.loadComments'))
       return
     }
 
@@ -621,7 +626,8 @@ export default function PostPage() {
       .eq('post_id', postId)
 
     if (error) {
-      setMessage('Erro ao carregar curtidas: ' + error.message)
+      console.error('Erro ao carregar curtidas:', error.message)
+      setMessage(t('postPage.errors.loadLikes'))
       return
     }
 
@@ -636,7 +642,8 @@ export default function PostPage() {
       .eq('post_id', postId)
 
     if (error) {
-      setMessage('Erro ao carregar salvos: ' + error.message)
+      console.error('Erro ao carregar salvos:', error.message)
+      setMessage(t('postPage.errors.loadBookmarks'))
       return
     }
 
@@ -651,7 +658,8 @@ export default function PostPage() {
       .order('created_at', { ascending: false })
 
     if (error) {
-      setMessage('Erro ao carregar reposts: ' + error.message)
+      console.error('Erro ao carregar reposts:', error.message)
+      setMessage(t('postPage.errors.loadReposts'))
       return
     }
 
@@ -681,7 +689,8 @@ export default function PostPage() {
         .eq('id', existingLike.id)
 
       if (error) {
-        setMessage('Erro ao remover curtida: ' + error.message)
+        console.error('Erro ao remover curtida:', error.message)
+        setMessage(t('postPage.errors.removeLike'))
         await loadLikes()
       }
 
@@ -706,7 +715,8 @@ export default function PostPage() {
       .single()
 
     if (error) {
-      setMessage('Erro ao curtir: ' + error.message)
+      console.error('Erro ao curtir publicação:', error.message)
+      setMessage(t('postPage.errors.like'))
       await loadLikes()
       return
     }
@@ -753,7 +763,8 @@ export default function PostPage() {
         .eq('user_id', loggedUserId)
 
       if (error) {
-        setMessage('Erro ao remover dos salvos: ' + error.message)
+        console.error('Erro ao remover dos salvos:', error.message)
+        setMessage(t('postPage.errors.removeBookmark'))
         await loadBookmarks(loggedUserId)
       }
 
@@ -779,7 +790,8 @@ export default function PostPage() {
       .single()
 
     if (error) {
-      setMessage('Erro ao salvar post: ' + error.message)
+      console.error('Erro ao salvar publicação:', error.message)
+      setMessage(t('postPage.errors.savePost'))
       await loadBookmarks(loggedUserId)
       return
     }
@@ -804,7 +816,7 @@ export default function PostPage() {
     setMessage('')
 
     if (post.user_id === loggedUserId) {
-      setMessage('Você não precisa repostar sua própria publicação.')
+      setMessage(t('postPage.errors.repostOwn'))
       return
     }
 
@@ -824,7 +836,8 @@ export default function PostPage() {
         .eq('user_id', loggedUserId)
 
       if (error) {
-        setMessage('Erro ao remover repost: ' + error.message)
+        console.error('Erro ao remover repost:', error.message)
+        setMessage(t('postPage.errors.removeRepost'))
         await loadReposts()
       }
 
@@ -850,7 +863,8 @@ export default function PostPage() {
       .single()
 
     if (error) {
-      setMessage('Erro ao repostar: ' + error.message)
+      console.error('Erro ao repostar publicação:', error.message)
+      setMessage(t('postPage.errors.repost'))
       await loadReposts()
       return
     }
@@ -884,7 +898,7 @@ export default function PostPage() {
     const text = commentInput.trim()
 
     if (!text) {
-      setMessage('Escreva um comentário antes de enviar.')
+      setMessage(t('postPage.errors.emptyComment'))
       return
     }
 
@@ -902,7 +916,8 @@ export default function PostPage() {
       .single()
 
     if (error) {
-      setMessage('Erro ao comentar: ' + error.message)
+      console.error('Erro ao comentar na publicação:', error.message)
+      setMessage(t('postPage.errors.comment'))
       setSendingComment(false)
       return
     }
@@ -934,14 +949,14 @@ export default function PostPage() {
         setCopiedPostId((current) => (current === postId ? null : current))
       }, 2000)
     } catch {
-      setMessage('Não foi possível copiar o link.')
+      setMessage(t('postPage.errors.copyLink'))
     }
   }
 
   async function handleDeletePost() {
     if (!loggedUserId || !post) return
 
-    const confirmDelete = window.confirm('Tem certeza que deseja excluir esta publicação?')
+    const confirmDelete = window.confirm(t('postPage.confirmDelete'))
 
     if (!confirmDelete) return
 
@@ -952,7 +967,8 @@ export default function PostPage() {
       .eq('user_id', loggedUserId)
 
     if (error) {
-      setMessage('Erro ao excluir publicação: ' + error.message)
+      console.error('Erro ao excluir publicação:', error.message)
+      setMessage(t('postPage.errors.deletePost'))
       return
     }
 
@@ -966,12 +982,12 @@ export default function PostPage() {
     }
 
     if (post.user_id === loggedUserId) {
-      setMessage('Você não pode denunciar sua própria publicação.')
+      setMessage(t('postPage.errors.reportOwn'))
       return
     }
 
     const reason = window.prompt(
-      'Informe o motivo da denúncia.\nEx.: spam, nudez indevida, assédio, conteúdo ofensivo'
+      t('postPage.reportPrompt')
     )
 
     if (!reason || !reason.trim()) return
@@ -984,11 +1000,12 @@ export default function PostPage() {
     })
 
     if (error) {
-      setMessage('Erro ao denunciar publicação: ' + error.message)
+      console.error('Erro ao denunciar publicação:', error.message)
+      setMessage(t('postPage.errors.report'))
       return
     }
 
-    setMessage('Publicação denunciada com sucesso.')
+    setMessage(t('postPage.success.reported'))
   }
 
   const userLiked = useMemo(() => {
@@ -1010,7 +1027,7 @@ export default function PostPage() {
   if (loading) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-white px-4 text-black dark:bg-black dark:text-white">
-        <p>Carregando publicação...</p>
+        <p>{t('postPage.loading')}</p>
       </main>
     )
   }
@@ -1025,7 +1042,7 @@ export default function PostPage() {
               className="inline-flex items-center gap-2 rounded-full border border-zinc-300 px-4 py-2 text-sm hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900"
             >
               <ArrowLeft className="h-4 w-4" />
-              Voltar
+              {t('postPage.back')}
             </Link>
 
             <strong>EntreUS</strong>
@@ -1035,7 +1052,7 @@ export default function PostPage() {
         <section className="mx-auto max-w-3xl px-4 py-8">
           <div className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900">
             <p className="text-zinc-700 dark:text-zinc-300">
-              {message || 'Publicação não encontrada.'}
+              {message || t('postPage.errors.notFound')}
             </p>
           </div>
         </section>
@@ -1053,7 +1070,7 @@ export default function PostPage() {
             className="inline-flex items-center gap-2 rounded-full border border-zinc-300 px-4 py-2 text-sm hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900"
           >
             <ArrowLeft className="h-4 w-4" />
-            Voltar
+            {t('postPage.back')}
           </button>
 
           <Link href="/feed" className="font-bold">
@@ -1066,13 +1083,13 @@ export default function PostPage() {
         {permissionDenied ? (
           <div className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900">
             <h1 className="text-xl font-bold">
-              {moderationHiddenDenied ? 'Conteudo ocultado' : 'Publicação restrita'}
+              {moderationHiddenDenied ? t('postPage.moderatedTitle') : t('postPage.restrictedTitle')}
             </h1>
 
             <p className="mt-2 text-zinc-600 dark:text-zinc-400">
               {moderationHiddenDenied
-                ? 'Este conteudo foi ocultado pela moderacao.'
-                : 'Essa publicação não está disponível para sua conta ou precisa de login.'}
+                ? t('postPage.errors.moderatedHidden')
+                : t('postPage.restrictedDescription')}
             </p>
 
             {!moderationHiddenDenied && (
@@ -1081,14 +1098,14 @@ export default function PostPage() {
                 href="/login"
                 className="rounded-xl bg-black px-5 py-3 text-center font-medium text-white hover:opacity-90 dark:bg-white dark:text-black"
               >
-                Entrar
+                {t('auth.login.submit')}
               </Link>
 
               <Link
                 href="/signup"
                 className="rounded-xl border border-zinc-300 px-5 py-3 text-center font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900"
               >
-                Criar conta
+                {t('auth.signup.create')}
               </Link>
             </div>
             )}
@@ -1114,7 +1131,9 @@ export default function PostPage() {
                   ageVerificationStatus: currentProfile?.age_verification_status,
                 })
               }
-              footerLabel={`Publicado em ${new Date(post.created_at).toLocaleString('pt-BR')}`}
+              footerLabel={t('postPage.publishedAt', {
+                date: new Date(post.created_at).toLocaleString(language),
+              })}
               onLike={handleToggleLike}
               onCommentClick={() => {
                 const input = document.getElementById('single-post-comment-input')
@@ -1142,11 +1161,11 @@ export default function PostPage() {
             {!canInteract && (
               <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 p-4 text-blue-900 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200">
                 <p className="font-semibold">
-                  Entre no EntreUS para interagir com esta publicação.
+                    {t('postPage.signInTitle')}
                 </p>
 
                 <p className="mt-1 text-sm opacity-90">
-                  Crie sua conta para curtir, comentar, seguir perfis e participar da rede.
+                  {t('postPage.signInDescription')}
                 </p>
 
                 <div className="mt-4 flex flex-col gap-3 sm:flex-row">
@@ -1154,21 +1173,21 @@ export default function PostPage() {
                     href="/login"
                     className="rounded-xl bg-black px-5 py-3 text-center font-medium text-white hover:opacity-90 dark:bg-white dark:text-black"
                   >
-                    Entrar
+                    {t('auth.login.submit')}
                   </Link>
 
                   <Link
                     href="/signup"
                     className="rounded-xl border border-blue-300 px-5 py-3 text-center font-medium hover:bg-blue-100 dark:border-blue-800 dark:hover:bg-blue-950"
                   >
-                    Criar conta
+                    {t('auth.signup.create')}
                   </Link>
                 </div>
               </div>
             )}
 
             <section className="mt-5 rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900 sm:p-6">
-              <h2 className="mb-4 text-lg font-bold">Comentários</h2>
+              <h2 className="mb-4 text-lg font-bold">{t('postPage.commentsTitle')}</h2>
 
               {canInteract ? (
                 <form
@@ -1180,7 +1199,7 @@ export default function PostPage() {
                     type="text"
                     value={commentInput}
                     onChange={(e) => setCommentInput(e.target.value)}
-                    placeholder="Escreva um comentário..."
+                    placeholder={t('postPage.commentPlaceholder')}
                     className="flex-1 rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800"
                   />
 
@@ -1189,12 +1208,12 @@ export default function PostPage() {
                     disabled={sendingComment}
                     className="rounded-xl bg-black px-5 py-3 font-medium text-white hover:opacity-90 disabled:opacity-60 dark:bg-white dark:text-black"
                   >
-                    {sendingComment ? 'Enviando...' : 'Comentar'}
+                    {sendingComment ? t('postPage.commentSending') : t('postPage.commentSubmit')}
                   </button>
                 </form>
               ) : (
                 <p className="mb-5 text-sm text-zinc-500">
-                  Faça login para comentar.
+                  {t('postPage.commentLoginHint')}
                 </p>
               )}
 
@@ -1207,7 +1226,7 @@ export default function PostPage() {
               <div className="space-y-3">
                 {comments.length === 0 && (
                   <p className="text-sm text-zinc-500">
-                    Nenhum comentário ainda.
+                    {t('postPage.commentsEmpty')}
                   </p>
                 )}
 
@@ -1215,10 +1234,10 @@ export default function PostPage() {
                   const commentAuthorName =
                     comment.profiles?.display_name ||
                     comment.profiles?.username ||
-                    'Usuário'
+                    t('postPage.fallbackUser')
 
                   const commentAuthorUsername =
-                    comment.profiles?.username || 'usuario'
+                    comment.profiles?.username || t('postPage.fallbackUsername')
 
                   const commentAvatar = comment.profiles?.avatar_url || ''
 
@@ -1259,7 +1278,7 @@ export default function PostPage() {
                           />
 
                           <p className="mt-2 text-xs text-zinc-500">
-                            {new Date(comment.created_at).toLocaleString('pt-BR')}
+                            {new Date(comment.created_at).toLocaleString(language)}
                           </p>
                         </div>
                       </div>

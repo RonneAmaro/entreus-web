@@ -312,7 +312,7 @@ export default function PublicProfilePage() {
       }
 
       if (profileError) {
-        setMessage(t("publicProfile.errors.loadProfile", { error: profileError.message }));
+        setMessage(t("publicProfile.errors.loadProfile"));
         setLoading(false);
         return;
       }
@@ -353,7 +353,7 @@ export default function PublicProfilePage() {
             .maybeSingle();
 
         if (blockedByMeError) {
-          setMessage(t("publicProfile.errors.checkBlock", { error: blockedByMeError.message }));
+          setMessage(t("publicProfile.errors.checkBlock"));
           setLoading(false);
           return;
         }
@@ -367,9 +367,7 @@ export default function PublicProfilePage() {
             .maybeSingle();
 
         if (hasBlockedMeError) {
-          setMessage(
-            t("publicProfile.errors.checkBlock", { error: hasBlockedMeError.message }),
-          );
+          setMessage(t("publicProfile.errors.checkBlock"));
           setLoading(false);
           return;
         }
@@ -437,7 +435,7 @@ export default function PublicProfilePage() {
       .eq("read", false);
 
     if (error) {
-      setMessage(t("publicProfile.errors.loadNotifications", { error: error.message }));
+      setMessage(t("publicProfile.errors.loadNotifications"));
       return;
     }
 
@@ -451,7 +449,7 @@ export default function PublicProfilePage() {
       .eq("following_id", profileId);
 
     if (followersError) {
-      setMessage(t("publicProfile.errors.loadFollowers", { error: followersError.message }));
+      setMessage(t("publicProfile.errors.loadFollowers"));
       return;
     }
 
@@ -463,7 +461,7 @@ export default function PublicProfilePage() {
       .eq("follower_id", profileId);
 
     if (followingError) {
-      setMessage(t("publicProfile.errors.loadFollowing", { error: followingError.message }));
+      setMessage(t("publicProfile.errors.loadFollowing"));
       return;
     }
 
@@ -575,7 +573,7 @@ export default function PublicProfilePage() {
       .select("id, post_id, user_id");
 
     if (error) {
-      setMessage(t("publicProfile.errors.loadLikes", { error: error.message }));
+      setMessage(t("publicProfile.errors.loadLikes"));
       return;
     }
 
@@ -588,7 +586,7 @@ export default function PublicProfilePage() {
       .select("id, post_id, user_id");
 
     if (error) {
-      setMessage(t("publicProfile.errors.loadComments", { error: error.message }));
+      setMessage(t("publicProfile.errors.loadComments"));
       return;
     }
 
@@ -604,7 +602,7 @@ export default function PublicProfilePage() {
       .eq("user_id", currentUserId);
 
     if (error) {
-      setMessage(t("publicProfile.errors.loadBookmarks", { error: error.message }));
+      setMessage(t("publicProfile.errors.loadBookmarks"));
       return;
     }
 
@@ -618,7 +616,7 @@ export default function PublicProfilePage() {
       .order("created_at", { ascending: false });
 
     if (error) {
-      setMessage(t("publicProfile.errors.loadReposts", { error: error.message }));
+      setMessage(t("publicProfile.errors.loadReposts"));
       return;
     }
 
@@ -802,7 +800,7 @@ export default function PublicProfilePage() {
       .maybeSingle();
 
     if (checkError) {
-      setMessage(t("publicProfile.errors.checkFollow", { error: checkError.message }));
+      setMessage(t("publicProfile.errors.checkFollow"));
       setFollowLoading(false);
       return;
     }
@@ -814,7 +812,7 @@ export default function PublicProfilePage() {
         .eq("id", existingFollow.id);
 
       if (error) {
-        setMessage(t("publicProfile.errors.unfollow", { error: error.message }));
+        setMessage(t("publicProfile.errors.unfollow"));
         setFollowLoading(false);
         return;
       }
@@ -825,7 +823,7 @@ export default function PublicProfilePage() {
       });
 
       if (error) {
-        setMessage(t("publicProfile.errors.follow", { error: error.message }));
+        setMessage(t("publicProfile.errors.follow"));
         setFollowLoading(false);
         return;
       }
@@ -856,7 +854,7 @@ export default function PublicProfilePage() {
         .eq("blocked_id", profile.id);
 
       if (error) {
-        setMessage(t("publicProfile.errors.unblock", { error: error.message }));
+        setMessage(t("publicProfile.errors.unblock"));
         setBlockLoading(false);
         return;
       }
@@ -881,7 +879,7 @@ export default function PublicProfilePage() {
       });
 
       if (error) {
-        setMessage(t("publicProfile.errors.block", { error: error.message }));
+        setMessage(t("publicProfile.errors.block"));
         setBlockLoading(false);
         return;
       }
@@ -916,7 +914,7 @@ export default function PublicProfilePage() {
     });
 
     if (error) {
-      setMessage(t("publicProfile.errors.reportUser", { error: error.message }));
+      setMessage(t("publicProfile.errors.reportUser"));
       setReportingUser(false);
       return;
     }
@@ -946,7 +944,7 @@ export default function PublicProfilePage() {
         .eq("user_id", loggedUserId);
 
       if (error) {
-        setMessage(t("publicProfile.errors.removeBookmark", { error: error.message }));
+        setMessage(t("publicProfile.errors.removeBookmark"));
         await loadBookmarks(loggedUserId);
       }
 
@@ -972,7 +970,7 @@ export default function PublicProfilePage() {
       .single();
 
     if (error) {
-      setMessage(t("publicProfile.errors.savePost", { error: error.message }));
+      setMessage(t("publicProfile.errors.savePost"));
       await loadBookmarks(loggedUserId);
       return;
     }
@@ -1012,7 +1010,7 @@ export default function PublicProfilePage() {
         .eq("user_id", loggedUserId);
 
       if (error) {
-        setMessage(t("publicProfile.errors.removeRepost", { error: error.message }));
+        setMessage(t("publicProfile.errors.removeRepost"));
         if (profile) await loadAllReposts(profile);
       }
 
@@ -1043,7 +1041,7 @@ export default function PublicProfilePage() {
       .single();
 
     if (error) {
-      setMessage(t("publicProfile.errors.repost", { error: error.message }));
+      setMessage(t("publicProfile.errors.repost"));
       if (profile) await loadAllReposts(profile);
       return;
     }
@@ -1089,7 +1087,7 @@ export default function PublicProfilePage() {
         .eq("id", existingLike.id);
 
       if (error) {
-        setMessage(t("publicProfile.errors.removeLike", { error: error.message }));
+        setMessage(t("publicProfile.errors.removeLike"));
         await loadLikes();
       }
 
@@ -1114,7 +1112,7 @@ export default function PublicProfilePage() {
       .single();
 
     if (error) {
-      setMessage(t("publicProfile.errors.like", { error: error.message }));
+      setMessage(t("publicProfile.errors.like"));
       await loadLikes();
       return;
     }
@@ -1177,7 +1175,7 @@ export default function PublicProfilePage() {
     });
 
     if (error) {
-      setMessage(t("publicProfile.errors.reportPost", { error: error.message }));
+      setMessage(t("publicProfile.errors.reportPost"));
       setReportingPostId(null);
       return;
     }
@@ -1198,7 +1196,7 @@ export default function PublicProfilePage() {
       .eq("following_id", profile.id);
 
     if (followsError) {
-      setMessage(t("publicProfile.errors.loadFollowers", { error: followsError.message }));
+      setMessage(t("publicProfile.errors.loadFollowers"));
       setLoadingFollowers(false);
       return;
     }
@@ -1219,7 +1217,7 @@ export default function PublicProfilePage() {
       .in("id", followerIds);
 
     if (profilesError) {
-      setMessage(t("publicProfile.errors.loadFollowers", { error: profilesError.message }));
+      setMessage(t("publicProfile.errors.loadFollowers"));
       setLoadingFollowers(false);
       return;
     }
@@ -1239,7 +1237,7 @@ export default function PublicProfilePage() {
       .eq("follower_id", profile.id);
 
     if (followsError) {
-      setMessage(t("publicProfile.errors.loadFollowing", { error: followsError.message }));
+      setMessage(t("publicProfile.errors.loadFollowing"));
       setLoadingFollowing(false);
       return;
     }
@@ -1260,7 +1258,7 @@ export default function PublicProfilePage() {
       .in("id", followingIds);
 
     if (profilesError) {
-      setMessage(t("publicProfile.errors.loadFollowing", { error: profilesError.message }));
+      setMessage(t("publicProfile.errors.loadFollowing"));
       setLoadingFollowing(false);
       return;
     }
@@ -1393,7 +1391,7 @@ export default function PublicProfilePage() {
     setSharingGiftId(null);
 
     if (error) {
-      setMessage(t("publicProfile.errors.shareGift", { error: error.message }));
+      setMessage(t("publicProfile.errors.shareGift"));
       return;
     }
 
