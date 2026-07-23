@@ -14,6 +14,7 @@ import {
   Search,
   ShieldAlert,
 } from 'lucide-react'
+import { useLanguage } from '@/app/components/LanguageProvider'
 import { isAdminRole } from '@/lib/admin'
 import {
   BETA_CHECKLIST_ITEMS,
@@ -32,75 +33,9 @@ import { supabase } from '@/lib/supabase'
 
 type AdminState = 'loading' | 'denied' | 'ready'
 
-const filterOptions: Array<{ value: BetaChecklistFilter; label: string }> = [
-  { value: 'all', label: 'Todos' },
-  { value: 'pending', label: 'Pendentes' },
-  { value: 'blocker', label: 'Bloqueadores' },
-  { value: 'passed', label: 'Aprovados' },
-]
-
-function getStatusClassName(status: BetaChecklistStatus) {
-  if (status === 'passed') {
-    return 'border-emerald-300/30 bg-emerald-500/10 text-emerald-100'
-  }
-
-  if (status === 'bug') {
-    return 'border-red-300/35 bg-red-500/15 text-red-100'
-  }
-
-  if (status === 'testing') {
-    return 'border-amber-300/35 bg-amber-500/15 text-amber-100'
-  }
-  if (status === 'blocker') return 'border-red-300/50 bg-red-500/25 text-red-50'
-  if (status === 'not_applicable') return 'border-zinc-300/20 bg-zinc-500/10 text-zinc-300'
-
-  return 'border-white/10 bg-white/5 text-zinc-300'
-}
-
-function getSummaryCardClassName(kind: BetaChecklistStatus | 'total') {
-  if (kind === 'passed') return 'border-emerald-300/25 bg-emerald-500/10 text-emerald-50'
-  if (kind === 'bug') return 'border-red-300/25 bg-red-500/10 text-red-50'
-  if (kind === 'testing') return 'border-amber-300/25 bg-amber-500/10 text-amber-50'
-  if (kind === 'blocker') return 'border-red-300/35 bg-red-500/20 text-red-50'
-  if (kind === 'pending') return 'border-white/10 bg-zinc-950/80 text-zinc-100'
-
-  return 'border-blue-300/25 bg-blue-500/10 text-blue-50'
-}
-
-function parseStoredProgress(value: string | null): BetaChecklistProgress {
-  if (!value) return {}
-
-  try {
-    const parsed = JSON.parse(value) as BetaChecklistProgress
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
-
-    const nextProgress: BetaChecklistProgress = {}
-
-    for (const [itemId, entry] of Object.entries(parsed)) {
-      if (!entry || typeof entry !== 'object') continue
-
-      const status = betaChecklistStatuses.includes(entry.status as BetaChecklistStatus)
-        ? entry.status
-        : undefined
-      const note = typeof entry.note === 'string' ? entry.note.slice(0, 240) : ''
-
-      if (status || note.trim()) {
-        nextProgress[itemId] = { status, note }
-      }
-    }
-
-    return nextProgress
-  } catch {
-    return {}
-  }
-}
-
-function getRouteParts(route: string) {
-  return route.split(',').map((part) => part.trim()).filter(Boolean)
-}
-
 export default function AdminBetaChecklistPage() {
   const router = useRouter()
+  const { t } = useLanguage()
   const [adminState, setAdminState] = useState<AdminState>('loading')
   const [adminLabel, setAdminLabel] = useState('')
   const [message, setMessage] = useState('')
@@ -109,6 +44,86 @@ export default function AdminBetaChecklistPage() {
   const [statusFilter, setStatusFilter] = useState<BetaChecklistFilter>('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [copyMessage, setCopyMessage] = useState('')
+
+  const filterOptions: Array<{ value: BetaChecklistFilter; label: string }> = useMemo(
+    () => [
+      { value: 'all', label: t('admin.betaChecklist.filters.all') },
+      { value: 'pending', label: t('admin.betaChecklist.filters.pending') },
+      { value: 'blocker', label: t('admin.betaChecklist.filters.blocker') },
+      { value: 'passed', label: t('admin.betaChecklist.filters.passed') },
+    ],
+    [t],
+  )
+
+  function getStatusClassName(status: BetaChecklistStatus) {
+    if (status === 'passed') {
+      return 'border-emerald-300/30 bg-emerald-500/10 text-emerald-100'
+    }
+
+    if (status === 'bug') {
+      return 'border-red-300/35 bg-red-500/15 text-red-100'
+    }
+
+    if (status === 'testing') {
+      return 'border-amber-300/35 bg-amber-500/15 text-amber-100'
+    }
+    if (status === 'blocker') return 'border-red-300/50 bg-red-500/25 text-red-50'
+    if (status === 'not_applicable') return 'border-zinc-300/20 bg-zinc-500/10 text-zinc-300'
+
+    return 'border-white/10 bg-white/5 text-zinc-300'
+  }
+
+  function getSummaryCardClassName(kind: BetaChecklistStatus | 'total') {
+    if (kind === 'passed') return 'border-emerald-300/25 bg-emerald-500/10 text-emerald-50'
+    if (kind === 'bug') return 'border-red-300/25 bg-red-500/10 text-red-50'
+    if (kind === 'testing') return 'border-amber-300/25 bg-amber-500/10 text-amber-50'
+    if (kind === 'blocker') return 'border-red-300/35 bg-red-500/20 text-red-50'
+    if (kind === 'pending') return 'border-white/10 bg-zinc-950/80 text-zinc-100'
+
+    return 'border-blue-300/25 bg-blue-500/10 text-blue-50'
+  }
+
+  function parseStoredProgress(value: string | null): BetaChecklistProgress {
+    if (!value) return {}
+
+    try {
+      const parsed = JSON.parse(value) as BetaChecklistProgress
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
+
+      const nextProgress: BetaChecklistProgress = {}
+
+      for (const [itemId, entry] of Object.entries(parsed)) {
+        if (!entry || typeof entry !== 'object') continue
+
+        const status = betaChecklistStatuses.includes(entry.status as BetaChecklistStatus)
+          ? entry.status
+          : undefined
+        const note = typeof entry.note === 'string' ? entry.note.slice(0, 240) : ''
+
+        if (status || note.trim()) {
+          nextProgress[itemId] = { status, note }
+        }
+      }
+
+      return nextProgress
+    } catch {
+      return {}
+    }
+  }
+
+  function getRouteParts(route: string) {
+    return route.split(',').map((part) => part.trim()).filter(Boolean)
+  }
+
+  function getChecklistStatusLabel(status: BetaChecklistStatus) {
+    if (status === 'pending') return t('admin.betaChecklist.status.pending')
+    if (status === 'passed') return t('admin.betaChecklist.status.passed')
+    if (status === 'bug') return t('admin.betaChecklist.status.bug')
+    if (status === 'testing') return t('admin.betaChecklist.status.testing')
+    if (status === 'blocker') return t('admin.betaChecklist.status.blocker')
+    if (status === 'not_applicable') return t('admin.betaChecklist.status.notApplicable')
+    return betaChecklistStatusLabels[status]
+  }
 
   useEffect(() => {
     let active = true
@@ -134,7 +149,7 @@ export default function AdminBetaChecklistPage() {
       if (!active) return
 
       if (profileError) {
-        setMessage('Nao foi possivel verificar permissao admin.')
+        setMessage(t('admin.betaChecklist.messages.adminCheckFailed'))
         setAdminState('denied')
         return
       }
@@ -153,7 +168,7 @@ export default function AdminBetaChecklistPage() {
     return () => {
       active = false
     }
-  }, [router])
+  }, [router, t])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -236,14 +251,14 @@ export default function AdminBetaChecklistPage() {
 
     try {
       await navigator.clipboard.writeText(report)
-      setCopyMessage('Relatório copiado para a área de transferência.')
+      setCopyMessage(t('admin.betaChecklist.messages.reportCopied'))
     } catch {
-      setCopyMessage('Nao foi possivel copiar automaticamente. Tente novamente no navegador.')
+      setCopyMessage(t('admin.betaChecklist.messages.reportCopyFailed'))
     }
   }
 
   function handleClearProgress() {
-    const confirmed = window.confirm('Limpar todo o progresso salvo neste navegador?')
+    const confirmed = window.confirm(t('admin.betaChecklist.confirm.clear'))
 
     if (!confirmed) return
 
@@ -251,14 +266,14 @@ export default function AdminBetaChecklistPage() {
     if (typeof window !== 'undefined') {
       window.localStorage.removeItem(BETA_CHECKLIST_STORAGE_KEY)
     }
-    setCopyMessage('Progresso local limpo.')
+    setCopyMessage(t('admin.betaChecklist.messages.progressCleared'))
   }
 
   if (adminState === 'loading') {
     return (
       <main className="flex min-h-screen items-center justify-center bg-black text-white">
         <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-        Carregando checklist...
+        {t('admin.betaChecklist.loading')}
       </main>
     )
   }
@@ -268,9 +283,9 @@ export default function AdminBetaChecklistPage() {
       <main className="min-h-screen bg-black px-4 py-10 text-white">
         <section className="mx-auto max-w-xl rounded-[2rem] border border-red-300/20 bg-red-500/10 p-6 text-red-100">
           <ShieldAlert className="h-10 w-10" />
-          <h1 className="mt-4 text-2xl font-black">Acesso restrito</h1>
+          <h1 className="mt-4 text-2xl font-black">{t('post.restrictedTitle')}</h1>
           <p className="mt-2 text-sm leading-6">
-            Esta area e exclusiva para administradores da plataforma.
+            {t('admin.betaChecklist.accessDeniedDescription')}
           </p>
           {message && (
             <p className="mt-3 rounded-2xl border border-red-200/20 bg-red-500/10 p-3 text-sm">
@@ -278,7 +293,7 @@ export default function AdminBetaChecklistPage() {
             </p>
           )}
           <Link href="/feed" className="mt-5 inline-flex rounded-full bg-white px-5 py-2.5 text-sm font-black text-black">
-            Voltar
+            {t('messages.detail.back')}
           </Link>
         </section>
       </main>
@@ -295,52 +310,51 @@ export default function AdminBetaChecklistPage() {
               className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-black transition hover:bg-white/10"
             >
               <ArrowLeft className="h-4 w-4" />
-              Admin
+              {t('admin.creatorWithdrawals.admin')}
             </Link>
             <p className="text-sm font-black uppercase tracking-[0.18em] text-blue-200/80">
-              Beta fechado
+              {t('admin.betaChecklist.kicker')}
             </p>
             <h1 className="mt-3 text-3xl font-black tracking-tight sm:text-5xl">
-              Checklist interativo de testes
+              {t('admin.betaChecklist.title')}
             </h1>
             <p className="mt-3 max-w-3xl text-sm leading-6 text-zinc-400 sm:text-base">
-              Use este checklist para validar o EntreUS antes de liberar usuarios beta.
-              O progresso fica salvo apenas neste navegador.
+              {t('admin.betaChecklist.description')}
             </p>
           </div>
 
           <div className="rounded-3xl border border-blue-300/20 bg-blue-500/10 p-4 text-blue-100">
-            <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-200/70">Admin</p>
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-200/70">{t('admin.betaChecklist.adminLabel')}</p>
             <p className="mt-1 font-black">{adminLabel}</p>
           </div>
         </header>
 
         <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
           <div className={`rounded-[1.5rem] border p-4 ${getSummaryCardClassName('total')}`}>
-            <p className="text-xs font-black uppercase tracking-[0.16em] opacity-70">Total</p>
+            <p className="text-xs font-black uppercase tracking-[0.16em] opacity-70">{t('admin.betaChecklist.summary.total')}</p>
             <p className="mt-2 text-3xl font-black">{summary.total}</p>
-            <p className="mt-1 text-xs opacity-75">Prontidao beta: {summary.readinessPercent}%</p>
+            <p className="mt-1 text-xs opacity-75">{t('admin.betaChecklist.summary.readiness', { count: summary.readinessPercent })}</p>
           </div>
           <div className={`rounded-[1.5rem] border p-4 ${getSummaryCardClassName('passed')}`}>
-            <p className="text-xs font-black uppercase tracking-[0.16em] opacity-70">Aprovados</p>
+            <p className="text-xs font-black uppercase tracking-[0.16em] opacity-70">{t('admin.betaChecklist.summary.passed')}</p>
             <p className="mt-2 text-3xl font-black">{summary.passed}</p>
           </div>
           <div className={`rounded-[1.5rem] border p-4 ${getSummaryCardClassName('bug')}`}>
-            <p className="text-xs font-black uppercase tracking-[0.16em] opacity-70">Bug</p>
+            <p className="text-xs font-black uppercase tracking-[0.16em] opacity-70">{t('admin.betaChecklist.summary.bug')}</p>
             <p className="mt-2 text-3xl font-black">{summary.bug}</p>
           </div>
           <div className={`rounded-[1.5rem] border p-4 ${getSummaryCardClassName('blocker')}`}>
-            <p className="text-xs font-black uppercase tracking-[0.16em] opacity-70">Bloqueadores</p>
+            <p className="text-xs font-black uppercase tracking-[0.16em] opacity-70">{t('admin.betaChecklist.summary.blocker')}</p>
             <p className="mt-2 text-3xl font-black">{summary.blocker}</p>
           </div>
           <div className={`rounded-[1.5rem] border p-4 ${getSummaryCardClassName('pending')}`}>
-            <p className="text-xs font-black uppercase tracking-[0.16em] opacity-70">Pendente</p>
+            <p className="text-xs font-black uppercase tracking-[0.16em] opacity-70">{t('admin.betaChecklist.summary.pending')}</p>
             <p className="mt-2 text-3xl font-black">{summary.pending}</p>
           </div>
           <div className="rounded-[1.5rem] border border-white/10 bg-zinc-950/85 p-4 text-zinc-100">
-            <p className="text-xs font-black uppercase tracking-[0.16em] text-zinc-500">Visiveis</p>
+            <p className="text-xs font-black uppercase tracking-[0.16em] text-zinc-500">{t('admin.betaChecklist.summary.visible')}</p>
             <p className="mt-2 text-3xl font-black">{visibleItems.length}</p>
-            <p className="mt-1 text-xs text-zinc-500">apos filtros</p>
+            <p className="mt-1 text-xs text-zinc-500">{t('admin.betaChecklist.summary.afterFilters')}</p>
           </div>
         </div>
 
@@ -348,8 +362,8 @@ export default function AdminBetaChecklistPage() {
           <div className="flex items-start gap-3">
             <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0" />
             <div>
-              <h2 className="font-black">{summary.readyToInviteCreators ? 'Checklist pronto para convite' : 'Ainda nao convidar criadores'}</h2>
-              <p className="mt-1 text-sm leading-6 opacity-80">Nao avance com bloqueadores em saque, post pago, gorjeta, 18+, login/cadastro, upload, moderacao, termos ou suporte.</p>
+              <h2 className="font-black">{summary.readyToInviteCreators ? t('admin.betaChecklist.readyTitle') : t('admin.betaChecklist.notReadyTitle')}</h2>
+              <p className="mt-1 text-sm leading-6 opacity-80">{t('admin.betaChecklist.readinessDescription')}</p>
             </div>
           </div>
         </section>
@@ -362,7 +376,7 @@ export default function AdminBetaChecklistPage() {
                 type="search"
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="Buscar por item, categoria ou rota..."
+                placeholder={t('admin.betaChecklist.searchPlaceholder')}
                 className="h-12 w-full rounded-2xl border border-white/10 bg-black/50 pl-11 pr-4 text-sm font-semibold text-white outline-none transition placeholder:text-zinc-500 focus:border-blue-300/50 focus:ring-4 focus:ring-blue-500/10"
               />
             </label>
@@ -374,7 +388,7 @@ export default function AdminBetaChecklistPage() {
                 className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-white px-4 text-sm font-black text-black transition hover:bg-blue-50"
               >
                 <Copy className="h-4 w-4" />
-                Copiar relatório
+                {t('admin.betaChecklist.actions.copyReport')}
               </button>
               <button
                 type="button"
@@ -382,7 +396,7 @@ export default function AdminBetaChecklistPage() {
                 className="inline-flex h-11 items-center justify-center gap-2 rounded-full border border-red-300/25 bg-red-500/10 px-4 text-sm font-black text-red-100 transition hover:bg-red-500/20"
               >
                 <RotateCcw className="h-4 w-4" />
-                Limpar progresso
+                {t('admin.betaChecklist.actions.clearProgress')}
               </button>
             </div>
           </div>
@@ -390,7 +404,7 @@ export default function AdminBetaChecklistPage() {
           <div className="mt-4 flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center gap-2 pr-1 text-xs font-black uppercase tracking-[0.16em] text-zinc-500">
               <Filter className="h-4 w-4" />
-              Filtros
+              {t('admin.betaChecklist.filtersTitle')}
             </span>
             {filterOptions.map((option) => (
               <button
@@ -417,7 +431,7 @@ export default function AdminBetaChecklistPage() {
 
         {visibleItems.length === 0 ? (
           <div className="rounded-[1.5rem] border border-white/10 bg-zinc-950/80 p-5 text-sm font-semibold text-zinc-300 shadow-xl shadow-black/20">
-            Nenhum item encontrado.
+            {t('admin.betaChecklist.empty')}
           </div>
         ) : (
           <div className="grid gap-4 lg:grid-cols-2">
@@ -437,7 +451,7 @@ export default function AdminBetaChecklistPage() {
                           {item.category}
                         </span>
                         <span className={`rounded-full border px-3 py-1 text-xs font-black ${getStatusClassName(status)}`}>
-                          {betaChecklistStatusLabels[status]}
+                          {getChecklistStatusLabel(status)}
                         </span>
                       </div>
                       <h2 className="mt-3 text-xl font-black">{item.title}</h2>
@@ -446,7 +460,7 @@ export default function AdminBetaChecklistPage() {
 
                     <label className="block shrink-0">
                       <span className="mb-1.5 block text-xs font-black uppercase tracking-[0.14em] text-zinc-500">
-                        Status
+                        {t('admin.betaChecklist.statusLabel')}
                       </span>
                       <select
                         value={status}
@@ -455,7 +469,7 @@ export default function AdminBetaChecklistPage() {
                       >
                         {betaChecklistStatuses.map((statusOption) => (
                           <option key={statusOption} value={statusOption}>
-                            {betaChecklistStatusLabels[statusOption]}
+                            {getChecklistStatusLabel(statusOption)}
                           </option>
                         ))}
                       </select>
@@ -488,14 +502,14 @@ export default function AdminBetaChecklistPage() {
 
                   <label className="mt-4 block">
                     <span className="mb-1.5 block text-xs font-black uppercase tracking-[0.14em] text-zinc-500">
-                      Observação curta
+                      {t('admin.betaChecklist.noteLabel')}
                     </span>
                     <textarea
                       value={note}
                       onChange={(event) => updateItemNote(item.id, event.target.value)}
                       maxLength={240}
                       rows={3}
-                      placeholder="Ex.: passou no Chrome mobile; revisar copy; bug no upload..."
+                      placeholder={t('admin.betaChecklist.notePlaceholder')}
                       className="w-full resize-none rounded-2xl border border-white/10 bg-black/50 px-4 py-3 text-sm font-semibold leading-6 text-white outline-none transition placeholder:text-zinc-600 focus:border-blue-300/50 focus:ring-4 focus:ring-blue-500/10"
                     />
                     <span className="mt-1 block text-right text-[11px] font-semibold text-zinc-500">
@@ -510,9 +524,9 @@ export default function AdminBetaChecklistPage() {
 
         <section className="mt-6 grid gap-4 lg:grid-cols-3">
           {[
-            { title: 'Conta A - usuario comum', steps: 'Cadastrar, completar perfil, publicar, curtir/comentar, testar ItaCash e enviar gorjeta.' },
-            { title: 'Conta B - criador', steps: 'Configurar perfil, criar post pago, receber gorjeta/desbloqueio e pedir saque.' },
-            { title: 'Conta C - admin', steps: 'Revisar denuncias e idade, conferir saque pendente, aprovar/recusar e validar o painel admin.' },
+            { title: t('admin.betaChecklist.scripts.userA.title'), steps: t('admin.betaChecklist.scripts.userA.steps') },
+            { title: t('admin.betaChecklist.scripts.userB.title'), steps: t('admin.betaChecklist.scripts.userB.steps') },
+            { title: t('admin.betaChecklist.scripts.userC.title'), steps: t('admin.betaChecklist.scripts.userC.steps') },
           ].map((script) => (
             <article key={script.title} className="rounded-[2rem] border border-white/10 bg-zinc-950/85 p-5 ring-1 ring-white/5">
               <h2 className="font-black text-white">{script.title}</h2>
@@ -525,12 +539,13 @@ export default function AdminBetaChecklistPage() {
           <div className="flex items-start gap-3">
             <ClipboardCheck className="mt-1 h-5 w-5 shrink-0 text-blue-100" />
             <div>
-              <p className="font-black">Roteiro complementar</p>
+              <p className="font-black">{t('admin.betaChecklist.extraGuideTitle')}</p>
               <p className="mt-1 text-blue-50/80">
-                Use este painel como ferramenta pratica da rodada atual. Para contexto completo, consulte
+                {t('admin.betaChecklist.extraGuidePrefix')}
                 {' '}
-                <Link href="/admin" className="font-black underline underline-offset-2">o painel admin</Link>
-                {' '}e os documentos Markdown do beta fechado no repositorio.
+                <Link href="/admin" className="font-black underline underline-offset-2">{t('admin.betaChecklist.extraGuideLink')}</Link>
+                {' '}
+                {t('admin.betaChecklist.extraGuideSuffix')}
               </p>
             </div>
           </div>

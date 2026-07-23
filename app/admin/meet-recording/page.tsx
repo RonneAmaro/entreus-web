@@ -13,6 +13,7 @@ import {
   RefreshCw,
   ShieldAlert,
 } from 'lucide-react'
+import { useLanguage } from '@/app/components/LanguageProvider'
 import { isAdminRole } from '@/lib/admin'
 import { supabase } from '@/lib/supabase'
 
@@ -41,15 +42,6 @@ type RecordingDiagnostics = {
   }
 }
 
-function formatRecordingDuration(totalSeconds: number) {
-  const minutes = Math.round(totalSeconds / 60)
-  return `${minutes} minuto${minutes === 1 ? '' : 's'}`
-}
-
-function formatRecordingMegabytes(bytes: number) {
-  return `${Math.round(bytes / (1024 * 1024))} MB`
-}
-
 function DiagnosticItem({
   title,
   description,
@@ -76,11 +68,21 @@ function DiagnosticItem({
 
 export default function AdminMeetRecordingPage() {
   const router = useRouter()
+  const { t } = useLanguage()
   const [loading, setLoading] = useState(true)
   const [diagnosticsLoading, setDiagnosticsLoading] = useState(false)
   const [message, setMessage] = useState('')
   const [adminProfile, setAdminProfile] = useState<AdminProfile | null>(null)
   const [diagnostics, setDiagnostics] = useState<RecordingDiagnostics | null>(null)
+
+  function formatRecordingDuration(totalSeconds: number) {
+    const minutes = Math.round(totalSeconds / 60)
+    return t('admin.meetRecording.durationMinutes', { count: minutes })
+  }
+
+  function formatRecordingMegabytes(bytes: number) {
+    return t('admin.meetRecording.sizeMb', { count: Math.round(bytes / (1024 * 1024)) })
+  }
 
   const loadDiagnostics = useCallback(async () => {
     setDiagnosticsLoading(true)
@@ -91,7 +93,7 @@ export default function AdminMeetRecordingPage() {
     } = await supabase.auth.getSession()
 
     if (!session?.access_token) {
-      setMessage('Sua sessão expirou. Entre novamente para consultar o diagnóstico.')
+      setMessage(t('admin.meetRecording.messages.sessionExpired'))
       setDiagnosticsLoading(false)
       return
     }
@@ -106,18 +108,18 @@ export default function AdminMeetRecordingPage() {
 
       if (!response.ok || !data) {
         setDiagnostics(null)
-        setMessage(data?.error || 'Não foi possível carregar o diagnóstico da gravação.')
+        setMessage(t('admin.meetRecording.messages.loadFailed'))
         return
       }
 
       setDiagnostics(data)
     } catch {
       setDiagnostics(null)
-      setMessage('Não foi possível conectar ao diagnóstico da gravação agora.')
+      setMessage(t('admin.meetRecording.messages.connectionFailed'))
     } finally {
       setDiagnosticsLoading(false)
     }
-  }, [])
+  }, [t])
 
   useEffect(() => {
     async function loadPage() {
@@ -140,7 +142,7 @@ export default function AdminMeetRecordingPage() {
         .maybeSingle()
 
       if (profileError) {
-        setMessage('Não foi possível verificar a permissão administrativa.')
+        setMessage(t('admin.meetRecording.messages.adminCheckFailed'))
         setLoading(false)
         return
       }
@@ -160,13 +162,13 @@ export default function AdminMeetRecordingPage() {
     }
 
     void loadPage()
-  }, [loadDiagnostics, router])
+  }, [loadDiagnostics, router, t])
 
   if (loading) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-black text-white">
         <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-        Carregando diagnóstico...
+        {t('admin.meetRecording.loading')}
       </main>
     )
   }
@@ -176,10 +178,10 @@ export default function AdminMeetRecordingPage() {
       <main className="min-h-screen bg-black px-4 py-10 text-white">
         <section className="mx-auto max-w-xl rounded-[2rem] border border-red-300/20 bg-red-500/10 p-6 text-red-100">
           <ShieldAlert className="h-10 w-10" />
-          <h1 className="mt-4 text-2xl font-black">Acesso restrito</h1>
-          <p className="mt-2 text-sm leading-6">Esta área é exclusiva para administradores.</p>
+          <h1 className="mt-4 text-2xl font-black">{t('post.restrictedTitle')}</h1>
+          <p className="mt-2 text-sm leading-6">{t('admin.meetRecording.accessDeniedDescription')}</p>
           <Link href="/feed" className="mt-5 inline-flex rounded-full bg-white px-5 py-2.5 text-sm font-black text-black">
-            Voltar
+            {t('messages.detail.back')}
           </Link>
         </section>
       </main>
@@ -192,7 +194,7 @@ export default function AdminMeetRecordingPage() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <Link href="/admin" className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-black transition hover:bg-white/10">
             <ArrowLeft className="h-4 w-4" />
-            Admin
+            {t('admin.creatorWithdrawals.admin')}
           </Link>
           <button
             type="button"
@@ -201,7 +203,7 @@ export default function AdminMeetRecordingPage() {
             className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-black text-black transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {diagnosticsLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-            Atualizar diagnóstico
+            {t('admin.meetRecording.actions.refresh')}
           </button>
         </div>
 
@@ -209,14 +211,14 @@ export default function AdminMeetRecordingPage() {
           <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-500/15 text-blue-100 ring-1 ring-blue-300/20">
             <CircleDot className="h-6 w-6" />
           </span>
-          <h1 className="mt-4 text-3xl font-black tracking-tight sm:text-5xl">Gravação Meet</h1>
+          <h1 className="mt-4 text-3xl font-black tracking-tight sm:text-5xl">{t('admin.meetRecording.title')}</h1>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-blue-100/80 sm:text-base">
-            Diagnóstico seguro da ativação de gravações. Esta página mostra somente estados de configuração, nunca chaves, tokens, buckets ou caminhos privados.
+            {t('admin.meetRecording.description')}
           </p>
         </header>
 
         <section className="mt-5 rounded-3xl border border-amber-300/25 bg-amber-500/10 p-4 text-sm font-semibold leading-6 text-amber-50">
-          A gravação só será liberada quando todos os itens estiverem prontos. O perfil econômico é obrigatório para controlar o uso de armazenamento.
+          {t('admin.meetRecording.banner')}
         </section>
 
         {message ? (
@@ -228,60 +230,75 @@ export default function AdminMeetRecordingPage() {
         {diagnosticsLoading && !diagnostics ? (
           <section className="mt-5 flex min-h-52 items-center justify-center rounded-[2rem] border border-white/10 bg-zinc-950/80 text-zinc-400">
             <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-            Verificando configurações seguras...
+            {t('admin.meetRecording.loadingDiagnostics')}
           </section>
         ) : diagnostics ? (
           <>
             <section className="mt-5 grid gap-3 sm:grid-cols-2">
               <DiagnosticItem
-                title="Migration Supabase"
-                description="Confirmação manual: aplique a base e a migration de compactação, depois execute os scripts verify antes da liberação."
+                title={t('admin.meetRecording.items.migration.title')}
+                description={t('admin.meetRecording.items.migration.description')}
                 ready={false}
               />
               <DiagnosticItem
-                title="Bucket R2 privado"
-                description={diagnostics.hasMeetRecordingsBucketName && diagnostics.hasR2AccessConfig ? 'Nome e acesso server-side configurados. Confirme a privacidade no R2.' : 'Pendente: configure o bucket dedicado e as credenciais server-side.'}
+                title={t('admin.meetRecording.items.bucket.title')}
+                description={
+                  diagnostics.hasMeetRecordingsBucketName && diagnostics.hasR2AccessConfig
+                    ? t('admin.meetRecording.items.bucket.ready')
+                    : t('admin.meetRecording.items.bucket.pending')
+                }
                 ready={diagnostics.hasMeetRecordingsBucketName && diagnostics.hasR2AccessConfig}
               />
               <DiagnosticItem
-                title="LiveKit Egress"
-                description={diagnostics.hasLiveKitServerConfig ? 'Credenciais server-side presentes. Confirme suporte a Egress no provedor.' : 'Pendente: configure URL, API key e API secret do LiveKit no servidor.'}
+                title={t('admin.meetRecording.items.egress.title')}
+                description={
+                  diagnostics.hasLiveKitServerConfig
+                    ? t('admin.meetRecording.items.egress.ready')
+                    : t('admin.meetRecording.items.egress.pending')
+                }
                 ready={diagnostics.hasLiveKitServerConfig}
               />
               <DiagnosticItem
-                title="Compressão obrigatória"
-                description={`Perfil padrão: ${diagnostics.storagePolicy.compressionProfile}. ${diagnostics.storagePolicy.compressionDescription}`}
+                title={t('admin.meetRecording.items.compression.title')}
+                description={t('admin.meetRecording.items.compression.description', {
+                  profile: diagnostics.storagePolicy.compressionProfile,
+                  description: diagnostics.storagePolicy.compressionDescription,
+                })}
                 ready={diagnostics.storagePolicy.compressionProfile === 'economy'}
               />
               <DiagnosticItem
-                title="Retenção planejada"
-                description={`Downloads terão prazo de ${diagnostics.storagePolicy.retentionDays} dias. A remoção física automática continua pendente de um job futuro.`}
+                title={t('admin.meetRecording.items.retention.title')}
+                description={t('admin.meetRecording.items.retention.description', {
+                  days: diagnostics.storagePolicy.retentionDays,
+                })}
                 ready={diagnostics.storagePolicy.retentionDays > 0}
               />
               <DiagnosticItem
-                title="Opt-in de gravação"
-                description={diagnostics.egressEnabled ? 'Ligado no ambiente.' : 'Desligado: a gravação continua bloqueada.'}
+                title={t('admin.meetRecording.items.optIn.title')}
+                description={diagnostics.egressEnabled ? t('admin.meetRecording.items.optIn.enabled') : t('admin.meetRecording.items.optIn.disabled')}
                 ready={diagnostics.egressEnabled}
               />
             </section>
 
             <section className="mt-5 rounded-[2rem] border border-blue-300/20 bg-blue-500/10 p-5 text-blue-50">
-              <h2 className="text-lg font-black">Política de armazenamento</h2>
+              <h2 className="text-lg font-black">{t('admin.meetRecording.storagePolicyTitle')}</h2>
               <p className="mt-2 text-sm leading-6 text-blue-100/85">
                 {diagnostics.storagePolicy.storageUsage}
               </p>
               <dl className="mt-4 grid gap-3 sm:grid-cols-3">
                 <div className="rounded-2xl border border-blue-200/15 bg-black/15 p-3">
-                  <dt className="text-xs font-bold uppercase tracking-[0.12em] text-blue-100/60">Perfil</dt>
+                  <dt className="text-xs font-bold uppercase tracking-[0.12em] text-blue-100/60">{t('admin.meetRecording.storage.profile')}</dt>
                   <dd className="mt-1 text-sm font-black capitalize">{diagnostics.storagePolicy.compressionProfile}</dd>
                 </div>
                 <div className="rounded-2xl border border-blue-200/15 bg-black/15 p-3">
-                  <dt className="text-xs font-bold uppercase tracking-[0.12em] text-blue-100/60">Limite</dt>
-                  <dd className="mt-1 text-sm font-black">{formatRecordingDuration(diagnostics.storagePolicy.maxDurationSeconds)} · {formatRecordingMegabytes(diagnostics.storagePolicy.maxExpectedFileSizeBytes)}</dd>
+                  <dt className="text-xs font-bold uppercase tracking-[0.12em] text-blue-100/60">{t('admin.meetRecording.storage.limit')}</dt>
+                  <dd className="mt-1 text-sm font-black">
+                    {formatRecordingDuration(diagnostics.storagePolicy.maxDurationSeconds)} · {formatRecordingMegabytes(diagnostics.storagePolicy.maxExpectedFileSizeBytes)}
+                  </dd>
                 </div>
                 <div className="rounded-2xl border border-blue-200/15 bg-black/15 p-3">
-                  <dt className="text-xs font-bold uppercase tracking-[0.12em] text-blue-100/60">Retenção</dt>
-                  <dd className="mt-1 text-sm font-black">{diagnostics.storagePolicy.retentionDays} dias</dd>
+                  <dt className="text-xs font-bold uppercase tracking-[0.12em] text-blue-100/60">{t('admin.meetRecording.storage.retention')}</dt>
+                  <dd className="mt-1 text-sm font-black">{t('admin.meetRecording.retentionDays', { count: diagnostics.storagePolicy.retentionDays })}</dd>
                 </div>
               </dl>
               <p className="mt-4 text-xs leading-5 text-blue-100/70">{diagnostics.storagePolicy.retentionWarning}</p>
@@ -291,11 +308,11 @@ export default function AdminMeetRecordingPage() {
               <div className="flex items-start gap-3">
                 <CloudCog className="mt-0.5 h-6 w-6 shrink-0" />
                 <div>
-                  <h2 className="text-lg font-black">Pronto para configuração de gravação: {diagnostics.ready ? 'Sim' : 'Não'}</h2>
+                  <h2 className="text-lg font-black">
+                    {t('admin.meetRecording.readyTitle', { status: diagnostics.ready ? t('admin.meetRecording.yes') : t('admin.meetRecording.no') })}
+                  </h2>
                   <p className="mt-2 text-sm leading-6">
-                    {diagnostics.ready
-                      ? 'As variáveis obrigatórias estão presentes. Antes de liberar, valide manualmente a migration, a privacidade do bucket e o suporte do LiveKit Egress.'
-                      : 'A API de início continuará retornando indisponibilidade segura até que todas as configurações estejam completas.'}
+                    {diagnostics.ready ? t('admin.meetRecording.readyDescription') : t('admin.meetRecording.notReadyDescription')}
                   </p>
                 </div>
               </div>
@@ -303,7 +320,7 @@ export default function AdminMeetRecordingPage() {
 
             {diagnostics.missing.length > 0 ? (
               <section className="mt-5 rounded-[2rem] border border-red-300/20 bg-red-500/10 p-5 text-red-100">
-                <h2 className="text-base font-black">Itens pendentes</h2>
+                <h2 className="text-base font-black">{t('admin.meetRecording.pendingItemsTitle')}</h2>
                 <ul className="mt-3 list-inside list-disc space-y-1 text-sm leading-6">
                   {diagnostics.missing.map((item) => <li key={item}>{item}</li>)}
                 </ul>
@@ -312,7 +329,7 @@ export default function AdminMeetRecordingPage() {
 
             {diagnostics.warnings.length > 0 ? (
               <section className="mt-5 rounded-[2rem] border border-amber-300/20 bg-amber-500/10 p-5 text-amber-50">
-                <h2 className="text-base font-black">Confirmações manuais</h2>
+                <h2 className="text-base font-black">{t('admin.meetRecording.manualChecksTitle')}</h2>
                 <ul className="mt-3 list-inside list-disc space-y-1 text-sm leading-6">
                   {diagnostics.warnings.map((warning) => <li key={warning}>{warning}</li>)}
                 </ul>

@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
   ArrowLeft,
@@ -17,6 +17,7 @@ import {
   ShieldAlert,
   ShieldCheck,
 } from 'lucide-react'
+import { useLanguage } from '@/app/components/LanguageProvider'
 import { isAdminRole } from '@/lib/admin'
 import { supabase } from '@/lib/supabase'
 
@@ -28,162 +29,176 @@ type AdminProfile = {
 
 type BadgeTone = 'manual' | 'pending' | 'critical' | 'ok' | 'check'
 
-const bucketChecks = [
-  {
-    name: 'meet-chat-attachments',
-    label: 'Conferir',
-    tone: 'manual' as const,
-    description: 'Bucket esperado para anexos do chat do Meet.',
-    items: [
-      'Deve existir no Supabase Storage.',
-      'Deve ser privado e nao publico.',
-      'Downloads devem usar signed URL temporaria.',
-      'Nao listar arquivos reais de usuarios nesta pagina.',
-    ],
-  },
-  {
-    name: 'age-verifications',
-    label: 'Conferir',
-    tone: 'manual' as const,
-    description: 'Bucket esperado para documentos, selfies e comprovantes sensiveis de verificacao 18+.',
-    items: [
-      'Deve existir se o fluxo de verificacao 18+ usa esse bucket.',
-      'Deve ser privado e nao publico.',
-      'Acesso admin deve acontecer por signed URL temporaria.',
-      'Nao expor path bruto, documentos ou dados pessoais fora do momento de revisao.',
-    ],
-  },
-]
-
-const migrationGroups = [
-  {
-    title: 'Meet',
-    files: [
-      'supabase/migrations/20260603_create_meet_room_chat_messages.sql',
-      'supabase/migrations/20260603_add_meet_chat_attachments.sql',
-    ],
-  },
-  {
-    title: 'Moderacao',
-    files: [
-      'supabase/migrations/20260524_add_post_moderation_fields.sql',
-      'supabase/migrations/20260524_add_moderation_notification_type.sql',
-      'supabase/migrations/20260524_harden_admin_sensitive_rls.sql',
-    ],
-  },
-  {
-    title: 'Consentimento parental / termos',
-    files: [
-      'supabase/migrations/20260526_add_profile_terms_privacy_acceptance.sql',
-      'supabase/migrations/20260526_extend_parental_consent_responsible_terms.sql',
-      'supabase/migrations/20260527_add_parental_consent_guardian_selfie.sql',
-    ],
-  },
-]
-
-const riskCards = [
-  {
-    title: 'Meet anexos',
-    tone: 'critical' as const,
-    items: [
-      'Bucket privado.',
-      'Limite de 5 MB.',
-      'Tipos perigosos bloqueados.',
-      'Signed URL temporaria.',
-      'Usuario precisa estar aprovado na sala.',
-      'Proximo passo: limpeza/expiracao de anexos antigos.',
-    ],
-  },
-  {
-    title: 'Verificacao 18+',
-    tone: 'critical' as const,
-    items: [
-      'Bucket age-verifications privado.',
-      'Menor nao pode acessar conteudo 18+.',
-      'Conteudo sensivel nao deve montar midia antes do reveal.',
-    ],
-  },
-  {
-    title: 'Admin/moderacao',
-    tone: 'check' as const,
-    items: [
-      '/admin deve bloquear usuario comum.',
-      'Reports pendentes devem contar so null/pending.',
-      'Ocultar conteudo nao deleta definitivamente.',
-    ],
-  },
-  {
-    title: 'Pagamentos Mercado Pago',
-    tone: 'critical' as const,
-    items: [
-      'Webhook deve buscar o pagamento real na API Mercado Pago antes de processar.',
-      'Configurar MERCADO_PAGO_WEBHOOK_SECRET para validar x-signature.',
-      'Webhook duplicado de ItaCash nao pode duplicar saldo.',
-      'Webhook duplicado de VIP nao pode estender VIP duas vezes.',
-      'Status pendente/rejeitado/cancelado nao pode ativar beneficio.',
-      'Logs nao devem exibir tokens, secrets, payload completo ou dados de cartao.',
-      'Nao apresentar ItaCash como cripto/investimento.',
-    ],
-  },
-  {
-    title: 'Upload/R2',
-    tone: 'check' as const,
-    items: [
-      'Presigned URL.',
-      'Validar tipo/tamanho.',
-      'Planejar limpeza de midia orfa.',
-    ],
-  },
-]
-
-const manualTests = [
-  'Entrar em /admin com usuario comum e confirmar bloqueio.',
-  'Criar sala Meet e testar chat historico.',
-  'Entrar depois na sala e ver mensagens antigas.',
-  'Enviar anexo no Meet e baixar como outro usuario aprovado.',
-  'Tentar baixar anexo sem estar aprovado.',
-  'Testar arquivo bloqueado no chat do Meet.',
-  'Testar post sensivel com usuario menor/nao verificado.',
-  'Testar ocultar/restaurar conteudo denunciado.',
-  'Testar webhook sem payment id e confirmar que nada e processado.',
-  'Testar webhook com payment id inexistente e confirmar que nada e processado.',
-  'Testar webhook pending/rejected do Mercado Pago e confirmar que nao ativa ItaCash/VIP.',
-  'Testar webhook duplicado de ItaCash e VIP em ambiente controlado.',
-]
-
-function getBadgeClass(tone: BadgeTone) {
-  if (tone === 'ok') return 'border-emerald-300/20 bg-emerald-500/10 text-emerald-100'
-  if (tone === 'critical') return 'border-red-300/25 bg-red-500/10 text-red-100'
-  if (tone === 'pending') return 'border-amber-300/25 bg-amber-500/10 text-amber-100'
-  if (tone === 'check') return 'border-blue-300/25 bg-blue-500/10 text-blue-100'
-  return 'border-zinc-300/20 bg-white/10 text-zinc-100'
-}
-
-function getBadgeLabel(tone: BadgeTone, label?: string) {
-  if (label) return label
-  if (tone === 'ok') return 'OK'
-  if (tone === 'critical') return 'Critico'
-  if (tone === 'pending') return 'Pendente'
-  if (tone === 'check') return 'Conferir'
-  return 'Manual'
-}
-
-function StatusBadge({ tone, label }: { tone: BadgeTone; label?: string }) {
-  return (
-    <span className={`inline-flex w-fit items-center rounded-full border px-3 py-1 text-xs font-black ${getBadgeClass(tone)}`}>
-      {getBadgeLabel(tone, label)}
-    </span>
-  )
-}
-
 export default function AdminSecurityCheckPage() {
   const router = useRouter()
+  const { t } = useLanguage()
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState('')
   const [adminProfile, setAdminProfile] = useState<AdminProfile | null>(null)
 
+  const bucketChecks = useMemo(
+    () => [
+      {
+        name: 'meet-chat-attachments',
+        label: t('admin.securityCheck.badges.check'),
+        tone: 'manual' as const,
+        description: t('admin.securityCheck.buckets.meetAttachments.description'),
+        items: [
+          t('admin.securityCheck.buckets.meetAttachments.item1'),
+          t('admin.securityCheck.buckets.meetAttachments.item2'),
+          t('admin.securityCheck.buckets.meetAttachments.item3'),
+          t('admin.securityCheck.buckets.meetAttachments.item4'),
+        ],
+      },
+      {
+        name: 'age-verifications',
+        label: t('admin.securityCheck.badges.check'),
+        tone: 'manual' as const,
+        description: t('admin.securityCheck.buckets.ageVerifications.description'),
+        items: [
+          t('admin.securityCheck.buckets.ageVerifications.item1'),
+          t('admin.securityCheck.buckets.ageVerifications.item2'),
+          t('admin.securityCheck.buckets.ageVerifications.item3'),
+          t('admin.securityCheck.buckets.ageVerifications.item4'),
+        ],
+      },
+    ],
+    [t],
+  )
+
+  const migrationGroups = useMemo(
+    () => [
+      {
+        title: t('admin.securityCheck.migrations.meet'),
+        files: [
+          'supabase/migrations/20260603_create_meet_room_chat_messages.sql',
+          'supabase/migrations/20260603_add_meet_chat_attachments.sql',
+        ],
+      },
+      {
+        title: t('admin.securityCheck.migrations.moderation'),
+        files: [
+          'supabase/migrations/20260524_add_post_moderation_fields.sql',
+          'supabase/migrations/20260524_add_moderation_notification_type.sql',
+          'supabase/migrations/20260524_harden_admin_sensitive_rls.sql',
+        ],
+      },
+      {
+        title: t('admin.securityCheck.migrations.parentalConsent'),
+        files: [
+          'supabase/migrations/20260526_add_profile_terms_privacy_acceptance.sql',
+          'supabase/migrations/20260526_extend_parental_consent_responsible_terms.sql',
+          'supabase/migrations/20260527_add_parental_consent_guardian_selfie.sql',
+        ],
+      },
+    ],
+    [t],
+  )
+
+  const riskCards = useMemo(
+    () => [
+      {
+        title: t('admin.securityCheck.risks.meetAttachments.title'),
+        tone: 'critical' as const,
+        items: [
+          t('admin.securityCheck.risks.meetAttachments.item1'),
+          t('admin.securityCheck.risks.meetAttachments.item2'),
+          t('admin.securityCheck.risks.meetAttachments.item3'),
+          t('admin.securityCheck.risks.meetAttachments.item4'),
+          t('admin.securityCheck.risks.meetAttachments.item5'),
+          t('admin.securityCheck.risks.meetAttachments.item6'),
+        ],
+      },
+      {
+        title: t('admin.securityCheck.risks.ageVerification.title'),
+        tone: 'critical' as const,
+        items: [
+          t('admin.securityCheck.risks.ageVerification.item1'),
+          t('admin.securityCheck.risks.ageVerification.item2'),
+          t('admin.securityCheck.risks.ageVerification.item3'),
+        ],
+      },
+      {
+        title: t('admin.securityCheck.risks.adminModeration.title'),
+        tone: 'check' as const,
+        items: [
+          t('admin.securityCheck.risks.adminModeration.item1'),
+          t('admin.securityCheck.risks.adminModeration.item2'),
+          t('admin.securityCheck.risks.adminModeration.item3'),
+        ],
+      },
+      {
+        title: t('admin.securityCheck.risks.marketplacePayments.title'),
+        tone: 'critical' as const,
+        items: [
+          t('admin.securityCheck.risks.marketplacePayments.item1'),
+          t('admin.securityCheck.risks.marketplacePayments.item2'),
+          t('admin.securityCheck.risks.marketplacePayments.item3'),
+          t('admin.securityCheck.risks.marketplacePayments.item4'),
+          t('admin.securityCheck.risks.marketplacePayments.item5'),
+          t('admin.securityCheck.risks.marketplacePayments.item6'),
+          t('admin.securityCheck.risks.marketplacePayments.item7'),
+        ],
+      },
+      {
+        title: t('admin.securityCheck.risks.uploadR2.title'),
+        tone: 'check' as const,
+        items: [
+          t('admin.securityCheck.risks.uploadR2.item1'),
+          t('admin.securityCheck.risks.uploadR2.item2'),
+          t('admin.securityCheck.risks.uploadR2.item3'),
+        ],
+      },
+    ],
+    [t],
+  )
+
+  const manualTests = useMemo(
+    () => [
+      t('admin.securityCheck.manualTests.item1'),
+      t('admin.securityCheck.manualTests.item2'),
+      t('admin.securityCheck.manualTests.item3'),
+      t('admin.securityCheck.manualTests.item4'),
+      t('admin.securityCheck.manualTests.item5'),
+      t('admin.securityCheck.manualTests.item6'),
+      t('admin.securityCheck.manualTests.item7'),
+      t('admin.securityCheck.manualTests.item8'),
+      t('admin.securityCheck.manualTests.item9'),
+      t('admin.securityCheck.manualTests.item10'),
+      t('admin.securityCheck.manualTests.item11'),
+      t('admin.securityCheck.manualTests.item12'),
+    ],
+    [t],
+  )
+
+  function getBadgeClass(tone: BadgeTone) {
+    if (tone === 'ok') return 'border-emerald-300/20 bg-emerald-500/10 text-emerald-100'
+    if (tone === 'critical') return 'border-red-300/25 bg-red-500/10 text-red-100'
+    if (tone === 'pending') return 'border-amber-300/25 bg-amber-500/10 text-amber-100'
+    if (tone === 'check') return 'border-blue-300/25 bg-blue-500/10 text-blue-100'
+    return 'border-zinc-300/20 bg-white/10 text-zinc-100'
+  }
+
+  function getBadgeLabel(tone: BadgeTone, label?: string) {
+    if (label) return label
+    if (tone === 'ok') return t('admin.securityCheck.badges.ok')
+    if (tone === 'critical') return t('admin.securityCheck.badges.critical')
+    if (tone === 'pending') return t('admin.securityCheck.badges.pending')
+    if (tone === 'check') return t('admin.securityCheck.badges.check')
+    return t('admin.securityCheck.badges.manual')
+  }
+
+  function StatusBadge({ tone, label }: { tone: BadgeTone; label?: string }) {
+    return (
+      <span className={`inline-flex w-fit items-center rounded-full border px-3 py-1 text-xs font-black ${getBadgeClass(tone)}`}>
+        {getBadgeLabel(tone, label)}
+      </span>
+    )
+  }
+
   useEffect(() => {
-    loadPage()
+    void loadPage()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   async function loadPage() {
@@ -206,7 +221,7 @@ export default function AdminSecurityCheckPage() {
       .maybeSingle()
 
     if (profileError) {
-      setMessage('Nao foi possivel verificar permissao admin: ' + profileError.message)
+      setMessage(t('admin.securityCheck.messages.adminCheckFailed'))
       setLoading(false)
       return
     }
@@ -223,7 +238,7 @@ export default function AdminSecurityCheckPage() {
     return (
       <main className="flex min-h-screen items-center justify-center bg-black text-white">
         <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-        Carregando checklist...
+        {t('admin.securityCheck.loading')}
       </main>
     )
   }
@@ -233,10 +248,10 @@ export default function AdminSecurityCheckPage() {
       <main className="min-h-screen bg-black px-4 py-10 text-white">
         <section className="mx-auto max-w-xl rounded-[2rem] border border-red-300/20 bg-red-500/10 p-6 text-red-100">
           <ShieldAlert className="h-10 w-10" />
-          <h1 className="mt-4 text-2xl font-black">Acesso restrito</h1>
-          <p className="mt-2 text-sm leading-6">Esta area e exclusiva para administradores.</p>
+          <h1 className="mt-4 text-2xl font-black">{t('post.restrictedTitle')}</h1>
+          <p className="mt-2 text-sm leading-6">{t('admin.securityCheck.accessDeniedDescription')}</p>
           <Link href="/feed" className="mt-5 inline-flex rounded-full bg-white px-5 py-2.5 text-sm font-black text-black">
-            Voltar
+            {t('messages.detail.back')}
           </Link>
         </section>
       </main>
@@ -248,11 +263,11 @@ export default function AdminSecurityCheckPage() {
       <section className="mx-auto w-full max-w-6xl">
         <Link href="/admin" className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-black transition hover:bg-white/10">
           <ArrowLeft className="h-4 w-4" />
-          Admin
+          {t('admin.creatorWithdrawals.admin')}
         </Link>
         <Link href="/admin/meet-attachments" className="ml-2 inline-flex items-center gap-2 rounded-full border border-blue-300/20 bg-blue-500/10 px-4 py-2 text-sm font-black text-blue-100 transition hover:bg-blue-500/20">
           <FileArchive className="h-4 w-4" />
-          Auditoria de anexos do Meet
+          {t('admin.securityCheck.links.meetAttachments')}
         </Link>
 
         <header className="mt-6 rounded-[2rem] border border-blue-300/20 bg-zinc-950/90 p-6 ring-1 ring-white/5">
@@ -260,12 +275,11 @@ export default function AdminSecurityCheckPage() {
             <LockKeyhole className="h-6 w-6" />
           </span>
           <div className="mt-4 flex flex-wrap items-center gap-3">
-            <h1 className="text-3xl font-black">Checklist de seguranca</h1>
-            <StatusBadge tone="manual" label="Manual" />
+            <h1 className="text-3xl font-black">{t('admin.securityCheck.title')}</h1>
+            <StatusBadge tone="manual" label={t('admin.securityCheck.badges.manual')} />
           </div>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-400">
-            Confira buckets, migrations e pontos criticos antes de liberar usuarios reais. Esta pagina nao consulta arquivos,
-            nao mostra secrets e nao cria recursos automaticamente.
+            {t('admin.securityCheck.description')}
           </p>
         </header>
 
@@ -280,10 +294,10 @@ export default function AdminSecurityCheckPage() {
             <div>
               <p className="inline-flex items-center gap-2 text-lg font-black">
                 <HardDrive className="h-5 w-5 text-blue-100" />
-                Buckets esperados
+                {t('admin.securityCheck.expectedBucketsTitle')}
               </p>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-400">
-                Conferencia manual no Supabase Storage. Nao torne buckets sensiveis publicos para facilitar teste.
+                {t('admin.securityCheck.expectedBucketsDescription')}
               </p>
             </div>
             <StatusBadge tone="manual" />
@@ -315,13 +329,13 @@ export default function AdminSecurityCheckPage() {
             <div>
               <p className="inline-flex items-center gap-2 text-lg font-black">
                 <Database className="h-5 w-5 text-blue-100" />
-                Migrations criticas
+                {t('admin.securityCheck.criticalMigrationsTitle')}
               </p>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-400">
-                Aplicar migrations manualmente no Supabase SQL Editor. Depois de aplicar, testar a funcionalidade relacionada.
+                {t('admin.securityCheck.criticalMigrationsDescription')}
               </p>
             </div>
-            <StatusBadge tone="pending" label="Pendente" />
+            <StatusBadge tone="pending" label={t('admin.securityCheck.badges.pending')} />
           </div>
 
           <div className="mt-4 grid gap-3 lg:grid-cols-3">
@@ -343,7 +357,7 @@ export default function AdminSecurityCheckPage() {
         <section className="mt-5">
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-red-100" />
-            <h2 className="text-lg font-black">Riscos criticos para revisar</h2>
+            <h2 className="text-lg font-black">{t('admin.securityCheck.risksTitle')}</h2>
           </div>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {riskCards.map((risk) => (
@@ -368,8 +382,8 @@ export default function AdminSecurityCheckPage() {
         <section className="mt-5 rounded-[2rem] border border-blue-300/20 bg-blue-500/10 p-5 text-blue-50 ring-1 ring-blue-300/10">
           <div className="flex flex-wrap items-center gap-2">
             <ClipboardCheck className="h-5 w-5" />
-            <h2 className="text-lg font-black">Checklist de testes manuais</h2>
-            <StatusBadge tone="check" label="Conferir" />
+            <h2 className="text-lg font-black">{t('admin.securityCheck.manualTestsTitle')}</h2>
+            <StatusBadge tone="check" label={t('admin.securityCheck.badges.check')} />
           </div>
           <div className="mt-4 grid gap-2 md:grid-cols-2">
             {manualTests.map((test) => (
@@ -384,10 +398,9 @@ export default function AdminSecurityCheckPage() {
           <div className="flex items-start gap-3">
             <FileWarning className="mt-1 h-5 w-5 shrink-0" />
             <div>
-              <h2 className="font-black">Limites deste diagnostico</h2>
+              <h2 className="font-black">{t('admin.securityCheck.limitsTitle')}</h2>
               <p className="mt-2 text-sm leading-6 text-amber-100/85">
-                Bucket privado, migrations aplicadas e webhooks idempotentes precisam ser confirmados no ambiente real.
-                Esta pagina nao usa service role no client, nao lista objetos de storage, nao gera signed URLs e nao altera configuracao.
+                {t('admin.securityCheck.limitsDescription')}
               </p>
             </div>
           </div>

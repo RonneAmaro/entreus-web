@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { ArrowLeft, Bug, Loader2, ShieldAlert } from 'lucide-react'
+import { useLanguage } from '@/app/components/LanguageProvider'
 import { isAdminRole } from '@/lib/admin'
 import { supabase } from '@/lib/supabase'
 
@@ -33,13 +34,28 @@ function urgencyClass(urgency: string) {
 
 export default function AdminFeedbackPage() {
   const router = useRouter()
+  const { t } = useLanguage()
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState('')
   const [adminProfile, setAdminProfile] = useState<AdminProfile | null>(null)
   const [reports, setReports] = useState<FeedbackReportRow[]>([])
 
+  function getUrgencyLabel(urgency: string) {
+    if (urgency === 'urgent') return t('admin.feedback.urgency.urgent')
+    if (urgency === 'high') return t('admin.feedback.urgency.high')
+    return t('admin.feedback.urgency.normal')
+  }
+
+  function getStatusLabel(status: string) {
+    if (status === 'open') return t('admin.feedback.status.open')
+    if (status === 'triaged') return t('admin.feedback.status.triaged')
+    if (status === 'in_progress') return t('admin.feedback.status.inProgress')
+    return t('admin.feedback.status.unknown')
+  }
+
   useEffect(() => {
-    loadPage()
+    void loadPage()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   async function loadPage() {
@@ -62,7 +78,7 @@ export default function AdminFeedbackPage() {
       .maybeSingle()
 
     if (profileError) {
-      setMessage('Nao foi possivel verificar permissao admin.')
+      setMessage(t('admin.feedback.messages.adminCheckFailed'))
       setLoading(false)
       return
     }
@@ -88,7 +104,7 @@ export default function AdminFeedbackPage() {
 
     if (error) {
       console.error('[AdminFeedback] Load failed:', error.message)
-      setMessage('Nao foi possivel carregar feedbacks agora.')
+      setMessage(t('admin.feedback.messages.loadFailed'))
       setReports([])
     } else {
       setReports((data || []) as FeedbackReportRow[])
@@ -101,7 +117,7 @@ export default function AdminFeedbackPage() {
     return (
       <main className="flex min-h-screen items-center justify-center bg-black text-white">
         <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-        Carregando feedbacks...
+        {t('admin.feedback.loading')}
       </main>
     )
   }
@@ -111,10 +127,10 @@ export default function AdminFeedbackPage() {
       <main className="min-h-screen bg-black px-4 py-10 text-white">
         <section className="mx-auto max-w-xl rounded-[2rem] border border-red-300/20 bg-red-500/10 p-6 text-red-100">
           <ShieldAlert className="h-10 w-10" />
-          <h1 className="mt-4 text-2xl font-black">Acesso restrito</h1>
-          <p className="mt-2 text-sm leading-6">Esta area e exclusiva para administradores.</p>
+          <h1 className="mt-4 text-2xl font-black">{t('post.restrictedTitle')}</h1>
+          <p className="mt-2 text-sm leading-6">{t('admin.feedback.accessDeniedDescription')}</p>
           <Link href="/feed" className="mt-5 inline-flex rounded-full bg-white px-5 py-2.5 text-sm font-black text-black">
-            Voltar
+            {t('messages.detail.back')}
           </Link>
         </section>
       </main>
@@ -126,14 +142,14 @@ export default function AdminFeedbackPage() {
       <section className="mx-auto w-full max-w-6xl">
         <Link href="/admin" className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-black transition hover:bg-white/10">
           <ArrowLeft className="h-4 w-4" />
-          Admin
+          {t('admin.creatorWithdrawals.admin')}
         </Link>
 
-        <header className="mt-6 rounded-[2rem] border border-blue-300/25 bg-blue-500/10 p-6 ring-1 ring-blue-300/10 shadow-xl shadow-blue-950/10">
+        <header className="mt-6 rounded-[2rem] border border-blue-300/25 bg-blue-500/10 p-6 shadow-xl shadow-blue-950/10 ring-1 ring-blue-300/10">
           <Bug className="h-9 w-9 text-blue-100" />
-          <h1 className="mt-4 text-3xl font-black">Feedbacks e bugs</h1>
+          <h1 className="mt-4 text-3xl font-black">{t('admin.feedback.title')}</h1>
           <p className="mt-2 text-sm leading-6 text-blue-100/80">
-            Relatos abertos enviados pela pagina de feedback da EntreUS.
+            {t('admin.feedback.description')}
           </p>
         </header>
 
@@ -146,7 +162,7 @@ export default function AdminFeedbackPage() {
         <div className="mt-5 grid gap-3">
           {reports.length === 0 ? (
             <div className="rounded-3xl border border-emerald-300/20 bg-emerald-500/10 p-5 text-emerald-100 ring-1 ring-emerald-300/10">
-              Nenhum feedback ou bug aberto no momento.
+              {t('admin.feedback.empty')}
             </div>
           ) : (
             reports.map((report) => (
@@ -155,12 +171,12 @@ export default function AdminFeedbackPage() {
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="rounded-full bg-blue-500/15 px-3 py-1 text-xs font-black text-blue-100">{report.type}</span>
-                      <span className={`rounded-full px-3 py-1 text-xs font-black ${urgencyClass(report.urgency)}`}>{report.urgency}</span>
-                      <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-black text-zinc-300">{report.status}</span>
+                      <span className={`rounded-full px-3 py-1 text-xs font-black ${urgencyClass(report.urgency)}`}>{getUrgencyLabel(report.urgency)}</span>
+                      <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-black text-zinc-300">{getStatusLabel(report.status)}</span>
                     </div>
                     <h2 className="mt-3 text-lg font-black">{report.title}</h2>
                     <p className="mt-2 line-clamp-3 text-sm leading-6 text-zinc-300">{report.description}</p>
-                    {report.page_url && <p className="mt-2 truncate text-xs text-zinc-500">Pagina: {report.page_url}</p>}
+                    {report.page_url && <p className="mt-2 truncate text-xs text-zinc-500">{t('admin.feedback.pageLabel', { url: report.page_url })}</p>}
                   </div>
                 </div>
               </article>
