@@ -5,8 +5,10 @@ import Link from 'next/link'
 import { FormEvent, useEffect, useState } from 'react'
 import { getPasswordResetValidationMessage } from '@/lib/auth/password-reset'
 import { supabase } from '@/lib/supabase'
+import { useLanguage } from '../components/LanguageProvider'
 
 export default function ResetPasswordPage() {
+  const { t } = useLanguage()
   const [newPassword, setNewPassword] = useState('')
   const [confirmation, setConfirmation] = useState('')
   const [checkingRecovery, setCheckingRecovery] = useState(true)
@@ -49,6 +51,7 @@ export default function ResetPasswordPage() {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (saving) return
 
     const validationMessage = getPasswordResetValidationMessage(newPassword, confirmation)
     if (validationMessage) {
@@ -62,7 +65,8 @@ export default function ResetPasswordPage() {
     const { error } = await supabase.auth.updateUser({ password: newPassword })
 
     if (error) {
-      setMessage('Não foi possível atualizar sua senha. Solicite um novo link de recuperação e tente novamente.')
+      console.error('Erro ao atualizar senha:', error.message)
+      setMessage(t('auth.reset.updateError'))
       setSaving(false)
       return
     }
@@ -82,40 +86,40 @@ export default function ResetPasswordPage() {
           <span className="font-black tracking-tight">EntreUS</span>
         </Link>
 
-        <h1 className="text-3xl font-black">Redefinir senha</h1>
+        <h1 className="text-3xl font-black">{t('auth.reset.title')}</h1>
 
         {checkingRecovery ? (
-          <p className="mt-3 text-sm text-zinc-600 dark:text-zinc-400">Verificando seu link de recuperação...</p>
+          <p className="mt-3 text-sm text-zinc-600 dark:text-zinc-400">{t('auth.reset.checking')}</p>
         ) : completed ? (
           <div className="mt-4 space-y-5">
             <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-200">
-              Senha atualizada com sucesso. Você já pode entrar com sua nova senha.
+              {t('auth.reset.success')}
             </p>
             <Link
               href="/login"
               className="flex min-h-12 w-full items-center justify-center rounded-xl bg-black px-4 py-3 font-semibold text-white transition hover:bg-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:bg-white dark:text-black dark:hover:bg-zinc-200 dark:focus-visible:ring-offset-zinc-950"
             >
-              Ir para login
+              {t('auth.reset.backToLogin')}
             </Link>
           </div>
         ) : !hasRecoverySession ? (
           <div className="mt-4 space-y-5">
             <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
-              Solicite um novo link de recuperação.
+              {t('auth.reset.invalidLink')}
             </p>
             <Link
               href="/forgot-password"
               className="flex min-h-12 w-full items-center justify-center rounded-xl bg-black px-4 py-3 font-semibold text-white transition hover:bg-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:bg-white dark:text-black dark:hover:bg-zinc-200 dark:focus-visible:ring-offset-zinc-950"
             >
-              Solicitar novo link
+              {t('auth.reset.requestNewLink')}
             </Link>
           </div>
         ) : (
           <form onSubmit={submit} className="mt-6 space-y-4">
-            <p className="text-sm text-zinc-600 dark:text-zinc-400">Crie uma senha com pelo menos 8 caracteres.</p>
+            <p className="text-sm text-zinc-600 dark:text-zinc-400">{t('auth.reset.passwordHint')}</p>
 
             <div>
-              <label htmlFor="new-password" className="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Nova senha</label>
+              <label htmlFor="new-password" className="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">{t('auth.reset.newPassword')}</label>
               <input
                 id="new-password"
                 type="password"
@@ -128,7 +132,7 @@ export default function ResetPasswordPage() {
             </div>
 
             <div>
-              <label htmlFor="confirm-password" className="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Confirmar nova senha</label>
+              <label htmlFor="confirm-password" className="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">{t('auth.reset.confirmPassword')}</label>
               <input
                 id="confirm-password"
                 type="password"
@@ -145,10 +149,10 @@ export default function ResetPasswordPage() {
               disabled={saving}
               className="flex min-h-12 w-full items-center justify-center rounded-xl bg-black px-4 py-3 font-semibold text-white transition hover:bg-zinc-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-white dark:text-black dark:hover:bg-zinc-200 dark:focus-visible:ring-offset-zinc-950"
             >
-              {saving ? 'Salvando nova senha...' : 'Salvar nova senha'}
+              {saving ? t('auth.reset.saving') : t('auth.reset.submit')}
             </button>
 
-            {message && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300">{message}</p>}
+            {message && <p role="alert" aria-live="polite" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300">{message}</p>}
           </form>
         )}
       </section>

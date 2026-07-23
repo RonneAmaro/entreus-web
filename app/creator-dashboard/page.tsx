@@ -31,6 +31,7 @@ import MobileNavigation from '../components/MobileNavigation'
 import { CreatorChecklist, CreatorDashboardStats } from '../components/CreatorDashboardStats'
 import ItaCashAmount from '../components/ItaCashAmount'
 import { supabase } from '@/lib/supabase'
+import { blocksMinorAccess, isProfileIncomplete } from '@/lib/profile-completion'
 import {
   summarizeCreatorDashboard,
   type CreatorDashboardPost,
@@ -68,8 +69,12 @@ type CurrentProfile = {
   display_name: string | null
   avatar_url: string | null
   bio: string | null
+  birth_date: string | null
+  is_minor: boolean | null
+  parental_consent_status: string | null
   age_verification_status: string | null
   terms_accepted_at: string | null
+  privacy_accepted_at: string | null
 }
 
 type PostReference = { post_id: string | null }
@@ -295,7 +300,7 @@ export default function CreatorDashboardPage() {
     const [profileResult, unreadResult] = await Promise.all([
       supabase
         .from('profiles')
-        .select('username, display_name, avatar_url, bio, age_verification_status, terms_accepted_at')
+        .select('username, display_name, avatar_url, bio, birth_date, is_minor, parental_consent_status, age_verification_status, terms_accepted_at, privacy_accepted_at')
         .eq('id', user.id)
         .maybeSingle(),
       supabase
@@ -305,8 +310,22 @@ export default function CreatorDashboardPage() {
         .eq('read', false),
     ])
 
-    if (profileResult.data) {
-      setProfile(profileResult.data as CurrentProfile)
+    if (!profileResult.data) {
+      router.replace('/complete-profile')
+      return
+    }
+
+    const currentProfile = profileResult.data as CurrentProfile
+    setProfile(currentProfile)
+
+    if (isProfileIncomplete(currentProfile)) {
+      router.replace('/complete-profile')
+      return
+    }
+
+    if (blocksMinorAccess(currentProfile)) {
+      router.replace('/account-pending')
+      return
     }
     setUnreadNotificationsCount(unreadResult.count || 0)
 

@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { getSafeRedirectParam } from '@/lib/auth/safe-redirect'
 import { supabase } from '@/lib/supabase'
+import { useLanguage } from '../../components/LanguageProvider'
 import {
   blocksMinorAccess,
   CURRENT_PRIVACY_VERSION,
@@ -148,13 +150,15 @@ async function insertProfileWithUsernameRetry(
 
 export default function AuthCallbackPage() {
   const router = useRouter()
-  const [message, setMessage] = useState('Conectando sua conta...')
+  const { t } = useLanguage()
+  const [message, setMessage] = useState('')
 
   useEffect(() => {
     let cancelled = false
 
     async function finishOAuthLogin() {
       const searchParams = new URLSearchParams(window.location.search)
+      const safeNext = getSafeRedirectParam(searchParams, '/feed')
       const code = searchParams.get('code')
       const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''))
       const isPasswordRecovery =
@@ -167,7 +171,7 @@ export default function AuthCallbackPage() {
           if (error) {
             logAuthCallbackError('password recovery exchangeCodeForSession failed', error)
             if (!cancelled) {
-              setMessage('Não foi possível validar seu link de recuperação. Solicite um novo link e tente novamente.')
+              setMessage(t('auth.callback.recoveryInvalid'))
             }
             return
           }
@@ -185,7 +189,7 @@ export default function AuthCallbackPage() {
 
         if (error) {
           logAuthCallbackError('exchangeCodeForSession failed', error)
-          if (!cancelled) setMessage('Nao foi possivel confirmar o login social. Tente novamente.')
+          if (!cancelled) setMessage(t('auth.callback.oauthError'))
           return
         }
       }
@@ -200,7 +204,7 @@ export default function AuthCallbackPage() {
       }
 
       if (!user) {
-        if (!cancelled) setMessage('Sessao nao encontrada. Volte ao login e tente novamente.')
+        if (!cancelled) setMessage(t('auth.callback.sessionMissing'))
         return
       }
 
@@ -375,7 +379,7 @@ export default function AuthCallbackPage() {
           return
         }
 
-        router.replace(blocksMinorAccess(completedProfile) ? '/account-pending' : '/feed')
+        router.replace(blocksMinorAccess(completedProfile) ? '/account-pending' : safeNext)
       }
     }
 
@@ -384,7 +388,7 @@ export default function AuthCallbackPage() {
     return () => {
       cancelled = true
     }
-  }, [router])
+  }, [router, t])
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-white px-6 text-black dark:bg-black dark:text-white">

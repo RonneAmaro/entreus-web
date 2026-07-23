@@ -3,9 +3,12 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { useState } from 'react'
+import { buildRecoveryRedirectUrl } from '@/lib/auth/safe-redirect'
 import { supabase } from '@/lib/supabase'
+import { useLanguage } from '../components/LanguageProvider'
 
 export default function ForgotPasswordPage() {
+  const { t } = useLanguage()
   const [email, setEmail] = useState('')
   const [message, setMessage] = useState('')
   const [messageKind, setMessageKind] = useState<'success' | 'error' | null>(null)
@@ -13,24 +16,25 @@ export default function ForgotPasswordPage() {
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (loading) return
     setLoading(true)
     setMessage('')
     setMessageKind(null)
 
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-        redirectTo: `${window.location.origin}/reset-password?flow=recovery`,
+        redirectTo: buildRecoveryRedirectUrl(window.location.origin),
       })
 
-      setMessage(
-        error
-          ? 'Não foi possível solicitar o link agora. Tente novamente em instantes.'
-          : 'Se este e-mail estiver cadastrado, enviaremos um link para redefinir sua senha.',
-      )
-      setMessageKind(error ? 'error' : 'success')
+      if (error) {
+        console.error('Erro ao solicitar recuperacao de senha:', error.message)
+      }
+
+      setMessage(t('auth.forgot.success'))
+      setMessageKind('success')
     } catch {
-      setMessage('Não foi possível solicitar o link agora. Tente novamente em instantes.')
-      setMessageKind('error')
+      setMessage(t('auth.forgot.success'))
+      setMessageKind('success')
     } finally {
       setLoading(false)
     }
@@ -44,10 +48,10 @@ export default function ForgotPasswordPage() {
           <span className="font-black tracking-tight">EntreUS</span>
         </Link>
 
-        <h1 className="text-3xl font-black">Recuperar senha</h1>
-        <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-400">Informe seu e-mail para receber um link seguro de redefinição.</p>
+        <h1 className="text-3xl font-black">{t('auth.forgot.title')}</h1>
+        <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-400">{t('auth.forgot.subtitle')}</p>
 
-        <label htmlFor="recovery-email" className="mt-6 mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">E-mail</label>
+        <label htmlFor="recovery-email" className="mt-6 mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">{t('auth.email')}</label>
         <input
           id="recovery-email"
           className="w-full rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 text-zinc-950 outline-none transition placeholder:text-zinc-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white"
@@ -56,7 +60,7 @@ export default function ForgotPasswordPage() {
           autoComplete="email"
           value={email}
           onChange={(event) => setEmail(event.target.value)}
-          placeholder="seuemail@email.com"
+          placeholder={t('auth.emailPlaceholder')}
         />
 
         <button
@@ -64,12 +68,13 @@ export default function ForgotPasswordPage() {
           type="submit"
           disabled={loading}
         >
-          {loading ? 'Enviando link...' : 'Enviar link de recuperação'}
+          {loading ? t('auth.forgot.submitting') : t('auth.forgot.submit')}
         </button>
 
         {message && (
           <p
             role={messageKind === 'error' ? 'alert' : 'status'}
+            aria-live="polite"
             className={`mt-4 rounded-xl border px-4 py-3 text-sm ${
               messageKind === 'error'
                 ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300'
@@ -80,7 +85,7 @@ export default function ForgotPasswordPage() {
           </p>
         )}
 
-        <Link className="mt-5 block text-center text-sm font-medium text-zinc-700 underline underline-offset-4 transition hover:text-black dark:text-zinc-300 dark:hover:text-white" href="/login">Voltar para entrar</Link>
+        <Link className="mt-5 block text-center text-sm font-medium text-zinc-700 underline underline-offset-4 transition hover:text-black dark:text-zinc-300 dark:hover:text-white" href="/login">{t('auth.forgot.backToLogin')}</Link>
       </form>
     </main>
   )

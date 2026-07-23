@@ -2,16 +2,18 @@
 
 import Link from 'next/link'
 import { Eye, EyeOff } from 'lucide-react'
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import GoogleLogo from '../components/GoogleLogo'
 import { signInWithSocialProvider, supabase } from '@/lib/supabase'
 import { getAuthErrorMessage } from '@/lib/auth/auth-error-messages'
 import { ensureProfile } from '@/lib/auth/ensure-profile'
+import { getSafeRedirectParam } from '@/lib/auth/safe-redirect'
 import { useLanguage } from '../components/LanguageProvider'
 
 export default function LoginPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { t } = useLanguage()
 
   const [email, setEmail] = useState('')
@@ -20,9 +22,54 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [socialLoading, setSocialLoading] = useState(false)
   const [message, setMessage] = useState('')
+  const [checkingSession, setCheckingSession] = useState(true)
+
+  useEffect(() => {
+    let active = true
+
+    async function checkSession() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!active) return
+
+      if (!user) {
+        setCheckingSession(false)
+        return
+      }
+
+      const repaired = await ensureProfile(supabase as never, user.id)
+      if (!active) return
+
+      if (!repaired.profile) {
+        router.replace('/complete-profile')
+        return
+      }
+
+      if (repaired.profile.is_minor && repaired.profile.parental_consent_status !== 'approved') {
+        router.replace('/account-pending')
+        return
+      }
+
+      if (!repaired.profile.username || !repaired.profile.birth_date) {
+        router.replace('/complete-profile')
+        return
+      }
+
+      router.replace(getSafeRedirectParam(searchParams, '/feed'))
+    }
+
+    void checkSession()
+
+    return () => {
+      active = false
+    }
+  }, [router, searchParams])
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
+    if (loading || socialLoading) return
     setLoading(true)
     setMessage('')
 
@@ -43,20 +90,29 @@ export default function LoginPage() {
       if (repaired.profile.is_minor && repaired.profile.parental_consent_status !== 'approved') { router.push('/account-pending'); setLoading(false); return }
       if (!repaired.profile.username || !repaired.profile.birth_date) { router.push('/complete-profile'); setLoading(false); return }
     }
-    router.push('/feed')
+    router.push(getSafeRedirectParam(searchParams, '/feed'))
     setLoading(false)
   }
 
   async function handleGoogleLogin() {
+    if (loading || socialLoading) return
     setSocialLoading(true)
     setMessage('')
 
     const { error } = await signInWithSocialProvider('google')
 
     if (error) {
-      setMessage('Nao foi possivel iniciar o login com Google. Verifique a configuracao e tente novamente.')
+      setMessage(t('auth.login.googleError'))
       setSocialLoading(false)
     }
+  }
+
+  if (checkingSession) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-white px-6 py-10 text-black dark:bg-black dark:text-white">
+        <p role="status" aria-live="polite">{t('auth.login.checkingSession')}</p>
+      </main>
+    )
   }
 
   return (
@@ -66,7 +122,7 @@ export default function LoginPage() {
           <h1 className="text-3xl font-bold">{t('auth.login.title')}</h1>
 
           <p className="mt-2 text-zinc-500 dark:text-zinc-400">
-            Acesse sua conta no EntreUS
+            {t('auth.login.subtitle')}
           </p>
         </div>
 
@@ -89,7 +145,7 @@ export default function LoginPage() {
             type="button"
             disabled
             className="flex w-full cursor-not-allowed items-center justify-center gap-3 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm font-semibold text-zinc-400 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-600"
-            title="Facebook precisa ser configurado antes de ativar"
+            title={t('auth.facebookPendingTitle')}
           >
             {t('auth.facebookSoon')}
           </button>
@@ -103,31 +159,35 @@ export default function LoginPage() {
 
         <form onSubmit={handleLogin} className="mt-3 space-y-4">
           <div>
-            <label className="mb-2 block text-sm text-zinc-700 dark:text-zinc-300">
+            <label htmlFor="login-email" className="mb-2 block text-sm text-zinc-700 dark:text-zinc-300">
               {t('auth.email')}
             </label>
 
             <input
+              id="login-email"
               type="email"
-              placeholder="seuemail@email.com"
+              placeholder={t('auth.emailPlaceholder')}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              autoComplete="email"
               className="w-full rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 outline-none transition focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
               required
             />
           </div>
 
           <div>
-            <label className="mb-2 block text-sm text-zinc-700 dark:text-zinc-300">
+            <label htmlFor="login-password" className="mb-2 block text-sm text-zinc-700 dark:text-zinc-300">
               {t('auth.password')}
             </label>
 
             <div className="relative">
               <input
+                id="login-password"
                 type={showPassword ? 'text' : 'password'}
                 placeholder={t('auth.passwordPlaceholder')}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
                 className="w-full rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 pr-12 outline-none transition focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
                 required
               />
@@ -161,7 +221,7 @@ export default function LoginPage() {
         </form>
 
         {message && (
-          <p className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-center text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300">
+          <p role="alert" aria-live="polite" className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-center text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300">
             {message}
           </p>
         )}

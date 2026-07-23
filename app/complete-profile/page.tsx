@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { AtSign, CalendarDays, CheckCircle2, Mail, ShieldCheck, UserRound, UsersRound } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import {
@@ -14,6 +14,8 @@ import {
   isProfileIncomplete,
   sanitizeUsername,
 } from '@/lib/profile-completion'
+import { getSafeRedirectParam } from '@/lib/auth/safe-redirect'
+import { useLanguage } from '../components/LanguageProvider'
 
 type Profile = {
   id: string
@@ -38,6 +40,8 @@ type ParentalConsentRequest = {
 
 export default function CompleteProfilePage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const { t } = useLanguage()
   const [userId, setUserId] = useState('')
   const [profile, setProfile] = useState<Profile | null>(null)
   const [displayName, setDisplayName] = useState('')
@@ -50,6 +54,7 @@ export default function CompleteProfilePage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
+  const safeReturnTo = useMemo(() => getSafeRedirectParam(searchParams, '/feed'), [searchParams])
 
   useEffect(() => {
     let active = true
@@ -92,7 +97,7 @@ export default function CompleteProfilePage() {
       if (!active) return
 
       if (error) {
-        setMessage('Nao foi possivel carregar seu perfil. Tente novamente.')
+        setMessage(t('completeProfile.errors.loadProfile'))
         setLoading(false)
         return
       }
@@ -100,7 +105,7 @@ export default function CompleteProfilePage() {
       const loadedProfile = data as Profile | null
 
       if (loadedProfile && !isProfileIncomplete(loadedProfile) && !blocksMinorAccess(loadedProfile)) {
-        router.replace('/feed')
+        router.replace(safeReturnTo)
         return
       }
 
@@ -155,7 +160,7 @@ export default function CompleteProfilePage() {
     return () => {
       active = false
     }
-  }, [router])
+  }, [router, safeReturnTo, t])
 
   const normalizedUsername = useMemo(() => sanitizeUsername(username), [username])
   const age = useMemo(() => calculateAge(birthDate), [birthDate])
@@ -181,22 +186,22 @@ export default function CompleteProfilePage() {
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
 
-    if (!userId) return
+    if (!userId || saving) return
 
     setMessage('')
 
     if (!normalizedUsername || normalizedUsername.length < 3) {
-      setMessage('Escolha um username com pelo menos 3 caracteres.')
+      setMessage(t('completeProfile.errors.usernameShort'))
       return
     }
 
     if (!birthDate || age === null || age < 0) {
-      setMessage('Informe uma data de nascimento valida.')
+      setMessage(t('completeProfile.errors.birthDateInvalid'))
       return
     }
 
     if (!acceptedTerms) {
-      setMessage('Voce precisa aceitar os Termos de Uso e a Politica de Privacidade para continuar.')
+      setMessage(t('completeProfile.errors.acceptTerms'))
       return
     }
 
@@ -204,17 +209,17 @@ export default function CompleteProfilePage() {
 
     if (isMinor) {
       if (guardianName.trim().length < 3) {
-        setMessage('Informe o nome do responsavel.')
+        setMessage(t('completeProfile.errors.guardianName'))
         return
       }
 
       if (!isValidEmail(normalizedGuardianEmail)) {
-        setMessage('Informe um e-mail valido do responsavel.')
+        setMessage(t('completeProfile.errors.guardianEmail'))
         return
       }
 
       if (!relationship) {
-        setMessage('Informe a relacao com o responsavel.')
+        setMessage(t('completeProfile.errors.guardianRelationship'))
         return
       }
     }
@@ -229,13 +234,13 @@ export default function CompleteProfilePage() {
       .maybeSingle()
 
     if (usernameCheckError) {
-      setMessage('Nao foi possivel verificar o username. Tente novamente.')
+      setMessage(t('completeProfile.errors.usernameCheck'))
       setSaving(false)
       return
     }
 
     if (existingUsername) {
-      setMessage('Esse username ja esta em uso.')
+      setMessage(t('completeProfile.errors.usernameTaken'))
       setSaving(false)
       return
     }
@@ -276,7 +281,7 @@ export default function CompleteProfilePage() {
     }
 
     if (error) {
-      setMessage('Nao foi possivel concluir agora. Tente novamente.')
+      setMessage(t('completeProfile.errors.save'))
       setSaving(false)
       return
     }
@@ -287,7 +292,7 @@ export default function CompleteProfilePage() {
       } = await supabase.auth.getSession()
 
       if (!session?.access_token) {
-        setMessage('Entre novamente para solicitar autorizacao do responsavel.')
+        setMessage(t('completeProfile.errors.sessionExpired'))
         setSaving(false)
         return
       }
@@ -307,13 +312,13 @@ export default function CompleteProfilePage() {
       const result = await response.json().catch(() => null)
 
       if (!response.ok || !result?.success) {
-        setMessage('Nao foi possivel enviar o pedido ao responsavel. Tente novamente.')
+        setMessage(t('completeProfile.errors.guardianRequest'))
         setSaving(false)
         return
       }
     }
 
-    router.replace(isMinor && nextParentalConsentStatus !== 'approved' ? '/account-pending' : '/feed')
+    router.replace(isMinor && nextParentalConsentStatus !== 'approved' ? '/account-pending' : safeReturnTo)
   }
 
   if (loading) {
@@ -321,9 +326,9 @@ export default function CompleteProfilePage() {
       <main className="flex min-h-screen items-center justify-center bg-black px-6 text-white">
         <div className="w-full max-w-md rounded-3xl border border-blue-500/20 bg-zinc-950 p-6 text-center shadow-2xl shadow-blue-950/30">
           <ShieldCheck className="mx-auto h-8 w-8 text-blue-300" />
-          <h1 className="mt-4 text-xl font-black">Carregando perfil</h1>
+          <h1 className="mt-4 text-xl font-black">{t('completeProfile.loading.title')}</h1>
           <p className="mt-2 text-sm leading-6 text-zinc-400">
-            Estamos preparando suas informacoes iniciais.
+            {t('completeProfile.loading.description')}
           </p>
         </div>
       </main>
@@ -336,21 +341,19 @@ export default function CompleteProfilePage() {
         <div>
           <div className="inline-flex items-center gap-2 rounded-full border border-blue-400/30 bg-blue-500/10 px-4 py-2 text-xs font-bold uppercase tracking-[0.18em] text-blue-200">
             <CheckCircle2 className="h-4 w-4" />
-            Perfil obrigatorio
+            {t('completeProfile.badge')}
           </div>
 
           <h1 className="mt-6 text-4xl font-black tracking-tight sm:text-5xl">
-            Complete seu perfil para continuar
+            {t('completeProfile.title')}
           </h1>
 
           <p className="mt-5 max-w-xl text-base leading-7 text-zinc-300">
-            Precisamos dessas informacoes para manter a comunidade segura,
-            aplicar as regras de idade da EntreUS e deixar seu username publico correto.
+            {t('completeProfile.description')}
           </p>
 
           <div className="mt-8 rounded-3xl border border-blue-500/20 bg-blue-950/20 p-5 text-sm leading-6 text-blue-100">
-            Menores de 18 anos continuam protegidos pelo fluxo de autorizacao
-            do responsavel. Conteudo 18+ permanece bloqueado para menores.
+            {t('completeProfile.minorBanner')}
           </div>
         </div>
 
@@ -362,7 +365,7 @@ export default function CompleteProfilePage() {
             <label className="block">
               <span className="mb-2 flex items-center gap-2 text-sm font-semibold text-zinc-200">
                 <UserRound className="h-4 w-4 text-blue-300" />
-                Nome de exibicao
+                {t('completeProfile.fields.displayName')}
               </span>
               <input
                 type="text"
@@ -370,14 +373,14 @@ export default function CompleteProfilePage() {
                 onChange={(event) => setDisplayName(event.target.value)}
                 maxLength={80}
                 className="w-full rounded-2xl border border-zinc-700 bg-black px-4 py-3 text-white outline-none transition focus:border-blue-400"
-                placeholder="Seu nome na EntreUS"
+                placeholder={t('completeProfile.placeholders.displayName')}
               />
             </label>
 
             <label className="block">
               <span className="mb-2 flex items-center gap-2 text-sm font-semibold text-zinc-200">
                 <AtSign className="h-4 w-4 text-blue-300" />
-                Username
+                {t('completeProfile.fields.username')}
               </span>
               <input
                 type="text"
@@ -386,18 +389,18 @@ export default function CompleteProfilePage() {
                 onBlur={() => setUsername(normalizedUsername)}
                 maxLength={30}
                 className="w-full rounded-2xl border border-zinc-700 bg-black px-4 py-3 text-white outline-none transition focus:border-blue-400"
-                placeholder="seu_username"
+                placeholder={t('completeProfile.placeholders.username')}
                 required
               />
               <p className="mt-2 text-xs leading-5 text-zinc-500">
-                Use letras minusculas, numeros e underline. Seu link publico sera /u/{normalizedUsername || 'username'}.
+                {t('completeProfile.usernameHint', { username: normalizedUsername || t('completeProfile.usernameFallback') })}
               </p>
             </label>
 
             <label className="block">
               <span className="mb-2 flex items-center gap-2 text-sm font-semibold text-zinc-200">
                 <CalendarDays className="h-4 w-4 text-blue-300" />
-                Data de nascimento
+                {t('auth.birthDate')}
               </span>
               <input
                 type="date"
@@ -410,12 +413,12 @@ export default function CompleteProfilePage() {
               />
               {hasRegisteredBirthDate && (
                 <p className="mt-2 text-xs leading-5 text-zinc-500">
-                  A data ja registrada nao pode ser alterada por aqui.
+                  {t('completeProfile.birthDateLocked')}
                 </p>
               )}
               {birthDate && isMinor && (
                 <p className="mt-2 rounded-2xl border border-yellow-500/20 bg-yellow-500/10 px-3 py-2 text-xs leading-5 text-yellow-100">
-                  Contas de menores precisam de autorizacao do responsavel para acessar recursos gerais.
+                  {t('completeProfile.minorNotice')}
                 </p>
               )}
             </label>
@@ -427,9 +430,9 @@ export default function CompleteProfilePage() {
                     <UsersRound className="h-5 w-5" />
                   </div>
                   <div>
-                    <h2 className="text-base font-black text-white">Autorizacao do responsavel</h2>
+                    <h2 className="text-base font-black text-white">{t('completeProfile.guardian.title')}</h2>
                     <p className="mt-2 text-sm leading-6 text-blue-100/85">
-                      Como voce e menor de idade, precisamos enviar um pedido de autorizacao para seu responsavel. Com a autorizacao, voce podera acessar os recursos normais da EntreUS. Conteudos 18+ continuam bloqueados para menores.
+                      {t('completeProfile.guardian.description')}
                     </p>
                   </div>
                 </div>
@@ -438,7 +441,7 @@ export default function CompleteProfilePage() {
                   <label className="block sm:col-span-2">
                     <span className="mb-2 flex items-center gap-2 text-sm font-semibold text-zinc-200">
                       <UserRound className="h-4 w-4 text-blue-300" />
-                      Nome do responsavel
+                      {t('completeProfile.fields.guardianName')}
                     </span>
                     <input
                       type="text"
@@ -446,7 +449,7 @@ export default function CompleteProfilePage() {
                       onChange={(event) => setGuardianName(event.target.value)}
                       maxLength={120}
                       className="w-full rounded-2xl border border-zinc-700 bg-black px-4 py-3 text-white outline-none transition focus:border-blue-400"
-                      placeholder="Nome completo do responsavel"
+                      placeholder={t('completeProfile.placeholders.guardianName')}
                       required={isMinor}
                     />
                   </label>
@@ -454,14 +457,14 @@ export default function CompleteProfilePage() {
                   <label className="block">
                     <span className="mb-2 flex items-center gap-2 text-sm font-semibold text-zinc-200">
                       <Mail className="h-4 w-4 text-blue-300" />
-                      E-mail do responsavel
+                      {t('completeProfile.fields.guardianEmail')}
                     </span>
                     <input
                       type="email"
                       value={guardianEmail}
                       onChange={(event) => setGuardianEmail(event.target.value)}
                       className="w-full rounded-2xl border border-zinc-700 bg-black px-4 py-3 text-white outline-none transition focus:border-blue-400"
-                      placeholder="responsavel@email.com"
+                      placeholder={t('completeProfile.placeholders.guardianEmail')}
                       required={isMinor}
                     />
                   </label>
@@ -469,7 +472,7 @@ export default function CompleteProfilePage() {
                   <label className="block">
                     <span className="mb-2 flex items-center gap-2 text-sm font-semibold text-zinc-200">
                       <ShieldCheck className="h-4 w-4 text-blue-300" />
-                      Relacao com o menor
+                      {t('completeProfile.fields.guardianRelationship')}
                     </span>
                     <select
                       value={relationship}
@@ -477,11 +480,11 @@ export default function CompleteProfilePage() {
                       className="w-full rounded-2xl border border-zinc-700 bg-black px-4 py-3 text-white outline-none transition focus:border-blue-400"
                       required={isMinor}
                     >
-                      <option value="">Selecione</option>
-                      <option value="mae">Mae</option>
-                      <option value="pai">Pai</option>
-                      <option value="responsavel_legal">Responsavel legal</option>
-                      <option value="outro">Outro</option>
+                      <option value="">{t('completeProfile.guardian.relationshipPlaceholder')}</option>
+                      <option value="mae">{t('completeProfile.guardian.relationships.mae')}</option>
+                      <option value="pai">{t('completeProfile.guardian.relationships.pai')}</option>
+                      <option value="responsavel_legal">{t('completeProfile.guardian.relationships.responsavel_legal')}</option>
+                      <option value="outro">{t('completeProfile.guardian.relationships.outro')}</option>
                     </select>
                   </label>
                 </div>
@@ -496,21 +499,21 @@ export default function CompleteProfilePage() {
                 className="mt-1 h-4 w-4 shrink-0 rounded border-zinc-600 bg-zinc-950 text-blue-500 accent-blue-500"
               />
               <span>
-                Li e aceito os{' '}
+                {t('auth.termsPrefix')}{' '}
                 <Link href="/terms" className="font-semibold text-blue-300 underline-offset-4 hover:underline">
-                  Termos de Uso
+                  {t('auth.terms')}
                 </Link>{' '}
-                e a{' '}
+                {t('auth.privacyConnector')}{' '}
                 <Link href="/privacy" className="font-semibold text-blue-300 underline-offset-4 hover:underline">
-                  Politica de Privacidade
+                  {t('auth.privacy')}
                 </Link>{' '}
-                da EntreUS.
+                {t('auth.termsSuffix')}
               </span>
             </label>
           </div>
 
           {message && (
-            <p className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm leading-6 text-red-100">
+            <p role="alert" aria-live="polite" className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm leading-6 text-red-100">
               {message}
             </p>
           )}
@@ -520,7 +523,7 @@ export default function CompleteProfilePage() {
             disabled={saving}
             className="mt-5 inline-flex min-h-12 w-full items-center justify-center rounded-2xl bg-blue-500 px-5 text-sm font-black text-white shadow-lg shadow-blue-950/40 transition hover:bg-blue-400 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {saving ? 'Salvando...' : 'Continuar para a EntreUS'}
+            {saving ? t('common.saving') : t('completeProfile.submit')}
           </button>
         </form>
       </section>
