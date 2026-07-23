@@ -349,7 +349,7 @@ export default function ProfilePage() {
       }
 
       if (error) {
-        setMessage(t('profile.messages.loadProfileError') + error.message)
+        setMessage(t('profile.messages.loadProfileError'))
         setLoading(false)
         return
       }
@@ -447,7 +447,7 @@ export default function ProfilePage() {
       .eq('read', false)
 
     if (error) {
-      setMessage(t('profile.messages.loadNotificationsError') + error.message)
+      setMessage(t('profile.messages.loadNotificationsError'))
       return
     }
 
@@ -512,7 +512,7 @@ export default function ProfilePage() {
 
     if (!response.ok || !result?.success) {
       setCreatingConsentRequest(false)
-      setMessage(result?.error || 'Nao foi possivel criar solicitacao de autorizacao.')
+      setMessage('Nao foi possivel criar solicitacao de autorizacao.')
       return
     }
 
@@ -534,7 +534,7 @@ export default function ProfilePage() {
       return
     }
 
-    setMessage(result.message || 'Nao foi possivel enviar automaticamente agora.')
+    setMessage('Nao foi possivel enviar automaticamente agora.')
   }
 
   async function getR2UploadAuthHeaders() {
@@ -664,7 +664,7 @@ export default function ProfilePage() {
       .select('id, post_id, user_id')
 
     if (error) {
-      setMessage(t('profile.messages.loadLikesError') + error.message)
+      setMessage(t('profile.messages.loadLikesError'))
       return
     }
 
@@ -677,7 +677,7 @@ export default function ProfilePage() {
       .select('id, post_id, user_id')
 
     if (error) {
-      setMessage(t('profile.messages.loadCommentsError') + error.message)
+      setMessage(t('profile.messages.loadCommentsError'))
       return
     }
 
@@ -693,7 +693,7 @@ export default function ProfilePage() {
       .eq('user_id', currentUserId)
 
     if (error) {
-      setMessage(t('profile.messages.loadSavedError') + error.message)
+      setMessage(t('profile.messages.loadSavedError'))
       return
     }
 
@@ -707,7 +707,7 @@ export default function ProfilePage() {
       .order('created_at', { ascending: false })
 
     if (error) {
-      setMessage(t('profile.messages.loadRepostsError') + error.message)
+      setMessage(t('profile.messages.loadRepostsError'))
       return
     }
 
@@ -940,7 +940,7 @@ export default function ProfilePage() {
       }
 
       if (repostedPostsError) {
-        setMessage(t('profile.messages.loadRepostedPostsError') + repostedPostsError.message)
+      setMessage(t('profile.messages.loadRepostedPostsError'))
         return
       }
 
@@ -1134,7 +1134,7 @@ export default function ProfilePage() {
       .maybeSingle()
 
     if (usernameCheckError) {
-      setMessage(t('profile.messages.usernameCheckError') + usernameCheckError.message)
+      setMessage(t('profile.messages.usernameCheckError'))
       setSaving(false)
       return
     }
@@ -1190,7 +1190,7 @@ export default function ProfilePage() {
     const { error } = await supabase.from('profiles').upsert(payload)
 
     if (error) {
-      setMessage(t('profile.messages.saveProfileError') + error.message)
+      setMessage(t('profile.messages.saveProfileError'))
       setSaving(false)
       return
     }
@@ -1266,7 +1266,7 @@ export default function ProfilePage() {
 
     if (!response.ok || !result?.ok || !result.theme) {
       setSavingProfileTheme(false)
-      setMessage(result?.error || 'Nao foi possivel salvar o tema do perfil.')
+      setMessage('Nao foi possivel salvar o tema do perfil.')
       return
     }
 
@@ -1296,7 +1296,7 @@ export default function ProfilePage() {
         .eq('user_id', userId)
 
       if (error) {
-        setMessage(t('profile.messages.removeSavedError') + error.message)
+        setMessage(t('profile.messages.removeSavedError'))
         await loadBookmarks(userId)
       }
 
@@ -1322,7 +1322,7 @@ export default function ProfilePage() {
       .single()
 
     if (error) {
-      setMessage(t('profile.messages.savePostError') + error.message)
+      setMessage(t('profile.messages.savePostError'))
       await loadBookmarks(userId)
       return
     }
@@ -1362,7 +1362,7 @@ export default function ProfilePage() {
         .eq('user_id', userId)
 
       if (error) {
-        setMessage(t('profile.messages.removeRepostError') + error.message)
+        setMessage(t('profile.messages.removeRepostError'))
         await loadReposts(profile)
       }
 
@@ -1393,7 +1393,7 @@ export default function ProfilePage() {
       .single()
 
     if (error) {
-      setMessage(t('profile.messages.repostError') + error.message)
+      setMessage(t('profile.messages.repostError'))
       await loadReposts(profile)
       return
     }
@@ -1428,7 +1428,7 @@ export default function ProfilePage() {
         .eq('id', existingLike.id)
 
       if (error) {
-        setMessage(t('profile.messages.removeLikeError') + error.message)
+        setMessage(t('profile.messages.removeLikeError'))
         await loadLikes()
       }
 
@@ -1453,7 +1453,7 @@ export default function ProfilePage() {
       .single()
 
     if (error) {
-      setMessage(t('profile.messages.likeError') + error.message)
+      setMessage(t('profile.messages.likeError'))
       await loadLikes()
       return
     }
@@ -1492,7 +1492,7 @@ export default function ProfilePage() {
       .eq('user_id', userId)
 
     if (error) {
-      setMessage(t('profile.messages.deletePostError') + error.message)
+      setMessage(t('profile.messages.deletePostError'))
       return
     }
 
@@ -1527,7 +1527,7 @@ export default function ProfilePage() {
     })
 
     if (error) {
-      setMessage(t('profile.messages.reportPostError') + error.message)
+      setMessage(t('profile.messages.reportPostError'))
       setReportingPostId(null)
       return
     }

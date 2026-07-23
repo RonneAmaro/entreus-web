@@ -22,6 +22,10 @@ type MercadoPagoPreference = {
 }
 
 const PLATFORM_FEE_PERCENT = 2
+const MERCADO_PAGO_CONFIGURATION_ERROR =
+  'Os pagamentos automaticos do Mercado Pago ainda nao estao configurados neste ambiente.'
+const PAYMENT_ORDER_CREATION_ERROR =
+  'Nao foi possivel preparar o pedido de pagamento agora. Tente novamente em instantes.'
 
 function getSupabaseForRequest(request: Request) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -61,7 +65,7 @@ export async function POST(request: Request) {
 
     if (!accessToken || !siteUrl) {
       return NextResponse.json(
-        { error: 'Mercado Pago ainda nao esta configurado no servidor.' },
+        { error: MERCADO_PAGO_CONFIGURATION_ERROR },
         { status: 503 }
       )
     }
@@ -137,8 +141,11 @@ export async function POST(request: Request) {
     })
 
     if (orderError || !orderData) {
+      console.error('Mercado Pago preference nao conseguiu criar o pedido interno.', {
+        code: orderError?.code || null,
+      })
       return NextResponse.json(
-        { error: orderError?.message || 'Nao foi possivel criar pedido de pagamento.' },
+        { error: PAYMENT_ORDER_CREATION_ERROR },
         { status: 400 }
       )
     }

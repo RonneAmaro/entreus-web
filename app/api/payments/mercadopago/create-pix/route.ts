@@ -27,6 +27,14 @@ type MercadoPagoPixPayment = {
 }
 
 const PIX_EXPIRATION_MINUTES = 30
+const MERCADO_PAGO_CONFIGURATION_ERROR =
+  'Os pagamentos automaticos do Mercado Pago ainda nao estao configurados neste ambiente.'
+const PIX_ORDER_CREATION_ERROR =
+  'Nao foi possivel preparar o pedido Pix agora. Tente novamente em instantes.'
+const PIX_PROVIDER_ERROR =
+  'Nao foi possivel gerar o Pix automatico agora. Tente novamente em instantes.'
+const PIX_PERSISTENCE_ERROR =
+  'O Pix foi gerado, mas nao foi possivel concluir o registro interno do pagamento.'
 const INVALID_NOTIFICATION_URL_ERROR =
   'Configure uma URL pública HTTPS para receber notificações do Mercado Pago.'
 
@@ -100,7 +108,7 @@ export async function POST(request: Request) {
     if (!accessToken) {
       console.error('Mercado Pago Pix configuracao ausente: MERCADO_PAGO_ACCESS_TOKEN.')
       return NextResponse.json(
-        { error: 'Mercado Pago ainda nao esta configurado no servidor.' },
+        { error: MERCADO_PAGO_CONFIGURATION_ERROR },
         { status: 503 }
       )
     }
@@ -174,8 +182,11 @@ export async function POST(request: Request) {
     })
 
     if (orderError || !orderData) {
+      console.error('Mercado Pago Pix nao conseguiu criar o pedido interno.', {
+        code: orderError?.code || null,
+      })
       return NextResponse.json(
-        { error: orderError?.message || 'Nao foi possivel criar pedido Pix.' },
+        { error: PIX_ORDER_CREATION_ERROR },
         { status: 400 }
       )
     }
@@ -215,8 +226,12 @@ export async function POST(request: Request) {
     const transactionData = payment?.point_of_interaction?.transaction_data
 
     if (!paymentResponse.ok || !payment?.id || (!transactionData?.qr_code && !transactionData?.qr_code_base64)) {
+      console.error('Mercado Pago Pix nao retornou um QR Code valido.', {
+        status: paymentResponse.status,
+        providerStatus: payment?.status || null,
+      })
       return NextResponse.json(
-        { error: payment?.message || 'Nao foi possivel gerar Pix Mercado Pago.' },
+        { error: PIX_PROVIDER_ERROR },
         { status: 502 }
       )
     }
@@ -232,8 +247,11 @@ export async function POST(request: Request) {
     })
 
     if (attachError) {
+      console.error('Mercado Pago Pix nao conseguiu registrar o pagamento gerado.', {
+        code: attachError.code || null,
+      })
       return NextResponse.json(
-        { error: 'Pix criado, mas nao foi possivel salvar o pagamento: ' + attachError.message },
+        { error: PIX_PERSISTENCE_ERROR },
         { status: 500 }
       )
     }

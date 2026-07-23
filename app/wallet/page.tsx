@@ -390,7 +390,7 @@ export default function WalletPage() {
       .rpc('ensure_itacash_wallet')
 
     if (walletError || !walletData) {
-      setMessage(t('wallet.errors.load', { error: walletError?.message || t('common.retry') }))
+      setMessage(t('wallet.errors.load'))
       setLoading(false)
       return
     }
@@ -406,7 +406,7 @@ export default function WalletPage() {
       .limit(60)
 
     if (transactionError) {
-      setMessage(t('wallet.errors.history', { error: transactionError.message }))
+      setMessage(t('wallet.errors.history'))
       setTransactions([])
       setGiftContexts({})
     } else {

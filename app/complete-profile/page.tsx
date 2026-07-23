@@ -307,7 +307,7 @@ export default function CompleteProfilePage() {
       const result = await response.json().catch(() => null)
 
       if (!response.ok || !result?.success) {
-        setMessage(result?.error || result?.message || 'Nao foi possivel enviar o pedido ao responsavel. Tente novamente.')
+        setMessage('Nao foi possivel enviar o pedido ao responsavel. Tente novamente.')
         setSaving(false)
         return
       }

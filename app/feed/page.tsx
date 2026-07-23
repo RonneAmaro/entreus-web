@@ -1226,7 +1226,7 @@ function FeedContent() {
       .eq('read', false)
 
     if (error) {
-      setMessage(t('feed.messages.loadNotificationsError') + error.message)
+      setMessage(t('feed.messages.loadNotificationsError'))
       return
     }
 
@@ -1295,7 +1295,7 @@ function FeedContent() {
       .select('id, follower_id, following_id')
 
     if (error) {
-      setMessage(t('feed.messages.loadFollowsError') + error.message)
+      setMessage(t('feed.messages.loadFollowsError'))
       return []
     }
 
@@ -1311,7 +1311,7 @@ function FeedContent() {
       .eq('user_id', currentUserId)
 
     if (error) {
-      setMessage(t('feed.messages.loadSavedPostsError') + error.message)
+      setMessage(t('feed.messages.loadSavedPostsError'))
       return
     }
 
@@ -1336,7 +1336,7 @@ function FeedContent() {
     const { data, error } = await query
 
     if (error) {
-      setMessage(t('feed.messages.loadRepostsError') + error.message)
+      setMessage(t('feed.messages.loadRepostsError'))
       return []
     }
 
@@ -1563,7 +1563,7 @@ function FeedContent() {
         throw error
       }
 
-      setMessage(t('feed.messages.loadPostsError') + error.message)
+      setMessage(t('feed.messages.loadPostsError'))
       setHasMorePosts(false)
       return []
     }
@@ -1743,7 +1743,7 @@ function FeedContent() {
       .limit(FEED_INITIAL_COMMENT_LIMIT)
 
     if (error) {
-      setMessage(t('feed.messages.loadCommentsError') + error.message)
+      setMessage(t('feed.messages.loadCommentsError'))
       return []
     }
 
@@ -1808,7 +1808,7 @@ function FeedContent() {
     const { data, error } = await query
 
     if (error) {
-      setMessage(t('feed.messages.loadLikesError') + error.message)
+      setMessage(t('feed.messages.loadLikesError'))
       return
     }
 
@@ -1837,7 +1837,7 @@ function FeedContent() {
       .limit(FEED_INITIAL_REACTION_LIMIT)
 
     if (error) {
-      setMessage(t('feed.messages.loadCommentLikesError') + error.message)
+      setMessage(t('feed.messages.loadCommentLikesError'))
       return
     }
 
@@ -2003,7 +2003,7 @@ function FeedContent() {
         .eq('id', existingFollow.id)
 
       if (error) {
-        setMessage(t('feed.messages.unfollowError') + error.message)
+        setMessage(t('feed.messages.unfollowError'))
         setFollowLoadingUserId(null)
         return
       }
@@ -2014,7 +2014,7 @@ function FeedContent() {
       })
 
       if (error) {
-        setMessage(t('feed.messages.followError') + error.message)
+        setMessage(t('feed.messages.followError'))
         setFollowLoadingUserId(null)
         return
       }
@@ -2053,7 +2053,7 @@ function FeedContent() {
     })
 
     if (error) {
-      setMessage(t('feed.messages.reportError') + error.message)
+      setMessage(t('feed.messages.reportError'))
       setReportingPostId(null)
       return
     }
@@ -2173,7 +2173,7 @@ function FeedContent() {
         .eq('user_id', userId)
 
       if (error) {
-        setMessage(t('feed.messages.removeSavedError') + error.message)
+        setMessage(t('feed.messages.removeSavedError'))
         await loadBookmarks(userId)
       }
 
@@ -2199,7 +2199,7 @@ function FeedContent() {
       .single()
 
     if (error) {
-      setMessage(t('feed.messages.savePostError') + error.message)
+      setMessage(t('feed.messages.savePostError'))
       await loadBookmarks(userId)
       return
     }
@@ -2241,7 +2241,7 @@ function FeedContent() {
         .eq('user_id', userId)
 
       if (error) {
-        setMessage(t('feed.messages.removeRepostError') + error.message)
+        setMessage(t('feed.messages.removeRepostError'))
         await loadReposts(blockedUserIds)
       }
 
@@ -2274,7 +2274,7 @@ function FeedContent() {
       .single()
 
     if (error) {
-      setMessage(t('feed.messages.repostError') + error.message)
+      setMessage(t('feed.messages.repostError'))
       await loadReposts(blockedUserIds)
       return
     }
@@ -3128,7 +3128,7 @@ function FeedContent() {
       .eq('user_id', userId)
 
     if (error) {
-      setMessage(t('feed.messages.deletePostError') + error.message)
+      setMessage(t('feed.messages.deletePostError'))
       return
     }
 
@@ -3166,7 +3166,7 @@ function FeedContent() {
       .eq('user_id', userId)
 
     if (error) {
-      setMessage(t('feed.messages.editPostError') + error.message)
+      setMessage(t('feed.messages.editPostError'))
       setSavingEdit(false)
       return
     }
@@ -3212,7 +3212,7 @@ function FeedContent() {
       .single()
 
     if (error) {
-      setMessage(t('feed.messages.commentError') + error.message)
+      setMessage(t('feed.messages.commentError'))
       setSubmittingCommentPostId(null)
       return
     }
@@ -3283,7 +3283,7 @@ function FeedContent() {
         .eq('id', existingLike.id)
 
       if (error) {
-        setMessage(t('feed.messages.removeLikeError') + error.message)
+        setMessage(t('feed.messages.removeLikeError'))
         await loadLikes()
       }
 
@@ -3309,7 +3309,7 @@ function FeedContent() {
       .single()
 
     if (error) {
-      setMessage(t('feed.messages.likeError') + error.message)
+      setMessage(t('feed.messages.likeError'))
       await loadLikes()
       likeActionInProgressRef.current.delete(postId)
       return
@@ -3351,7 +3351,7 @@ function FeedContent() {
         .eq('id', existingLike.id)
 
       if (error) {
-        setMessage(t('feed.messages.removeCommentLikeError') + error.message)
+        setMessage(t('feed.messages.removeCommentLikeError'))
         return
       }
     } else {
@@ -3361,7 +3361,7 @@ function FeedContent() {
       })
 
       if (error) {
-        setMessage(t('feed.messages.commentLikeError') + error.message)
+        setMessage(t('feed.messages.commentLikeError'))
         return
       }
     }
@@ -3399,7 +3399,7 @@ function FeedContent() {
       .eq('user_id', userId)
 
     if (error) {
-      setMessage(t('feed.messages.editCommentError') + error.message)
+      setMessage(t('feed.messages.editCommentError'))
       setSavingCommentId(null)
       return
     }
@@ -3424,7 +3424,7 @@ function FeedContent() {
       .eq('user_id', userId)
 
     if (error) {
-      setMessage(t('feed.messages.deleteCommentError') + error.message)
+      setMessage(t('feed.messages.deleteCommentError'))
       return
     }
 

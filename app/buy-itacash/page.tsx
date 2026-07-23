@@ -385,7 +385,7 @@ export default function BuyItaCashPage() {
       })
 
     if (uploadError) {
-      setMessage(t('purchase.errors.uploadProof', { error: uploadError.message }))
+      setMessage(t('purchase.errors.uploadProof'))
       setSubmitting(false)
       return
     }
@@ -412,7 +412,7 @@ export default function BuyItaCashPage() {
     setSubmitting(false)
 
     if (error) {
-      setMessage(t('purchase.errors.createRequest', { error: error.message }))
+      setMessage(t('purchase.errors.createRequest'))
       return
     }
 

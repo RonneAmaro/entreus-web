@@ -73,6 +73,10 @@ const MERCHANT_ORDER_EVENT_TYPES = new Set(['merchant_order'])
 const PENDING_PAYMENT_STATUSES = new Set(['pending', 'in_process', 'authorized'])
 const FINAL_NOT_APPROVED_PAYMENT_STATUSES = new Set(['rejected', 'cancelled', 'canceled', 'expired'])
 
+export function isProductionEnvironment() {
+  return process.env.NODE_ENV === 'production'
+}
+
 function getServiceSupabase() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -157,14 +161,16 @@ function safeTimingCompareHex(left: string, right: string) {
   return crypto.timingSafeEqual(leftBuffer, rightBuffer)
 }
 
-function verifyMercadoPagoWebhookSignature(request: Request, body: unknown) {
+export function verifyMercadoPagoWebhookSignature(request: Request, body: unknown) {
   const secret = process.env.MERCADO_PAGO_WEBHOOK_SECRET?.trim()
 
   if (!secret) {
     return {
       configured: false,
-      ok: true,
-      reason: 'signature_secret_not_configured',
+      ok: !isProductionEnvironment(),
+      reason: isProductionEnvironment()
+        ? 'signature_secret_required_in_production'
+        : 'signature_secret_not_configured',
     }
   }
 
