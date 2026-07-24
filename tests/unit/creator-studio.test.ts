@@ -11,6 +11,67 @@ import {
 } from '@/lib/creator/creator-studio'
 
 const route = readFileSync('app/api/creator-studio/overview/route.ts', 'utf8')
+const page = readFileSync('app/creator-studio/page.tsx', 'utf8')
+const shell = readFileSync('app/components/creator/CreatorStudioShell.tsx', 'utf8')
+const ptBR = readFileSync('lib/i18n/catalogs/pt-BR.ts', 'utf8')
+const en = readFileSync('lib/i18n/catalogs/en.ts', 'utf8')
+
+const localizedKeys = [
+  'creator.studio.content.empty',
+  'creator.studio.shell.skipToContent',
+  'creator.studio.shell.brand',
+  'creator.studio.shell.title',
+  'creator.studio.shell.createPost',
+  'creator.studio.shell.backToFeed',
+  'creator.studio.shell.navLabel',
+  'creator.studio.shell.nav.overview',
+  'creator.studio.shell.nav.content',
+  'creator.studio.shell.nav.interactions',
+  'creator.studio.shell.nav.insights',
+  'creator.studio.shell.nav.earnings',
+  'creator.studio.shell.nav.profile',
+  'creator.studio.shell.nav.settings',
+  'creator.studio.overview.greeting',
+  'creator.studio.overview.description',
+  'creator.studio.overview.checklistTitle',
+  'creator.studio.overview.metrics.posts',
+  'creator.studio.overview.metrics.viewsPeriod',
+  'creator.studio.overview.metrics.likes',
+  'creator.studio.overview.metrics.comments',
+  'creator.studio.overview.metrics.followers',
+  'creator.studio.overview.quickActions.title',
+  'creator.studio.overview.quickActions.createPost',
+  'creator.studio.overview.quickActions.viewPublicProfile',
+  'creator.studio.overview.quickActions.manageContent',
+  'creator.studio.overview.quickActions.checkEarnings',
+  'creator.studio.interactions.title',
+  'creator.studio.interactions.description',
+  'creator.studio.interactions.empty',
+  'creator.studio.insights.title',
+  'creator.studio.insights.description',
+  'creator.studio.insights.periodDays',
+  'creator.studio.insights.summaryTitle',
+  'creator.studio.insights.summary',
+  'creator.studio.earnings.title',
+  'creator.studio.earnings.description',
+  'creator.studio.earnings.availableBalance',
+  'creator.studio.earnings.pendingWithdrawals',
+  'creator.studio.earnings.tipsReceived',
+  'creator.studio.earnings.paidPostsReceived',
+  'creator.studio.earnings.openWallet',
+  'creator.studio.earnings.withdrawalRequests',
+  'creator.studio.profile.title',
+  'creator.studio.profile.description',
+  'creator.studio.profile.emptyBio',
+  'creator.studio.profile.viewProfile',
+  'creator.studio.profile.editProfile',
+  'creator.studio.settings.title',
+  'creator.studio.settings.description',
+  'creator.studio.settings.privacySecurity',
+  'creator.studio.settings.profileIdentity',
+  'creator.studio.settings.notifications',
+  'creator.studio.settings.wallet',
+] as const
 
 describe('Creator Studio model', () => {
   it.each([7, 30, 90])('accepts the supported period %i', (period) => expect(parseCreatorPeriod(String(period))).toBe(period))
@@ -74,5 +135,51 @@ describe('Creator Studio server boundary', () => {
     expect(route).not.toContain('payment_details')
     expect(route).not.toContain('admin_notes')
     expect(route).not.toContain('service_role')
+  })
+})
+
+describe('Creator Studio page localization boundary', () => {
+  it('removes the main visible hardcodes from the localized sections', () => {
+    expect(page).not.toContain('Sua atividade real no EntreUS')
+    expect(page).not.toContain('Checklist do criador')
+    expect(page).not.toContain('Coment')
+    expect(page).not.toContain('Visualiza')
+    expect(page).not.toContain('Saldo dispon')
+    expect(page).not.toContain('Biografia ainda n')
+    expect(page).not.toContain('Atalhos para fontes de verdade')
+    expect(shell).not.toContain('Pular para o conte')
+    expect(shell).not.toContain('Criar publica')
+    expect(shell).not.toContain('Voltar ao Feed')
+    expect(shell).not.toContain('Seções do Creator Studio')
+  })
+
+  it('keeps the authenticated gate redirects and avoids window.location.assign', () => {
+    expect(page).toContain("router.replace('/login')")
+    expect(page).toContain("router.replace('/complete-profile')")
+    expect(page).toContain("router.replace('/account-pending')")
+    expect(page).not.toContain('window.location.assign')
+  })
+
+  it('uses the current app language instead of a fixed locale', () => {
+    expect(page).toContain('formatDateTime(language, post.createdAt)')
+    expect(page).toContain('formatNumber(language, overview.metrics.views)')
+    expect(page).toContain('formatNumber(language, post.likes)')
+    expect(page).not.toContain('pt-BR')
+    expect(page).not.toContain('en-US')
+    expect(page).not.toContain('toLocaleString(')
+  })
+
+  it('keeps user-facing errors sanitized and accessible', () => {
+    expect(page).toContain("setError(t('creator.studio.errors.load'))")
+    expect(page).not.toContain('error.message')
+    expect(page).toContain('aria-live="assertive"')
+    expect(page).toContain('aria-live="polite"')
+  })
+
+  it('defines the same new creator studio keys in both catalogs', () => {
+    for (const key of localizedKeys) {
+      expect(ptBR).toContain(`'${key}':`)
+      expect(en).toContain(`'${key}':`)
+    }
   })
 })
