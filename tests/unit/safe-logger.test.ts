@@ -71,3 +71,25 @@ describe('public messages remain unchanged in touched flows', () => {
     expect(parentalConsent).toContain('Nao foi possivel solicitar autorizacao parental agora.')
   })
 })
+
+describe('safe logging audit', () => {
+  it('replaces raw legacy console logging in the audited beta server flows', () => {
+    const auditedFiles = [
+      'app/api/payments/mercadopago/webhook/route.ts',
+      'app/api/payments/pix/manual-info/route.ts',
+      'app/api/whatsapp/webhook/route.ts',
+      'app/api/analytics/post-view/route.ts',
+      'app/api/creator-tips/route.ts',
+      'app/api/paid-posts/unlock/route.ts',
+      'app/api/creator-withdrawals/route.ts',
+      'app/api/parental-consent/respond/route.ts',
+      'lib/meet-server.ts',
+    ]
+
+    for (const file of auditedFiles) {
+      const source = readFileSync(file, 'utf8')
+      expect(source).not.toMatch(/console\.(error|warn|info)\([\s\S]*error(?:\.message)?/i)
+      expect(source).toContain('logServerEvent')
+    }
+  })
+})

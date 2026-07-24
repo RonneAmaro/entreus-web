@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getRequestCorrelationId, logServerEvent } from '@/lib/logging/safe-logger'
 
 function getSupabaseForRequest(request: Request) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -18,6 +19,7 @@ function getSupabaseForRequest(request: Request) {
 }
 
 export async function GET(request: Request) {
+  const requestId = getRequestCorrelationId(request)
   try {
     const supabase = getSupabaseForRequest(request)
     const {
@@ -40,7 +42,11 @@ export async function GET(request: Request) {
       configured: Boolean(pixKey || pixPaymentLink),
     })
   } catch (error) {
-    console.error('Erro ao carregar informacoes Pix:', error)
+    logServerEvent('error', {
+      event: 'pix_manual_info.load_failed',
+      requestId,
+      error,
+    })
 
     return NextResponse.json(
       { error: 'Erro interno ao carregar Pix manual.' },

@@ -6,6 +6,7 @@ import {
   validatePostViewPayload,
   type PostViewErrorReason,
 } from '@/lib/post-analytics'
+import { getRequestCorrelationId, logServerEvent } from '@/lib/logging/safe-logger'
 
 type PostViewBody = {
   postId?: unknown
@@ -47,6 +48,7 @@ function statusForReason(reason: PostViewErrorReason) {
 }
 
 export async function POST(request: Request) {
+  const requestId = getRequestCorrelationId(request)
   try {
     const body = (await request.json().catch(() => ({}))) as PostViewBody
     const validation = validatePostViewPayload({
@@ -76,7 +78,11 @@ export async function POST(request: Request) {
     if (error) {
       const reason = normalizePostViewRpcError(error)
       if (process.env.NODE_ENV === 'development') {
-        console.warn('[PostAnalytics] record_post_view failed:', { reason, code: error.code })
+        logServerEvent('warn', {
+          event: 'post_analytics.record_post_view_failed',
+          requestId,
+          context: { reason, code: error.code ?? 'unknown' },
+        })
       }
       return jsonPostViewError(reason, statusForReason(reason))
     }
@@ -93,7 +99,11 @@ export async function POST(request: Request) {
     })
   } catch (error) {
     if (process.env.NODE_ENV === 'development') {
-      console.warn('[PostAnalytics] unexpected view error:', error)
+      logServerEvent('warn', {
+        event: 'post_analytics.unexpected_view_error',
+        requestId,
+        error,
+      })
     }
     return jsonPostViewError('internal', 500)
   }

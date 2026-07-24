@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient, type User } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
+import { logServerEvent } from '@/lib/logging/safe-logger'
 
 export const FREE_MEET_DURATION_MINUTES = 20
 export const VIP_MEET_DURATION_MINUTES = 60
@@ -109,7 +110,10 @@ export async function isActiveVipUser(supabase: SupabaseClient, userId: string) 
     .maybeSingle()
 
   if (error) {
-    console.warn('[Meet] VIP status lookup failed:', error.message)
+    logServerEvent('warn', {
+      event: 'meet.vip_status_lookup_failed',
+      context: { code: error.code ?? 'unknown' },
+    })
     return false
   }
 

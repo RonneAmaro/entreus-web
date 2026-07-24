@@ -7,6 +7,7 @@ import {
   type CreatorTipErrorReason,
 } from '@/lib/creator-tips'
 import { canViewerSeePostClassification } from '@/lib/post-classification'
+import { getRequestCorrelationId, logServerEvent } from '@/lib/logging/safe-logger'
 
 type CreatorTipRequestBody = {
   receiverUserId?: unknown
@@ -63,6 +64,7 @@ function statusForRpcReason(reason: CreatorTipErrorReason) {
 }
 
 export async function POST(request: Request) {
+  const requestId = getRequestCorrelationId(request)
   try {
     const body = (await request.json().catch(() => ({}))) as CreatorTipRequestBody
     const supabase = getSupabaseForRequest(request)
@@ -105,7 +107,11 @@ export async function POST(request: Request) {
 
     if (receiverError) {
       if (process.env.NODE_ENV === 'development') {
-        console.warn('[CreatorTips] receiver lookup failed:', receiverError.message)
+        logServerEvent('warn', {
+          event: 'creator_tips.receiver_lookup_failed',
+          requestId,
+          context: { code: receiverError.code ?? 'unknown' },
+        })
       }
       return jsonTipError('creator_not_found', 404)
     }
@@ -115,7 +121,11 @@ export async function POST(request: Request) {
     }
 
     if (currentProfileError && process.env.NODE_ENV === 'development') {
-      console.warn('[CreatorTips] current profile lookup failed:', currentProfileError.message)
+      logServerEvent('warn', {
+        event: 'creator_tips.current_profile_lookup_failed',
+        requestId,
+        context: { code: currentProfileError.code ?? 'unknown' },
+      })
     }
 
     if (payload.postId) {
@@ -127,7 +137,11 @@ export async function POST(request: Request) {
 
       if (postError) {
         if (process.env.NODE_ENV === 'development') {
-          console.warn('[CreatorTips] post lookup failed:', postError.message)
+          logServerEvent('warn', {
+            event: 'creator_tips.post_lookup_failed',
+            requestId,
+            context: { code: postError.code ?? 'unknown' },
+          })
         }
         return jsonTipError('post_not_found', 404)
       }
@@ -165,7 +179,11 @@ export async function POST(request: Request) {
     if (error) {
       const reason = normalizeCreatorTipRpcError(error)
       if (process.env.NODE_ENV === 'development') {
-        console.warn('[CreatorTips] send_itacash_tip failed:', { reason, code: error.code })
+        logServerEvent('warn', {
+          event: 'creator_tips.send_tip_failed',
+          requestId,
+          context: { reason, code: error.code ?? 'unknown' },
+        })
       }
       return jsonTipError(reason, statusForRpcReason(reason))
     }
@@ -192,7 +210,11 @@ export async function POST(request: Request) {
     })
   } catch (error) {
     if (process.env.NODE_ENV === 'development') {
-      console.warn('[CreatorTips] unexpected error:', error)
+      logServerEvent('warn', {
+        event: 'creator_tips.unexpected_error',
+        requestId,
+        error,
+      })
     }
     return jsonTipError('internal', 500)
   }

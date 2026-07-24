@@ -6,6 +6,7 @@ import {
   validatePaidPostUnlockPayload,
   type PaidPostErrorReason,
 } from '@/lib/paid-posts'
+import { getRequestCorrelationId, logServerEvent } from '@/lib/logging/safe-logger'
 
 type UnlockPaidPostBody = {
   postId?: unknown
@@ -51,6 +52,7 @@ function statusForReason(reason: PaidPostErrorReason) {
 }
 
 export async function POST(request: Request) {
+  const requestId = getRequestCorrelationId(request)
   try {
     const body = (await request.json().catch(() => ({}))) as UnlockPaidPostBody
     const validation = validatePaidPostUnlockPayload({ postId: body.postId ?? body.post_id })
@@ -76,7 +78,11 @@ export async function POST(request: Request) {
     if (error) {
       const reason = normalizePaidPostRpcError(error)
       if (process.env.NODE_ENV === 'development') {
-        console.warn('[PaidPosts] unlock_paid_post failed:', { reason, code: error.code })
+        logServerEvent('warn', {
+          event: 'paid_posts.unlock_failed',
+          requestId,
+          context: { reason, code: error.code ?? 'unknown' },
+        })
       }
       return jsonPaidPostError(reason, statusForReason(reason))
     }
@@ -111,7 +117,11 @@ export async function POST(request: Request) {
     })
   } catch (error) {
     if (process.env.NODE_ENV === 'development') {
-      console.warn('[PaidPosts] unexpected unlock error:', error)
+      logServerEvent('warn', {
+        event: 'paid_posts.unexpected_unlock_error',
+        requestId,
+        error,
+      })
     }
     return jsonPaidPostError('internal', 500)
   }

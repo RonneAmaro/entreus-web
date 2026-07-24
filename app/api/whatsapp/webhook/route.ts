@@ -6,6 +6,7 @@ import {
   sendWhatsAppTextMessage,
   verifyMetaSignature,
 } from '@/lib/whatsapp'
+import { getRequestCorrelationId, logServerEvent } from '@/lib/logging/safe-logger'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -40,6 +41,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const requestId = getRequestCorrelationId(request)
   const rawBody = await request.text()
 
   const signature =
@@ -155,7 +157,15 @@ export async function POST(request: NextRequest) {
         ].join('\n')
       )
     } catch (error) {
-      console.error('Erro ao responder mensagem WhatsApp:', error)
+      logServerEvent('error', {
+        event: 'whatsapp_webhook.reply_failed',
+        requestId,
+        context: {
+          messageType: message.type,
+          hasProfileName: Boolean(message.profileName),
+        },
+        error,
+      })
     }
   }
 

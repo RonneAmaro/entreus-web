@@ -12,6 +12,7 @@ import {
   type CreatorWithdrawalValidationInput,
   type PixWithdrawalPaymentDetails,
 } from '@/lib/creator-withdrawals'
+import { getRequestCorrelationId, logServerEvent } from '@/lib/logging/safe-logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -114,6 +115,7 @@ function jsonWithdrawalError(reason: CreatorWithdrawalErrorReason, status = stat
 }
 
 export async function GET(request: Request) {
+  const requestId = getRequestCorrelationId(request)
   try {
     const supabase = getSupabaseForRequest(request)
     const {
@@ -157,13 +159,18 @@ export async function GET(request: Request) {
     })
   } catch (error) {
     if (process.env.NODE_ENV === 'development') {
-      console.warn('[CreatorWithdrawals] GET failed:', error)
+      logServerEvent('warn', {
+        event: 'creator_withdrawals.get_failed',
+        requestId,
+        error,
+      })
     }
     return jsonWithdrawalError('internal', 500)
   }
 }
 
 export async function POST(request: Request) {
+  const requestId = getRequestCorrelationId(request)
   try {
     const body = (await request.json().catch(() => ({}))) as CreatorWithdrawalRequestBody
     const supabase = getSupabaseForRequest(request)
@@ -214,7 +221,11 @@ export async function POST(request: Request) {
     })
   } catch (error) {
     if (process.env.NODE_ENV === 'development') {
-      console.warn('[CreatorWithdrawals] POST failed:', error)
+      logServerEvent('warn', {
+        event: 'creator_withdrawals.post_failed',
+        requestId,
+        error,
+      })
     }
     return jsonWithdrawalError('internal', 500)
   }

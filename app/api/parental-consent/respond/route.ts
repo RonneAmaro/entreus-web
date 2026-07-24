@@ -1,6 +1,7 @@
 import { createHash } from 'crypto'
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getRequestCorrelationId, logServerEvent } from '@/lib/logging/safe-logger'
 
 export const runtime = 'nodejs'
 
@@ -288,6 +289,7 @@ async function findRequestByToken(server: ServerSupabase, token: string) {
 }
 
 export async function GET(request: Request) {
+  const requestId = getRequestCorrelationId(request)
   try {
     const token = new URL(request.url).searchParams.get('token') || ''
 
@@ -311,7 +313,11 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ request: sanitizeRequest(data as ConsentRequest) })
   } catch (error) {
-    console.error('Erro ao carregar autorizacao parental:', error)
+    logServerEvent('error', {
+      event: 'parental_consent_respond.load_failed',
+      requestId,
+      error,
+    })
 
     return NextResponse.json(
       { error: 'Nao foi possivel carregar a autorizacao agora.' },
@@ -321,6 +327,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const requestId = getRequestCorrelationId(request)
   try {
     const parsedBody = await parseDecisionBody(request)
     const token = parsedBody.token
@@ -524,7 +531,11 @@ export async function POST(request: Request) {
       message: decision === 'approved' ? 'Autorizacao aprovada.' : 'Autorizacao recusada.',
     })
   } catch (error) {
-    console.error('Erro ao responder autorizacao parental:', error)
+    logServerEvent('error', {
+      event: 'parental_consent_respond.submit_failed',
+      requestId,
+      error,
+    })
 
     return NextResponse.json(
       { error: 'Nao foi possivel responder a autorizacao agora.' },
