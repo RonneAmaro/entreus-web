@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { calculatePaymentTotals, PLATFORM_FEE_PERCENT } from '@/lib/payment-fees'
 import { getSafeCheckoutUrl } from '@/lib/vip-checkout-flow'
 import { getVipPurchasePlan, VIP_PRICE_VERSION } from '@/lib/vip-plans'
+import { getRequestCorrelationId, logServerEvent } from '@/lib/logging/safe-logger'
 
 type CreateVipOrderBody = {
   plan_key?: unknown
@@ -40,6 +41,8 @@ function getSupabaseForRequest(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const requestId = getRequestCorrelationId(request)
+
   try {
     const body = (await request.json().catch(() => ({}))) as CreateVipOrderBody
     const planKey = typeof body.plan_key === 'string' ? body.plan_key : ''
@@ -85,9 +88,14 @@ export async function POST(request: Request) {
     })
 
     if (orderError || !orderData) {
-      console.error('Nao foi possivel criar o pedido VIP.', { code: orderError?.code })
+      logServerEvent('error', {
+        event: 'vip_purchase_order.create_failed',
+        requestId,
+        context: { planKey: plan.planKey },
+        error: orderError,
+      })
       return NextResponse.json(
-        { ok: false, error: 'Não foi possível preparar a compra VIP agora. Tente novamente em instantes.' },
+        { ok: false, error: 'NÃ£o foi possÃ­vel preparar a compra VIP agora. Tente novamente em instantes.' },
         { status: 400 },
       )
     }
@@ -108,12 +116,18 @@ export async function POST(request: Request) {
       },
     })
   } catch (error) {
-    console.error('Erro ao preparar pedido VIP:', error)
+    logServerEvent('error', {
+      event: 'vip_purchase_order.unexpected_post_error',
+      requestId,
+      error,
+    })
     return NextResponse.json({ ok: false, error: 'Erro interno ao preparar pedido VIP.' }, { status: 500 })
   }
 }
 
 export async function GET(request: Request) {
+  const requestId = getRequestCorrelationId(request)
+
   try {
     const supabase = getSupabaseForRequest(request)
     const {
@@ -136,8 +150,12 @@ export async function GET(request: Request) {
       .maybeSingle()
 
     if (error) {
-      console.error('Nao foi possivel consultar pedido VIP pendente.', { code: error.code })
-      return NextResponse.json({ ok: false, error: 'Não foi possível consultar pagamentos pendentes agora.' }, { status: 500 })
+      logServerEvent('warn', {
+        event: 'vip_purchase_order.pending_lookup_failed',
+        requestId,
+        error,
+      })
+      return NextResponse.json({ ok: false, error: 'NÃ£o foi possÃ­vel consultar pagamentos pendentes agora.' }, { status: 500 })
     }
 
     const order = data as PaymentOrder | null
@@ -159,7 +177,12 @@ export async function GET(request: Request) {
             }
           : null,
     })
-  } catch {
-    return NextResponse.json({ ok: false, error: 'Não foi possível consultar pagamentos pendentes agora.' }, { status: 500 })
+  } catch (error) {
+    logServerEvent('error', {
+      event: 'vip_purchase_order.unexpected_get_error',
+      requestId,
+      error,
+    })
+    return NextResponse.json({ ok: false, error: 'NÃ£o foi possÃ­vel consultar pagamentos pendentes agora.' }, { status: 500 })
   }
 }

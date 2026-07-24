@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { calculatePaymentTotals, getPaymentMethodConfig, PLATFORM_FEE_PERCENT } from '@/lib/payment-fees'
+import { getRequestCorrelationId, logServerEvent } from '@/lib/logging/safe-logger'
 
 type PaymentOrder = {
   id: string
@@ -102,11 +103,15 @@ function isValidMercadoPagoNotificationUrl(value: string) {
 }
 
 export async function POST(request: Request) {
+  const requestId = getRequestCorrelationId(request)
   try {
     const accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN
 
     if (!accessToken) {
-      console.error('Mercado Pago Pix configuracao ausente: MERCADO_PAGO_ACCESS_TOKEN.')
+      logServerEvent('error', {
+        event: 'mercadopago_pix.config_missing',
+        requestId,
+      })
       return NextResponse.json(
         { error: MERCADO_PAGO_CONFIGURATION_ERROR },
         { status: 503 }
@@ -124,16 +129,15 @@ export async function POST(request: Request) {
         safeHostname = 'invalid-url'
       }
 
-      console.error('Mercado Pago Pix notification_url debug', {
-        source: notificationUrl.source,
-        value: notificationUrl.value,
-        startsWithHttps: notificationUrl.value.startsWith('https://'),
-        hostname: safeHostname,
+      logServerEvent('error', {
+        event: 'mercadopago_pix.invalid_notification_url',
+        requestId,
+        context: {
+          source: notificationUrl.source,
+          startsWithHttps: notificationUrl.value.startsWith('https://'),
+          hostname: safeHostname,
+        },
       })
-
-      console.error(
-        `Mercado Pago Pix notification_url invalida. Configure ${notificationUrl.source} com uma URL publica HTTPS.`
-      )
 
       return NextResponse.json(
         { error: INVALID_NOTIFICATION_URL_ERROR },
@@ -182,8 +186,11 @@ export async function POST(request: Request) {
     })
 
     if (orderError || !orderData) {
-      console.error('Mercado Pago Pix nao conseguiu criar o pedido interno.', {
-        code: orderError?.code || null,
+      logServerEvent('error', {
+        event: 'mercadopago_pix.order_creation_failed',
+        requestId,
+        context: { amountItacash, paymentMethod: paymentMethod.value },
+        error: orderError,
       })
       return NextResponse.json(
         { error: PIX_ORDER_CREATION_ERROR },
@@ -226,9 +233,14 @@ export async function POST(request: Request) {
     const transactionData = payment?.point_of_interaction?.transaction_data
 
     if (!paymentResponse.ok || !payment?.id || (!transactionData?.qr_code && !transactionData?.qr_code_base64)) {
-      console.error('Mercado Pago Pix nao retornou um QR Code valido.', {
-        status: paymentResponse.status,
-        providerStatus: payment?.status || null,
+      logServerEvent('error', {
+        event: 'mercadopago_pix.provider_qr_failed',
+        requestId,
+        context: {
+          status: paymentResponse.status,
+          providerStatus: payment?.status || null,
+          orderId: order.id,
+        },
       })
       return NextResponse.json(
         { error: PIX_PROVIDER_ERROR },
@@ -247,8 +259,14 @@ export async function POST(request: Request) {
     })
 
     if (attachError) {
-      console.error('Mercado Pago Pix nao conseguiu registrar o pagamento gerado.', {
-        code: attachError.code || null,
+      logServerEvent('error', {
+        event: 'mercadopago_pix.attach_failed',
+        requestId,
+        context: {
+          orderId: order.id,
+          providerPaymentId: String(payment.id),
+        },
+        error: attachError,
       })
       return NextResponse.json(
         { error: PIX_PERSISTENCE_ERROR },
@@ -270,7 +288,11 @@ export async function POST(request: Request) {
       totals,
     })
   } catch (error) {
-    console.error('Erro ao criar Pix Mercado Pago:', error)
+    logServerEvent('error', {
+      event: 'mercadopago_pix.unexpected_error',
+      requestId,
+      error,
+    })
 
     return NextResponse.json(
       { error: 'Erro interno ao criar Pix Mercado Pago.' },

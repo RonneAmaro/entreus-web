@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { calculatePaymentTotals, getPaymentMethodConfig } from '@/lib/payment-fees'
 import { getSafeCheckoutUrl } from '@/lib/vip-checkout-flow'
 import { getVipPurchasePlan, VIP_PRICE_VERSION } from '@/lib/vip-plans'
+import { getRequestCorrelationId, logServerEvent } from '@/lib/logging/safe-logger'
 
 type ProductType = 'itacash' | 'vip_plus'
 
@@ -59,6 +60,7 @@ function calculateTotals(
 }
 
 export async function POST(request: Request) {
+  const requestId = getRequestCorrelationId(request)
   try {
     const accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL
@@ -141,8 +143,11 @@ export async function POST(request: Request) {
     })
 
     if (orderError || !orderData) {
-      console.error('Mercado Pago preference nao conseguiu criar o pedido interno.', {
-        code: orderError?.code || null,
+      logServerEvent('error', {
+        event: 'mercadopago_preference.order_creation_failed',
+        requestId,
+        context: { productType, paymentMethod: paymentMethod.value, planKey: vipPlan?.planKey || null },
+        error: orderError,
       })
       return NextResponse.json(
         { error: PAYMENT_ORDER_CREATION_ERROR },
@@ -205,8 +210,10 @@ export async function POST(request: Request) {
     const preference = (await preferenceResponse.json().catch(() => null)) as MercadoPagoPreference | null
 
     if (!preferenceResponse.ok || !preference?.id) {
-      console.error('Mercado Pago recusou a criacao da preferencia.', {
-        status: preferenceResponse.status,
+      logServerEvent('error', {
+        event: 'mercadopago_preference.provider_rejected',
+        requestId,
+        context: { status: preferenceResponse.status, productType, orderId: order.id },
       })
 
       return NextResponse.json(
@@ -218,8 +225,10 @@ export async function POST(request: Request) {
     const initPoint = getSafeCheckoutUrl(preference.init_point || preference.sandbox_init_point)
 
     if (!initPoint) {
-      console.error('Mercado Pago criou uma preferencia sem URL de checkout valida.', {
-        preferenceId: preference.id,
+      logServerEvent('error', {
+        event: 'mercadopago_preference.invalid_checkout_url',
+        requestId,
+        context: { preferenceId: preference.id, orderId: order.id, productType },
       })
 
       return NextResponse.json(
@@ -235,8 +244,11 @@ export async function POST(request: Request) {
     })
 
     if (attachError) {
-      console.error('Nao foi possivel associar a preferencia Mercado Pago ao pedido.', {
-        code: attachError.code,
+      logServerEvent('error', {
+        event: 'mercadopago_preference.attach_failed',
+        requestId,
+        context: { orderId: order.id, preferenceId: preference.id, productType },
+        error: attachError,
       })
 
       return NextResponse.json(
@@ -255,7 +267,11 @@ export async function POST(request: Request) {
       totals,
     })
   } catch (error) {
-    console.error('Erro ao criar preferencia Mercado Pago:', error)
+    logServerEvent('error', {
+      event: 'mercadopago_preference.unexpected_error',
+      requestId,
+      error,
+    })
 
     return NextResponse.json(
       { error: 'Erro interno ao criar pagamento.' },

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import crypto from 'crypto'
 import { verifyVipPaymentForActivation } from '@/lib/vip-payment-verification'
+import { getRequestCorrelationId, logServerEvent } from '@/lib/logging/safe-logger'
 
 type MercadoPagoPayment = {
   id?: number | string
@@ -627,6 +628,7 @@ async function processMerchantOrder(resourceId: string, accessToken: string) {
 }
 
 export async function POST(request: Request) {
+  const requestId = getRequestCorrelationId(request)
   try {
     const accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN
 
@@ -640,10 +642,14 @@ export async function POST(request: Request) {
     const signature = verifyMercadoPagoWebhookSignature(request, body)
 
     if (!signature.ok) {
-      console.warn('Mercado Pago webhook rejeitado por assinatura invalida.', {
-        reason: signature.reason,
-        eventType,
-        hasResourceId: Boolean(resourceId),
+      logServerEvent('warn', {
+        event: 'mercadopago_webhook.invalid_signature',
+        requestId,
+        context: {
+          reason: signature.reason,
+          eventType,
+          hasResourceId: Boolean(resourceId),
+        },
       })
 
       return NextResponse.json(
@@ -652,13 +658,17 @@ export async function POST(request: Request) {
       )
     }
 
-    console.info('Mercado Pago webhook recebido', {
-      eventType,
-      action: body && typeof body === 'object' ? (body as MercadoPagoWebhookPayload).action || null : null,
-      topic: body && typeof body === 'object' ? (body as MercadoPagoWebhookPayload).topic || null : null,
-      liveMode: body && typeof body === 'object' ? (body as MercadoPagoWebhookPayload).live_mode ?? null : null,
-      resourceId,
-      signatureConfigured: signature.configured,
+    logServerEvent('info', {
+      event: 'mercadopago_webhook.received',
+      requestId,
+      context: {
+        eventType,
+        action: body && typeof body === 'object' ? (body as MercadoPagoWebhookPayload).action || null : null,
+        topic: body && typeof body === 'object' ? (body as MercadoPagoWebhookPayload).topic || null : null,
+        liveMode: body && typeof body === 'object' ? (body as MercadoPagoWebhookPayload).live_mode ?? null : null,
+        resourceId,
+        signatureConfigured: signature.configured,
+      },
     })
 
     if (!resourceId) {
@@ -681,7 +691,11 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ok: true, received: true, ignored: true, reason: 'unsupported_event', eventType })
   } catch (error) {
-    console.error('Erro no webhook Mercado Pago:', error instanceof Error ? error.message : 'unknown_error')
+    logServerEvent('error', {
+      event: 'mercadopago_webhook.unexpected_error',
+      requestId,
+      error,
+    })
 
     return NextResponse.json(
       { ok: false, error: 'Erro interno controlado no webhook Mercado Pago.' },

@@ -3,6 +3,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse } from 'next/server'
 import { canPreparePostMediaUpload, resolvePostMediaAccessLevel } from '@/lib/media/post-media-access'
+import { getRequestCorrelationId, logServerEvent } from '@/lib/logging/safe-logger'
 import {
   UPLOAD_EXTENSION_BY_MIME_TYPE,
   formatUploadLimitMegabytes,
@@ -218,7 +219,13 @@ function isRateLimited(request: Request, userId: string) {
 }
 
 export async function POST(request: Request) {
+  const requestId = getRequestCorrelationId(request)
   if (!hasR2Config()) {
+    logServerEvent('error', {
+      event: 'r2_presign.config_missing',
+      requestId,
+      context: { hasR2Config: false },
+    })
     return NextResponse.json(
       {
         ok: false,
@@ -230,6 +237,11 @@ export async function POST(request: Request) {
   }
 
   if (!hasSupabaseConfig()) {
+    logServerEvent('error', {
+      event: 'r2_presign.auth_config_missing',
+      requestId,
+      context: { hasSupabaseConfig: false },
+    })
     return NextResponse.json(
       {
         ok: false,
@@ -303,12 +315,17 @@ export async function POST(request: Request) {
     accessLevel: body.accessLevel,
   })
 
-  console.info('[R2Presign] Upload solicitado:', {
-    fileName: body.fileName,
-    fileType: typeof body.contentType === 'string' ? body.contentType : null,
-    fileSize: typeof body.fileSize === 'number' ? body.fileSize : null,
-    contentType,
-    folder,
+  logServerEvent('info', {
+    event: 'r2_presign.requested',
+    requestId,
+    context: {
+      fileName: body.fileName,
+      fileType: typeof body.contentType === 'string' ? body.contentType : null,
+      fileSize: typeof body.fileSize === 'number' ? body.fileSize : null,
+      contentType,
+      folder,
+      accessLevel,
+    },
   })
 
   if (!folder || !accessLevel || (accessLevel !== 'public' && folder !== 'posts')) {
@@ -430,18 +447,20 @@ export async function POST(request: Request) {
     })
     const publicUrl = accessLevel === 'public' && !profileMediaReview ? buildPublicUrl(publicBaseUrl, key) : null
 
-    console.info('[R2Presign] Upload preparado:', {
-      fileName: body.fileName,
-      fileType: typeof body.contentType === 'string' ? body.contentType : null,
-      fileSize: body.fileSize,
-      contentType,
-      folder,
-      status: 200,
-      hasUploadUrl: Boolean(uploadUrl),
-      accessLevel,
-      requiresReview: profileMediaReview,
-      hasPublicUrl: Boolean(publicUrl),
-      hasKey: Boolean(key),
+    logServerEvent('info', {
+      event: 'r2_presign.prepared',
+      requestId,
+      context: {
+        fileName: body.fileName,
+        fileType: typeof body.contentType === 'string' ? body.contentType : null,
+        fileSize: body.fileSize,
+        contentType,
+        folder,
+        accessLevel,
+        requiresReview: profileMediaReview,
+        hasPublicUrl: Boolean(publicUrl),
+        hasKey: Boolean(key),
+      },
     })
 
     return NextResponse.json({
@@ -460,13 +479,17 @@ export async function POST(request: Request) {
       expiresIn: PRESIGNED_URL_EXPIRES_IN_SECONDS,
     })
   } catch (error) {
-    console.error('[R2Presign] Falha ao preparar upload:', {
-      fileName: body.fileName,
-      fileType: typeof body.contentType === 'string' ? body.contentType : null,
-      fileSize: body.fileSize,
-      contentType,
-      folder,
-      error: error instanceof Error ? error.message : 'Erro inesperado no presign.',
+    logServerEvent('error', {
+      event: 'r2_presign.prepare_failed',
+      requestId,
+      context: {
+        fileName: body.fileName,
+        fileType: typeof body.contentType === 'string' ? body.contentType : null,
+        fileSize: body.fileSize,
+        contentType,
+        folder,
+      },
+      error,
     })
 
     return NextResponse.json(

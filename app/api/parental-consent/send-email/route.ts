@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'crypto'
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getRequestSiteUrl, siteConfig } from '@/lib/site-config'
+import { getRequestCorrelationId, logServerEvent } from '@/lib/logging/safe-logger'
 
 export const runtime = 'nodejs'
 
@@ -93,10 +94,12 @@ async function sendResendEmail({
   to,
   approvalUrl,
   guardianName,
+  requestId,
 }: {
   to: string
   approvalUrl: string
   guardianName: string
+  requestId: string
 }) {
   const resendApiKey = process.env.RESEND_API_KEY
   const emailFrom = process.env.EMAIL_FROM
@@ -126,7 +129,11 @@ async function sendResendEmail({
       }),
     })
   } catch (error) {
-    console.error('Falha de rede ao enviar e-mail parental pela Resend:', error)
+    logServerEvent('error', {
+      event: 'parental_consent_email.network_failed',
+      requestId,
+      error,
+    })
 
     return {
       sent: false,
@@ -136,7 +143,11 @@ async function sendResendEmail({
   }
 
   if (!response.ok) {
-    console.error('Erro ao enviar e-mail parental pela Resend:', response.status)
+    logServerEvent('warn', {
+      event: 'parental_consent_email.provider_failed',
+      requestId,
+      context: { status: response.status },
+    })
 
     return {
       sent: false,
@@ -153,6 +164,7 @@ async function sendResendEmail({
 }
 
 export async function POST(request: Request) {
+  const requestId = getRequestCorrelationId(request)
   try {
     const body = await request.json().catch(() => null)
     const guardianEmail = String(body?.guardian_email || '').trim().toLowerCase()
@@ -184,6 +196,11 @@ export async function POST(request: Request) {
       .maybeSingle()
 
     if (profileError) {
+      logServerEvent('warn', {
+        event: 'parental_consent.profile_lookup_failed',
+        requestId,
+        error: profileError,
+      })
       return NextResponse.json(
         { error: 'Nao foi possivel verificar sua conta agora.' },
         { status: 500 },
@@ -248,6 +265,12 @@ export async function POST(request: Request) {
     }
 
     if (created.error || !created.data) {
+      logServerEvent('error', {
+        event: 'parental_consent.request_create_failed',
+        requestId,
+        context: { userId: user.id },
+        error: created.error,
+      })
       return NextResponse.json(
         { error: 'Nao foi possivel criar a solicitacao de autorizacao.' },
         { status: 500 },
@@ -268,6 +291,12 @@ export async function POST(request: Request) {
       .eq('id', user.id)
 
     if (updateProfileError) {
+      logServerEvent('error', {
+        event: 'parental_consent.profile_update_failed',
+        requestId,
+        context: { userId: user.id },
+        error: updateProfileError,
+      })
       return NextResponse.json(
         { error: 'A solicitacao foi criada, mas nao foi possivel atualizar o status da conta.' },
         { status: 500 },
@@ -279,6 +308,7 @@ export async function POST(request: Request) {
       to: guardianEmail,
       approvalUrl,
       guardianName,
+      requestId,
     })
     const isProduction = process.env.NODE_ENV === 'production'
     const canUseDevLink = !isProduction && !emailResult.sent
@@ -300,7 +330,11 @@ export async function POST(request: Request) {
       { status: emailResult.sent || canUseDevLink ? 200 : 503 },
     )
   } catch (error) {
-    console.error('Erro ao solicitar autorizacao parental por e-mail:', error)
+    logServerEvent('error', {
+      event: 'parental_consent.unexpected_error',
+      requestId,
+      error,
+    })
 
     return NextResponse.json(
       { error: 'Nao foi possivel solicitar autorizacao parental agora.' },

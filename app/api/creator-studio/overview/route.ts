@@ -9,6 +9,7 @@ import {
   sumIntegerAmounts,
   type CreatorStudioPost,
 } from '@/lib/creator/creator-studio'
+import { getRequestCorrelationId, logServerEvent } from '@/lib/logging/safe-logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,6 +31,7 @@ type PostRow = {
 }
 
 export async function GET(request: NextRequest) {
+  const requestId = getRequestCorrelationId(request)
   try {
     const period = parseCreatorPeriod(request.nextUrl.searchParams.get('period') || '30')
     if (!period) return privateJson({ ok: false, error: 'invalid_period' }, 400)
@@ -39,7 +41,14 @@ export async function GET(request: NextRequest) {
 
     const supabase = clientFor(request)
     const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) return privateJson({ ok: false, error: 'not_authenticated' }, 401)
+    if (authError || !user) {
+      logServerEvent('warn', {
+        event: 'creator_studio_overview.auth_failed',
+        requestId,
+        error: authError,
+      })
+      return privateJson({ ok: false, error: 'not_authenticated' }, 401)
+    }
 
     const partialErrors: string[] = []
     const profileQuery = supabase.from('profiles')
@@ -61,8 +70,24 @@ export async function GET(request: NextRequest) {
       supabase.from('itacash_transactions').select('amount').eq('user_id', user.id).eq('type', 'paid_post_received'),
       supabase.from('creator_withdrawal_requests').select('amount_itacash').eq('user_id', user.id).in('status', ['pending', 'approved']),
     ])
-    if (profileResult.error || !profileResult.data) return privateJson({ ok: false, error: 'profile_unavailable' }, 403)
-    if (postsResult.error) return privateJson({ ok: false, error: 'content_unavailable' }, 503)
+    if (profileResult.error || !profileResult.data) {
+      logServerEvent('warn', {
+        event: 'creator_studio_overview.profile_unavailable',
+        requestId,
+        context: { userId: user.id },
+        error: profileResult.error,
+      })
+      return privateJson({ ok: false, error: 'profile_unavailable' }, 403)
+    }
+    if (postsResult.error) {
+      logServerEvent('error', {
+        event: 'creator_studio_overview.posts_unavailable',
+        requestId,
+        context: { userId: user.id, period, hasCursor: Boolean(cursor) },
+        error: postsResult.error,
+      })
+      return privateJson({ ok: false, error: 'content_unavailable' }, 503)
+    }
 
     const allRows = (postsResult.data || []) as PostRow[]
     const pageRows = allRows.slice(0, CREATOR_CONTENT_PAGE_SIZE)
@@ -100,6 +125,13 @@ export async function GET(request: NextRequest) {
     for (const [name, result] of [['followers', followersResult], ['wallet', walletResult], ['tips', tipsResult], ['paidPosts', paidResult], ['withdrawals', withdrawalsResult]] as const) {
       if (result.error) partialErrors.push(name)
     }
+    if (partialErrors.length > 0) {
+      logServerEvent('warn', {
+        event: 'creator_studio_overview.partial_data',
+        requestId,
+        context: { userId: user.id, partialErrors, period, postCount: pageRows.length },
+      })
+    }
     const profile = profileResult.data
     const totalPosts = postsResult.count ?? pageRows.length
     const next = allRows.length > CREATOR_CONTENT_PAGE_SIZE ? pageRows[pageRows.length - 1] : null
@@ -136,7 +168,16 @@ export async function GET(request: NextRequest) {
         period,
       },
     })
-  } catch {
+  } catch (error) {
+    logServerEvent('error', {
+      event: 'creator_studio_overview.unexpected_error',
+      requestId,
+      context: {
+        period: request.nextUrl.searchParams.get('period') || '30',
+        hasCursor: Boolean(request.nextUrl.searchParams.get('cursor')),
+      },
+      error,
+    })
     return privateJson({ ok: false, error: 'internal' }, 500)
   }
 }

@@ -1266,7 +1266,7 @@ export default function ProfilePage() {
 
     if (!response.ok || !result?.ok || !result.theme) {
       setSavingProfileTheme(false)
-      setMessage('Nao foi possivel salvar o tema do perfil.')
+      setMessage(t('common.saveFailed'))
       return
     }
 
