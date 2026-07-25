@@ -5,6 +5,8 @@ import { publicProfileCatalogs } from './public-profile'
 export const zhCN = extendEnglishCatalog({
   ...purchaseCatalogs['zh-CN'],
   ...publicProfileCatalogs['zh-CN'],
+  'feed.emptyTitle': '您的动态目前还是空的。',
+  'feed.emptyDescription': '当您关注更多人，或者有适合您账号的帖子可见时，它们会出现在这里。在此之前，您可以先搜索、浏览个人资料，并探索 EntreUS Hub。',
   'common.loading': '加载中…', 'common.error': '发生错误。', 'common.retry': '重试', 'common.noResults': '没有结果', 'common.unavailable': '内容不可用', 'common.saved': '更改已保存。', 'common.saveFailed': '保存失败。', 'common.current': '当前', 'common.close': '关闭', 'common.comingSoon': '即将推出', 'common.theme': '主题', 'common.cancel': '取消', 'common.remove': '移除', 'common.edit': '编辑', 'common.save': '保存', 'common.saving': '正在保存…',
   'language.label': '平台语言', 'language.helper': '设置界面语言。帖子和消息将保留原始语言。', 'language.saving': '正在保存语言…', 'language.save': '保存语言', 'language.saved': '语言保存成功。', 'language.localSaveError': '无法在此设备上保存语言。', 'language.migrationMissing': '数据库配置尚未应用。您的偏好已保留在此设备上，但尚未同步到帐户。', 'language.localOnly': '您的偏好已保留在此设备上，但尚未同步到帐户。',
   'auth.login.title': '登录', 'auth.login.subtitle': '登录您的EntreUS帐户', 'auth.login.submit': '登录', 'auth.login.submitting': '正在登录…', 'auth.login.google': '使用Google继续', 'auth.login.forgot': '忘记密码', 'auth.login.noAccount': '初次使用EntreUS？', 'auth.login.create': '创建帐户', 'auth.signup.title': '创建帐户', 'auth.signup.subtitle': '加入EntreUS', 'auth.signup.submit': '创建帐户', 'auth.signup.submitting': '正在创建帐户…', 'auth.signup.hasAccount': '已有帐户？', 'auth.signup.login': '登录',
