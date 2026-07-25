@@ -705,9 +705,14 @@ export default function CreatorDashboardPage() {
             {summary.posts === 0 && (
               <section className="rounded-[2rem] border border-blue-300/20 bg-blue-500/10 p-7 text-center ring-1 ring-blue-300/10">
                 <Send className="mx-auto h-9 w-9 text-blue-200" />
-                <h2 className="mt-4 text-2xl font-black">{t('creator.dashboard.firstPostTitle')}</h2>
-                <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-blue-100/75">{t('creator.dashboard.firstPostDescription')}</p>
-                <Link href="/feed#post-composer" className="mt-5 inline-flex rounded-full bg-white px-5 py-2.5 text-sm font-black text-black transition hover:bg-blue-50">{t('creator.dashboard.createPost')}</Link>
+                <p className="mt-4 text-xs font-black uppercase tracking-[0.18em] text-blue-200">{t('creator.dashboard.getStarted')}</p>
+                <h2 className="mt-2 text-2xl font-black">{t('creator.dashboard.firstPostTitle')}</h2>
+                <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-blue-100/75">{t('creator.dashboard.emptyDashboardDescription')}</p>
+                <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+                  <Link href="/feed#post-composer" className="inline-flex rounded-full bg-white px-5 py-2.5 text-sm font-black text-black transition hover:bg-blue-50">{t('creator.dashboard.createPost')}</Link>
+                  <Link href="/creator-studio" className="inline-flex rounded-full border border-white/15 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-white/10">{t('creator.dashboard.openStudio')}</Link>
+                  {profile?.username && <Link href={`/u/${profile.username}`} className="inline-flex rounded-full border border-blue-200/20 bg-blue-950/20 px-5 py-2.5 text-sm font-bold text-blue-100 transition hover:bg-blue-950/35">{t('creator.studio.profile.viewProfile')}</Link>}
+                </div>
               </section>
             )}
 

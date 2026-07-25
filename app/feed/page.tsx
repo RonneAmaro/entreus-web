@@ -4277,7 +4277,14 @@ function FeedContent() {
             <div className="space-y-3.5 sm:space-y-5">
               {visibleFeedItems.length === 0 && (
                 <div className="rounded-[2rem] border border-zinc-200/70 bg-white/90 p-5 text-zinc-500 shadow-sm shadow-black/5 backdrop-blur dark:border-zinc-800/70 dark:bg-zinc-950/80 dark:text-zinc-400 sm:p-6">
-                  {hasSearch ? localTexts.mural.noSearchResults : t('feed.noPosts')}
+                  {hasSearch ? (
+                    localTexts.mural.noSearchResults
+                  ) : (
+                    <div className="space-y-3">
+                      <p className="font-black text-zinc-900 dark:text-white">{t('feed.emptyTitle')}</p>
+                      <p className="text-sm leading-6">{t('feed.emptyDescription')}</p>
+                    </div>
+                  )}
                 </div>
               )}
 
