@@ -244,13 +244,22 @@ export default function EntreUSHub(props: EntreUSHubProps) {
             <button type="button" onClick={closeHub} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-zinc-600 transition hover:bg-zinc-100 hover:text-zinc-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-zinc-300 dark:hover:bg-white/10 dark:hover:text-white" aria-label={t('hub.close')}><X className="h-5 w-5" /></button>
           </div>
           <label className="relative mx-auto block w-full max-w-4xl"><Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-blue-600 dark:text-blue-300" /><span className="sr-only">{t('hub.searchLabel')}</span><input ref={searchRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('hub.searchPlaceholder')} className="h-[52px] w-full rounded-2xl border border-zinc-300 bg-zinc-100 pl-12 pr-4 text-sm text-zinc-950 shadow-inner outline-none transition placeholder:text-zinc-500 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/15 dark:border-white/10 dark:bg-white/[0.07] dark:text-white dark:focus:border-blue-400/60 dark:focus:bg-white/[0.09] sm:h-14 sm:text-base" /></label>
+          <div className="mx-auto mt-3 flex w-full max-w-4xl flex-col gap-3 rounded-2xl border border-zinc-200/70 bg-zinc-50/80 px-4 py-3 text-sm text-zinc-600 dark:border-white/10 dark:bg-white/[0.04] dark:text-zinc-300 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="font-bold text-zinc-900 dark:text-white">{t('hub.discoveryScope')}</p>
+              <p className="mt-1">{t('hub.discoveryProfiles')}</p>
+            </div>
+            <Link href="/search" prefetch={false} onClick={(event) => handleRouteClick(event, localizedItems.find((item) => item.id === 'search')!)} onNavigate={() => closeHubAfterNavigation(localizedItems.find((item) => item.id === 'search')!)} className="inline-flex min-h-11 items-center justify-center rounded-full bg-blue-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
+              {t('hub.openSearch')}
+            </Link>
+          </div>
         </header>
 
         <main className="relative flex-1 overflow-y-auto overscroll-contain px-4 pb-6 sm:px-8 lg:px-10">
           {query ? (
             <section aria-live="polite" className="mx-auto max-w-5xl py-4 sm:py-6">
               <h3 className="mb-4 text-sm font-black text-zinc-800 dark:text-zinc-200">{t('hub.results')} <span className="ml-1 font-medium text-zinc-500 dark:text-zinc-400">{results.length}</span></h3>
-              {results.length === 0 ? <div className="flex min-h-52 flex-col items-center justify-center rounded-3xl bg-zinc-50 px-6 py-12 text-center dark:bg-white/[0.025]"><Search className="mb-3 h-8 w-8 text-zinc-500 dark:text-zinc-400" /><p className="font-bold">{t('hub.noResults')}</p><p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">{t('hub.noResultsHint')}</p></div> : <div className="grid grid-cols-[repeat(auto-fit,minmax(6.5rem,1fr))] gap-1 sm:grid-cols-[repeat(auto-fit,minmax(8rem,1fr))]">{results.map((item) => appLink(item))}</div>}
+              {results.length === 0 ? <div className="flex min-h-52 flex-col items-center justify-center rounded-3xl bg-zinc-50 px-6 py-12 text-center dark:bg-white/[0.025]"><Search className="mb-3 h-8 w-8 text-zinc-500 dark:text-zinc-400" /><p className="font-bold">{t('hub.noResults')}</p><p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">{t('hub.noResultsHint')}</p><Link href="/search" prefetch={false} onClick={(event) => handleRouteClick(event, localizedItems.find((item) => item.id === 'search')!)} onNavigate={() => closeHubAfterNavigation(localizedItems.find((item) => item.id === 'search')!)} className="mt-4 inline-flex min-h-11 items-center justify-center rounded-full bg-blue-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">{t('hub.openSearch')}</Link></div> : <div className="grid grid-cols-[repeat(auto-fit,minmax(6.5rem,1fr))] gap-1 sm:grid-cols-[repeat(auto-fit,minmax(8rem,1fr))]">{results.map((item) => appLink(item))}</div>}
             </section>
           ) : showAll ? (
             <div className="mx-auto max-w-6xl py-4 sm:py-6">

@@ -5,6 +5,11 @@ import { publicProfileCatalogs } from './public-profile'
 export const ja = extendEnglishCatalog({
   ...purchaseCatalogs.ja,
   ...publicProfileCatalogs.ja,
+  'hub.discoveryScope': 'Hub ではページやプラットフォーム機能を見つけられます。',
+  'hub.discoveryProfiles': '人やプロフィールを探すには検索を開いてください。',
+  'hub.openSearch': '人を探す',
+  'feed.emptySearchCta': '人を探す',
+  'feed.emptyComposeCta': '投稿を作成',
   'common.loading': '読み込み中…', 'common.error': 'エラーが発生しました。', 'common.retry': 'もう一度試す', 'common.noResults': '結果がありません', 'common.unavailable': 'コンテンツを利用できません', 'common.saved': '変更を保存しました。', 'common.saveFailed': '保存できませんでした。', 'common.current': '現在', 'common.close': '閉じる', 'common.comingSoon': '近日公開', 'common.theme': 'テーマ', 'common.cancel': 'キャンセル', 'common.remove': '削除', 'common.edit': '編集', 'common.save': '保存', 'common.saving': '保存中…',
   'language.label': 'プラットフォームの言語', 'language.helper': 'インターフェースの言語を設定します。投稿とメッセージは元の言語のままです。', 'language.saving': '言語を保存中…', 'language.save': '言語を保存', 'language.saved': '言語を保存しました。', 'language.localSaveError': 'この端末に言語を保存できませんでした。', 'language.migrationMissing': 'データベース設定がまだ適用されていません。この端末には設定が保持されますが、アカウントとは同期されていません。', 'language.localOnly': 'この端末には設定が保持されますが、アカウントとは同期されていません。',
   'auth.login.title': 'ログイン', 'auth.login.subtitle': 'EntreUSアカウントにログイン', 'auth.login.submit': 'ログイン', 'auth.login.submitting': 'ログイン中…', 'auth.login.google': 'Googleで続行', 'auth.login.forgot': 'パスワードを忘れた場合', 'auth.login.noAccount': 'EntreUSは初めてですか？', 'auth.login.create': 'アカウントを作成', 'auth.signup.title': 'アカウントを作成', 'auth.signup.subtitle': 'EntreUSに参加', 'auth.signup.submit': 'アカウントを作成', 'auth.signup.submitting': 'アカウントを作成中…', 'auth.signup.hasAccount': 'すでにアカウントをお持ちですか？', 'auth.signup.login': 'ログイン',

@@ -5,6 +5,11 @@ import { publicProfileCatalogs } from './public-profile'
 export const ko = extendEnglishCatalog({
   ...purchaseCatalogs.ko,
   ...publicProfileCatalogs.ko,
+  'hub.discoveryScope': 'Hub에서는 플랫폼의 페이지와 기능을 찾을 수 있습니다.',
+  'hub.discoveryProfiles': '사람과 프로필을 찾으려면 검색을 여세요.',
+  'hub.openSearch': '사람 찾기',
+  'feed.emptySearchCta': '사람 찾기',
+  'feed.emptyComposeCta': '게시물 만들기',
   'common.loading': '불러오는 중…', 'common.error': '오류가 발생했습니다.', 'common.retry': '다시 시도', 'common.noResults': '결과 없음', 'common.unavailable': '콘텐츠를 사용할 수 없음', 'common.saved': '변경사항이 저장되었습니다.', 'common.saveFailed': '저장하지 못했습니다.', 'common.current': '현재', 'common.close': '닫기', 'common.comingSoon': '곧 제공 예정', 'common.theme': '테마', 'common.cancel': '취소', 'common.remove': '삭제', 'common.edit': '수정', 'common.save': '저장', 'common.saving': '저장 중…',
   'language.label': '플랫폼 언어', 'language.helper': '인터페이스 언어를 설정합니다. 게시물과 메시지는 원래 언어로 유지됩니다.', 'language.saving': '언어 저장 중…', 'language.save': '언어 저장', 'language.saved': '언어가 저장되었습니다.', 'language.localSaveError': '이 기기에 언어를 저장할 수 없습니다.', 'language.migrationMissing': '데이터베이스 설정이 아직 적용되지 않았습니다. 이 기기에는 환경설정이 유지되지만 계정과 동기화되지 않았습니다.', 'language.localOnly': '이 기기에는 환경설정이 유지되지만 계정과 동기화되지 않았습니다.',
   'auth.login.title': '로그인', 'auth.login.subtitle': 'EntreUS 계정에 로그인하세요', 'auth.login.submit': '로그인', 'auth.login.submitting': '로그인 중…', 'auth.login.google': 'Google로 계속', 'auth.login.forgot': '비밀번호 찾기', 'auth.login.noAccount': 'EntreUS가 처음이신가요?', 'auth.login.create': '계정 만들기', 'auth.signup.title': '계정 만들기', 'auth.signup.subtitle': 'EntreUS에 가입하세요', 'auth.signup.submit': '계정 만들기', 'auth.signup.submitting': '계정 생성 중…', 'auth.signup.hasAccount': '이미 계정이 있으신가요?', 'auth.signup.login': '로그인',

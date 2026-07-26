@@ -2423,6 +2423,15 @@ export default function PublicProfilePage() {
                     className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-zinc-500"
                   />
                 </label>
+                <p className="mt-3 text-sm leading-6 text-zinc-500 dark:text-zinc-400">
+                  {t("publicProfile.searchHint")}
+                </p>
+                <Link
+                  href="/search"
+                  className="mt-3 inline-flex min-h-11 items-center justify-center rounded-full bg-blue-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-blue-500"
+                >
+                  {t("publicProfile.searchProfiles")}
+                </Link>
               </div>
 
               <div className="rounded-[2rem] border border-zinc-200/70 bg-white/95 p-4 shadow-sm ring-1 ring-black/5 dark:border-zinc-800/70 dark:bg-black/80 dark:ring-white/10">
