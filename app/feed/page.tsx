@@ -4280,9 +4280,19 @@ function FeedContent() {
                   {hasSearch ? (
                     localTexts.mural.noSearchResults
                   ) : (
-                    <div className="space-y-3">
-                      <p className="font-black text-zinc-900 dark:text-white">{t('feed.emptyTitle')}</p>
-                      <p className="text-sm leading-6">{t('feed.emptyDescription')}</p>
+                    <div className="space-y-4">
+                      <div>
+                        <p className="font-black text-zinc-950 dark:text-white">{t('feed.emptyTitle')}</p>
+                        <p className="mt-1 text-sm leading-6">{t('feed.emptyDescription')}</p>
+                      </div>
+                      <div className="flex flex-col gap-3 sm:flex-row">
+                        <Link href="/search" className="inline-flex min-h-11 items-center justify-center rounded-full bg-blue-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-blue-500">
+                          {t('feed.emptySearchCta')}
+                        </Link>
+                        <Link href="/feed?compose=text" className="inline-flex min-h-11 items-center justify-center rounded-full border border-zinc-300 px-4 py-2 text-sm font-bold text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-900">
+                          {t('feed.emptyComposeCta')}
+                        </Link>
+                      </div>
                     </div>
                   )}
                 </div>
