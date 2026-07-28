@@ -352,6 +352,15 @@ export default function CompleteProfilePage() {
             {t('completeProfile.description')}
           </p>
 
+          <div className="mt-6 space-y-3 rounded-3xl border border-white/10 bg-white/[0.03] p-5 text-sm leading-6 text-zinc-300">
+            <p className="font-black text-white">{t('completeProfile.nextStepTitle')}</p>
+            <ul className="space-y-2">
+              <li>{t('completeProfile.nextStepUsername')}</li>
+              <li>{t('completeProfile.nextStepBirthDate')}</li>
+              <li>{t('completeProfile.nextStepContinue')}</li>
+            </ul>
+          </div>
+
           <div className="mt-8 rounded-3xl border border-blue-500/20 bg-blue-950/20 p-5 text-sm leading-6 text-blue-100">
             {t('completeProfile.minorBanner')}
           </div>

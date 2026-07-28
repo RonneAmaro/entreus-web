@@ -1,14 +1,15 @@
 'use client'
 
-import AppSidebar from '../components/AppSidebar'
-import MobileNavigation from '../components/MobileNavigation'
-import BrandHeader from '../components/BrandHeader'
-import UserBadges from '../components/UserBadges'
 import Link from 'next/link'
-import { Search, UserRound } from 'lucide-react'
-import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
+import { Compass, Search, Sparkles, UserRound } from 'lucide-react'
+import { type FormEvent, useEffect, useMemo, useState } from 'react'
+import AppSidebar from '../components/AppSidebar'
+import BrandHeader from '../components/BrandHeader'
+import MobileNavigation from '../components/MobileNavigation'
+import UserBadges from '../components/UserBadges'
+import { useLanguage } from '../components/LanguageProvider'
 import { supabase } from '@/lib/supabase'
 
 type Profile = {
@@ -34,6 +35,7 @@ function getInitial(text: string) {
 export default function SearchPage() {
   const router = useRouter()
   const { theme, setTheme } = useTheme()
+  const { t } = useLanguage()
 
   const [mounted, setMounted] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -47,6 +49,22 @@ export default function SearchPage() {
   const [email, setEmail] = useState('')
   const [currentProfile, setCurrentProfile] = useState<CurrentProfile | null>(null)
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0)
+
+  const hasQuery = query.trim().length > 0
+  const hasProfiles = profiles.length > 0
+  const helperCards = useMemo(
+    () => [
+      {
+        title: t('search.scopeTitle'),
+        description: t('search.scopeDescription'),
+      },
+      {
+        title: t('search.howItWorksTitle'),
+        description: t('search.howItWorksDescription'),
+      },
+    ],
+    [t]
+  )
 
   useEffect(() => {
     setMounted(true)
@@ -92,7 +110,7 @@ export default function SearchPage() {
       setLoading(false)
     }
 
-    checkUser()
+    void checkUser()
   }, [router])
 
   async function loadUnreadNotificationsCount(userId: string) {
@@ -103,7 +121,7 @@ export default function SearchPage() {
       .eq('read', false)
 
     if (error) {
-      setMessage('Erro ao carregar notificações: ' + error.message)
+      setMessage(t('search.errors.notifications', { error: error.message }))
       return
     }
 
@@ -117,7 +135,7 @@ export default function SearchPage() {
       .eq('blocker_id', userId)
 
     if (blockedByMeError) {
-      setMessage('Erro ao carregar bloqueios: ' + blockedByMeError.message)
+      setMessage(t('search.errors.blocks', { error: blockedByMeError.message }))
       return []
     }
 
@@ -127,7 +145,7 @@ export default function SearchPage() {
       .eq('blocked_id', userId)
 
     if (blockedMeError) {
-      setMessage('Erro ao carregar bloqueios: ' + blockedMeError.message)
+      setMessage(t('search.errors.blocks', { error: blockedMeError.message }))
       return []
     }
 
@@ -144,20 +162,11 @@ export default function SearchPage() {
     return Array.from(ids)
   }
 
-  function filterBlockedProfiles(
-    allProfiles: Profile[],
-    userId: string,
-    blockedIds: string[]
-  ) {
-    return allProfiles.filter(
-      (profile) => profile.id !== userId && !blockedIds.includes(profile.id)
-    )
+  function filterBlockedProfiles(allProfiles: Profile[], userId: string, ids: string[]) {
+    return allProfiles.filter((profile) => profile.id !== userId && !ids.includes(profile.id))
   }
 
-  async function loadInitialProfiles(
-    userId = currentUserId,
-    blockedIds = blockedUserIds
-  ) {
+  async function loadInitialProfiles(userId = currentUserId, ids = blockedUserIds) {
     const { data, error } = await supabase
       .from('profiles')
       .select('id, username, display_name, bio, avatar_url')
@@ -165,16 +174,15 @@ export default function SearchPage() {
       .limit(20)
 
     if (error) {
-      setMessage('Erro ao carregar usuários: ' + error.message)
+      setMessage(t('search.errors.loadProfiles', { error: error.message }))
       return
     }
 
-    const filteredProfiles = filterBlockedProfiles(data || [], userId, blockedIds)
-    setProfiles(filteredProfiles)
+    setProfiles(filterBlockedProfiles(data || [], userId, ids))
   }
 
-  async function handleSearch(e: React.FormEvent) {
-    e.preventDefault()
+  async function handleSearch(event: FormEvent) {
+    event.preventDefault()
 
     const trimmedQuery = query.trim()
 
@@ -197,7 +205,7 @@ export default function SearchPage() {
       .limit(20)
 
     if (error) {
-      setMessage('Erro ao buscar usuários: ' + error.message)
+      setMessage(t('search.errors.runSearch', { error: error.message }))
       setSearching(false)
       return
     }
@@ -205,8 +213,8 @@ export default function SearchPage() {
     const filteredProfiles = filterBlockedProfiles(data || [], currentUserId, blockedUserIds)
     setProfiles(filteredProfiles)
 
-    if (!filteredProfiles || filteredProfiles.length === 0) {
-      setMessage('Nenhum usuário encontrado.')
+    if (filteredProfiles.length === 0) {
+      setMessage(t('search.empty.noResults'))
     }
 
     setSearching(false)
@@ -228,7 +236,7 @@ export default function SearchPage() {
   if (loading) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-zinc-50 px-4 text-black dark:bg-black dark:text-white">
-        <p>Carregando busca...</p>
+        <p>{t('search.loading')}</p>
       </main>
     )
   }
@@ -245,7 +253,7 @@ export default function SearchPage() {
 
       <MobileNavigation
         email={email}
-        displayName={currentProfile?.display_name || currentProfile?.username || 'Minha conta'}
+        displayName={currentProfile?.display_name || currentProfile?.username || t('search.myAccount')}
         avatarUrl={currentProfile?.avatar_url || null}
         unreadNotificationsCount={unreadNotificationsCount}
         mounted={mounted}
@@ -255,28 +263,47 @@ export default function SearchPage() {
         onPostClick={handlePostClick}
       />
 
-      <section className="w-full max-w-4xl overflow-x-hidden px-4 py-20 pb-24 sm:px-6 lg:ml-[calc(104px+((100vw-104px-56rem)/2))] lg:py-8">
+      <section className="w-full max-w-5xl overflow-x-hidden px-4 py-20 pb-24 sm:px-6 lg:ml-[calc(104px+((100vw-104px-70rem)/2))] lg:py-8">
         <BrandHeader
-          subtitle="Explorar"
-          description="Busque pessoas pelo nome ou @username e descubra novos perfis para seguir."
+          subtitle={t('search.headerEyebrow')}
+          description={t('search.headerDescription')}
           compact
         />
+
+        <div className="mt-5 grid gap-3 md:grid-cols-2">
+          {helperCards.map((item) => (
+            <div
+              key={item.title}
+              className="rounded-[1.5rem] border border-zinc-200/70 bg-white/90 p-4 shadow-sm shadow-black/5 ring-1 ring-black/5 backdrop-blur dark:border-zinc-800/70 dark:bg-slate-950/80 dark:ring-white/10"
+            >
+              <p className="text-sm font-black text-zinc-950 dark:text-white">{item.title}</p>
+              <p className="mt-1 text-sm leading-6 text-zinc-600 dark:text-zinc-400">{item.description}</p>
+            </div>
+          ))}
+        </div>
 
         <form
           onSubmit={handleSearch}
           className="mt-5 rounded-[1.75rem] border border-zinc-200/70 bg-white/90 p-5 shadow-sm shadow-black/5 ring-1 ring-black/5 backdrop-blur dark:border-zinc-800/70 dark:bg-slate-950/80 dark:ring-white/10 sm:p-6"
         >
-          <label className="mb-3 flex items-center gap-2 text-sm font-medium text-zinc-700 dark:text-zinc-300">
-            <Search className="h-4 w-4" />
-            Buscar por nome ou @username
-          </label>
+          <div className="mb-4 flex items-start justify-between gap-3">
+            <label className="flex items-center gap-2 text-sm font-medium text-zinc-700 dark:text-zinc-300">
+              <Search className="h-4 w-4" />
+              {t('search.inputLabel')}
+            </label>
+
+            <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700 ring-1 ring-blue-200/70 dark:bg-blue-950/30 dark:text-blue-200 dark:ring-blue-900/60">
+              {t('search.scopeBadge')}
+            </span>
+          </div>
 
           <div className="flex flex-col gap-3 sm:flex-row">
             <input
-              type="text"
+              type="search"
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Ex.: Ronne ou @ronneamaro"
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder={t('search.placeholder')}
+              aria-label={t('search.inputAriaLabel')}
               className="flex-1 rounded-2xl border border-zinc-300/80 bg-zinc-50/80 px-4 py-3 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-700/80 dark:bg-black/30 dark:focus:bg-zinc-950"
             />
 
@@ -289,9 +316,11 @@ export default function SearchPage() {
                   : 'bg-blue-500 text-white shadow-sm shadow-blue-500/25 hover:-translate-y-0.5 hover:bg-blue-400 active:scale-95'
               }`}
             >
-              {searching ? 'Buscando...' : 'Buscar'}
+              {searching ? t('search.searching') : t('search.submit')}
             </button>
           </div>
+
+          <p className="mt-3 text-sm text-zinc-500 dark:text-zinc-400">{t('search.inputHint')}</p>
 
           {message && (
             <p className="mt-4 rounded-2xl border border-zinc-200/70 bg-zinc-50/80 px-4 py-3 text-sm text-zinc-700 dark:border-zinc-800/70 dark:bg-black/30 dark:text-zinc-300">
@@ -300,15 +329,39 @@ export default function SearchPage() {
           )}
         </form>
 
-        <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
-          {profiles.length === 0 && !message && (
+        <div className="mt-6 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-black text-zinc-950 dark:text-white">
+              {hasQuery ? t('search.resultsTitle') : t('search.discoverTitle')}
+            </p>
+            <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+              {hasQuery ? t('search.resultsDescription') : t('search.discoverDescription')}
+            </p>
+          </div>
+
+          {hasQuery && (
+            <button
+              type="button"
+              onClick={() => {
+                setQuery('')
+                setMessage('')
+                void loadInitialProfiles()
+              }}
+              className="min-h-11 rounded-full border border-zinc-300 px-4 text-sm font-bold text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-900"
+            >
+              {t('search.clear')}
+            </button>
+          )}
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+          {!hasProfiles && !message && !hasQuery && (
             <div className="rounded-[1.75rem] border border-blue-200/70 bg-white/90 p-7 text-center text-zinc-500 shadow-sm shadow-blue-500/5 ring-1 ring-black/5 backdrop-blur dark:border-blue-400/15 dark:bg-slate-950/80 dark:text-zinc-400 dark:ring-white/10 md:col-span-2">
               <span className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-blue-50 text-blue-600 ring-1 ring-blue-200/70 dark:bg-blue-950/35 dark:text-blue-300 dark:ring-blue-900/60">
-                <Search className="h-7 w-7" />
+                <Compass className="h-7 w-7" />
               </span>
-              <p className="font-black text-zinc-900 dark:text-white">Comece uma busca</p>
-              <p className="mt-1 text-sm">Digite um nome ou @username para encontrar pessoas na EntreUS.</p>
-              Nenhum usuário para mostrar.
+              <p className="font-black text-zinc-900 dark:text-white">{t('search.empty.initialTitle')}</p>
+              <p className="mt-1 text-sm">{t('search.empty.initialDescription')}</p>
             </div>
           )}
 
@@ -323,6 +376,7 @@ export default function SearchPage() {
               >
                 <div className="flex items-start gap-4">
                   {profile.avatar_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- Profile avatars can come from approved runtime hosts.
                     <img
                       src={profile.avatar_url}
                       alt={displayName}
@@ -339,15 +393,10 @@ export default function SearchPage() {
                       <div className="min-w-0">
                         <div className="flex min-w-0 items-center gap-1.5">
                           <UserBadges userId={profile.id} size="sm" max={1} />
-
-                          <p className="truncate font-semibold text-black dark:text-white">
-                            {displayName}
-                          </p>
+                          <p className="truncate font-semibold text-black dark:text-white">{displayName}</p>
                         </div>
 
-                        <p className="truncate text-sm text-zinc-500">
-                          @{profile.username}
-                        </p>
+                        <p className="truncate text-sm text-zinc-500">@{profile.username}</p>
                       </div>
 
                       <div className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-zinc-500 transition group-hover:bg-blue-50 group-hover:text-blue-500 dark:bg-zinc-800 dark:group-hover:bg-blue-950/40 sm:flex">
@@ -356,8 +405,13 @@ export default function SearchPage() {
                     </div>
 
                     <p className="mt-2 line-clamp-3 text-sm text-zinc-600 dark:text-zinc-400">
-                      {profile.bio?.trim() || 'Este usuário ainda não adicionou uma bio.'}
+                      {profile.bio?.trim() || t('search.profileNoBio')}
                     </p>
+
+                    <div className="mt-3 inline-flex items-center gap-2 text-sm font-bold text-blue-700 dark:text-blue-300">
+                      <Sparkles className="h-4 w-4" />
+                      {t('search.openProfile')}
+                    </div>
                   </div>
                 </div>
               </Link>

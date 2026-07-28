@@ -10,6 +10,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import { supabase } from '@/lib/supabase'
+import { useLanguage } from '../components/LanguageProvider'
 
 type CurrentProfile = {
   username: string | null
@@ -316,6 +317,7 @@ function getNotificationHref(notification: NotificationView) {
 export default function NotificationsPage() {
   const router = useRouter()
   const { theme, setTheme } = useTheme()
+  const { t } = useLanguage()
 
   const [mounted, setMounted] = useState(false)
   const [userId, setUserId] = useState('')
@@ -729,8 +731,8 @@ export default function NotificationsPage() {
 
       <section className="w-full max-w-3xl overflow-x-hidden px-4 py-20 pb-24 sm:px-6 lg:ml-[calc(104px+((100vw-104px-48rem)/2))] lg:py-8">
         <BrandHeader
-          subtitle="Notificações"
-          description="Acompanhe curtidas, comentários, reposts e novos seguidores."
+          subtitle={t('notifications.subtitle')}
+          description={t('notifications.description')}
           compact
           rightContent={
             hasUnread ? (
@@ -741,7 +743,7 @@ export default function NotificationsPage() {
                 className="inline-flex items-center justify-center gap-2 rounded-full border border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-zinc-900 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-black dark:text-white dark:hover:bg-zinc-900"
               >
                 <CheckCheck className="h-4 w-4" />
-                {markingAll ? 'Marcando...' : 'Marcar como lidas'}
+                {markingAll ? t('notifications.markingAll') : t('notifications.markAllRead')}
               </button>
             ) : null
           }
@@ -761,18 +763,18 @@ export default function NotificationsPage() {
               </span>
 
               <p className="font-black text-zinc-900 dark:text-white">
-                Nenhuma notificação ainda.
+                {t('notifications.emptyTitle')}
               </p>
 
               <p className="mt-1 text-sm">
-                Quando alguém curtir, comentar, repostar ou seguir você, aparecerá aqui.
+                {t('notifications.emptyDescription')}
               </p>
 
               <Link
                 href="/feed"
                 className="mt-5 inline-flex rounded-full bg-blue-500 px-5 py-2 text-sm font-black text-white shadow-sm shadow-blue-500/25 transition hover:-translate-y-0.5 hover:bg-blue-400 active:scale-95"
               >
-                Voltar para o feed
+                {t('notifications.backToFeed')}
               </Link>
             </div>
           )}
