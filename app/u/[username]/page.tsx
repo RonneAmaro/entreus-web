@@ -2276,7 +2276,8 @@ export default function PublicProfilePage() {
               <div className="space-y-4 p-3 sm:p-4">
                 {feedItems.length === 0 && (
                   <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-6 text-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400">
-                    {t("publicProfile.noActivity")}
+                    <p className="font-bold text-zinc-900 dark:text-white">{t("publicProfile.noActivity")}</p>
+                    <p className="mt-2 text-sm">{t("publicProfile.noActivityHint")}</p>
                   </div>
                 )}
 
@@ -2290,6 +2291,9 @@ export default function PublicProfilePage() {
                     <p className="font-bold text-zinc-950 dark:text-white">
                       {t("publicProfile.signInExclusive")}
                     </p>
+                    <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
+                      {t("publicProfile.signInExclusiveHint")}
+                    </p>
                     <Link href="/login" className="mt-4 inline-flex rounded-full bg-zinc-950 px-5 py-2 text-sm font-bold text-white dark:bg-white dark:text-black">
                       {t("auth.login.submit")}
                     </Link>
@@ -2298,7 +2302,8 @@ export default function PublicProfilePage() {
 
                 {exclusiveAccessState === "available" && exclusiveFeedItems.length === 0 && (
                   <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-6 text-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400">
-                    {t("publicProfile.noExclusive")}
+                    <p className="font-bold text-zinc-900 dark:text-white">{t("publicProfile.noExclusive")}</p>
+                    <p className="mt-2 text-sm">{t("publicProfile.noExclusiveHint")}</p>
                   </div>
                 )}
 
