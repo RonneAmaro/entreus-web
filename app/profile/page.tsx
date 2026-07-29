@@ -277,7 +277,7 @@ export default function ProfilePage() {
   const [avatarPreview, setAvatarPreview] = useState('')
   const [bannerUrl, setBannerUrl] = useState('')
   const [bannerPreview, setBannerPreview] = useState('')
-  const [showSensitiveContent, setShowSensitiveContent] = useState(false)
+  const [, setShowSensitiveContent] = useState(false)
   const [selectedProfileTheme, setSelectedProfileTheme] = useState<ProfileThemeKey>('default')
   const [savedProfileTheme, setSavedProfileTheme] = useState<ProfileThemeKey>('default')
 
@@ -1614,7 +1614,6 @@ export default function ProfilePage() {
 
   const publicProfileUrl = username ? `/u/${username}` : '#'
   const profileAge = calculateAge(birthDate)
-  const canRequest18Plus = profileAge !== null && profileAge >= 18 && !isMinor
   const canView18Plus = !isMinor && wants18Plus && ageVerificationStatus === 'approved'
   const parentalConsentDisplayStatus = latestConsentRequest?.status || parentalConsentStatus
   const parentalConsentLabel = getParentalConsentLabel(
