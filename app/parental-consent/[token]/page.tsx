@@ -56,7 +56,33 @@ export default function ParentalConsentPage() {
   const [selfiePreviewUrl, setSelfiePreviewUrl] = useState('')
 
   useEffect(() => {
-    loadRequest()
+    async function loadRequest() {
+      if (!token) {
+        setMessage('Link invalido.')
+        setLoading(false)
+        return
+      }
+
+      setLoading(true)
+      setMessage('')
+
+      const response = await fetch(`/api/parental-consent/respond?token=${encodeURIComponent(token)}`)
+      const result = await response.json().catch(() => null)
+
+      if (!response.ok || !result?.request) {
+        setMessage(result?.error || 'Link expirado ou invalido.')
+        setLoading(false)
+        return
+      }
+
+      const loadedRequest = result.request as ConsentRequest
+
+      setRequest(loadedRequest)
+      setResultStatus(loadedRequest.status)
+      setLoading(false)
+    }
+
+    void loadRequest()
   }, [token])
 
   useEffect(() => {
@@ -71,32 +97,6 @@ export default function ParentalConsentPage() {
     () => isResponsible && authorizesNormalUse && acceptsTerms && signedName.trim().length >= 5 && Boolean(selfieFile),
     [acceptsTerms, authorizesNormalUse, isResponsible, selfieFile, signedName],
   )
-
-  async function loadRequest() {
-    if (!token) {
-      setMessage('Link invalido.')
-      setLoading(false)
-      return
-    }
-
-    setLoading(true)
-    setMessage('')
-
-    const response = await fetch(`/api/parental-consent/respond?token=${encodeURIComponent(token)}`)
-    const result = await response.json().catch(() => null)
-
-    if (!response.ok || !result?.request) {
-      setMessage(result?.error || 'Link expirado ou invalido.')
-      setLoading(false)
-      return
-    }
-
-    const loadedRequest = result.request as ConsentRequest
-
-    setRequest(loadedRequest)
-    setResultStatus(loadedRequest.status)
-    setLoading(false)
-  }
 
   async function submitDecision(decision: 'approved' | 'rejected') {
     if (!token) return
