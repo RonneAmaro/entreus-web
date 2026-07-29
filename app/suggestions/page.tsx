@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import type { FormEvent } from 'react'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ArrowDown,
   ArrowLeft,
@@ -136,62 +136,9 @@ export default function SuggestionsPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [suggestions, setSuggestions] = useState<SuggestionItem[]>([])
 
-  useEffect(() => {
-    async function loadPage() {
-      setLoading(true)
+  const loadSuggestions = useCallback(async (currentUserId?: string) => {
+    const resolvedUserId = currentUserId ?? userId
 
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-
-      if (user) {
-        setUserId(user.id)
-      }
-
-      await loadSuggestions(user?.id || '')
-      setLoading(false)
-    }
-
-    loadPage()
-  }, [])
-
-  const visibleSuggestions = useMemo(() => {
-    const normalizedQuery = searchQuery.trim().toLowerCase()
-
-    let items = [...suggestions]
-
-    if (filter === 'planned') {
-      items = items.filter((item) => item.status === 'planned')
-    } else if (filter === 'in_progress') {
-      items = items.filter((item) => item.status === 'in_progress')
-    } else if (filter === 'released') {
-      items = items.filter((item) => item.status === 'released')
-    }
-
-    if (normalizedQuery) {
-      items = items.filter((item) => {
-        return [
-          item.title,
-          item.description,
-          getCategoryLabel(item.category),
-          statusLabels[item.status],
-        ].join(' ').toLowerCase().includes(normalizedQuery)
-      })
-    }
-
-    if (filter === 'top') {
-      return items.sort((a, b) => {
-        if (b.voteTotal !== a.voteTotal) return b.voteTotal - a.voteTotal
-        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      })
-    }
-
-    return items.sort((a, b) => {
-      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    })
-  }, [filter, searchQuery, suggestions])
-
-  async function loadSuggestions(currentUserId: string = userId) {
     setMessage('')
 
     const { data: suggestionData, error: suggestionError } = await supabase
@@ -240,11 +187,66 @@ export default function SuggestionsPage() {
           ...item,
           voteTotal: itemVotes.reduce((total, vote) => total + vote.vote_value, 0),
           myVote:
-            itemVotes.find((vote) => vote.user_id === currentUserId)?.vote_value || null,
+            itemVotes.find((vote) => vote.user_id === resolvedUserId)?.vote_value || null,
         }
       })
     )
-  }
+  }, [userId])
+
+  useEffect(() => {
+    async function loadPage() {
+      setLoading(true)
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (user) {
+        setUserId(user.id)
+      }
+
+      await loadSuggestions(user?.id || '')
+      setLoading(false)
+    }
+
+    loadPage()
+  }, [loadSuggestions])
+
+  const visibleSuggestions = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLowerCase()
+
+    let items = [...suggestions]
+
+    if (filter === 'planned') {
+      items = items.filter((item) => item.status === 'planned')
+    } else if (filter === 'in_progress') {
+      items = items.filter((item) => item.status === 'in_progress')
+    } else if (filter === 'released') {
+      items = items.filter((item) => item.status === 'released')
+    }
+
+    if (normalizedQuery) {
+      items = items.filter((item) => {
+        return [
+          item.title,
+          item.description,
+          getCategoryLabel(item.category),
+          statusLabels[item.status],
+        ].join(' ').toLowerCase().includes(normalizedQuery)
+      })
+    }
+
+    if (filter === 'top') {
+      return items.sort((a, b) => {
+        if (b.voteTotal !== a.voteTotal) return b.voteTotal - a.voteTotal
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      })
+    }
+
+    return items.sort((a, b) => {
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    })
+  }, [filter, searchQuery, suggestions])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
