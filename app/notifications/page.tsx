@@ -780,7 +780,6 @@ export default function NotificationsPage() {
           )}
 
           {notifications.map((notification) => {
-            const isItaCashPurchaseStatus = isItaCashPurchaseStatusNotification(notification.type)
             const isItaCashFinancial = isItaCashFinancialNotification(notification.type)
             const isModeration = isModerationNotification(notification.type)
             const isBadge = isBadgeNotification(notification.type)
