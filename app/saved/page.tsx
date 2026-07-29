@@ -5,7 +5,7 @@ import MobileNavigation from '../components/MobileNavigation'
 import PostCard from '../components/PostCard'
 import Link from 'next/link'
 import { Bookmark } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import { supabase } from '@/lib/supabase'
@@ -19,7 +19,6 @@ import {
   canViewerSeePostClassification as canViewCommunity,
   getSafePostCommunity as normalizeCommunity,
   getSafePostContentRating as normalizeContentRating,
-  isAdultPostClassification as isAdultCommunityOrRating,
 } from '@/lib/post-classification'
 import { canViewAdultContent } from '@/lib/content-access'
 import { applyPostVisibilityFilters } from '@/lib/post-visibility'
@@ -92,6 +91,23 @@ type Post = ModeratedPostFields & {
   media?: PostMedia[]
 }
 
+type RawPost = ModeratedPostFields & {
+  id: string
+  content: string | null
+  category: string | null
+  created_at: string
+  user_id: string
+  image_url: string | null
+  video_url: string | null
+  visibility: string | null
+  is_sensitive: boolean | null
+  community_type?: string | null
+  content_rating?: string | null
+  is_paid?: boolean | null
+  price_itacash?: number | null
+  profiles: ProfileSummary | ProfileSummary[] | null
+}
+
 type Like = {
   id: string
   post_id: string
@@ -149,7 +165,11 @@ export default function SavedPage() {
   const { theme, setTheme } = useTheme()
   const { t, language } = useLanguage()
 
-  const [mounted, setMounted] = useState(false)
+  const mounted = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false
+  )
   const [userId, setUserId] = useState('')
   const [email, setEmail] = useState('')
   const [currentProfile, setCurrentProfile] = useState<CurrentProfile | null>(null)
@@ -169,10 +189,6 @@ export default function SavedPage() {
 
   const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    setMounted(true)
-  }, [])
 
   useEffect(() => {
     async function loadPageData() {
@@ -381,17 +397,6 @@ export default function SavedPage() {
     return false
   }
 
-  function isSensitivePost(post: Post) {
-    return (
-      post.is_sensitive ||
-      normalizeContentRating(post.content_rating) !== 'safe' ||
-      isAdultCommunityOrRating(post.community_type, post.content_rating, post.category) ||
-      post.category === 'adulto' ||
-      post.category === 'sensual' ||
-      post.category === '18plus'
-    )
-  }
-
   async function loadPaidUnlockIdsForPosts(currentUserId: string, postIds: string[]) {
     if (!currentUserId || postIds.length === 0) return new Set<string>()
 
@@ -542,7 +547,7 @@ export default function SavedPage() {
       return
     }
 
-    const rawPosts = (data || []).map((post: any) => ({
+    const rawPosts = ((data || []) as RawPost[]).map((post) => ({
       ...post,
       visibility: (post.visibility || 'public') as VisibilityType,
       is_sensitive: post.is_sensitive || false,

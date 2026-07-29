@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import { Compass, Search, Sparkles, UserRound } from 'lucide-react'
-import { type FormEvent, useEffect, useMemo, useState } from 'react'
+import { type FormEvent, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import AppSidebar from '../components/AppSidebar'
 import BrandHeader from '../components/BrandHeader'
 import MobileNavigation from '../components/MobileNavigation'
@@ -37,7 +37,11 @@ export default function SearchPage() {
   const { theme, setTheme } = useTheme()
   const { t } = useLanguage()
 
-  const [mounted, setMounted] = useState(false)
+  const mounted = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false
+  )
   const [loading, setLoading] = useState(true)
   const [searching, setSearching] = useState(false)
   const [query, setQuery] = useState('')
@@ -65,10 +69,6 @@ export default function SearchPage() {
     ],
     [t]
   )
-
-  useEffect(() => {
-    setMounted(true)
-  }, [])
 
   useEffect(() => {
     async function checkUser() {
