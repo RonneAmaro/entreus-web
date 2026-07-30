@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
 import {
   ArrowLeft,
-  CheckCircle2,
   Coins,
   Gift,
   Loader2,
