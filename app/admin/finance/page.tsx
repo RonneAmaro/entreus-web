@@ -21,7 +21,6 @@ import {
   FINANCIAL_EXPENSE_CATEGORIES,
   FINANCIAL_INCOME_CATEGORIES,
   calculateFinancialSummary,
-  formatCurrencyFromCents,
   getFinancialCategoriesForKind,
   validateFinancialRecordInput,
   type FinancialCategory,
