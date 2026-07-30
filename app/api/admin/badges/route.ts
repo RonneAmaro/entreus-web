@@ -616,7 +616,11 @@ async function updateVipProfile(
   if (!error) return
 
   if (/vip_source|vip_granted_by|vip_reason|vip_updated_at/i.test(error.message)) {
-    const { vip_source, vip_granted_by, vip_reason, vip_updated_at, ...fallbackPayload } = payload
+    const fallbackPayload = { ...payload }
+    delete fallbackPayload.vip_source
+    delete fallbackPayload.vip_granted_by
+    delete fallbackPayload.vip_reason
+    delete fallbackPayload.vip_updated_at
     const { error: fallbackError } = await supabase
       .from('profiles')
       .update(fallbackPayload)
