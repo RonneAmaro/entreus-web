@@ -128,55 +128,55 @@ export default function AdminAgeVerificationsPage() {
   const [adminNotes, setAdminNotes] = useState('')
 
   useEffect(() => {
-    loadPage()
-  }, [])
+    async function loadPage() {
+      setLoading(true)
+      setMessage('')
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user) {
+        router.push('/login')
+        return
+      }
+
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, role')
+        .eq('id', user.id)
+        .maybeSingle()
+
+      if (profileError) {
+        setMessage('Nao foi possivel verificar permissao admin: ' + profileError.message)
+        setLoading(false)
+        return
+      }
+
+      const loadedAdminProfile = {
+        id: user.id,
+        email: user.email,
+        role: profileData?.role || 'user',
+      }
+
+      setAdminProfile(loadedAdminProfile)
+
+      if (!isAdminRole(loadedAdminProfile.role)) {
+        setLoading(false)
+        return
+      }
+
+      await loadRequests()
+      setLoading(false)
+    }
+
+    void loadPage()
+  }, [router])
 
   const visibleRequests = useMemo(() => {
     if (filter === 'all') return requests
     return requests.filter((request) => request.status === filter)
   }, [filter, requests])
-
-  async function loadPage() {
-    setLoading(true)
-    setMessage('')
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    if (!user) {
-      router.push('/login')
-      return
-    }
-
-    const { data: profileData, error: profileError } = await supabase
-      .from('profiles')
-      .select('id, role')
-      .eq('id', user.id)
-      .maybeSingle()
-
-    if (profileError) {
-      setMessage('Nao foi possivel verificar permissao admin: ' + profileError.message)
-      setLoading(false)
-      return
-    }
-
-    const loadedAdminProfile = {
-      id: user.id,
-      email: user.email,
-      role: profileData?.role || 'user',
-    }
-
-    setAdminProfile(loadedAdminProfile)
-
-    if (!isAdminRole(loadedAdminProfile.role)) {
-      setLoading(false)
-      return
-    }
-
-    await loadRequests()
-    setLoading(false)
-  }
 
   async function loadRequests() {
     const { data, error } = await supabase
