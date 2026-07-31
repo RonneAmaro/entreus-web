@@ -81,7 +81,7 @@ function isStaticAsset(request, url) {
 async function networkFirstNavigation(request) {
   try {
     return await fetch(request)
-  } catch (error) {
+  } catch {
     const cache = await caches.open(STATIC_CACHE)
     const offline = await cache.match('/offline')
 
