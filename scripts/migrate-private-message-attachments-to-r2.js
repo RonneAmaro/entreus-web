@@ -671,7 +671,7 @@ async function updateDatabaseField(supabase, candidate, config) {
   throw new Error('Update do banco retornou linha, mas o campo nao foi confirmado com a key R2.')
 }
 
-function makeOperationBase(candidate) {
+function makeOperationBase() {
   return {
     table: SOURCE.table,
     field: SOURCE.field,
@@ -699,7 +699,7 @@ async function runMigrationOperations(supabase, config, candidates, warnings) {
   const operations = []
 
   for (const candidate of candidates) {
-    const operation = makeOperationBase(candidate)
+    const operation = makeOperationBase()
 
     try {
       const currentRow = await loadCurrentAttachment(supabase, candidate)
