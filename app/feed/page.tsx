@@ -33,7 +33,6 @@ import {
   Lock,
   MessageCircle,
   MoreHorizontal,
-  Play,
   Repeat2,
   Search,
   SmilePlus,
