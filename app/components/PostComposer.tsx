@@ -207,32 +207,6 @@ const MEDIA_INTENT_READY_MESSAGES: Record<'photo' | 'video', string> = {
   photo: 'Escolha uma foto para publicar.',
   video: 'Escolha um vídeo para publicar.',
 }
-const POST_EMOJI_GROUPS = [
-  {
-    title: 'Populares',
-    emojis: ['😀', '😍', '😂', '😎', '🔥', '❤️', '💙', '👏', '🙌', '🎉', '✨', '🚀'],
-  },
-  {
-    title: 'Emoções',
-    emojis: ['😮', '😢', '🥳', '🤔', '😘', '😜', '🥰', '😏', '😊', '😭', '😅', '🤩'],
-  },
-  {
-    title: 'Gestos',
-    emojis: ['👍', '👎', '🙏', '🫶', '💪', '🤝', '👊', '✌️', '🤙', '👋', '☝️', '🤞'],
-  },
-  {
-    title: 'Festa',
-    emojis: ['🎉', '🥳', '🎊', '🎁', '🏆', '⭐', '💎', '🌹', '📸', '🎥', '🎬', '🎵'],
-  },
-  {
-    title: 'Símbolos',
-    emojis: ['💬', '📌', '📢', '✅', '⚠️', '🔒', '🔗', '📝', '💯', '⚡', '🌎', '💡'],
-  },
-  {
-    title: 'EntreUS azul',
-    emojis: ['💙', '🫶', '🌎', '🚀', '✨', '💎', '🤝', '📣', '🌟', '🏠', '👥', '🛡️'],
-  },
-]
 
 function getInitial(name: string) {
   if (!name) return 'U'
