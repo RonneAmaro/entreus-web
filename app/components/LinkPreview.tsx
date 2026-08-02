@@ -56,12 +56,6 @@ function cleanUrl(url: string) {
   return url.replace(/[),.;!?]+$/g, '')
 }
 
-function getTrailingPunctuation(url: string) {
-  const cleanedUrl = cleanUrl(url)
-
-  return url.slice(cleanedUrl.length)
-}
-
 function getUrlMeta(url: string) {
   try {
     const parsedUrl = new URL(url)
