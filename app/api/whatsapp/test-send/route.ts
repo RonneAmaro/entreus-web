@@ -1,7 +1,14 @@
+import { createHash, timingSafeEqual } from 'node:crypto'
 import { NextResponse } from 'next/server'
+import { createRateLimiter, createRateLimitExceededResponse } from '@/lib/rate-limit'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+
+const TEST_SEND_RATE_LIMITER = createRateLimiter({
+  limit: 5,
+  windowMs: 10 * 60 * 1000,
+})
 
 type MetaWhatsAppSuccess = {
   messaging_product?: string
@@ -54,6 +61,26 @@ function getMissingEnvVars() {
   return required.filter((key) => !process.env[key])
 }
 
+function getRateLimitIp(request: Request) {
+  const forwardedFor = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+  return forwardedFor || request.headers.get('x-real-ip') || 'unknown'
+}
+
+function getBearerSecret(request: Request) {
+  const authorization = request.headers.get('authorization')?.trim() || ''
+  const match = authorization.match(/^Bearer\s+(.+)$/i)
+  return match?.[1]?.trim() || ''
+}
+
+function safeEqualSecret(received: string, expected: string) {
+  if (!received || !expected) return false
+
+  const receivedHash = createHash('sha256').update(received).digest()
+  const expectedHash = createHash('sha256').update(expected).digest()
+
+  return timingSafeEqual(receivedHash, expectedHash)
+}
+
 async function readJsonBody(request: Request) {
   try {
     return await request.json()
@@ -68,9 +95,9 @@ export async function GET() {
       ok: false,
       error: 'METHOD_NOT_ALLOWED',
       message:
-        'Use POST nesta rota, enviando o segredo no header x-test-secret.',
+        'Use POST nesta rota, enviando o segredo no header Authorization.',
       example:
-        'curl -X POST https://entreus.vercel.app/api/whatsapp/test-send -H "Content-Type: application/json" -H "x-test-secret: SEU_SEGREDO" -d \'{"message":"Teste direto do EntreUS Lab"}\'',
+        'curl -X POST https://entreus.vercel.app/api/whatsapp/test-send -H "Content-Type: application/json" -H "Authorization: Bearer SEU_SEGREDO" -d \'{"message":"Teste direto do EntreUS Lab"}\'',
     },
     {
       status: 405,
@@ -82,6 +109,18 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const rateLimit = await TEST_SEND_RATE_LIMITER.check({
+    key: `${getRateLimitIp(request)}:whatsapp-test-send`,
+  })
+
+  if (!rateLimit.ok) {
+    return createRateLimitExceededResponse(rateLimit, {
+      ok: false,
+      error: 'RATE_LIMITED',
+      message: 'Muitas requisições operacionais. Tente novamente mais tarde.',
+    })
+  }
+
   const missing = getMissingEnvVars()
 
   if (missing.length > 0) {
@@ -89,21 +128,16 @@ export async function POST(request: Request) {
       {
         ok: false,
         error: 'MISSING_ENV_VARS',
-        message:
-          'Existem variáveis de ambiente ausentes na Vercel. Adicione as variáveis e faça redeploy.',
-        missing,
+        message: 'Configuração operacional indisponível.',
       },
       { status: 500 },
     )
   }
 
   const expectedSecret = process.env.WHATSAPP_TEST_SECRET as string
-  const receivedSecret =
-    request.headers.get('x-test-secret') ||
-    new URL(request.url).searchParams.get('secret') ||
-    ''
+  const receivedSecret = getBearerSecret(request)
 
-  if (!receivedSecret || receivedSecret !== expectedSecret) {
+  if (!safeEqualSecret(receivedSecret, expectedSecret)) {
     return NextResponse.json(
       {
         ok: false,

@@ -1,7 +1,19 @@
+import { createHash, timingSafeEqual } from 'node:crypto'
 import { NextResponse } from 'next/server'
+import { createRateLimiter, createRateLimitExceededResponse } from '@/lib/rate-limit'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+
+const SUBSCRIBED_APPS_GET_LIMITER = createRateLimiter({
+  limit: 10,
+  windowMs: 10 * 60 * 1000,
+})
+
+const SUBSCRIBED_APPS_POST_LIMITER = createRateLimiter({
+  limit: 5,
+  windowMs: 10 * 60 * 1000,
+})
 
 type MetaError = {
   error?: {
@@ -24,19 +36,28 @@ function getMissingEnvVars() {
   return required.filter((key) => !process.env[key])
 }
 
-function getSecretFromRequest(request: Request) {
-  return (
-    request.headers.get('x-test-secret') ||
-    new URL(request.url).searchParams.get('secret') ||
-    ''
-  )
+function getRateLimitIp(request: Request) {
+  const forwardedFor = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+  return forwardedFor || request.headers.get('x-real-ip') || 'unknown'
 }
 
-function isAuthorized(request: Request) {
-  const expectedSecret = process.env.WHATSAPP_TEST_SECRET
-  const receivedSecret = getSecretFromRequest(request)
+function getBearerSecret(request: Request) {
+  const authorization = request.headers.get('authorization')?.trim() || ''
+  const match = authorization.match(/^Bearer\s+(.+)$/i)
+  return match?.[1]?.trim() || ''
+}
 
-  return Boolean(expectedSecret && receivedSecret && expectedSecret === receivedSecret)
+function safeEqualSecret(received: string, expected: string) {
+  if (!received || !expected) return false
+
+  const receivedHash = createHash('sha256').update(received).digest()
+  const expectedHash = createHash('sha256').update(expected).digest()
+
+  return timingSafeEqual(receivedHash, expectedHash)
+}
+
+function getLimiter(method: 'GET' | 'POST') {
+  return method === 'GET' ? SUBSCRIBED_APPS_GET_LIMITER : SUBSCRIBED_APPS_POST_LIMITER
 }
 
 async function callMetaSubscribedApps(method: 'GET' | 'POST') {
@@ -110,7 +131,20 @@ async function callMetaSubscribedApps(method: 'GET' | 'POST') {
   }
 }
 
-export async function GET(request: Request) {
+async function authorizeOperationalRequest(request: Request) {
+  const method = request.method === 'POST' ? 'POST' : 'GET'
+  const rateLimit = await getLimiter(method).check({
+    key: `${getRateLimitIp(request)}:whatsapp-subscribed-apps:${method}`,
+  })
+
+  if (!rateLimit.ok) {
+    return createRateLimitExceededResponse(rateLimit, {
+      ok: false,
+      error: 'RATE_LIMITED',
+      message: 'Muitas requisições operacionais. Tente novamente mais tarde.',
+    })
+  }
+
   const missing = getMissingEnvVars()
 
   if (missing.length > 0) {
@@ -118,15 +152,16 @@ export async function GET(request: Request) {
       {
         ok: false,
         error: 'MISSING_ENV_VARS',
-        message:
-          'Existem variáveis de ambiente ausentes na Vercel. Adicione as variáveis e faça redeploy.',
-        missing,
+        message: 'Configuração operacional indisponível.',
       },
       { status: 500 },
     )
   }
 
-  if (!isAuthorized(request)) {
+  const expectedSecret = process.env.WHATSAPP_TEST_SECRET as string
+  const receivedSecret = getBearerSecret(request)
+
+  if (!safeEqualSecret(receivedSecret, expectedSecret)) {
     return NextResponse.json(
       {
         ok: false,
@@ -136,6 +171,13 @@ export async function GET(request: Request) {
       { status: 401 },
     )
   }
+
+  return null
+}
+
+export async function GET(request: Request) {
+  const deniedResponse = await authorizeOperationalRequest(request)
+  if (deniedResponse) return deniedResponse
 
   const result = await callMetaSubscribedApps('GET')
 
@@ -150,31 +192,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const missing = getMissingEnvVars()
-
-  if (missing.length > 0) {
-    return NextResponse.json(
-      {
-        ok: false,
-        error: 'MISSING_ENV_VARS',
-        message:
-          'Existem variáveis de ambiente ausentes na Vercel. Adicione as variáveis e faça redeploy.',
-        missing,
-      },
-      { status: 500 },
-    )
-  }
-
-  if (!isAuthorized(request)) {
-    return NextResponse.json(
-      {
-        ok: false,
-        error: 'UNAUTHORIZED',
-        message: 'Segredo de teste inválido ou ausente.',
-      },
-      { status: 401 },
-    )
-  }
+  const deniedResponse = await authorizeOperationalRequest(request)
+  if (deniedResponse) return deniedResponse
 
   const result = await callMetaSubscribedApps('POST')
 
