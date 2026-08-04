@@ -10,9 +10,20 @@ import {
 } from '@/lib/meet-server'
 import { AccessToken } from 'livekit-server-sdk'
 import { NextResponse } from 'next/server'
+import { createRateLimiter, createRateLimitExceededResponse } from '@/lib/rate-limit'
 
 const MAX_ROOM_NAME_LENGTH = 80
 const MAX_PARTICIPANT_NAME_LENGTH = 60
+
+const LIVEKIT_TOKEN_IP_LIMITER = createRateLimiter({
+  limit: 30,
+  windowMs: 10 * 60 * 1000,
+})
+
+const LIVEKIT_TOKEN_USER_ROOM_LIMITER = createRateLimiter({
+  limit: 20,
+  windowMs: 10 * 60 * 1000,
+})
 
 type TokenRequestBody = {
   roomName?: unknown
@@ -45,7 +56,24 @@ function sanitizeOptionalTextField(value: unknown, maxLength: number) {
   return trimmed.length >= 2 ? trimmed : null
 }
 
+function getRateLimitIp(request: Request) {
+  const forwardedFor = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+  return forwardedFor || request.headers.get('x-real-ip') || 'unknown'
+}
+
 export async function POST(request: Request) {
+  const ipRateLimit = await LIVEKIT_TOKEN_IP_LIMITER.check({
+    key: `${getRateLimitIp(request)}:livekit-token`,
+  })
+
+  if (!ipRateLimit.ok) {
+    return createRateLimitExceededResponse(ipRateLimit, {
+      ok: false,
+      error: 'RATE_LIMITED',
+      message: 'Muitas solicitações de acesso à chamada. Tente novamente mais tarde.',
+    })
+  }
+
   const auth = await requireUser(request)
   if ('error' in auth) return auth.error
 
@@ -77,6 +105,18 @@ export async function POST(request: Request) {
 
   if (!roomName.value) {
     return jsonError('Dados obrigatórios ausentes.', 400)
+  }
+
+  const userRoomRateLimit = await LIVEKIT_TOKEN_USER_ROOM_LIMITER.check({
+    key: `${auth.user.id}:${roomName.value}:livekit-token`,
+  })
+
+  if (!userRoomRateLimit.ok) {
+    return createRateLimitExceededResponse(userRoomRateLimit, {
+      ok: false,
+      error: 'RATE_LIMITED',
+      message: 'Muitas solicitações de acesso à chamada. Tente novamente mais tarde.',
+    })
   }
 
   try {

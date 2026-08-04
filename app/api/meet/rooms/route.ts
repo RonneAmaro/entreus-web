@@ -7,8 +7,19 @@ import {
   requireUser,
 } from '@/lib/meet-server'
 import { NextResponse } from 'next/server'
+import { createRateLimiter, createRateLimitExceededResponse } from '@/lib/rate-limit'
 
 const ROOM_PREFIXES = ['sala', 'meet', 'entreus']
+
+const MEET_ROOM_CREATE_IP_LIMITER = createRateLimiter({
+  limit: 20,
+  windowMs: 10 * 60 * 1000,
+})
+
+const MEET_ROOM_CREATE_USER_LIMITER = createRateLimiter({
+  limit: 5,
+  windowMs: 30 * 60 * 1000,
+})
 
 type CreateRoomBody = {
   title?: unknown
@@ -24,9 +35,38 @@ function addMinutes(date: Date, minutes: number) {
   return new Date(date.getTime() + minutes * 60 * 1000)
 }
 
+function getRateLimitIp(request: Request) {
+  const forwardedFor = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+  return forwardedFor || request.headers.get('x-real-ip') || 'unknown'
+}
+
 export async function POST(request: Request) {
+  const ipRateLimit = await MEET_ROOM_CREATE_IP_LIMITER.check({
+    key: `${getRateLimitIp(request)}:meet-room-create`,
+  })
+
+  if (!ipRateLimit.ok) {
+    return createRateLimitExceededResponse(ipRateLimit, {
+      ok: false,
+      error: 'RATE_LIMITED',
+      message: 'Você criou muitas salas recentemente. Tente novamente mais tarde.',
+    })
+  }
+
   const auth = await requireUser(request)
   if ('error' in auth) return auth.error
+
+  const userRateLimit = await MEET_ROOM_CREATE_USER_LIMITER.check({
+    key: `${auth.user.id}:meet-room-create`,
+  })
+
+  if (!userRateLimit.ok) {
+    return createRateLimitExceededResponse(userRateLimit, {
+      ok: false,
+      error: 'RATE_LIMITED',
+      message: 'Você criou muitas salas recentemente. Tente novamente mais tarde.',
+    })
+  }
 
   const supabase = getSupabaseAdmin()
   if (!supabase) return jsonError('Configuração Supabase ausente no servidor.', 500)
