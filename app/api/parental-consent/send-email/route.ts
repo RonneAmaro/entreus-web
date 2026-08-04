@@ -3,10 +3,14 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getRequestSiteUrl, siteConfig } from '@/lib/site-config'
 import { getRequestCorrelationId, logServerEvent } from '@/lib/logging/safe-logger'
+import { createRateLimiter, createRateLimitExceededResponse } from '@/lib/rate-limit'
 
 export const runtime = 'nodejs'
 
 const CONSENT_VERSION = '2026-05'
+const PARENTAL_CONSENT_IP_LIMITER = createRateLimiter({ limit: 10, windowMs: 30 * 60 * 1000 })
+const PARENTAL_CONSENT_USER_LIMITER = createRateLimiter({ limit: 5, windowMs: 24 * 60 * 60 * 1000 })
+const PARENTAL_CONSENT_GUARDIAN_LIMITER = createRateLimiter({ limit: 3, windowMs: 24 * 60 * 60 * 1000 })
 
 type ParentalConsentRequest = {
   id: string
@@ -59,6 +63,26 @@ function isMissingParentalColumnError(error: { message?: string; code?: string }
 
 function hashToken(token: string) {
   return createHash('sha256').update(token).digest('hex')
+}
+
+function getRateLimitIp(request: Request) {
+  const forwardedFor = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+  return forwardedFor || request.headers.get('x-real-ip')?.trim() || 'unknown'
+}
+
+function hashRateLimitValue(value: string) {
+  return createHash('sha256').update(value).digest('hex')
+}
+
+function createParentalRateLimitResponse(result: Parameters<typeof createRateLimitExceededResponse>[0]) {
+  return createRateLimitExceededResponse(
+    result,
+    {
+      success: false,
+      error: 'RATE_LIMITED',
+      message: 'Muitas solicitações de autorização foram feitas recentemente. Tente novamente mais tarde.',
+    } as Parameters<typeof createRateLimitExceededResponse>[1],
+  )
 }
 
 function buildEmailText({
@@ -165,6 +189,14 @@ async function sendResendEmail({
 
 export async function POST(request: Request) {
   const requestId = getRequestCorrelationId(request)
+  const ipRateLimit = await PARENTAL_CONSENT_IP_LIMITER.check({
+    key: `${getRateLimitIp(request)}:parental-consent-email`,
+  })
+
+  if (!ipRateLimit.ok) {
+    return createParentalRateLimitResponse(ipRateLimit)
+  }
+
   try {
     const body = await request.json().catch(() => null)
     const guardianEmail = String(body?.guardian_email || '').trim().toLowerCase()
@@ -187,6 +219,22 @@ export async function POST(request: Request) {
 
     if (userError || !user) {
       return NextResponse.json({ error: 'Entre na sua conta para solicitar autorizacao.' }, { status: 401 })
+    }
+
+    const userRateLimit = await PARENTAL_CONSENT_USER_LIMITER.check({
+      key: `${user.id}:parental-consent-email-user`,
+    })
+
+    if (!userRateLimit.ok) {
+      return createParentalRateLimitResponse(userRateLimit)
+    }
+
+    const guardianRateLimit = await PARENTAL_CONSENT_GUARDIAN_LIMITER.check({
+      key: `${user.id}:${hashRateLimitValue(guardianEmail)}:parental-consent-email-guardian`,
+    })
+
+    if (!guardianRateLimit.ok) {
+      return createParentalRateLimitResponse(guardianRateLimit)
     }
 
     const { data: profile, error: profileError } = await supabase
