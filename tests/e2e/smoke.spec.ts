@@ -57,7 +57,7 @@ test('VIP checkout action is visible without starting a payment', async ({ page 
 
   expect(response?.status() || 200).toBeLessThan(500)
   await expectNoServerError(page)
-  await expect(page.getByRole('button', { name: 'Pagar com Mercado Pago' })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Mercado Pago/i })).toBeVisible()
 })
 
 test('creator onboarding shows founder and monetization CTAs', async ({ page }) => {

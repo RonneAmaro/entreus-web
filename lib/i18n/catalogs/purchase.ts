@@ -1,5 +1,6 @@
 const ptBR = {
   'navigation.myAccount': 'Minha conta',
+  'navigation.feed': 'Feed',
   'common.recommended': 'Recomendado',
   'common.copied': 'Copiada',
   'common.notProvided': 'Não informado',
