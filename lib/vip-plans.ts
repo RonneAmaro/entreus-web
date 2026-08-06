@@ -10,7 +10,7 @@ export type VipPurchasePlan = {
 
 // Placeholder prices for VIP Base 2. Keep these centralized so production pricing
 // can be changed without hunting through UI and API code.
-export const VIP_PRICE_VERSION = '2026-06-vip-placeholder'
+export const VIP_PRICE_VERSION = '2026-08-vip'
 
 export const VIP_PURCHASE_PLANS: VipPurchasePlan[] = [
   {
@@ -36,4 +36,16 @@ export const VIP_PURCHASE_PLANS: VipPurchasePlan[] = [
 
 export function getVipPurchasePlan(planKey: string | null | undefined) {
   return VIP_PURCHASE_PLANS.find((plan) => plan.planKey === planKey) || null
+}
+
+export function getVipPlanSavings(plan: VipPurchasePlan) {
+  const monthly = VIP_PURCHASE_PLANS[0].amountBrlCents
+  const proportionalBrlCents = Math.round(monthly * (plan.days / 30))
+  const savingsBrlCents = Math.max(0, proportionalBrlCents - plan.amountBrlCents)
+  return {
+    proportionalBrlCents,
+    savingsBrlCents,
+    savingsPercent: proportionalBrlCents ? Math.round((savingsBrlCents / proportionalBrlCents) * 100) : 0,
+    monthlyEquivalentBrlCents: Math.round(plan.amountBrlCents / (plan.days / 30)),
+  }
 }

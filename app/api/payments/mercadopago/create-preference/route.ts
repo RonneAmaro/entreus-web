@@ -4,6 +4,9 @@ import { calculatePaymentTotals, getPaymentMethodConfig } from '@/lib/payment-fe
 import { getSafeCheckoutUrl } from '@/lib/vip-checkout-flow'
 import { getVipPurchasePlan, VIP_PRICE_VERSION } from '@/lib/vip-plans'
 import { getRequestCorrelationId, logServerEvent } from '@/lib/logging/safe-logger'
+import { resolveMercadoPagoPublicUrls } from '@/lib/payments/public-urls'
+import { paymentError } from '@/lib/payments/errors'
+import { getBearerAuthorization } from '@/lib/payments/server-auth'
 
 type ProductType = 'itacash' | 'vip_plus'
 
@@ -23,10 +26,6 @@ type MercadoPagoPreference = {
 }
 
 const PLATFORM_FEE_PERCENT = 2
-const MERCADO_PAGO_CONFIGURATION_ERROR =
-  'Os pagamentos automaticos do Mercado Pago ainda nao estao configurados neste ambiente.'
-const PAYMENT_ORDER_CREATION_ERROR =
-  'Nao foi possivel preparar o pedido de pagamento agora. Tente novamente em instantes.'
 
 function getSupabaseForRequest(request: Request) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -63,14 +62,17 @@ export async function POST(request: Request) {
   const requestId = getRequestCorrelationId(request)
   try {
     const accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL
 
-    if (!accessToken || !siteUrl) {
+    if (!accessToken) {
       return NextResponse.json(
-        { error: MERCADO_PAGO_CONFIGURATION_ERROR },
+        paymentError('payment_configuration_missing'),
         { status: 503 }
       )
     }
+    const publicUrls = resolveMercadoPagoPublicUrls()
+    if (!publicUrls) return NextResponse.json(paymentError('payment_urls_not_configured'), { status: 503 })
+
+    if (!getBearerAuthorization(request)) return NextResponse.json(paymentError('authentication_required'), { status: 401 })
 
     const body = await request.json().catch(() => null)
     const productType = String(body?.product_type || '') as ProductType
@@ -113,7 +115,7 @@ export async function POST(request: Request) {
     } = await supabase.auth.getUser()
 
     if (userError || !user) {
-      return NextResponse.json({ error: 'Entre na sua conta para pagar.' }, { status: 401 })
+      return NextResponse.json(paymentError('authentication_rejected'), { status: 401 })
     }
 
     const totals = calculateTotals(productType, amountItacash, paymentMethod.value, vipPlan?.amountBrlCents || null)
@@ -150,7 +152,7 @@ export async function POST(request: Request) {
         error: orderError,
       })
       return NextResponse.json(
-        { error: PAYMENT_ORDER_CREATION_ERROR },
+        paymentError('payment_order_creation_failed'),
         { status: 400 }
       )
     }
@@ -169,7 +171,7 @@ export async function POST(request: Request) {
       },
       body: JSON.stringify({
         external_reference: order.external_reference,
-        notification_url: `${siteUrl.replace(/\/$/, '')}/api/payments/mercadopago/webhook`,
+        notification_url: publicUrls.notificationUrl,
         // Checkout Pro decide se debito aparece conforme conta/cartao do pagador.
         // Mantemos debit_card sem exclusao para nao bloquear essa opcao quando disponivel.
         payment_methods: {
@@ -177,9 +179,9 @@ export async function POST(request: Request) {
           excluded_payment_methods: [],
         },
         back_urls: {
-          success: `${siteUrl.replace(/\/$/, '')}/${productType === 'vip_plus' ? 'vip-plus' : 'wallet'}?payment=success`,
-          pending: `${siteUrl.replace(/\/$/, '')}/${productType === 'vip_plus' ? 'vip-plus' : 'wallet'}?payment=pending`,
-          failure: `${siteUrl.replace(/\/$/, '')}/${productType === 'vip_plus' ? 'vip-plus' : 'buy-itacash'}?payment=failure`,
+          success: `${publicUrls.returnBaseUrl}/${productType === 'vip_plus' ? 'vip-plus' : 'wallet'}?payment=success`,
+          pending: `${publicUrls.returnBaseUrl}/${productType === 'vip_plus' ? 'vip-plus' : 'wallet'}?payment=pending`,
+          failure: `${publicUrls.returnBaseUrl}/${productType === 'vip_plus' ? 'vip-plus' : 'buy-itacash'}?payment=failure`,
         },
         auto_return: 'approved',
         items: [
@@ -217,7 +219,7 @@ export async function POST(request: Request) {
       })
 
       return NextResponse.json(
-        { error: 'Não foi possível abrir o pagamento agora. Tente novamente em instantes.' },
+        paymentError('payment_provider_rejected'),
         { status: 502 }
       )
     }
@@ -232,7 +234,7 @@ export async function POST(request: Request) {
       })
 
       return NextResponse.json(
-        { error: 'Não foi possível abrir o pagamento agora. Tente novamente em instantes.' },
+        paymentError('payment_provider_rejected'),
         { status: 502 },
       )
     }

@@ -5,6 +5,9 @@ import { publicProfileCatalogs } from './public-profile'
 export const zhCN = extendEnglishCatalog({
   ...purchaseCatalogs['zh-CN'],
   ...publicProfileCatalogs['zh-CN'],
+  'vip.savePercent': '节省 {percent}%', 'vip.proportionalPrice': '按比例价格：{price}', 'vip.perMonth': '每月 {price}', 'vip.pixCopyPaste': '复制粘贴 Pix', 'vip.copyPixCode': '复制 Pix 代码', 'vip.codeCopied': '代码已复制', 'vip.pixQrAlt': '手动 Pix 二维码',
+  'vip.paymentChoiceNotice': '请选择最适合您的付款方式。使用手动 Pix 时，您只需支付套餐价格，无需额外费用。使用 Mercado Pago 时，系统会自动确认，并在继续前将处理费计入总额。', 'vip.manualPixNoFee': '无额外费用', 'vip.manualPixDescription': '您只需支付标示金额。之后请上传付款凭证，由我们的团队确认付款。', 'vip.onlyAdvertisedAmount': '准确金额：{total}', 'vip.mercadoPagoAutomatic': '自动确认', 'vip.mercadoPagoFeeDescription': 'Mercado Pago 会添加处理费。打开付款页面前会显示完整总额。', 'vip.planAmount': '套餐金额', 'vip.processingFee': '处理费', 'vip.totalToPay': '应付总额',
+  'vip.errors.pix_configuration_missing': '手动 Pix 配置不完整。', 'vip.errors.pix_key_invalid': '配置的 Pix 密钥无效。', 'vip.errors.pix_receiver_invalid': 'Pix 收款人信息无效。', 'vip.errors.pix_amount_invalid': 'Pix 金额无效。', 'vip.errors.pix_generation_failed': '目前无法生成 Pix，请重试。', 'vip.errors.temporary_pix_error': 'Pix 暂时不可用，请重试。',
   'feed.emptyTitle': '您的动态目前还是空的。',
   'feed.emptyDescription': '当您关注更多人，或者有适合您账号的帖子可见时，它们会出现在这里。在此之前，您可以先搜索、浏览个人资料，并探索 EntreUS Hub。',
   'hub.discoveryScope': 'Hub 可帮助您找到平台内的页面和功能。',

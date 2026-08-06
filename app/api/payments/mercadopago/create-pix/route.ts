@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { calculatePaymentTotals, getPaymentMethodConfig, PLATFORM_FEE_PERCENT } from '@/lib/payment-fees'
 import { getRequestCorrelationId, logServerEvent } from '@/lib/logging/safe-logger'
+import { resolveMercadoPagoNotificationUrl } from '@/lib/payments/public-urls'
+import { paymentError } from '@/lib/payments/errors'
+import { getBearerAuthorization } from '@/lib/payments/server-auth'
 
 type PaymentOrder = {
   id: string
@@ -30,14 +33,8 @@ type MercadoPagoPixPayment = {
 const PIX_EXPIRATION_MINUTES = 30
 const MERCADO_PAGO_CONFIGURATION_ERROR =
   'Os pagamentos automaticos do Mercado Pago ainda nao estao configurados neste ambiente.'
-const PIX_ORDER_CREATION_ERROR =
-  'Nao foi possivel preparar o pedido Pix agora. Tente novamente em instantes.'
-const PIX_PROVIDER_ERROR =
-  'Nao foi possivel gerar o Pix automatico agora. Tente novamente em instantes.'
 const PIX_PERSISTENCE_ERROR =
   'O Pix foi gerado, mas nao foi possivel concluir o registro interno do pagamento.'
-const INVALID_NOTIFICATION_URL_ERROR =
-  'Configure uma URL pública HTTPS para receber notificações do Mercado Pago.'
 
 function getSupabaseForRequest(request: Request) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -59,49 +56,6 @@ function centsToBRL(value: number) {
   return Number((value / 100).toFixed(2))
 }
 
-function buildNotificationUrl() {
-  const explicitNotificationUrl = process.env.MERCADO_PAGO_NOTIFICATION_URL?.trim()
-
-  if (explicitNotificationUrl) {
-    return {
-      value: explicitNotificationUrl,
-      source: 'MERCADO_PAGO_NOTIFICATION_URL',
-    }
-  }
-
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim()
-
-  if (!siteUrl) {
-    return {
-      value: '',
-      source: 'NEXT_PUBLIC_SITE_URL',
-    }
-  }
-
-  return {
-    value: `${siteUrl.replace(/\/$/, '')}/api/payments/mercadopago/webhook`,
-    source: 'NEXT_PUBLIC_SITE_URL',
-  }
-}
-
-function isValidMercadoPagoNotificationUrl(value: string) {
-  if (!value) return false
-
-  try {
-    const url = new URL(value)
-    const hostname = url.hostname.toLowerCase()
-
-    return (
-      url.protocol === 'https:' &&
-      hostname !== 'localhost' &&
-      hostname !== '127.0.0.1' &&
-      !hostname.endsWith('.localhost')
-    )
-  } catch {
-    return false
-  }
-}
-
 export async function POST(request: Request) {
   const requestId = getRequestCorrelationId(request)
   try {
@@ -118,32 +72,26 @@ export async function POST(request: Request) {
       )
     }
 
-    const notificationUrl = buildNotificationUrl()
+    const notificationUrl = resolveMercadoPagoNotificationUrl()
 
-    if (!isValidMercadoPagoNotificationUrl(notificationUrl.value)) {
-      let safeHostname = ''
-
-      try {
-        safeHostname = new URL(notificationUrl.value).hostname
-      } catch {
-        safeHostname = 'invalid-url'
-      }
-
+    if (!notificationUrl) {
       logServerEvent('error', {
         event: 'mercadopago_pix.invalid_notification_url',
         requestId,
         context: {
-          source: notificationUrl.source,
-          startsWithHttps: notificationUrl.value.startsWith('https://'),
-          hostname: safeHostname,
+          source: 'payment-url-resolver',
+          startsWithHttps: false,
+          hostname: 'not-configured',
         },
       })
 
       return NextResponse.json(
-        { error: INVALID_NOTIFICATION_URL_ERROR },
+        paymentError('payment_urls_not_configured'),
         { status: 503 }
       )
     }
+
+    if (!getBearerAuthorization(request)) return NextResponse.json(paymentError('authentication_required'), { status: 401 })
 
     const body = await request.json().catch(() => null)
     const amountItacash = Number.parseInt(String(body?.amount_itacash || ''), 10)
@@ -164,7 +112,7 @@ export async function POST(request: Request) {
     } = await supabase.auth.getUser()
 
     if (userError || !user?.email) {
-      return NextResponse.json({ error: 'Entre na sua conta para pagar.' }, { status: 401 })
+      return NextResponse.json(paymentError('authentication_rejected'), { status: 401 })
     }
 
     const totals = calculatePaymentTotals(amountItacash * 10, paymentMethod.value)
@@ -193,7 +141,7 @@ export async function POST(request: Request) {
         error: orderError,
       })
       return NextResponse.json(
-        { error: PIX_ORDER_CREATION_ERROR },
+        paymentError('payment_order_creation_failed'),
         { status: 400 }
       )
     }
@@ -214,7 +162,7 @@ export async function POST(request: Request) {
         description: `${amountItacash} ItaCash EntreUS`,
         payment_method_id: 'pix',
         external_reference: order.external_reference,
-        notification_url: notificationUrl.value,
+        notification_url: notificationUrl,
         date_of_expiration: expirationDate.toISOString(),
         payer: {
           email: user.email,
@@ -243,7 +191,7 @@ export async function POST(request: Request) {
         },
       })
       return NextResponse.json(
-        { error: PIX_PROVIDER_ERROR },
+        paymentError('payment_provider_rejected'),
         { status: 502 }
       )
     }

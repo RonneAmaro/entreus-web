@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getRequestCorrelationId, logServerEvent } from '@/lib/logging/safe-logger'
+import { inspectPixConfiguration } from '@/lib/payments/pix-config'
+import { paymentError } from '@/lib/payments/errors'
+import { getBearerAuthorization } from '@/lib/payments/server-auth'
 
 function getSupabaseForRequest(request: Request) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -21,6 +24,7 @@ function getSupabaseForRequest(request: Request) {
 export async function GET(request: Request) {
   const requestId = getRequestCorrelationId(request)
   try {
+    if (!getBearerAuthorization(request)) return NextResponse.json(paymentError('authentication_required'), { status: 401 })
     const supabase = getSupabaseForRequest(request)
     const {
       data: { user },
@@ -28,18 +32,21 @@ export async function GET(request: Request) {
     } = await supabase.auth.getUser()
 
     if (error || !user) {
-      return NextResponse.json({ error: 'Entre na sua conta para ver as instrucoes Pix.' }, { status: 401 })
+      return NextResponse.json(paymentError('authentication_rejected'), { status: 401 })
     }
 
-    const pixKey = process.env.PIX_KEY || ''
-    const pixPaymentLink = process.env.PIX_PAYMENT_LINK || ''
+    const diagnostic = inspectPixConfiguration()
 
     return NextResponse.json({
-      pix_key: pixKey,
-      pixPaymentLink,
-      receiver_name: process.env.PIX_RECEIVER_NAME || '',
-      receiver_city: process.env.PIX_RECEIVER_CITY || '',
-      configured: Boolean(pixKey || pixPaymentLink),
+      configured: diagnostic.valid,
+      diagnostic: {
+        key_present: diagnostic.keyPresent,
+        key_type: diagnostic.keyType,
+        receiver_name_present: diagnostic.receiverNamePresent,
+        receiver_city_present: diagnostic.receiverCityPresent,
+        valid: diagnostic.valid,
+        code: diagnostic.code,
+      },
     })
   } catch (error) {
     logServerEvent('error', {
@@ -49,7 +56,7 @@ export async function GET(request: Request) {
     })
 
     return NextResponse.json(
-      { error: 'Erro interno ao carregar Pix manual.' },
+      paymentError('temporary_pix_error'),
       { status: 500 }
     )
   }

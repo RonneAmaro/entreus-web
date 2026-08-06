@@ -24,18 +24,21 @@ import {
 import { supabase } from '@/lib/supabase'
 import {
   calculatePaymentTotals,
-  PLATFORM_FEE_PERCENT,
   paymentMethodOptions,
   type PaymentMethodOption,
 } from '@/lib/payment-fees'
 import { useLanguage } from '../components/LanguageProvider'
+import { getPaymentAccessToken } from '@/lib/payments/client-auth'
 
 type PixInfo = {
-  pix_key: string
-  pixPaymentLink: string
   receiver_name: string
   receiver_city: string
   configured: boolean
+  pix_copy_paste?: string
+  qr_code_data_url?: string
+  total_brl_cents?: number
+  code?: string
+  error?: string
 }
 
 type MercadoPagoPixPayment = {
@@ -85,8 +88,7 @@ export default function BuyItaCashPage() {
   const [pixInfo, setPixInfo] = useState<PixInfo | null>(null)
   const [pixInfoLoading, setPixInfoLoading] = useState(false)
   const [proofFile, setProofFile] = useState<File | null>(null)
-  const [copiedPixKey, setCopiedPixKey] = useState(false)
-  const [copiedPixLink, setCopiedPixLink] = useState(false)
+  const [copiedManualPixCode, setCopiedManualPixCode] = useState(false)
   const [mercadoPagoPixPayment, setMercadoPagoPixPayment] = useState<MercadoPagoPixPayment | null>(null)
   const [copiedMercadoPagoPix, setCopiedMercadoPagoPix] = useState(false)
 
@@ -97,12 +99,6 @@ export default function BuyItaCashPage() {
   useEffect(() => {
     checkSession()
   }, [])
-
-  useEffect(() => {
-    if (paymentMethod === 'pix_manual' && !pixInfo && !pixInfoLoading) {
-      loadPixInfo()
-    }
-  }, [paymentMethod, pixInfo, pixInfoLoading])
 
   useEffect(() => {
     setSuccess(false)
@@ -116,6 +112,10 @@ export default function BuyItaCashPage() {
     const parsed = Number.parseInt(amount, 10)
     return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
   }, [amount])
+
+  useEffect(() => {
+    if (paymentMethod === 'pix_manual' && amountItacash > 0) loadPixInfo()
+  }, [paymentMethod, amountItacash])
 
   const visiblePaymentMethods = paymentMethodOptions.filter((method) =>
     ['pix_manual', 'mercadopago_pix', 'mercadopago_debit', 'mercadopago_credit_30d', 'mercadopago_credit_instant', 'open_finance'].includes(method.value)
@@ -188,46 +188,33 @@ export default function BuyItaCashPage() {
   async function loadPixInfo() {
     setPixInfoLoading(true)
 
-    const {
-      data: { session },
-    } = await supabase.auth.getSession()
-
-    if (!session?.access_token) {
+    const auth = await getPaymentAccessToken(supabase.auth)
+    if (!auth.ok) {
+      setMessage(t(`purchase.errors.${auth.code}`))
       setPixInfoLoading(false)
       return
     }
 
-    const response = await fetch('/api/payments/pix/manual-info', {
-      headers: {
-        Authorization: `Bearer ${session.access_token}`,
-      },
+    const response = await fetch('/api/payments/pix/manual-code', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${auth.accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ product_type: 'itacash', amount_itacash: amountItacash }),
     })
-
     const data = await response.json().catch(() => null)
     setPixInfoLoading(false)
 
     if (!response.ok) {
-      setMessage(t('purchase.errors.loadPixInstructions'))
+      setPixInfo(null)
+      setMessage(paymentErrorMessage(data?.code, t('purchase.errors.loadPixInstructions')))
       return
     }
 
     setPixInfo(data as PixInfo)
   }
 
-  async function copyPixKey() {
-    if (!pixInfo?.pix_key) return
-
-    await navigator.clipboard.writeText(pixInfo.pix_key)
-    setCopiedPixKey(true)
-    window.setTimeout(() => setCopiedPixKey(false), 2000)
-  }
-
-  async function copyPixLink() {
-    if (!pixInfo?.pixPaymentLink) return
-
-    await navigator.clipboard.writeText(pixInfo.pixPaymentLink)
-    setCopiedPixLink(true)
-    window.setTimeout(() => setCopiedPixLink(false), 2000)
+  function paymentErrorMessage(code: string | undefined, fallback: string) {
+    const supported = ['authentication_required', 'session_refresh_failed', 'authentication_rejected', 'pix_configuration_missing', 'pix_key_invalid', 'pix_receiver_invalid', 'pix_amount_invalid', 'pix_generation_failed', 'temporary_pix_error']
+    return code && supported.includes(code) ? t(`purchase.errors.${code}`) : fallback
   }
 
   async function copyMercadoPagoPixCode() {
@@ -264,9 +251,14 @@ export default function BuyItaCashPage() {
     setPaymentLink('')
     setMercadoPagoPixPayment(null)
 
+    const paymentAuth = await getPaymentAccessToken(supabase.auth)
+    if (!paymentAuth.ok) {
+      setMessage(t(`purchase.errors.${paymentAuth.code}`))
+      return
+    }
     const {
       data: { user },
-    } = await supabase.auth.getUser()
+    } = await supabase.auth.getUser(paymentAuth.accessToken)
 
     if (!user) {
       setMessage(t('purchase.errors.signInToRequest'))
@@ -287,16 +279,6 @@ export default function BuyItaCashPage() {
         return
       }
 
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-
-      if (!session?.access_token) {
-        setMessage(t('purchase.errors.signInToPay'))
-        setSubmitting(false)
-        return
-      }
-
       const isMercadoPagoPix = paymentMethod === 'mercadopago_pix'
       const response = await fetch(
         isMercadoPagoPix
@@ -305,7 +287,7 @@ export default function BuyItaCashPage() {
         {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${paymentAuth.accessToken}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -321,7 +303,7 @@ export default function BuyItaCashPage() {
 
       if (isMercadoPagoPix) {
         if (!response.ok || (!data?.qr_code && !data?.qr_code_base64)) {
-          setMessage(t('purchase.errors.generatePix'))
+          setMessage(data?.error || t('purchase.errors.generatePix'))
           return
         }
 
@@ -341,7 +323,7 @@ export default function BuyItaCashPage() {
       }
 
       if (!response.ok || !data?.provider_init_point) {
-        setMessage(t('purchase.errors.createMercadoPago'))
+        setMessage(data?.error || t('purchase.errors.createMercadoPago'))
         return
       }
 
@@ -355,8 +337,14 @@ export default function BuyItaCashPage() {
       return
     }
 
-    if (!pixInfo?.configured || !pixInfo.pix_key) {
+    if (!pixInfo?.configured) {
       setMessage(t('purchase.errors.manualPixUnavailable'))
+      setSubmitting(false)
+      return
+    }
+
+    if (!pixInfo.pix_copy_paste || pixInfo.total_brl_cents !== totals.totalBrlCents) {
+      setMessage(t('purchase.errors.loadPixInstructions'))
       setSubmitting(false)
       return
     }
@@ -390,29 +378,36 @@ export default function BuyItaCashPage() {
       return
     }
 
-    const { error } = await supabase.from('itacash_purchase_requests').insert({
-      id: requestId,
-      user_id: user.id,
-      amount_itacash: amountItacash,
-      base_amount_brl_cents: totals.baseAmountBrlCents,
-      platform_fee_percent: PLATFORM_FEE_PERCENT,
-      platform_fee_brl_cents: totals.platformFeeBrlCents,
-      operator_fee_percent: totals.operatorFeePercent,
-      operator_fee_brl_cents: totals.operatorFeeBrlCents,
-      total_brl_cents: totals.totalBrlCents,
-      payment_method: 'pix_manual',
-      status: 'pending',
-      user_note: userNote.trim() || null,
-      proof_path: proofPath,
-      proof_uploaded_at: new Date().toISOString(),
-      pix_key_snapshot: pixInfo.pix_key,
-      pix_total_brl_cents: totals.totalBrlCents,
+    const refreshedAuth = await getPaymentAccessToken(supabase.auth)
+    if (!refreshedAuth.ok) {
+      setSubmitting(false)
+      setMessage(t('purchase.errors.proofUploadedRequestFailed'))
+      return
+    }
+    const response = await fetch('/api/payments/pix/manual-request', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${refreshedAuth.accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        amount_itacash: amountItacash,
+        request_id: requestId,
+        proof_path: proofPath,
+        user_note: userNote.trim() || undefined,
+      }),
     })
+    const requestResult = await response.json().catch(() => null)
 
     setSubmitting(false)
 
-    if (error) {
-      setMessage(t('purchase.errors.createRequest'))
+    if (!response.ok) {
+      setMessage(t('purchase.errors.proofUploadedRequestFailed'))
+      return
+    }
+
+    if (requestResult?.total_brl_cents !== pixInfo.total_brl_cents) {
+      setMessage(t('purchase.errors.serverTotalMismatch'))
       return
     }
 
@@ -486,7 +481,7 @@ export default function BuyItaCashPage() {
             </p>
 
             <div className="mt-6 rounded-3xl border border-blue-300/20 bg-blue-500/10 p-4 text-sm leading-6 text-blue-50 ring-1 ring-blue-300/10">
-              {t('purchase.feeNotice')}
+              <span data-testid="purchase-payment-choice-notice">{t('purchase.paymentChoiceNotice')}</span>
             </div>
 
             <div className="mt-5 grid gap-3 sm:grid-cols-3">
@@ -499,8 +494,8 @@ export default function BuyItaCashPage() {
               </div>
               <div className="rounded-3xl border border-blue-300/20 bg-blue-500/10 p-4 ring-1 ring-blue-300/10">
                 <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-200/70">{t('purchase.entreusFee')}</p>
-                <p className="mt-2 text-2xl font-black">2%</p>
-                <p className="text-sm text-blue-100/70">{t('purchase.alwaysSeparate')}</p>
+                <p className="mt-2 text-2xl font-black">{paymentMethod === 'pix_manual' ? '0%' : '2%'}</p>
+                <p className="text-sm text-blue-100/70">{paymentMethod === 'pix_manual' ? t('purchase.noAdditionalFee') : t('purchase.processingFee')}</p>
               </div>
               <div className="rounded-3xl border border-emerald-300/20 bg-emerald-500/10 p-4 ring-1 ring-emerald-300/10">
                 <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-200/70">{t('common.recommended')}</p>
@@ -531,6 +526,12 @@ export default function BuyItaCashPage() {
                 </div>
 
                 <div className="mt-5 space-y-3 text-sm">
+                  {pixInfo?.qr_code_data_url && (
+                    <div className="grid gap-4 rounded-2xl bg-black/35 p-4 sm:grid-cols-[13rem_1fr]">
+                      <img src={pixInfo.qr_code_data_url} alt={t('purchase.pixQrAlt')} className="w-full rounded-2xl bg-white p-2" />
+                      <div className="min-w-0"><p className="text-xs font-black uppercase tracking-[0.2em] text-blue-200/70">{t('purchase.pixCopyPaste')}</p><code className="mt-2 block max-h-32 overflow-auto break-all rounded-xl bg-black p-3 text-xs">{pixInfo.pix_copy_paste}</code><button type="button" onClick={async () => { await navigator.clipboard.writeText(pixInfo.pix_copy_paste || ''); setCopiedManualPixCode(true) }} className="mt-3 inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-xs font-black text-black"><Copy className="h-4 w-4" />{copiedManualPixCode ? t('purchase.codeCopied') : t('purchase.copyPixCode')}</button></div>
+                    </div>
+                  )}
                   <div className="flex items-center justify-between gap-4 rounded-2xl bg-black/35 px-4 py-3">
                     <span className="text-zinc-400">{t('purchase.baseAmount')}</span>
                     <strong>{formatBRLFromCents(totals.baseAmountBrlCents, language)}</strong>
@@ -584,6 +585,7 @@ export default function BuyItaCashPage() {
                 return (
                   <button
                     key={method.value}
+                    data-testid={`purchase-method-${method.value}`}
                     type="button"
                     onClick={() => {
                       if (method.available) setPaymentMethod(method.value)
@@ -602,7 +604,13 @@ export default function BuyItaCashPage() {
                         ? t('purchase.operatorFeeValue', { value: formatBRLFromCents(method.operatorFeeFixedCents, language) })
                         : t('purchase.operatorFeePercent', { value: method.operatorFeePercent })}
                     </p>
-                    <p className="mt-2 text-xs text-zinc-500">{t(`purchase.methods.${method.value}.note`)}</p>
+                    <p className="mt-2 text-xs text-zinc-500">
+                      {method.value === 'pix_manual'
+                        ? `${t('purchase.noAdditionalFee')}. ${t('purchase.onlyAdvertisedAmount')}`
+                        : method.value.startsWith('mercadopago_')
+                          ? `${t('purchase.automaticConfirmation')}. ${t('purchase.fullTotalNotice')}`
+                          : t(`purchase.methods.${method.value}.note`)}
+                    </p>
                     {method.recommended && (
                       <span className="mt-3 inline-flex rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-black text-emerald-200">
                         {t('common.recommended')}
@@ -628,24 +636,12 @@ export default function BuyItaCashPage() {
                 </div>
 
                 <div className="mt-5 space-y-3 text-sm">
-                  <div className="rounded-2xl bg-black/35 px-4 py-3">
-                    <p className="text-xs font-black uppercase tracking-[0.2em] text-zinc-500">{t('purchase.pixKey')}</p>
+                  <div data-testid="purchase-manual-pix-status" className="rounded-2xl bg-black/35 px-4 py-3">
+                    <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-200">{t('purchase.noAdditionalFee')}</p>
                     {pixInfoLoading ? (
                       <p className="mt-2 text-zinc-400">{t('purchase.loadingPixKey')}</p>
                     ) : pixInfo?.configured ? (
-                      <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center">
-                        <code className="min-w-0 flex-1 break-all rounded-xl bg-black px-3 py-2 text-blue-100">
-                          {pixInfo.pix_key}
-                        </code>
-                        <button
-                          type="button"
-                          onClick={copyPixKey}
-                          className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-4 py-2 text-xs font-black text-black transition hover:bg-blue-50"
-                        >
-                          <Copy className="h-3.5 w-3.5" />
-                          {copiedPixKey ? t('common.copied') : t('purchase.copyPixKey')}
-                        </button>
-                      </div>
+                      <p className="mt-2 text-blue-50/90">{t('purchase.onlyAdvertisedAmount')}</p>
                     ) : (
                       <p className="mt-2 text-amber-100">{t('purchase.errors.manualPixUnavailable')}</p>
                     )}
@@ -657,33 +653,10 @@ export default function BuyItaCashPage() {
                     )}
                   </div>
 
-                  {pixInfo?.pixPaymentLink && (
-                    <div className="rounded-2xl bg-black/35 px-4 py-3">
-                      <p className="text-xs font-black uppercase tracking-[0.2em] text-zinc-500">{t('purchase.pixLink')}</p>
-                      <div className="mt-2 flex flex-col gap-3 sm:flex-row">
-                        <Link
-                          href={pixInfo.pixPaymentLink}
-                          target="_blank"
-                          className="inline-flex flex-1 items-center justify-center rounded-full bg-blue-500 px-4 py-2 text-xs font-black text-white transition hover:bg-blue-400"
-                        >
-                          {t('purchase.openPixPaymentLink')}
-                        </Link>
-                        <button
-                          type="button"
-                          onClick={copyPixLink}
-                          className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-4 py-2 text-xs font-black text-black transition hover:bg-blue-50"
-                        >
-                          <Copy className="h-3.5 w-3.5" />
-                          {copiedPixLink ? t('purchase.linkCopied') : t('purchase.copyPixLink')}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div className="rounded-2xl bg-black/35 px-4 py-3">
                       <p className="text-zinc-400">{t('purchase.pixTotal')}</p>
-                      <p className="mt-1 text-2xl font-black">{formatBRLFromCents(totals.totalBrlCents, language)}</p>
+                      <p className="mt-1 text-2xl font-black">{formatBRLFromCents(pixInfo?.total_brl_cents || totals.totalBrlCents, language)}</p>
                       <p className="mt-2 text-xs font-semibold text-amber-100">
                         {t('purchase.exactAmountNotice')}
                       </p>
@@ -852,7 +825,7 @@ export default function BuyItaCashPage() {
                 <strong>{t(`purchase.methods.${totals.method.value}.label`)}</strong>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-zinc-400">EntreUS 2%</span>
+                <span className="text-zinc-400">{t('purchase.processingFee')}</span>
                 <strong>{formatBRLFromCents(totals.platformFeeBrlCents, language)}</strong>
               </div>
               <div className="flex items-center justify-between">
@@ -861,7 +834,7 @@ export default function BuyItaCashPage() {
               </div>
             </div>
 
-            <div className="mt-5 rounded-3xl border border-blue-300/20 bg-blue-500/10 p-4">
+            <div data-testid={paymentMethod === 'pix_manual' ? 'purchase-manual-pix-total' : 'purchase-mercadopago-total'} className="mt-5 rounded-3xl border border-blue-300/20 bg-blue-500/10 p-4">
               <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-200/70">{t('common.total')}</p>
               <p className="mt-2 text-3xl font-black">{formatBRLFromCents(totals.totalBrlCents, language)}</p>
             </div>

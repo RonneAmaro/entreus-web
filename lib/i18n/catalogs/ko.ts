@@ -5,6 +5,9 @@ import { publicProfileCatalogs } from './public-profile'
 export const ko = extendEnglishCatalog({
   ...purchaseCatalogs.ko,
   ...publicProfileCatalogs.ko,
+  'vip.savePercent': '{percent}% 절약', 'vip.proportionalPrice': '비례 가격: {price}', 'vip.perMonth': '월 {price}', 'vip.pixCopyPaste': '복사·붙여넣기 Pix', 'vip.copyPixCode': 'Pix 코드 복사', 'vip.codeCopied': '코드 복사됨', 'vip.pixQrAlt': '수동 Pix QR 코드',
+  'vip.paymentChoiceNotice': '가장 편한 방법을 선택하세요. 수동 Pix에서는 추가 수수료 없이 플랜 가격만 결제합니다. Mercado Pago는 자동으로 확인되며 계속하기 전에 처리 수수료가 합계에 추가됩니다.', 'vip.manualPixNoFee': '추가 수수료 없음', 'vip.manualPixDescription': '표시된 금액만 결제합니다. 결제 후 영수증을 업로드하면 담당 팀이 확인합니다.', 'vip.onlyAdvertisedAmount': '정확한 금액: {total}', 'vip.mercadoPagoAutomatic': '자동 확인', 'vip.mercadoPagoFeeDescription': 'Mercado Pago 처리 수수료가 추가됩니다. 결제를 열기 전에 전체 합계가 표시됩니다.', 'vip.planAmount': '플랜 금액', 'vip.processingFee': '처리 수수료', 'vip.totalToPay': '총 결제액',
+  'vip.errors.pix_configuration_missing': '수동 Pix 설정이 완전하지 않습니다.', 'vip.errors.pix_key_invalid': '설정된 Pix 키가 올바르지 않습니다.', 'vip.errors.pix_receiver_invalid': 'Pix 수취인 정보가 올바르지 않습니다.', 'vip.errors.pix_amount_invalid': 'Pix 금액이 올바르지 않습니다.', 'vip.errors.pix_generation_failed': '지금 Pix를 생성할 수 없습니다. 다시 시도하세요.', 'vip.errors.temporary_pix_error': 'Pix를 일시적으로 사용할 수 없습니다. 다시 시도하세요.',
   'feed.emptyTitle': '피드가 아직 비어 있습니다.',
   'feed.emptyDescription': '사람들을 팔로우하거나 내 계정에 맞는 게시물이 보이기 시작하면 여기에 표시됩니다. 그전에는 검색을 사용하고, 프로필을 둘러보고, EntreUS Hub를 탐색해 보세요.',
   'hub.discoveryScope': 'Hub에서는 플랫폼의 페이지와 기능을 찾을 수 있습니다.',

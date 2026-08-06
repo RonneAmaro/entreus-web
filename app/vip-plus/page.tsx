@@ -13,6 +13,7 @@ import {
   ArrowLeft,
   BadgeCheck,
   CheckCircle2,
+  Copy,
   Coins,
   Crown,
   Loader2,
@@ -29,8 +30,9 @@ import {
   getSafeCheckoutUrl,
   type VipPaymentReturnStatus,
 } from '@/lib/vip-checkout-flow'
-import { VIP_PURCHASE_PLANS, type VipPlanKey } from '@/lib/vip-plans'
+import { getVipPlanSavings, VIP_PURCHASE_PLANS, type VipPlanKey } from '@/lib/vip-plans'
 import { useLanguage } from '../components/LanguageProvider'
+import { getPaymentAccessToken } from '@/lib/payments/client-auth'
 
 type CurrentProfile = {
   username: string | null
@@ -65,14 +67,19 @@ type MercadoPagoPreferenceResponse = {
   order_id?: string
   external_reference?: string
   checkout_url?: string
+  error?: string
+  code?: string
 }
 
 type ManualPixResponse = {
   configured?: boolean
-  pix_key?: string
-  pixPaymentLink?: string
+  pix_copy_paste?: string
+  qr_code_data_url?: string
+  total_brl_cents?: number
   receiver_name?: string
   receiver_city?: string
+  error?: string
+  code?: string
 }
 
 const BADGE_MEDIA = {
@@ -162,7 +169,9 @@ export default function VipPlusPage() {
   const [preparedOrder, setPreparedOrder] = useState<PendingVipCheckout | null>(null)
   const [manualPix, setManualPix] = useState<ManualPixResponse | null>(null)
   const [loadingManualPix, setLoadingManualPix] = useState(false)
+  const [copiedManualPix, setCopiedManualPix] = useState(false)
   const [paymentReturnStatus, setPaymentReturnStatus] = useState<VipPaymentReturnStatus>(null)
+  const [paymentAuthIssue, setPaymentAuthIssue] = useState(false)
 
   useEffect(() => {
     // Hydration state is intentionally established after the client mounts.
@@ -193,9 +202,32 @@ export default function VipPlusPage() {
     () => calculatePaymentTotals(selectedPlan.amountBrlCents, 'mercadopago_pix'),
     [selectedPlan],
   )
+  const selectedManualPixTotals = useMemo(
+    () => calculatePaymentTotals(selectedPlan.amountBrlCents, 'pix_manual'),
+    [selectedPlan],
+  )
   const paymentReturnMessage = paymentReturnStatus
     ? t(`vip.paymentReturn.${paymentReturnStatus}${paymentReturnStatus === 'success' && vipActive ? 'Active' : ''}`)
     : null
+
+  function paymentErrorMessage(code: string | undefined, fallback: string) {
+    switch (code) {
+      case 'authentication_required': return t('vip.errors.authentication_required')
+      case 'session_refresh_failed': return t('vip.errors.session_refresh_failed')
+      case 'authentication_rejected': return t('vip.errors.authentication_rejected')
+      case 'payment_urls_not_configured': return t('vip.errors.payment_urls_not_configured')
+      case 'payment_order_creation_failed': return t('vip.errors.payment_order_creation_failed')
+      case 'payment_provider_rejected': return t('vip.errors.payment_provider_rejected')
+      case 'temporary_payment_error': return t('vip.errors.temporary_payment_error')
+      case 'pix_configuration_missing': return t('vip.errors.pix_configuration_missing')
+      case 'pix_key_invalid': return t('vip.errors.pix_key_invalid')
+      case 'pix_receiver_invalid': return t('vip.errors.pix_receiver_invalid')
+      case 'pix_amount_invalid': return t('vip.errors.pix_amount_invalid')
+      case 'pix_generation_failed': return t('vip.errors.pix_generation_failed')
+      case 'temporary_pix_error': return t('vip.errors.temporary_pix_error')
+      default: return fallback
+    }
+  }
 
   async function loadNavigationShell() {
     const {
@@ -276,13 +308,12 @@ export default function VipPlusPage() {
   async function openMercadoPagoCheckout() {
     setPreparingPurchase(true)
     setPurchaseMessage('')
+    setPaymentAuthIssue(false)
 
-    const {
-      data: { session },
-    } = await supabase.auth.getSession()
-
-    if (!session?.access_token) {
-      setPurchaseMessage(t('vip.errors.signInPayment'))
+    const auth = await getPaymentAccessToken(supabase.auth)
+    if (!auth.ok) {
+      setPurchaseMessage(paymentErrorMessage(auth.code, t('vip.errors.signInPayment')))
+      setPaymentAuthIssue(true)
       setPreparingPurchase(false)
       return
     }
@@ -301,7 +332,7 @@ export default function VipPlusPage() {
       const response = await fetch('/api/payments/mercadopago/create-preference', {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${auth.accessToken}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -314,7 +345,12 @@ export default function VipPlusPage() {
       const checkoutUrl = getSafeCheckoutUrl(data?.checkout_url)
 
       if (!response.ok || !checkoutUrl || !data?.order_id || !data.external_reference) {
-        setPurchaseMessage(t('vip.errors.openPayment'))
+        const errorCode = data?.code
+        setPurchaseMessage(paymentErrorMessage(errorCode, data?.error || t('vip.errors.openPayment')))
+        if (response.status === 401) {
+          setPaymentAuthIssue(true)
+          if (errorCode === 'authentication_rejected') await supabase.auth.signOut({ scope: 'local' })
+        }
         return
       }
 
@@ -336,29 +372,37 @@ export default function VipPlusPage() {
     }
   }
 
-  async function loadManualPix() {
+  async function loadManualPix(planKey: VipPlanKey = selectedPlan.planKey) {
     setLoadingManualPix(true)
     setPurchaseMessage('')
-
-    const {
-      data: { session },
-    } = await supabase.auth.getSession()
-
-    if (!session?.access_token) {
-      setPurchaseMessage(t('vip.errors.signInPix'))
-      setLoadingManualPix(false)
-      return
-    }
+    setPaymentAuthIssue(false)
 
     try {
-      const response = await fetch('/api/payments/pix/manual-info', {
-        headers: { Authorization: `Bearer ${session.access_token}` },
+      const auth = await getPaymentAccessToken(supabase.auth)
+      if (!auth.ok) {
+        setManualPix(null)
+        setPurchaseMessage(paymentErrorMessage(auth.code, t('vip.errors.signInPix')))
+        setPaymentAuthIssue(true)
+        return
+      }
+      const response = await fetch('/api/payments/pix/manual-code', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${auth.accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ product_type: 'vip_plus', plan_key: planKey }),
       })
       const data = (await response.json().catch(() => null)) as ManualPixResponse | null
 
       if (!response.ok || !data?.configured) {
         setManualPix(null)
-        setPurchaseMessage(t('vip.errors.pixUnavailable'))
+        const errorCode = data?.code
+        setPurchaseMessage(paymentErrorMessage(errorCode, data?.error || t('vip.errors.pixUnavailable')))
+        if (response.status === 401) {
+          setPaymentAuthIssue(true)
+          if (errorCode === 'authentication_rejected') await supabase.auth.signOut({ scope: 'local' })
+        }
         return
       }
 
@@ -372,7 +416,7 @@ export default function VipPlusPage() {
   }
 
   return (
-    <main className="min-h-screen overflow-hidden bg-black text-white">
+    <main data-testid="vip-page" data-mounted={mounted ? 'true' : 'false'} className="min-h-screen overflow-hidden bg-black text-white">
       <AppSidebar
         unreadNotificationsCount={unreadNotificationsCount}
         mounted={mounted}
@@ -558,17 +602,20 @@ export default function VipPlusPage() {
               <div className="mt-4 grid gap-3 md:grid-cols-3">
                 {VIP_PURCHASE_PLANS.map((plan) => {
                   const selected = selectedPlanKey === plan.planKey
+                  const savings = getVipPlanSavings(plan)
 
                   return (
                     <button
                       key={plan.planKey}
+                      data-testid={`vip-plan-${plan.planKey}`}
                       type="button"
                       onClick={() => {
+                        const shouldRegenerateManualPix = Boolean(manualPix)
                         setSelectedPlanKey(plan.planKey)
                         setPreparedOrder(null)
                         setCheckoutRequested(false)
-                        setManualPix(null)
                         setPurchaseMessage('')
+                        if (shouldRegenerateManualPix) void loadManualPix(plan.planKey)
                       }}
                       className={`rounded-3xl border p-4 text-left transition hover:-translate-y-0.5 ${
                         selected
@@ -585,6 +632,12 @@ export default function VipPlusPage() {
                         )}
                       </div>
                       <p className="mt-3 text-2xl font-black">{formatBRLFromCents(plan.amountBrlCents, language)}</p>
+                      {savings.savingsBrlCents > 0 && (
+                        <div data-testid="vip-plan-savings" className={`mt-2 text-xs font-bold ${selected ? 'text-blue-700' : 'text-blue-200'}`}>
+                          <p>{t('vip.savePercent', { percent: savings.savingsPercent })} · {t('vip.proportionalPrice', { price: formatBRLFromCents(savings.proportionalBrlCents, language) })}</p>
+                          <p data-testid="vip-plan-monthly-equivalent">{t('vip.perMonth', { price: formatBRLFromCents(savings.monthlyEquivalentBrlCents, language) })}</p>
+                        </div>
+                      )}
                       <p className={`mt-2 text-xs font-semibold ${selected ? 'text-zinc-600' : 'text-blue-50/65'}`}>
                         {t('vip.daysAfterPayment', { days: plan.days })}
                       </p>
@@ -623,15 +676,21 @@ export default function VipPlusPage() {
             </div>
 
             <div className="mt-4 grid gap-3 text-sm text-zinc-300">
+              <div data-testid="vip-payment-choice-notice" className="rounded-2xl border border-blue-300/20 bg-blue-500/10 px-4 py-3 leading-6 text-blue-50">
+                {t('vip.paymentChoiceNotice')}
+              </div>
               <div className="rounded-2xl border border-white/10 bg-black/35 px-4 py-3">
                 <strong className="block text-white">{t(`vip.plans.${selectedPlan.planKey}`)}</strong>
                 <span className="mt-1 block text-zinc-400">{t('vip.daysAfterPayment', { days: selectedPlan.days })}</span>
               </div>
               <div className="rounded-2xl border border-white/10 bg-black/35 px-4 py-3">
-                <strong className="block text-white">{t('vip.estimatedTotal')}</strong>
-                <span className="mt-1 block text-zinc-400">
-                  {t('vip.estimatedTotalDescription', { total: formatBRLFromCents(selectedPlanTotals.totalBrlCents, language) })}
-                </span>
+                <strong className="block text-white">{t('vip.mercadoPagoAutomatic')}</strong>
+                <span className="mt-1 block text-zinc-400">{t('vip.mercadoPagoFeeDescription')}</span>
+                <dl data-testid="vip-mercadopago-summary" className="mt-3 space-y-2 text-xs">
+                  <div className="flex justify-between gap-3"><dt>{t('vip.planAmount')}</dt><dd>{formatBRLFromCents(selectedPlanTotals.baseAmountBrlCents, language)}</dd></div>
+                  <div className="flex justify-between gap-3"><dt>{t('vip.processingFee')}</dt><dd>{formatBRLFromCents(selectedPlanTotals.platformFeeBrlCents + selectedPlanTotals.operatorFeeBrlCents, language)}</dd></div>
+                  <div className="flex justify-between gap-3 font-black text-white"><dt>{t('vip.totalToPay')}</dt><dd>{formatBRLFromCents(selectedPlanTotals.totalBrlCents, language)}</dd></div>
+                </dl>
               </div>
               <div className="rounded-2xl border border-white/10 bg-black/35 px-4 py-3">
                 <strong className="block text-white">{t('vip.currentPlan')}</strong>
@@ -640,6 +699,7 @@ export default function VipPlusPage() {
             </div>
 
             <button
+              data-testid="vip-mercadopago-option"
               type="button"
               onClick={openMercadoPagoCheckout}
               disabled={preparingPurchase}
@@ -655,9 +715,13 @@ export default function VipPlusPage() {
                     : t('vip.payMercadoPago')}
             </button>
 
+            <p data-testid="vip-manual-pix-no-fee" className="mt-3 text-sm font-black text-emerald-200">{t('vip.manualPixNoFee')}</p>
+            <p className="mt-1 text-xs leading-5 text-zinc-400">{t('vip.manualPixDescription')}</p>
+
             <button
+              data-testid="vip-manual-pix-option"
               type="button"
-              onClick={loadManualPix}
+              onClick={() => loadManualPix()}
               disabled={loadingManualPix}
               className="mt-3 inline-flex w-full items-center justify-center rounded-full border border-blue-200/35 bg-blue-500/10 px-5 py-3 text-sm font-bold text-blue-100 transition hover:bg-blue-500/20 disabled:cursor-not-allowed disabled:opacity-60"
             >
@@ -686,6 +750,12 @@ export default function VipPlusPage() {
               </div>
             )}
 
+            {paymentAuthIssue && (
+              <Link href="/login?redirect=/vip-plus" className="mt-3 inline-flex w-full items-center justify-center rounded-full border border-amber-300/30 px-5 py-3 text-sm font-black text-amber-100">
+                {t('vip.signInAgain')}
+              </Link>
+            )}
+
             {preparedOrder && (
               <div className="mt-4 rounded-3xl border border-emerald-300/20 bg-emerald-500/10 p-4 text-sm text-emerald-50">
                 <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-200/70">{t('vip.pendingOrder')}</p>
@@ -695,26 +765,15 @@ export default function VipPlusPage() {
             )}
 
             {manualPix && (
-              <div className="mt-4 rounded-3xl border border-blue-300/20 bg-blue-500/10 p-4 text-sm text-blue-50">
+              <div data-testid="vip-manual-pix-panel" className="mt-4 rounded-3xl border border-blue-300/20 bg-blue-500/10 p-4 text-sm text-blue-50">
                 <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-200/70">{t('vip.manualPix')}</p>
                 <p className="mt-2 font-semibold">{t('vip.activationNotice')}</p>
+                {manualPix.qr_code_data_url && <img data-testid="vip-manual-pix-qr" src={manualPix.qr_code_data_url} alt={t('vip.pixQrAlt')} className="mx-auto mt-4 w-56 rounded-2xl bg-white p-2" />}
+                {manualPix.total_brl_cents && <p data-testid="vip-manual-pix-total" className="mt-3 text-xl font-black">{formatBRLFromCents(manualPix.total_brl_cents, language)}</p>}
+                <p className="mt-1 text-xs text-blue-100/80">{t('vip.onlyAdvertisedAmount', { total: formatBRLFromCents(selectedManualPixTotals.totalBrlCents, language) })}</p>
                 {manualPix.receiver_name && <p className="mt-3 text-blue-50/80">{t('vip.receiver', { value: manualPix.receiver_name })}</p>}
                 {manualPix.receiver_city && <p className="text-blue-50/80">{t('vip.city', { value: manualPix.receiver_city })}</p>}
-                {manualPix.pix_key && (
-                  <p className="mt-3 break-all rounded-xl border border-white/10 bg-black/25 px-3 py-2 text-xs text-blue-50/90">
-                    {t('vip.pixKey', { value: manualPix.pix_key })}
-                  </p>
-                )}
-                {getSafeCheckoutUrl(manualPix.pixPaymentLink) && (
-                  <a
-                    href={getSafeCheckoutUrl(manualPix.pixPaymentLink) || undefined}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="mt-3 inline-flex rounded-full bg-white px-4 py-2 text-xs font-black text-black transition hover:bg-blue-50"
-                  >
-                    {t('vip.openPixInstructions')}
-                  </a>
-                )}
+                {manualPix.pix_copy_paste && <><p className="mt-3 text-xs font-black uppercase tracking-[0.2em] text-blue-200/70">{t('vip.pixCopyPaste')}</p><code data-testid="vip-manual-pix-copy-paste" className="mt-2 block max-h-28 overflow-auto break-all rounded-xl bg-black/40 p-3 text-xs">{manualPix.pix_copy_paste}</code><button data-testid="vip-manual-pix-copy-button" type="button" onClick={async () => { await navigator.clipboard.writeText(manualPix.pix_copy_paste!); setCopiedManualPix(true) }} className="mt-3 inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-xs font-black text-black"><Copy className="h-4 w-4" />{copiedManualPix ? t('vip.codeCopied') : t('vip.copyPixCode')}</button></>}
               </div>
             )}
           </aside>

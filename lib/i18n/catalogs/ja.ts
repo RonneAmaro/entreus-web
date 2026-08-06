@@ -5,6 +5,9 @@ import { publicProfileCatalogs } from './public-profile'
 export const ja = extendEnglishCatalog({
   ...purchaseCatalogs.ja,
   ...publicProfileCatalogs.ja,
+  'vip.savePercent': '{percent}%お得', 'vip.proportionalPrice': '通常換算価格：{price}', 'vip.perMonth': '月額換算 {price}', 'vip.pixCopyPaste': 'コピー＆ペースト用Pix', 'vip.copyPixCode': 'Pixコードをコピー', 'vip.codeCopied': 'コードをコピーしました', 'vip.pixQrAlt': '手動PixのQRコード',
+  'vip.paymentChoiceNotice': 'ご希望に合う方法をお選びください。手動Pixでは追加手数料なしでプラン価格のみをお支払いいただきます。Mercado Pagoでは自動確認され、続行前に処理手数料を含む合計が表示されます。', 'vip.manualPixNoFee': '追加手数料なし', 'vip.manualPixDescription': '表示された金額のみをお支払いください。その後、証明書を送信すると担当チームが確認します。', 'vip.onlyAdvertisedAmount': '正確な金額：{total}', 'vip.mercadoPagoAutomatic': '自動確認', 'vip.mercadoPagoFeeDescription': 'Mercado Pagoの処理手数料が加算されます。支払いを開く前に合計金額が表示されます。', 'vip.planAmount': 'プラン金額', 'vip.processingFee': '処理手数料', 'vip.totalToPay': '支払合計',
+  'vip.errors.pix_configuration_missing': '手動Pixの設定が完了していません。', 'vip.errors.pix_key_invalid': '設定されたPixキーが無効です。', 'vip.errors.pix_receiver_invalid': 'Pix受取人情報が無効です。', 'vip.errors.pix_amount_invalid': 'Pix金額が無効です。', 'vip.errors.pix_generation_failed': '現在Pixを生成できません。もう一度お試しください。', 'vip.errors.temporary_pix_error': 'Pixは一時的に利用できません。もう一度お試しください。',
   'feed.emptyTitle': 'フィードはまだ空です。',
   'feed.emptyDescription': 'フォローする相手が増えたり、あなたのアカウントに合う投稿が見つかると、ここに表示されます。それまでは検索やプロフィール閲覧、EntreUS Hub の探索を試してください。',
   'hub.discoveryScope': 'Hub ではページやプラットフォーム機能を見つけられます。',

@@ -92,14 +92,15 @@ export function getPaymentMethodConfig(value: string | null | undefined) {
 
 export function calculatePaymentTotals(baseAmountBrlCents: number, methodValue: string | null | undefined) {
   const method = getPaymentMethodConfig(methodValue)
-  const platformFeeBrlCents = Math.ceil(baseAmountBrlCents * (PLATFORM_FEE_PERCENT / 100))
+  const platformFeePercent = method.value === 'pix_manual' ? 0 : PLATFORM_FEE_PERCENT
+  const platformFeeBrlCents = Math.ceil(baseAmountBrlCents * (platformFeePercent / 100))
   const percentFeeCents = Math.ceil(baseAmountBrlCents * (method.operatorFeePercent / 100))
   const operatorFeeBrlCents = percentFeeCents + method.operatorFeeFixedCents
 
   return {
     method,
     baseAmountBrlCents,
-    platformFeePercent: PLATFORM_FEE_PERCENT,
+    platformFeePercent,
     platformFeeBrlCents,
     operatorFeePercent: method.operatorFeePercent,
     operatorFeeFixedCents: method.operatorFeeFixedCents,
