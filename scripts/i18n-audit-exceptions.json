@@ -58,14 +58,6 @@
       "reason": "Nome abreviado do produto Pix oferecido pelo Mercado Pago.",
       "category": "nome_proprio_ou_marca",
       "comment": "A abreviação identifica o método recomendado e não constitui texto em português."
-    },
-    {
-      "file": "app/buy-itacash/page.tsx",
-      "pattern": ">EntreUS 2%<",
-      "text": "EntreUS 2%",
-      "reason": "Marca EntreUS acompanhada apenas do percentual numérico da taxa.",
-      "category": "nome_proprio_ou_marca",
-      "comment": "Não há palavra em português; a marca e o valor são invariáveis entre idiomas."
     }
   ]
 }
