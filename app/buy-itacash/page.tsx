@@ -526,12 +526,6 @@ export default function BuyItaCashPage() {
                 </div>
 
                 <div className="mt-5 space-y-3 text-sm">
-                  {pixInfo?.qr_code_data_url && (
-                    <div className="grid gap-4 rounded-2xl bg-black/35 p-4 sm:grid-cols-[13rem_1fr]">
-                      <img src={pixInfo.qr_code_data_url} alt={t('purchase.pixQrAlt')} className="w-full rounded-2xl bg-white p-2" />
-                      <div className="min-w-0"><p className="text-xs font-black uppercase tracking-[0.2em] text-blue-200/70">{t('purchase.pixCopyPaste')}</p><code className="mt-2 block max-h-32 overflow-auto break-all rounded-xl bg-black p-3 text-xs">{pixInfo.pix_copy_paste}</code><button type="button" onClick={async () => { await navigator.clipboard.writeText(pixInfo.pix_copy_paste || ''); setCopiedManualPixCode(true) }} className="mt-3 inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-xs font-black text-black"><Copy className="h-4 w-4" />{copiedManualPixCode ? t('purchase.codeCopied') : t('purchase.copyPixCode')}</button></div>
-                    </div>
-                  )}
                   <div className="flex items-center justify-between gap-4 rounded-2xl bg-black/35 px-4 py-3">
                     <span className="text-zinc-400">{t('purchase.baseAmount')}</span>
                     <strong>{formatBRLFromCents(totals.baseAmountBrlCents, language)}</strong>
@@ -636,6 +630,13 @@ export default function BuyItaCashPage() {
                 </div>
 
                 <div className="mt-5 space-y-3 text-sm">
+                  {pixInfo?.qr_code_data_url && (
+                    <div className="grid min-w-0 gap-4 rounded-2xl bg-black/35 p-4 sm:grid-cols-[13rem_minmax(0,1fr)]">
+                      <img src={pixInfo.qr_code_data_url} alt={t('purchase.pixQrAlt')} className="mx-auto w-full max-w-52 rounded-2xl bg-white p-2 sm:mx-0" />
+                      <div className="min-w-0"><p className="text-xs font-black uppercase tracking-[0.2em] text-blue-200/70">{t('purchase.pixCopyPaste')}</p><code className="mt-2 block max-h-32 overflow-auto break-all rounded-xl bg-black p-3 text-xs">{pixInfo.pix_copy_paste}</code><button type="button" onClick={async () => { await navigator.clipboard.writeText(pixInfo.pix_copy_paste || ''); setCopiedManualPixCode(true) }} className="mt-3 inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-xs font-black text-black"><Copy className="h-4 w-4" />{copiedManualPixCode ? t('purchase.codeCopied') : t('purchase.copyPixCode')}</button></div>
+                    </div>
+                  )}
+
                   <div data-testid="purchase-manual-pix-status" className="rounded-2xl bg-black/35 px-4 py-3">
                     <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-200">{t('purchase.noAdditionalFee')}</p>
                     {pixInfoLoading ? (

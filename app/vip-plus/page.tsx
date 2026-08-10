@@ -715,6 +715,19 @@ export default function VipPlusPage() {
                     : t('vip.payMercadoPago')}
             </button>
 
+            {manualPix && (
+              <div data-testid="vip-manual-pix-panel" className="mt-4 rounded-3xl border border-blue-300/20 bg-blue-500/10 p-4 text-sm text-blue-50">
+                <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-200/70">{t('vip.manualPix')}</p>
+                <p className="mt-2 font-semibold">{t('vip.activationNotice')}</p>
+                {manualPix.qr_code_data_url && <img data-testid="vip-manual-pix-qr" src={manualPix.qr_code_data_url} alt={t('vip.pixQrAlt')} className="mx-auto mt-4 w-full max-w-56 rounded-2xl bg-white p-2" />}
+                {manualPix.total_brl_cents && <p data-testid="vip-manual-pix-total" className="mt-3 text-xl font-black">{formatBRLFromCents(manualPix.total_brl_cents, language)}</p>}
+                <p className="mt-1 text-xs text-blue-100/80">{t('vip.onlyAdvertisedAmount', { total: formatBRLFromCents(selectedManualPixTotals.totalBrlCents, language) })}</p>
+                {manualPix.receiver_name && <p className="mt-3 text-blue-50/80">{t('vip.receiver', { value: manualPix.receiver_name })}</p>}
+                {manualPix.receiver_city && <p className="text-blue-50/80">{t('vip.city', { value: manualPix.receiver_city })}</p>}
+                {manualPix.pix_copy_paste && <><p className="mt-3 text-xs font-black uppercase tracking-[0.2em] text-blue-200/70">{t('vip.pixCopyPaste')}</p><code data-testid="vip-manual-pix-copy-paste" className="mt-2 block max-h-28 overflow-auto break-all rounded-xl bg-black/40 p-3 text-xs">{manualPix.pix_copy_paste}</code><button data-testid="vip-manual-pix-copy-button" type="button" onClick={async () => { await navigator.clipboard.writeText(manualPix.pix_copy_paste!); setCopiedManualPix(true) }} className="mt-3 inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-xs font-black text-black"><Copy className="h-4 w-4" />{copiedManualPix ? t('vip.codeCopied') : t('vip.copyPixCode')}</button></>}
+              </div>
+            )}
+
             <p data-testid="vip-manual-pix-no-fee" className="mt-3 text-sm font-black text-emerald-200">{t('vip.manualPixNoFee')}</p>
             <p className="mt-1 text-xs leading-5 text-zinc-400">{t('vip.manualPixDescription')}</p>
 
@@ -764,18 +777,6 @@ export default function VipPlusPage() {
               </div>
             )}
 
-            {manualPix && (
-              <div data-testid="vip-manual-pix-panel" className="mt-4 rounded-3xl border border-blue-300/20 bg-blue-500/10 p-4 text-sm text-blue-50">
-                <p className="text-xs font-black uppercase tracking-[0.2em] text-blue-200/70">{t('vip.manualPix')}</p>
-                <p className="mt-2 font-semibold">{t('vip.activationNotice')}</p>
-                {manualPix.qr_code_data_url && <img data-testid="vip-manual-pix-qr" src={manualPix.qr_code_data_url} alt={t('vip.pixQrAlt')} className="mx-auto mt-4 w-56 rounded-2xl bg-white p-2" />}
-                {manualPix.total_brl_cents && <p data-testid="vip-manual-pix-total" className="mt-3 text-xl font-black">{formatBRLFromCents(manualPix.total_brl_cents, language)}</p>}
-                <p className="mt-1 text-xs text-blue-100/80">{t('vip.onlyAdvertisedAmount', { total: formatBRLFromCents(selectedManualPixTotals.totalBrlCents, language) })}</p>
-                {manualPix.receiver_name && <p className="mt-3 text-blue-50/80">{t('vip.receiver', { value: manualPix.receiver_name })}</p>}
-                {manualPix.receiver_city && <p className="text-blue-50/80">{t('vip.city', { value: manualPix.receiver_city })}</p>}
-                {manualPix.pix_copy_paste && <><p className="mt-3 text-xs font-black uppercase tracking-[0.2em] text-blue-200/70">{t('vip.pixCopyPaste')}</p><code data-testid="vip-manual-pix-copy-paste" className="mt-2 block max-h-28 overflow-auto break-all rounded-xl bg-black/40 p-3 text-xs">{manualPix.pix_copy_paste}</code><button data-testid="vip-manual-pix-copy-button" type="button" onClick={async () => { await navigator.clipboard.writeText(manualPix.pix_copy_paste!); setCopiedManualPix(true) }} className="mt-3 inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-xs font-black text-black"><Copy className="h-4 w-4" />{copiedManualPix ? t('vip.codeCopied') : t('vip.copyPixCode')}</button></>}
-              </div>
-            )}
           </aside>
         </section>
       </section>
