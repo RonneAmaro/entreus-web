@@ -311,32 +311,6 @@ function detectMediaType(file: File): 'image' | 'video' | 'audio' | null {
   return null
 }
 
-function makeFileNameSafe(name: string) {
-  return name
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9._-]/g, '-')
-}
-
-function isPrivateMessageAttachmentR2Path(value: string | null | undefined) {
-  if (!value) return false
-
-  const trimmed = value.trim()
-  const key = trimmed.startsWith('r2://')
-    ? trimmed.slice('r2://'.length).replace(/^\/+/, '')
-    : trimmed.replace(/^\/+/, '')
-
-  return (
-    key.startsWith('private/messages/') &&
-    !key.includes('..') &&
-    !key.includes('\\') &&
-    !key.includes('\0') &&
-    !key.includes('?') &&
-    !key.includes('#')
-  )
-}
-
 function getAudioMimeType() {
   if (typeof window === 'undefined') return 'audio/webm'
 
@@ -2744,29 +2718,20 @@ export default function ConversationPage() {
     const deletedAt = new Date().toISOString()
     const attachmentsToDelete = targetMessage.attachments || []
 
-    if (false && attachmentsToDelete.length > 0) {
-      const storagePaths = attachmentsToDelete
-        .map((attachment) => attachment.storage_path)
-        .filter(Boolean)
+    if (attachmentsToDelete.length > 0) {
+      const headers = await getMessageAttachmentAuthHeaders()
+      if (headers) {
+        const attachmentsDeleteResponse = await fetch(
+          `/api/messages/attachments/message/${encodeURIComponent(messageId)}`,
+          {
+            method: 'DELETE',
+            headers,
+          }
+        )
 
-      if (storagePaths.length > 0) {
-        const { error: storageError } = await supabase.storage
-          .from('message-media')
-          .remove(storagePaths)
-
-        if (storageError) {
-          console.error('Erro ao remover mídias da mensagem:', storageError)
+        if (!attachmentsDeleteResponse.ok) {
+          console.error('Erro ao apagar anexos da mensagem:', attachmentsDeleteResponse.status)
         }
-      }
-
-      const { error: attachmentsError } = await supabase
-        .from('message_attachments')
-        .delete()
-        .eq('message_id', messageId)
-        .eq('sender_id', userId)
-
-      if (attachmentsError) {
-        console.error('Erro ao apagar anexos da mensagem:', attachmentsError)
       }
     }
 
@@ -2841,24 +2806,20 @@ export default function ConversationPage() {
 
     setMessage('')
 
-    if (!isPrivateMessageAttachmentR2Path(attachment.storage_path)) {
-      const { error: storageError } = await supabase.storage
-        .from('message-media')
-        .remove([attachment.storage_path])
+    const headers = await getMessageAttachmentAuthHeaders()
+    if (!headers) return
 
-      if (storageError) {
-        console.error('Erro ao remover arquivo do storage:', storageError.message)
+    const deleteResponse = await fetch(
+      `/api/messages/attachments/${encodeURIComponent(attachment.id)}`,
+      {
+        method: 'DELETE',
+        headers,
       }
-    }
+    )
 
-    const { error: deleteError } = await supabase
-      .from('message_attachments')
-      .delete()
-      .eq('id', attachment.id)
-      .eq('sender_id', userId)
-
-    if (deleteError) {
-      setMessage(t('messages.detail.errors.deleteMedia', { error: deleteError.message }))
+    if (!deleteResponse.ok) {
+      const deleteData = (await deleteResponse.json().catch(() => null)) as { error?: string } | null
+      setMessage(t('messages.detail.errors.deleteMedia', { error: deleteData?.error || t('common.retry') }))
       return
     }
 
@@ -2910,65 +2871,76 @@ export default function ConversationPage() {
   }
 
   async function uploadMessageMedia(messageId: string, files: SelectedMedia[]) {
-    const attachmentsToInsert: Omit<MessageAttachment, 'id' | 'created_at'>[] = []
+    const headers = await getMessageAttachmentAuthHeaders()
+    if (!headers) throw new Error(t('messages.detail.errors.sendMedia'))
 
-    for (let index = 0; index < files.length; index++) {
-      const item = files[index]
-      const fileExt = item.file.name.split('.').pop()?.toLowerCase() || 'file'
-      const safeName = makeFileNameSafe(item.file.name)
-      const storagePath = `${conversationId}/${userId}/message-${messageId}-${index}-${Date.now()}.${fileExt}`
+    const uploadedAttachments: MessageAttachment[] = []
+    setUploadingMedia(true)
 
-      setUploadingMedia(true)
+    try {
+      for (const [position, item] of files.entries()) {
+        const prepareResponse = await fetch('/api/messages/attachments/prepare', {
+          method: 'POST',
+          headers: {
+            ...headers,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            conversationId,
+            messageId,
+            filename: item.file.name,
+            declaredMime: item.file.type,
+            declaredSize: item.file.size,
+            mediaType: item.mediaType,
+            position,
+          }),
+        })
+        const prepareData = (await prepareResponse.json().catch(() => null)) as {
+          uploadUrl?: string
+          pendingUploadId?: string
+        } | null
 
-      const { error: uploadError } = await supabase.storage
-        .from('message-media')
-        .upload(storagePath, item.file, {
-          cacheControl: '3600',
-          upsert: false,
-          contentType: item.file.type,
+        if (!prepareResponse.ok || typeof prepareData?.uploadUrl !== 'string' || typeof prepareData?.pendingUploadId !== 'string') {
+          throw new Error(t('messages.detail.errors.sendMedia'))
+        }
+
+        const uploadResponse = await fetch(prepareData.uploadUrl, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': item.file.type,
+          },
+          body: item.file,
         })
 
-      if (uploadError) {
-        setUploadingMedia(false)
-        throw new Error(t('messages.detail.errors.sendMediaWithReason', { error: uploadError.message }))
+        if (!uploadResponse.ok) {
+          throw new Error(t('messages.detail.errors.sendMedia'))
+        }
+
+        const confirmResponse = await fetch('/api/messages/attachments/confirm', {
+          method: 'POST',
+          headers: {
+            ...headers,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            pendingUploadId: prepareData.pendingUploadId,
+          }),
+        })
+        const confirmData = (await confirmResponse.json().catch(() => null)) as {
+          attachment?: MessageAttachment
+        } | null
+
+        if (!confirmResponse.ok || !confirmData?.attachment) {
+          throw new Error(t('messages.detail.errors.sendMedia'))
+        }
+
+        uploadedAttachments.push(await attachSignedUrl(confirmData.attachment))
       }
 
-      attachmentsToInsert.push({
-        message_id: messageId,
-        conversation_id: conversationId,
-        sender_id: userId,
-        storage_path: storagePath,
-        media_type: item.mediaType,
-        file_name: safeName,
-        file_size: item.file.size,
-        mime_type: item.file.type,
-        position: index,
-      })
-    }
-
-    if (attachmentsToInsert.length === 0) {
+      return uploadedAttachments
+    } finally {
       setUploadingMedia(false)
-      return []
     }
-
-    const { data, error } = await supabase
-      .from('message_attachments')
-      .insert(attachmentsToInsert)
-      .select(
-        'id, message_id, conversation_id, sender_id, storage_path, media_type, file_name, file_size, mime_type, position, created_at'
-      )
-
-    setUploadingMedia(false)
-
-    if (error) {
-      throw new Error(t('messages.detail.errors.saveAttachments', { error: error.message }))
-    }
-
-    return Promise.all(
-      ((data || []) as MessageAttachment[]).map((attachment) =>
-        attachSignedUrl(attachment)
-      )
-    )
   }
 
   async function handleSendMessage(e: React.FormEvent<HTMLFormElement>) {
