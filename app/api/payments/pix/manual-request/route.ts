@@ -5,6 +5,7 @@ import { getRequestCorrelationId, logServerEvent } from '@/lib/logging/safe-logg
 import { resolvePixConfiguration } from '@/lib/payments/pix-config'
 import { paymentError } from '@/lib/payments/errors'
 import { getBearerAuthorization } from '@/lib/payments/server-auth'
+import { getUploadPolicy, validateFileContent } from '@/lib/upload-security'
 
 const PROOF_BUCKET = 'payment-proofs'
 const MAX_ITACASH_PER_REQUEST = 1_000_000
@@ -55,8 +56,32 @@ export async function POST(request: Request) {
     const { data: proofFiles, error: proofError } = await supabase.storage
       .from(PROOF_BUCKET)
       .list(proof.folder, { limit: 2, search: proof.filename })
-    if (proofError || !proofFiles?.some((file) => file.name === proof.filename)) {
+    const proofFile = proofFiles?.find((file) => file.name === proof.filename)
+    const proofSize = proofFile?.metadata?.size
+    const proofMime = proofFile?.metadata?.mimetype
+    if (proofError || !proofFile) {
       return NextResponse.json({ error: 'O comprovante enviado nao foi encontrado.', code: 'payment_proof_not_found' }, { status: 400 })
+    }
+    if (typeof proofSize !== 'number' || proofSize <= 0 || proofSize > getUploadPolicy('payment_proof').maxBytes || typeof proofMime !== 'string') {
+      return NextResponse.json({ error: 'O comprovante enviado e invalido.', code: 'invalid_payment_proof' }, { status: 400 })
+    }
+
+    const { data: proofBlob, error: downloadError } = await supabase.storage
+      .from(PROOF_BUCKET)
+      .download(proof.path)
+    if (downloadError || !proofBlob) {
+      return NextResponse.json({ error: 'O comprovante enviado nao foi encontrado.', code: 'payment_proof_not_found' }, { status: 400 })
+    }
+
+    const proofValidation = validateFileContent({
+      context: 'payment_proof',
+      bytes: await proofBlob.arrayBuffer(),
+      declaredSize: proofSize,
+      declaredMime: proofMime,
+      fileName: proof.filename,
+    })
+    if (!proofValidation.ok) {
+      return NextResponse.json({ error: 'O comprovante enviado e invalido.', code: 'invalid_payment_proof' }, { status: 400 })
     }
 
     const totals = calculatePaymentTotals(amountItacash * 10, 'pix_manual')

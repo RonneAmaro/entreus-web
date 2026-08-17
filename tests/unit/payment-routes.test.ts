@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   rpc: vi.fn(),
   insert: vi.fn(),
   storageList: vi.fn(),
+  storageDownload: vi.fn(),
   log: vi.fn(),
   qr: vi.fn(),
 }))
@@ -14,7 +15,7 @@ vi.mock('@supabase/supabase-js', () => ({
     auth: { getUser: mocks.getUser },
     rpc: mocks.rpc,
     from: vi.fn(() => ({ insert: mocks.insert })),
-    storage: { from: vi.fn(() => ({ list: mocks.storageList })) },
+    storage: { from: vi.fn(() => ({ list: mocks.storageList, download: mocks.storageDownload })) },
   })),
 }))
 vi.mock('@/lib/logging/safe-logger', () => ({
@@ -61,12 +62,15 @@ beforeEach(() => {
   mocks.rpc.mockReset()
   mocks.insert.mockReset()
   mocks.storageList.mockReset()
+  mocks.storageDownload.mockReset()
   mocks.log.mockReset()
   mocks.qr.mockReset()
   for (const [name, value] of Object.entries(safeEnv)) vi.stubEnv(name, value)
   mocks.getUser.mockResolvedValue({ data: { user }, error: null })
   mocks.insert.mockResolvedValue({ error: null })
-  mocks.storageList.mockResolvedValue({ data: [{ name: 'proof.png' }], error: null })
+  const validPng = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, ...Array(16).fill(0)])
+  mocks.storageList.mockResolvedValue({ data: [{ name: 'proof.png', metadata: { size: validPng.byteLength, mimetype: 'image/png' } }], error: null })
+  mocks.storageDownload.mockResolvedValue({ data: new Blob([validPng], { type: 'image/png' }), error: null })
   mocks.qr.mockResolvedValue('data:image/png;base64,c2FmZQ==')
   vi.stubGlobal('fetch', vi.fn())
 })
@@ -254,6 +258,29 @@ describe('POST manual-request', () => {
   it('requires the uploaded object to exist', async () => {
     mocks.storageList.mockResolvedValueOnce({ data: [], error: null })
     expect((await manualRequest.POST(post('/api/payments/pix/manual-request', validBody))).status).toBe(400)
+  })
+
+  it('rejects oversized or signature-spoofed payment proofs before persistence', async () => {
+    mocks.storageList.mockResolvedValueOnce({
+      data: [{ name: 'proof.png', metadata: { size: 10 * 1024 * 1024 + 1, mimetype: 'image/png' } }],
+      error: null,
+    })
+    const oversized = await manualRequest.POST(post('/api/payments/pix/manual-request', validBody))
+    expect(oversized.status).toBe(400)
+    expect((await oversized.json()).code).toBe('invalid_payment_proof')
+    expect(mocks.storageDownload).not.toHaveBeenCalled()
+    expect(mocks.insert).not.toHaveBeenCalled()
+
+    const fakePng = new TextEncoder().encode('<script>alert(1)</script>')
+    mocks.storageList.mockResolvedValueOnce({
+      data: [{ name: 'proof.png', metadata: { size: fakePng.byteLength, mimetype: 'image/png' } }],
+      error: null,
+    })
+    mocks.storageDownload.mockResolvedValueOnce({ data: new Blob([fakePng], { type: 'image/png' }), error: null })
+    const spoofed = await manualRequest.POST(post('/api/payments/pix/manual-request', validBody))
+    expect(spoofed.status).toBe(400)
+    expect((await spoofed.json()).code).toBe('invalid_payment_proof')
+    expect(mocks.insert).not.toHaveBeenCalled()
   })
 
   it('ignores financial extras and inserts server-side totals', async () => {

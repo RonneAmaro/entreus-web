@@ -8,38 +8,20 @@ import {
   jsonError,
   requireUser,
 } from '@/lib/meet-server'
+import {
+  detectOfficeOpenXmlType,
+  validateFileContent,
+  validateUploadMetadata,
+  type OfficeOpenXmlType,
+} from '@/lib/upload-security'
 import { NextResponse } from 'next/server'
 
 const BUCKET_NAME = 'meet-chat-attachments'
-const MAX_ATTACHMENT_SIZE = 5 * 1024 * 1024
-
-const ALLOWED_MIME_BY_EXTENSION: Record<string, string> = {
-  pdf: 'application/pdf',
-  jpg: 'image/jpeg',
-  jpeg: 'image/jpeg',
-  png: 'image/png',
-  webp: 'image/webp',
-  txt: 'text/plain',
-  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+const OOXML_TYPE_BY_MIME: Record<string, OfficeOpenXmlType> = {
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx',
 }
-
-const BLOCKED_EXTENSIONS = new Set([
-  'exe',
-  'bat',
-  'cmd',
-  'msi',
-  'apk',
-  'js',
-  'html',
-  'htm',
-  'php',
-  'sh',
-  'zip',
-  'rar',
-  '7z',
-])
 
 type AttachmentsRouteContext = {
   params: Promise<{ roomName: string }>
@@ -78,13 +60,6 @@ function publicAttachmentMessage(row: ChatMessageRow) {
   }
 }
 
-function getExtension(fileName: string) {
-  const normalized = fileName.trim().toLowerCase()
-  const dotIndex = normalized.lastIndexOf('.')
-  if (dotIndex < 0 || dotIndex === normalized.length - 1) return null
-  return normalized.slice(dotIndex + 1)
-}
-
 function sanitizeFileName(fileName: string) {
   const fallback = 'arquivo'
   const trimmed = fileName.trim().replace(/[/\\]/g, '-')
@@ -95,6 +70,14 @@ function sanitizeFileName(fileName: string) {
 
 function sanitizePathSegment(value: string) {
   return value.replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 100) || 'room'
+}
+
+function normalizeMessageId(value: FormDataEntryValue | null) {
+  if (typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value.trim())) {
+    return value.trim()
+  }
+
+  return crypto.randomUUID()
 }
 
 function normalizeSenderName(value: FormDataEntryValue | null, fallback: string | null) {
@@ -113,26 +96,47 @@ function normalizeSenderIdentity(value: FormDataEntryValue | null) {
   return trimmed.length > 0 ? trimmed : null
 }
 
-function validateFile(file: File): FileValidationResult {
-  if (file.size > MAX_ATTACHMENT_SIZE) {
-    return { ok: false, error: 'Arquivo muito grande. Envie um arquivo de ate 5 MB.' }
-  }
+async function validateFile(file: File): Promise<FileValidationResult> {
+  const metadata = validateUploadMetadata({
+    context: 'meet_attachment',
+    fileName: file.name,
+    declaredMime: file.type,
+    declaredSize: file.size,
+  })
 
-  if (file.size <= 0) {
-    return { ok: false, error: 'Arquivo vazio.' }
-  }
-
-  const extension = getExtension(file.name)
-  if (!extension || BLOCKED_EXTENSIONS.has(extension)) {
+  if (!metadata.ok) {
+    if (metadata.code === 'file_too_large') {
+      return { ok: false, error: 'Arquivo muito grande. Envie um arquivo de ate 5 MB.' }
+    }
+    if (metadata.code === 'file_empty') {
+      return { ok: false, error: 'Arquivo vazio.' }
+    }
     return { ok: false, error: 'Tipo de arquivo nao permitido.' }
   }
 
-  const expectedMime = ALLOWED_MIME_BY_EXTENSION[extension]
-  if (!expectedMime || file.type !== expectedMime) {
-    return { ok: false, error: 'Tipo de arquivo nao permitido.' }
+  const bytes = new Uint8Array(await file.arrayBuffer())
+  const content = validateFileContent({
+    context: 'meet_attachment',
+    fileName: file.name,
+    declaredMime: metadata.mime,
+    declaredSize: file.size,
+    bytes,
+  })
+
+  if (!content.ok) {
+    const expectedOfficeType = OOXML_TYPE_BY_MIME[metadata.mime]
+    const isValidOfficeContainer =
+      content.code === 'file_content_unverified' &&
+      expectedOfficeType !== undefined &&
+      detectOfficeOpenXmlType(bytes) === expectedOfficeType
+    const isPreservedPlainText = content.code === 'file_content_unverified' && metadata.mime === 'text/plain'
+
+    if (!isValidOfficeContainer && !isPreservedPlainText) {
+      return { ok: false, error: 'Tipo de arquivo nao permitido.' }
+    }
   }
 
-  return { ok: true, extension, mimeType: expectedMime }
+  return { ok: true, extension: metadata.extension, mimeType: metadata.mime }
 }
 
 async function requireApprovedRoomAccess(request: Request, context: AttachmentsRouteContext) {
@@ -179,13 +183,10 @@ export async function POST(request: Request, context: AttachmentsRouteContext) {
   const file = formData.get('file')
   if (!(file instanceof File)) return jsonError('Arquivo obrigatorio.', 400)
 
-  const validation = validateFile(file)
+  const validation = await validateFile(file)
   if (!validation.ok) return jsonError(validation.error, 400)
 
-  const messageIdValue = formData.get('id')
-  const messageId = typeof messageIdValue === 'string' && messageIdValue.trim()
-    ? messageIdValue.trim()
-    : crypto.randomUUID()
+  const messageId = normalizeMessageId(formData.get('id'))
   const senderName = normalizeSenderName(formData.get('senderName'), access.membership.display_name)
   const senderIdentity = normalizeSenderIdentity(formData.get('senderIdentity'))
   const displayName = sanitizeFileName(file.name)

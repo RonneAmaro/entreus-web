@@ -1,7 +1,8 @@
 import { createHash } from 'crypto'
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { getRequestCorrelationId, logServerEvent } from '@/lib/logging/safe-logger'
+import { validateFileContent, validateUploadMetadata } from '@/lib/upload-security'
 
 export const runtime = 'nodejs'
 
@@ -25,7 +26,7 @@ type ConsentRequest = {
 }
 
 type ServerSupabase = {
-  client: any
+  client: SupabaseClient
   hasServiceRole: boolean
 }
 
@@ -36,9 +37,14 @@ type ParsedDecisionBody = {
   selfieFile: File | null
 }
 
+type LegacyRpcClient = {
+  rpc: (
+    functionName: string,
+    args: Record<string, unknown>,
+  ) => Promise<{ data: unknown; error: { message?: string; code?: string } | null }>
+}
+
 const GUARDIAN_SELFIE_BUCKET = 'age-verifications'
-const GUARDIAN_SELFIE_MAX_SIZE_BYTES = 5 * 1024 * 1024
-const GUARDIAN_SELFIE_ACCEPTED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
 const GUARDIAN_SELFIE_EXTENSIONS: Record<string, string> = {
   'image/jpeg': 'jpg',
   'image/png': 'png',
@@ -87,8 +93,8 @@ function mapRpcRequest(row: {
   }
 }
 
-async function findRequestByLegacyRpc(client: ReturnType<typeof createClient>, token: string) {
-  const rpcClient = client as any
+async function findRequestByLegacyRpc(client: SupabaseClient, token: string) {
+  const rpcClient = client as unknown as LegacyRpcClient
   const { data, error } = await rpcClient.rpc('get_parental_consent_request', {
     p_token: token,
   })
@@ -111,8 +117,8 @@ async function findRequestByLegacyRpc(client: ReturnType<typeof createClient>, t
   }
 }
 
-async function submitByLegacyRpc(client: ReturnType<typeof createClient>, token: string, decision: string) {
-  const rpcClient = client as any
+async function submitByLegacyRpc(client: SupabaseClient, token: string, decision: string) {
+  const rpcClient = client as unknown as LegacyRpcClient
   const { data, error } = await rpcClient.rpc('submit_parental_consent', {
     p_token: token,
     p_decision: decision,
@@ -212,18 +218,18 @@ function validateGuardianSelfie(file: File | null) {
     return 'Envie uma selfie simples do responsavel para aprovar a autorizacao.'
   }
 
-  if (!GUARDIAN_SELFIE_ACCEPTED_TYPES.has(file.type)) {
-    return 'A selfie precisa ser uma imagem JPG, PNG ou WEBP.'
-  }
-
-  if (file.size > GUARDIAN_SELFIE_MAX_SIZE_BYTES) {
-    return 'A selfie deve ter no maximo 5 MB.'
-  }
-
-  return ''
+  const validation = validateUploadMetadata({
+    context: 'parental_selfie',
+    fileName: file.name,
+    declaredMime: file.type,
+    declaredSize: file.size,
+  })
+  if (validation.ok) return ''
+  if (validation.code === 'file_too_large') return 'A selfie deve ter no maximo 5 MB.'
+  return 'A selfie precisa ser uma imagem JPG, PNG ou WEBP valida.'
 }
 
-async function ensureGuardianSelfieColumns(supabase: ReturnType<typeof createClient>) {
+async function ensureGuardianSelfieColumns(supabase: SupabaseClient) {
   const { error } = await supabase
     .from('parental_consent_requests')
     .select('guardian_selfie_path, guardian_selfie_uploaded_at, approval_user_agent')
@@ -235,6 +241,59 @@ async function ensureGuardianSelfieColumns(supabase: ReturnType<typeof createCli
 function buildGuardianSelfiePath(requestId: string, file: File) {
   const extension = GUARDIAN_SELFIE_EXTENSIONS[file.type] || 'jpg'
   return `parental-consent/${requestId}/guardian-selfie-${Date.now()}.${extension}`
+}
+
+export function parseGuardianSelfiePath(value: unknown, requestId: string) {
+  if (typeof value !== 'string' || !isUuid(requestId) || value.length > 240) return null
+  if (/\\|\.\.|[%?#]|[\u0000-\u001f\u007f]/.test(value)) return null
+  const parts = value.split('/')
+  if (parts.length !== 3 || parts[0] !== 'parental-consent' || parts[1] !== requestId) return null
+  if (!/^guardian-selfie-[0-9]{10,16}\.(?:jpg|jpeg|png|webp)$/i.test(parts[2])) return null
+  return { path: value, folder: `parental-consent/${requestId}`, fileName: parts[2] }
+}
+
+async function validateStoredGuardianSelfie(
+  supabase: SupabaseClient,
+  path: string,
+  requestId: string,
+) {
+  const parsed = parseGuardianSelfiePath(path, requestId)
+  if (!parsed) return { ok: false as const, status: 400, error: 'A selfie enviada e invalida.' }
+  const storage = supabase.storage.from(GUARDIAN_SELFIE_BUCKET)
+  const { data: files, error: listError } = await storage.list(parsed.folder, { limit: 2, search: parsed.fileName })
+  const storedFile = files?.find((file) => file.name === parsed.fileName)
+  if (listError || !storedFile) {
+    return { ok: false as const, status: 500, error: 'Nao foi possivel confirmar o envio da selfie.' }
+  }
+
+  const metadata = validateUploadMetadata({
+    context: 'parental_selfie',
+    fileName: parsed.fileName,
+    declaredMime: storedFile.metadata?.mimetype,
+    declaredSize: storedFile.metadata?.size,
+  })
+  if (!metadata.ok) return { ok: false as const, status: 400, error: 'A selfie enviada e invalida.' }
+
+  const { data: blob, error: downloadError } = await storage.download(parsed.path)
+  if (downloadError || !blob) {
+    return { ok: false as const, status: 500, error: 'Nao foi possivel confirmar o envio da selfie.' }
+  }
+
+  const content = validateFileContent({
+    context: 'parental_selfie',
+    fileName: parsed.fileName,
+    declaredMime: metadata.mime,
+    declaredSize: storedFile.metadata?.size as number,
+    bytes: await blob.arrayBuffer(),
+  })
+  return content.ok
+    ? { ok: true as const }
+    : { ok: false as const, status: 400, error: 'A selfie enviada e invalida.' }
+}
+
+async function removeGuardianSelfie(supabase: SupabaseClient, path: string | null) {
+  if (!path) return
+  await supabase.storage.from(GUARDIAN_SELFIE_BUCKET).remove([path]).catch(() => null)
 }
 
 async function findRequestByToken(server: ServerSupabase, token: string) {
@@ -435,6 +494,18 @@ export async function POST(request: Request) {
       }
 
       const selfieFile = parsedBody.selfieFile as File
+      const selfieBytes = await selfieFile.arrayBuffer()
+      const selfieContent = validateFileContent({
+        context: 'parental_selfie',
+        fileName: selfieFile.name,
+        declaredMime: selfieFile.type,
+        declaredSize: selfieFile.size,
+        bytes: selfieBytes,
+      })
+      if (!selfieContent.ok) {
+        return NextResponse.json({ error: 'A selfie enviada e invalida.' }, { status: 400 })
+      }
+
       guardianSelfiePath = buildGuardianSelfiePath(consentRequest.id, selfieFile)
 
       const { error: uploadError } = await supabase.client.storage
@@ -449,6 +520,16 @@ export async function POST(request: Request) {
           { error: 'Nao foi possivel enviar a selfie do responsavel. Tente novamente.' },
           { status: 500 },
         )
+      }
+
+      const storedSelfie = await validateStoredGuardianSelfie(
+        supabase.client,
+        guardianSelfiePath,
+        consentRequest.id,
+      )
+      if (!storedSelfie.ok) {
+        await removeGuardianSelfie(supabase.client, guardianSelfiePath)
+        return NextResponse.json({ error: storedSelfie.error }, { status: storedSelfie.status })
       }
     }
 
@@ -474,22 +555,29 @@ export async function POST(request: Request) {
       .update(updateWithSignature)
       .eq('id', consentRequest.id)
       .eq('status', 'pending')
+      .select('id')
 
     if (isMissingParentalColumnError(updateRequest.error)) {
+      await removeGuardianSelfie(supabase.client, guardianSelfiePath)
+      guardianSelfiePath = null
       updateRequest = await supabase
         .client
         .from('parental_consent_requests')
         .update(updateLegacy)
         .eq('id', consentRequest.id)
         .eq('status', 'pending')
+        .select('id')
     }
 
     if (updateRequest.error) {
+      await removeGuardianSelfie(supabase.client, guardianSelfiePath)
       return NextResponse.json(
         { error: 'Nao foi possivel registrar a decisao agora.' },
         { status: 500 },
       )
     }
+
+    const updateWon = Array.isArray(updateRequest.data) && updateRequest.data.length > 0
 
     const { data: latestRequest } = await supabase.client
       .from('parental_consent_requests')
@@ -499,7 +587,8 @@ export async function POST(request: Request) {
 
     const latestStatus = String(latestRequest?.status || decision)
 
-    if (latestStatus !== decision) {
+    if (!updateWon || latestStatus !== decision) {
+      await removeGuardianSelfie(supabase.client, guardianSelfiePath)
       return NextResponse.json({
         success: true,
         status: latestStatus,

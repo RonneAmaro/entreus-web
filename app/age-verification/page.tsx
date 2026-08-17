@@ -181,28 +181,6 @@ export default function AgeVerificationPage() {
     return path
   }
 
-  async function getOrCreatePendingRequest() {
-    if (!profile) throw new Error('Perfil nao carregado.')
-
-    if (latestRequest?.status === 'pending') {
-      return latestRequest
-    }
-
-    const { data, error } = await supabase
-      .from('age_verification_requests')
-      .insert({
-        user_id: profile.id,
-        status: 'pending',
-        birth_date: profile.birth_date || null,
-        user_statement: statement.trim() || null,
-      })
-      .select('id, status, created_at, document_front_path, document_back_path, selfie_path, submitted_at, document_type')
-      .single()
-
-    if (error) throw new Error(error.message)
-    return data as AgeVerificationRequest
-  }
-
   async function handleSubmit() {
     if (!profile) return
 
@@ -250,50 +228,36 @@ export default function AgeVerificationPage() {
     setMessage('')
 
     try {
-      const request = await getOrCreatePendingRequest()
-      const documentFrontPath = await uploadPrivateFile(documentFrontFile as File, request.id, 'document-front')
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      if (sessionError || !session?.access_token) throw new Error('Sessao expirada. Entre novamente.')
+
+      const requestId = crypto.randomUUID()
+      const documentFrontPath = await uploadPrivateFile(documentFrontFile as File, requestId, 'document-front')
       const documentBackPath = documentBackFile
-        ? await uploadPrivateFile(documentBackFile, request.id, 'document-back')
+        ? await uploadPrivateFile(documentBackFile, requestId, 'document-back')
         : null
-      const selfiePath = await uploadPrivateFile(selfieFile as File, request.id, 'selfie')
+      const selfiePath = await uploadPrivateFile(selfieFile as File, requestId, 'selfie')
 
-      const { error: updateRequestError } = await supabase
-        .from('age_verification_requests')
-        .update({
-          birth_date: profile.birth_date || null,
-          user_statement: statement.trim() || null,
-          document_type: documentType,
-          document_front_path: documentFrontPath,
-          document_back_path: documentBackPath,
-          selfie_path: selfiePath,
-          submitted_at: new Date().toISOString(),
-          privacy_accepted_at: new Date().toISOString(),
-          status: 'pending',
-        })
-        .eq('id', request.id)
-        .eq('user_id', profile.id)
-
-      if (updateRequestError) throw new Error(updateRequestError.message)
+      const response = await fetch('/api/age-verification/submit', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          requestId,
+          documentType,
+          documentFrontPath,
+          documentBackPath,
+          selfiePath,
+          userStatement: statement.trim() || null,
+          privacyAccepted: true,
+        }),
+      })
+      if (!response.ok) throw new Error('Os arquivos enviados nao passaram pela validacao segura.')
     } catch (error) {
       setSubmitting(false)
       setMessage('Nao foi possivel enviar os documentos: ' + (error instanceof Error ? error.message : 'tente novamente.'))
-      return
-    }
-
-    const { error: profileUpdateError } = await supabase
-      .from('profiles')
-      .update({
-        wants_18_plus: true,
-        age_verification_status: 'pending',
-        show_sensitive_content: false,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', profile.id)
-
-    if (profileUpdateError) {
-      setSubmitting(false)
-      setMessage('Solicitacao criada, mas o perfil nao foi atualizado: ' + profileUpdateError.message)
-      await loadPage()
       return
     }
 
