@@ -11,6 +11,7 @@ import {
   getVisualCommentDepth,
   mergeComments,
   type ThreadedComment,
+  type ThreadedCommentMedia,
 } from '@/lib/threaded-comments'
 import type { ExpressionAsset } from '@/lib/expressions/expression-types'
 import ExpressionAttachment from './expressions/ExpressionAttachment'
@@ -27,10 +28,11 @@ function normalize(row: ThreadedComment & { profiles: ThreadedComment['profiles'
 type Props = {
   postId: string
   currentUserId: string
+  refreshVersion?: number
   onCountChange?: () => void
 }
 
-export default function ThreadedComments({ postId, currentUserId, onCountChange }: Props) {
+export default function ThreadedComments({ postId, currentUserId, refreshVersion = 0, onCountChange }: Props) {
   const { t } = useLanguage()
   const [roots, setRoots] = useState<ThreadedComment[]>([])
   const [replies, setReplies] = useState<Record<string, ThreadedComment[]>>({})
@@ -40,6 +42,27 @@ export default function ThreadedComments({ postId, currentUserId, onCountChange 
   const [loading, setLoading] = useState(true)
   const [loadingTarget, setLoadingTarget] = useState<string | null>(null)
   const [error, setError] = useState('')
+
+  async function hydrateMedia(comments: ThreadedComment[]) {
+    const commentIds = comments.map(({ id }) => id)
+    if (commentIds.length === 0) return comments
+
+    const { data, error: mediaError } = await supabase
+      .from('comment_media')
+      .select('id, comment_id, user_id, media_url, media_type, created_at')
+      .in('comment_id', commentIds)
+
+    if (mediaError) {
+      console.warn('Comment media unavailable:', mediaError.message)
+      return comments
+    }
+
+    const mediaByCommentId = ((data || []) as ThreadedCommentMedia[]).reduce<Record<string, ThreadedCommentMedia[]>>(
+      (all, media) => ({ ...all, [media.comment_id]: [...(all[media.comment_id] || []), media] }),
+      {},
+    )
+    return comments.map((comment) => ({ ...comment, media: mediaByCommentId[comment.id] || [] }))
+  }
 
   const loadRoots = useCallback(async (append = false) => {
     setLoadingTarget(append ? 'roots' : null)
@@ -55,7 +78,7 @@ export default function ThreadedComments({ postId, currentUserId, onCountChange 
     if (queryError) {
       setError(t('post.comments.loadError'))
     } else {
-      const page = (data || []).slice(0, ROOT_COMMENT_PAGE_SIZE).map((row) => normalize(row as never))
+      const page = await hydrateMedia((data || []).slice(0, ROOT_COMMENT_PAGE_SIZE).map((row) => normalize(row as never)))
       setRoots((current) => append ? [...current, ...page.filter((item) => !current.some(({ id }) => id === item.id))] : page)
       setHasMoreRoots((data || []).length > ROOT_COMMENT_PAGE_SIZE)
     }
@@ -66,7 +89,7 @@ export default function ThreadedComments({ postId, currentUserId, onCountChange 
   useEffect(() => {
     const task = window.setTimeout(() => void loadRoots(false), 0)
     return () => window.clearTimeout(task)
-  }, [postId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [postId, refreshVersion]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function loadReplies(parent: ThreadedComment, append = false) {
     setLoadingTarget(parent.id)
@@ -81,7 +104,7 @@ export default function ThreadedComments({ postId, currentUserId, onCountChange 
     const { data, error: queryError } = await query
     if (queryError) setError(t('post.comments.repliesLoadError'))
     else {
-      const page = (data || []).slice(0, REPLY_PAGE_SIZE).map((row) => normalize(row as never))
+      const page = await hydrateMedia((data || []).slice(0, REPLY_PAGE_SIZE).map((row) => normalize(row as never)))
       setReplies((all) => ({ ...all, [parent.id]: append ? mergeComments(current, page) : page }))
       setHasMoreReplies((all) => ({ ...all, [parent.id]: (data || []).length > REPLY_PAGE_SIZE }))
       setExpanded((all) => new Set(all).add(parent.id))
@@ -185,6 +208,13 @@ function CommentNode(props: NodeProps) {
             editing ? <CommentComposer mode="edit" comment={comment} currentUserId={currentUserId} inputRef={input} onCancel={() => setEditing(false)} onSaved={async () => { setEditing(false); await onRefresh(comment) }} /> :
             <><p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-zinc-800 dark:text-zinc-200">{comment.content}</p>
               {comment.expression && <div className="mt-2"><ExpressionAttachment expression={comment.expression} compact /></div>}</>}
+          {!comment.deleted_at && comment.media && comment.media.length > 0 && <div className="mt-3 space-y-2">
+            {comment.media.map((media) => <div key={media.id} className="overflow-hidden rounded-xl border border-blue-400/15 bg-black">
+              {media.media_type === 'video' ? <video src={media.media_url} controls playsInline preload="metadata" className="max-h-80 w-full bg-black object-contain" /> :
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={media.media_url} alt={media.media_type === 'gif' ? 'GIF do comentário' : 'Imagem do comentário'} loading="lazy" className="max-h-80 w-full object-contain" />}
+            </div>)}
+          </div>}
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
             {!comment.deleted_at && <button ref={trigger} type="button" onClick={() => setReplying(true)} className="min-h-9 rounded-full px-2 font-bold hover:bg-zinc-200 dark:hover:bg-zinc-800">{t('post.comments.reply')}</button>}
             <time dateTime={comment.created_at}>{formatDateTime(language, comment.created_at)}</time>

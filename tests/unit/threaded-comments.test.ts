@@ -93,4 +93,12 @@ describe('threaded comment model', () => {
     const result = mergeComments([later], [earlier, later])
     expect(result.map(({ id }) => id)).toEqual([earlier.id, later.id])
   })
+
+  it('allows threaded comments to retain their hydrated media', () => {
+    const comment = base({ media: [{
+      id: 'media-1', comment_id: base().id, user_id: base().user_id,
+      media_url: 'https://cdn.example.test/comment.webp', media_type: 'image', created_at: base().created_at,
+    }] })
+    expect(comment.media?.[0].media_type).toBe('image')
+  })
 })

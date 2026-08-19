@@ -19,11 +19,21 @@ export type ThreadedComment = {
   deleted_at: string | null
   edited_at: string | null
   created_at: string
+  media?: ThreadedCommentMedia[]
   profiles: {
     username: string
     display_name: string | null
     avatar_url: string | null
   } | null
+}
+
+export type ThreadedCommentMedia = {
+  id: string
+  comment_id: string
+  user_id: string
+  media_url: string
+  media_type: 'image' | 'video' | 'gif'
+  created_at: string
 }
 
 export function encodeCommentCursor(comment: Pick<ThreadedComment, 'created_at' | 'id'>) {

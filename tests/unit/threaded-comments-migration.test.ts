@@ -80,6 +80,50 @@ describe('threaded comments migration', () => {
     expect(sql).toContain('on conflict (user_id, actor_id, comment_id, type)')
   })
 
+  it('has a follow-up fix that avoids PL/pgSQL actor_id ambiguity', async () => {
+    const fix = readFileSync(
+      'supabase/migrations/20260818_fix_threaded_comment_actor_id_ambiguity.sql',
+      'utf8',
+    )
+    expect(fix).toContain('create or replace function public.create_threaded_comment')
+    expect(fix).toContain('v_actor_id uuid := auth.uid()')
+    expect(fix).not.toMatch(/\n\s*actor_id uuid := auth\.uid\(\)/)
+    expect(fix).toContain('on conflict (user_id, actor_id, comment_id, type)')
+    expect(fix).toContain("set search_path = ''")
+    expect(fix).toContain('security definer')
+    expect(fix).not.toMatch(/alter table|create table|create index/i)
+  })
+
+  it('keeps the feed root comment state synchronized from the RPC result', async () => {
+    const feed = readFileSync('app/feed/page.tsx', 'utf8')
+    const threadedComments = readFileSync('app/components/ThreadedComments.tsx', 'utf8')
+    expect(feed).toContain(".select('id, post_id, user_id, content, expression, created_at')")
+    expect(feed).toMatch(/setComments\(\(current\) => mergeUniqueById\(current, \[\{[\s\S]*insertedComment/)
+    expect(feed).toContain('threadedCommentsRefreshByPostId')
+    expect(feed).toContain('[postId]: (current[postId] || 0) + 1')
+    expect(feed).toContain('refreshVersion={threadedCommentsRefreshByPostId[post.id] || 0}')
+    expect(feed).not.toContain('threadedCommentsRefreshVersion')
+    expect(threadedComments).toContain('refreshVersion?: number')
+    expect(threadedComments).toContain('[postId, refreshVersion]')
+    expect(threadedComments).toContain(".from('comment_media')")
+    expect(threadedComments).toContain(".in('comment_id', commentIds)")
+    expect(threadedComments).toContain('media.media_type === \'video\'')
+    expect(threadedComments).toContain('controls playsInline')
+    expect(threadedComments).toContain('!comment.deleted_at && comment.media')
+    expect(feed).toContain('profiles: null')
+    const createRootComment = feed.slice(
+      feed.indexOf('async function handleCreateComment'),
+      feed.indexOf('async function handleToggleLike'),
+    )
+    const mediaInsertIndex = createRootComment.indexOf(".from('comment_media')")
+    const refreshIndex = createRootComment.indexOf('setThreadedCommentsRefreshByPostId')
+    expect(mediaInsertIndex).toBeGreaterThanOrEqual(0)
+    expect(refreshIndex).toBeGreaterThanOrEqual(0)
+    expect(mediaInsertIndex).toBeLessThan(refreshIndex)
+    expect(feed).not.toContain('window.location.reload()')
+    expect(feed).not.toContain('location.reload()')
+  })
+
   it('applies rate limiting and grants only callable RPCs', () => {
     expect(sql).toContain("created_at > now() - interval '1 minute'")
     expect(sql).toContain('if recent_count >= 12')

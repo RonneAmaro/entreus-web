@@ -940,6 +940,7 @@ function FeedContent() {
 
   const [posts, setPosts] = useState<Post[]>([])
   const [comments, setComments] = useState<Comment[]>([])
+  const [threadedCommentsRefreshByPostId, setThreadedCommentsRefreshByPostId] = useState<Record<string, number>>({})
   const [likes, setLikes] = useState<Like[]>([])
   const [commentLikes, setCommentLikes] = useState<CommentLike[]>([])
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([])
@@ -3206,7 +3207,7 @@ function FeedContent() {
         p_parent_comment_id: null,
         p_client_request_id: crypto.randomUUID(),
       })
-      .select('id')
+      .select('id, post_id, user_id, content, expression, created_at')
       .single()
 
     if (error) {
@@ -3231,6 +3232,18 @@ function FeedContent() {
         setSubmittingCommentPostId(null)
         return
       }
+    }
+
+    if (insertedComment?.id) {
+      setComments((current) => mergeUniqueById(current, [{
+        ...insertedComment,
+        profiles: null,
+        media: [],
+      }]))
+      setThreadedCommentsRefreshByPostId((current) => ({
+        ...current,
+        [postId]: (current[postId] || 0) + 1,
+      }))
     }
 
     setCommentInputs((prev) => ({
@@ -4921,7 +4934,7 @@ function FeedContent() {
                         </button>
                       </div>
                     </div>}
-                    <ThreadedComments postId={post.id} currentUserId={userId} onCountChange={() => void loadComments()} />
+                    <ThreadedComments postId={post.id} currentUserId={userId} refreshVersion={threadedCommentsRefreshByPostId[post.id] || 0} onCountChange={() => void loadComments()} />
                     </DeferredFeedSection>
                     )}
                   </article>
