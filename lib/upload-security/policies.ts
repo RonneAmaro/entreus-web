@@ -53,11 +53,15 @@ const meetMimes = [
   'image/png',
   'image/webp',
   'text/plain',
+  'text/csv',
+  'application/csv',
+  'text/comma-separated-values',
+  'application/vnd.ms-excel',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   'application/vnd.openxmlformats-officedocument.presentationml.presentation',
 ] as const
-const meetExtensions = ['pdf', 'jpg', 'jpeg', 'png', 'webp', 'txt', 'docx', 'xlsx', 'pptx'] as const
+const meetExtensions = ['pdf', 'jpg', 'jpeg', 'png', 'webp', 'txt', 'csv', 'docx', 'xlsx', 'pptx'] as const
 
 const policies: Record<UploadContext, UploadPolicy> = {
   post_image: { context: 'post_image', category: 'image', maxBytes: IMAGE_UPLOAD_MAX_SIZE_BYTES, allowedMimes: imageMimes, allowedExtensions: imageExtensions, magicBytesRequired: true, mayBePublic: true },

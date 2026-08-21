@@ -11,9 +11,12 @@ import {
 import { AccessToken } from 'livekit-server-sdk'
 import { NextResponse } from 'next/server'
 import { createRateLimiter, createRateLimitExceededResponse } from '@/lib/rate-limit'
+import {
+  createServerIssuedLiveKitIdentity,
+  validateMeetingParticipantName,
+} from '@/lib/meet/participant-name'
 
 const MAX_ROOM_NAME_LENGTH = 80
-const MAX_PARTICIPANT_NAME_LENGTH = 60
 
 const LIVEKIT_TOKEN_IP_LIMITER = createRateLimiter({
   limit: 30,
@@ -49,19 +52,12 @@ function validateTextField(value: unknown, fieldName: string, maxLength: number)
   return { value: trimmed }
 }
 
-function sanitizeOptionalTextField(value: unknown, maxLength: number) {
-  if (typeof value !== 'string') return null
-
-  const trimmed = value.trim().slice(0, maxLength)
-  return trimmed.length >= 2 ? trimmed : null
-}
-
 function getRateLimitIp(request: Request) {
   const forwardedFor = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
   return forwardedFor || request.headers.get('x-real-ip') || 'unknown'
 }
 
-export async function POST(request: Request) {
+export async function POST(request: Request): Promise<Response> {
   const ipRateLimit = await LIVEKIT_TOKEN_IP_LIMITER.check({
     key: `${getRateLimitIp(request)}:livekit-token`,
   })
@@ -75,7 +71,7 @@ export async function POST(request: Request) {
   }
 
   const auth = await requireUser(request)
-  if ('error' in auth) return auth.error
+  if ('error' in auth) return auth.error ?? jsonError('Nao foi possivel validar sua sessao.', 500)
 
   const livekitUrl = readRequiredEnv('LIVEKIT_URL')
   const livekitApiKey = readRequiredEnv('LIVEKIT_API_KEY')
@@ -142,30 +138,22 @@ export async function POST(request: Request) {
       return jsonError('Você ainda não tem autorização para entrar nesta sala.', 403)
     }
 
-    const requestedParticipantName = sanitizeOptionalTextField(
-      body.participantName,
-      MAX_PARTICIPANT_NAME_LENGTH,
+    const participantNameValidation = validateMeetingParticipantName(
+      body.participantName === undefined ? membership?.display_name : body.participantName,
     )
-    const participantName =
-      requestedParticipantName ||
-      sanitizeOptionalTextField(membership?.display_name, MAX_PARTICIPANT_NAME_LENGTH)
-
-    if (!participantName) {
+    if (!participantNameValidation.ok) {
+      if (participantNameValidation.code === 'too_long') {
+        return jsonError('Nome na chamada e muito longo.', 400)
+      }
       return jsonError('Informe seu nome para entrar na chamada.', 400)
     }
-
-    if (requestedParticipantName && membership?.display_name !== requestedParticipantName) {
-      await supabase
-        .from('meet_room_members')
-        .update({ display_name: requestedParticipantName })
-        .eq('id', membership!.id)
-    }
+    const participantName = participantNameValidation.value
 
     const secondsLeft = Math.max(
       60,
       Math.floor((Date.parse(updatedRoom.expires_at) - Date.now()) / 1000),
     )
-    const identity = `${auth.user.id}-${crypto.randomUUID().slice(0, 8)}`
+    const identity = createServerIssuedLiveKitIdentity(auth.user.id)
     const accessToken = new AccessToken(livekitApiKey, livekitApiSecret, {
       identity,
       name: participantName,

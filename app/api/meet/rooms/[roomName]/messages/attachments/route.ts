@@ -9,19 +9,21 @@ import {
   requireUser,
 } from '@/lib/meet-server'
 import {
-  detectOfficeOpenXmlType,
+  detectFileSignature,
+  getNormalizedExtension,
+  getUploadPolicy,
+  isOfficeOpenXmlType,
+  OOXML_GENERIC_MIMES,
+  OOXML_MIME_BY_EXTENSION,
+  validateOfficeOpenXml,
   validateFileContent,
   validateUploadMetadata,
-  type OfficeOpenXmlType,
 } from '@/lib/upload-security'
 import { NextResponse } from 'next/server'
 
 const BUCKET_NAME = 'meet-chat-attachments'
-const OOXML_TYPE_BY_MIME: Record<string, OfficeOpenXmlType> = {
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
-  'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx',
-}
+const MULTIPART_OVERHEAD_BYTES = 32 * 1024
+const MAX_MULTIPART_BODY_BYTES = getUploadPolicy('meet_attachment').maxBytes + MULTIPART_OVERHEAD_BYTES
 
 type AttachmentsRouteContext = {
   params: Promise<{ roomName: string }>
@@ -42,6 +44,86 @@ type ChatMessageRow = {
 type FileValidationResult =
   | { ok: true; extension: string; mimeType: string }
   | { ok: false; error: string }
+
+type MultipartReadResult =
+  | { ok: true; formData: FormData }
+  | { ok: false; tooLarge: boolean }
+
+const DISALLOWED_TEXT_CONTROL_CHARACTERS = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/
+
+function startsWithBytes(bytes: Uint8Array, signature: readonly number[]) {
+  return signature.every((value, index) => bytes[index] === value)
+}
+
+function isStrictUtf8PlainText(bytes: Uint8Array) {
+  const signature = detectFileSignature(bytes)
+  if (signature.confidence !== 'unknown') return false
+
+  const isZipContainer = [
+    [0x50, 0x4b, 0x03, 0x04],
+    [0x50, 0x4b, 0x05, 0x06],
+    [0x50, 0x4b, 0x07, 0x08],
+  ].some((zipSignature) => startsWithBytes(bytes, zipSignature))
+  if (isZipContainer || startsWithBytes(bytes, [0x4d, 0x5a])) return false
+
+  try {
+    const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+    return !DISALLOWED_TEXT_CONTROL_CHARACTERS.test(text)
+  } catch {
+    return false
+  }
+}
+
+async function readLimitedMultipartFormData(request: Request): Promise<MultipartReadResult> {
+  const contentLength = request.headers.get('content-length')
+  if (contentLength && /^\d+$/.test(contentLength)) {
+    const declaredBytes = Number(contentLength)
+    if (!Number.isSafeInteger(declaredBytes) || declaredBytes > MAX_MULTIPART_BODY_BYTES) {
+      return { ok: false, tooLarge: true }
+    }
+  }
+
+  if (!request.body) return { ok: false, tooLarge: false }
+
+  const reader = request.body.getReader()
+  const chunks: ArrayBuffer[] = []
+  let receivedBytes = 0
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      receivedBytes += value.byteLength
+      if (receivedBytes > MAX_MULTIPART_BODY_BYTES) {
+        try {
+          await reader.cancel()
+        } catch {
+          // The byte limit has already failed closed even if the upstream stream cannot be cancelled.
+        }
+        return { ok: false, tooLarge: true }
+      }
+      const chunk = new Uint8Array(value.byteLength)
+      chunk.set(value)
+      chunks.push(chunk.buffer)
+    }
+  } catch {
+    return { ok: false, tooLarge: false }
+  }
+
+  try {
+    const headers = new Headers(request.headers)
+    headers.delete('content-length')
+    const limitedRequest = new Request(request.url, {
+      method: request.method,
+      headers,
+      body: new Blob(chunks),
+    })
+    return { ok: true, formData: await limitedRequest.formData() }
+  } catch {
+    return { ok: false, tooLarge: false }
+  }
+}
 
 function publicAttachmentMessage(row: ChatMessageRow) {
   return {
@@ -97,10 +179,16 @@ function normalizeSenderIdentity(value: FormDataEntryValue | null) {
 }
 
 async function validateFile(file: File): Promise<FileValidationResult> {
+  const extension = getNormalizedExtension(file.name)
+  const declaredMime = file.type.split(';', 1)[0].trim().toLowerCase()
+  const isOfficeDocument = isOfficeOpenXmlType(extension)
+  const metadataMime = isOfficeDocument && OOXML_GENERIC_MIMES.has(declaredMime)
+    ? OOXML_MIME_BY_EXTENSION[extension]
+    : declaredMime
   const metadata = validateUploadMetadata({
     context: 'meet_attachment',
     fileName: file.name,
-    declaredMime: file.type,
+    declaredMime: metadataMime,
     declaredSize: file.size,
   })
 
@@ -115,6 +203,18 @@ async function validateFile(file: File): Promise<FileValidationResult> {
   }
 
   const bytes = new Uint8Array(await file.arrayBuffer())
+  if (isOfficeDocument) {
+    const officeValidation = await validateOfficeOpenXml(bytes, extension)
+    if (!officeValidation.ok) {
+      return { ok: false, error: 'Tipo de arquivo nao permitido.' }
+    }
+    return {
+      ok: true,
+      extension: metadata.extension,
+      mimeType: officeValidation.mimeType,
+    }
+  }
+
   const content = validateFileContent({
     context: 'meet_attachment',
     fileName: file.name,
@@ -124,14 +224,12 @@ async function validateFile(file: File): Promise<FileValidationResult> {
   })
 
   if (!content.ok) {
-    const expectedOfficeType = OOXML_TYPE_BY_MIME[metadata.mime]
-    const isValidOfficeContainer =
+    const isPreservedText =
       content.code === 'file_content_unverified' &&
-      expectedOfficeType !== undefined &&
-      detectOfficeOpenXmlType(bytes) === expectedOfficeType
-    const isPreservedPlainText = content.code === 'file_content_unverified' && metadata.mime === 'text/plain'
+      (metadata.extension === 'txt' || metadata.extension === 'csv') &&
+      isStrictUtf8PlainText(bytes)
 
-    if (!isValidOfficeContainer && !isPreservedPlainText) {
+    if (!isPreservedText) {
       return { ok: false, error: 'Tipo de arquivo nao permitido.' }
     }
   }
@@ -168,17 +266,17 @@ async function requireApprovedRoomAccess(request: Request, context: AttachmentsR
   return { auth, supabase, room: updatedRoom, membership }
 }
 
-export async function POST(request: Request, context: AttachmentsRouteContext) {
+export async function POST(request: Request, context: AttachmentsRouteContext): Promise<Response> {
   const access = await requireApprovedRoomAccess(request, context)
-  if ('error' in access) return access.error
+  if ('error' in access) return access.error ?? jsonError('Nao foi possivel validar o acesso a sala.', 500)
 
-  let formData: FormData
-
-  try {
-    formData = await request.formData()
-  } catch {
-    return jsonError('Envio invalido.', 400)
+  const multipart = await readLimitedMultipartFormData(request)
+  if (!multipart.ok) {
+    return multipart.tooLarge
+      ? jsonError('Corpo da requisicao muito grande.', 413)
+      : jsonError('Envio invalido.', 400)
   }
+  const { formData } = multipart
 
   const file = formData.get('file')
   if (!(file instanceof File)) return jsonError('Arquivo obrigatorio.', 400)

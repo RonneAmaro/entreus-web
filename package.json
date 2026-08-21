@@ -46,6 +46,7 @@
     "@livekit/components-react": "^2.9.21",
     "@livekit/components-styles": "^1.2.0",
     "@supabase/supabase-js": "^2.103.3",
+    "@zip.js/zip.js": "^2.8.52",
     "jspdf": "^4.2.1",
     "livekit-client": "^2.18.10",
     "livekit-server-sdk": "^2.15.2",

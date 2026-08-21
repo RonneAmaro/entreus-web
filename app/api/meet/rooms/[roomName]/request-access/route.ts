@@ -8,6 +8,7 @@ import {
   requireUser,
 } from '@/lib/meet-server'
 import { NextResponse } from 'next/server'
+import { validateMeetingParticipantName } from '@/lib/meet/participant-name'
 
 type RoomRouteContext = {
   params: Promise<{ roomName: string }>
@@ -17,18 +18,9 @@ type RequestAccessBody = {
   displayName?: unknown
 }
 
-const MAX_DISPLAY_NAME_LENGTH = 60
-
-function sanitizeDisplayName(value: unknown) {
-  if (typeof value !== 'string') return null
-
-  const displayName = value.trim().slice(0, MAX_DISPLAY_NAME_LENGTH)
-  return displayName.length >= 2 ? displayName : null
-}
-
-export async function POST(request: Request, context: RoomRouteContext) {
+export async function POST(request: Request, context: RoomRouteContext): Promise<Response> {
   const auth = await requireUser(request)
-  if ('error' in auth) return auth.error
+  if ('error' in auth) return auth.error ?? jsonError('Nao foi possivel validar sua sessao.', 500)
 
   const supabase = getSupabaseAdmin()
   if (!supabase) return jsonError('Configuração Supabase ausente no servidor.', 500)
@@ -41,11 +33,14 @@ export async function POST(request: Request, context: RoomRouteContext) {
     return jsonError('JSON inválido.', 400)
   }
 
-  const displayName = sanitizeDisplayName(body.displayName)
-
-  if (!displayName) {
+  const displayNameValidation = validateMeetingParticipantName(body.displayName)
+  if (!displayNameValidation.ok) {
+    if (displayNameValidation.code === 'too_long') {
+      return jsonError('Nome na chamada e muito longo.', 400)
+    }
     return jsonError('Informe seu nome para entrar na chamada.', 400)
   }
+  const displayName = displayNameValidation.value
 
   const { roomName } = await context.params
   const room = await getRoomByName(supabase, decodeURIComponent(roomName))

@@ -123,6 +123,41 @@ describe('LiveKit token rate limits', () => {
     expect(state.accessToken).toHaveBeenCalledTimes(1)
   })
 
+  it('uses the custom alias only as LiveKit display name and keeps identity server-issued', async () => {
+    const route = await loadTokenRoute()
+    const response = await route.POST!(request(
+      'http://localhost/api/livekit/token',
+      '198.51.100.150',
+      { roomName: 'room-a', participantName: '  Ronne   Meet  ' },
+    ))
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({ participantName: 'Ronne Meet' })
+    expect(state.accessToken).toHaveBeenCalledTimes(1)
+    const options = state.accessToken.mock.calls[0]?.[2] as { identity: string; name: string }
+    expect(options.name).toBe('Ronne Meet')
+    expect(options.identity).toMatch(/^user-a-[0-9a-f]{8}$/)
+    expect(options.identity).not.toContain('Ronne')
+    expect(state.supabase.from).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['empty', '   '],
+    ['too long', 'A'.repeat(61)],
+    ['markup', '<script>alert(1)</script>'],
+  ])('rejects %s custom meeting name before token creation', async (_label, participantName) => {
+    const route = await loadTokenRoute()
+    const response = await route.POST!(request(
+      'http://localhost/api/livekit/token',
+      `198.51.100.${160 + participantName.length}`,
+      { roomName: 'room-a', participantName },
+    ))
+
+    expect(response.status).toBe(400)
+    expect(state.accessToken).not.toHaveBeenCalled()
+    expect(state.supabase.from).not.toHaveBeenCalled()
+  })
+
   it('blocks the 31st request by IP before authentication', async () => {
     const route = await loadTokenRoute()
     for (let index = 0; index < 31; index += 1) {

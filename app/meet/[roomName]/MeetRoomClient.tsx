@@ -1,6 +1,14 @@
 'use client'
 
 import { supabase } from '@/lib/supabase'
+import {
+  confirmMeetingName,
+  createMeetingNameFieldState,
+  editMeetingName,
+  initializeMeetingName,
+  MAX_MEET_PARTICIPANT_NAME_LENGTH,
+  validateMeetingParticipantName,
+} from '@/lib/meet/participant-name'
 import ExpressionPicker from '../../components/expressions/ExpressionPicker'
 import ExpressionAttachment from '../../components/expressions/ExpressionAttachment'
 import type { ExpressionAsset } from '@/lib/expressions/expression-types'
@@ -204,23 +212,26 @@ type ChatMessage = Extract<MeetDataMessage, { type: 'chat' }>
 type ReactionMessage = Extract<MeetDataMessage, { type: 'reaction' }>
 type MeetAlertSound = 'request' | 'hand' | 'join' | 'leave' | 'ending'
 
-const MAX_DISPLAY_NAME_LENGTH = 60
+const MAX_DISPLAY_NAME_LENGTH = MAX_MEET_PARTICIPANT_NAME_LENGTH
 const MAX_CHAT_MESSAGE_LENGTH = 500
 const MAX_CHAT_ATTACHMENT_SIZE = 5 * 1024 * 1024
 const NAME_REQUIRED_MESSAGE = 'Informe seu nome para entrar na chamada.'
 const MEET_DATA_TOPIC = 'entreus.meet'
-const ALLOWED_CHAT_ATTACHMENT_MIME_BY_EXTENSION: Record<string, string> = {
-  pdf: 'application/pdf',
-  jpg: 'image/jpeg',
-  jpeg: 'image/jpeg',
-  png: 'image/png',
-  webp: 'image/webp',
-  txt: 'text/plain',
-  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+const ALLOWED_CHAT_ATTACHMENT_MIME_BY_EXTENSION: Record<string, readonly string[]> = {
+  pdf: ['application/pdf'],
+  jpg: ['image/jpeg'],
+  jpeg: ['image/jpeg'],
+  png: ['image/png'],
+  webp: ['image/webp'],
+  txt: ['text/plain'],
+  csv: ['text/csv', 'application/csv', 'text/comma-separated-values', 'application/vnd.ms-excel'],
+  docx: ['application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/zip', 'application/x-zip-compressed', 'application/octet-stream', ''],
+  xlsx: ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/zip', 'application/x-zip-compressed', 'application/octet-stream', ''],
+  pptx: ['application/vnd.openxmlformats-officedocument.presentationml.presentation', 'application/zip', 'application/x-zip-compressed', 'application/octet-stream', ''],
 }
-const BLOCKED_CHAT_ATTACHMENT_EXTENSIONS = new Set(['exe', 'bat', 'cmd', 'msi', 'apk', 'js', 'html', 'htm', 'php', 'sh', 'zip', 'rar', '7z'])
+const BLOCKED_CHAT_ATTACHMENT_EXTENSIONS = new Set(['exe', 'dll', 'bat', 'cmd', 'com', 'msi', 'scr', 'ps1', 'apk', 'jar', 'js', 'html', 'htm', 'php', 'sh', 'zip', 'rar', '7z'])
+const IMAGE_PREVIEW_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
+const ATTACHMENT_PREVIEW_TTL_MS = 55_000
 const CHAT_EMOJIS = ['😀', '😂', '😍', '👍', '👏', '❤️', '🔥', '🎉', '🙌', '👀']
 const QUICK_REACTIONS = ['👍', '👏', '😂', '❤️', '🔥', '🎉']
 const MEET_SOUND_PATTERNS: Record<MeetAlertSound, { frequency: number; endFrequency?: number; duration: number; volume: number }> = {
@@ -298,11 +309,12 @@ function getMediaPermissionMessage(kind?: MediaDeviceKind) {
 }
 
 function normalizeDisplayName(value: string) {
-  return value.trim().slice(0, MAX_DISPLAY_NAME_LENGTH)
+  const validated = validateMeetingParticipantName(value)
+  return validated.ok ? validated.value : ''
 }
 
 function isValidDisplayName(value: string) {
-  return normalizeDisplayName(value).length >= 2
+  return validateMeetingParticipantName(value).ok
 }
 
 async function playMeetAlertSound(type: MeetAlertSound) {
@@ -488,8 +500,8 @@ function validateChatAttachment(file: File) {
     return 'Tipo de arquivo nao permitido.'
   }
 
-  const expectedMime = ALLOWED_CHAT_ATTACHMENT_MIME_BY_EXTENSION[extension]
-  if (!expectedMime || file.type !== expectedMime) {
+  const expectedMimes = ALLOWED_CHAT_ATTACHMENT_MIME_BY_EXTENSION[extension]
+  if (!expectedMimes || !expectedMimes.includes(file.type.toLowerCase())) {
     return 'Tipo de arquivo nao permitido.'
   }
 
@@ -500,6 +512,34 @@ function formatFileSize(size: number) {
   if (size < 1024) return `${size} B`
   if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`
   return `${(size / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function getAttachmentTypeLabel(fileName: string) {
+  const extension = getFileExtension(fileName)
+  const labels: Record<string, string> = {
+    jpg: 'JPEG', jpeg: 'JPEG', png: 'PNG', webp: 'WEBP', pdf: 'PDF', txt: 'TXT',
+    csv: 'CSV', docx: 'DOCX', xlsx: 'XLSX', pptx: 'PPTX',
+  }
+  return extension ? labels[extension] || 'Arquivo' : 'Arquivo'
+}
+
+export function canPreviewMeetAttachment(mimeType: string) {
+  return IMAGE_PREVIEW_MIME_TYPES.has(mimeType)
+}
+
+export function getMeetAttachmentPreviewCacheKey(messageId: string) {
+  return messageId
+}
+
+export function shouldRefreshMeetAttachmentPreview(cached: { expiresAt: number } | null | undefined, now = Date.now()) {
+  return cached === undefined || (cached !== null && cached.expiresAt <= now)
+}
+
+export function removeMeetAttachmentPreviewUrl(current: Record<string, string>, messageId: string) {
+  if (!(messageId in current)) return current
+  const next = { ...current }
+  delete next[messageId]
+  return next
 }
 
 export function InviteActions({ compact = false }: { compact?: boolean }) {
@@ -604,6 +644,9 @@ function PortugueseConference({
   const [chatExpression, setChatExpression] = useState<ExpressionAsset | null>(null)
   const [chatAttachmentUploading, setChatAttachmentUploading] = useState(false)
   const [chatAttachmentError, setChatAttachmentError] = useState<string | null>(null)
+  const [attachmentPreviewUrls, setAttachmentPreviewUrls] = useState<Record<string, string>>({})
+  const attachmentPreviewCacheRef = useRef(new Map<string, { url: string; expiresAt: number } | null>())
+  const attachmentPreviewRequestsRef = useRef(new Set<string>())
   const [showReactions, setShowReactions] = useState(false)
   const [floatingReactions, setFloatingReactions] = useState<ReactionMessage[]>([])
   const [isMeetMoreOptionsOpen, setIsMeetMoreOptionsOpen] = useState(false)
@@ -647,6 +690,56 @@ function PortugueseConference({
       // The visible call continues even if recording status cannot be refreshed.
     }
   }, [authHeaders, roomName])
+
+  useEffect(() => {
+    let active = true
+
+    async function loadAttachmentPreviews() {
+      const imageMessages = chatMessages.filter(
+        (message) => message.messageKind === 'attachment' && message.attachment && canPreviewMeetAttachment(message.attachment.mimeType),
+      )
+
+      for (const message of imageMessages) {
+        const cacheKey = getMeetAttachmentPreviewCacheKey(message.id)
+        const cached = attachmentPreviewCacheRef.current.get(cacheKey)
+        if (cached === null || !shouldRefreshMeetAttachmentPreview(cached)) {
+          if (cached) setAttachmentPreviewUrls((current) => ({ ...current, [message.id]: cached.url }))
+          continue
+        }
+        if (attachmentPreviewRequestsRef.current.has(cacheKey)) continue
+
+        attachmentPreviewRequestsRef.current.add(cacheKey)
+        try {
+          const headers = await authHeaders()
+          if (!headers) throw new Error('Missing authentication')
+          const response = await fetch(
+            `/api/meet/rooms/${encodeURIComponent(roomName)}/messages/attachments/download?messageId=${encodeURIComponent(message.id)}`,
+            { headers },
+          )
+          const data = (await response.json()) as { ok: boolean; url?: string }
+          if (!response.ok || !data.ok || !data.url) throw new Error('Preview URL unavailable')
+
+          attachmentPreviewCacheRef.current.set(cacheKey, { url: data.url, expiresAt: Date.now() + ATTACHMENT_PREVIEW_TTL_MS })
+          if (active) setAttachmentPreviewUrls((current) => ({ ...current, [cacheKey]: data.url! }))
+        } catch (previewError) {
+          console.error('Meet attachment preview failed', previewError)
+          attachmentPreviewCacheRef.current.set(cacheKey, null)
+          if (active) {
+            setAttachmentPreviewUrls((current) => removeMeetAttachmentPreviewUrl(current, message.id))
+          }
+        } finally {
+          attachmentPreviewRequestsRef.current.delete(cacheKey)
+        }
+      }
+    }
+
+    void loadAttachmentPreviews()
+    const timer = window.setInterval(() => void loadAttachmentPreviews(), 10_000)
+    return () => {
+      active = false
+      window.clearInterval(timer)
+    }
+  }, [authHeaders, chatMessages, roomName])
 
   const { send } = useDataChannel(MEET_DATA_TOPIC, (message) => {
     const data = parseMeetDataMessage(message.payload)
@@ -1780,18 +1873,34 @@ function PortugueseConference({
                           <span className="shrink-0 text-xs text-zinc-500">{formatTime(message.sentAt)}</span>
                         </div>
                         {message.messageKind === 'attachment' && message.attachment ? (
-                          <div className="mt-2 flex items-center gap-3 rounded-2xl border border-blue-300/15 bg-blue-500/10 p-3">
+                          <div className="mt-2 rounded-2xl border border-blue-300/15 bg-blue-500/10 p-3">
+                            {canPreviewMeetAttachment(message.attachment.mimeType) && attachmentPreviewUrls[message.id] ? (
+                              <Image
+                                src={attachmentPreviewUrls[message.id]}
+                                alt={message.attachment.name}
+                                width={640}
+                                height={480}
+                                unoptimized
+                                className="mb-3 max-h-64 w-full rounded-xl object-contain"
+                                onError={() => {
+                                  attachmentPreviewCacheRef.current.set(message.id, null)
+                                  setAttachmentPreviewUrls((current) => removeMeetAttachmentPreviewUrl(current, message.id))
+                                }}
+                              />
+                            ) : null}
+                            <div className="flex items-center gap-3">
                             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-500/15 text-blue-100 ring-1 ring-blue-200/10">
                               <FileText className="h-5 w-5" />
                             </span>
                             <span className="min-w-0 flex-1">
                               <span className="block truncate text-sm font-bold text-zinc-100">{message.attachment.name}</span>
-                              <span className="block text-xs text-zinc-500">{formatFileSize(message.attachment.size)}</span>
+                              <span className="block text-xs text-zinc-500">{getAttachmentTypeLabel(message.attachment.name)} · {formatFileSize(message.attachment.size)}</span>
                             </span>
                             <button type="button" onClick={() => void downloadChatAttachment(message)} className="inline-flex min-h-9 shrink-0 items-center justify-center gap-1 rounded-full border border-blue-300/20 bg-blue-500/15 px-3 text-xs font-bold text-blue-50 transition hover:bg-blue-500/25" aria-label={`Baixar ${message.attachment.name}`} title="Baixar">
                               <Download className="h-3.5 w-3.5" />
                               Baixar
                             </button>
+                            </div>
                           </div>
                         ) : (
                           <>
@@ -1815,7 +1924,7 @@ function PortugueseConference({
                       ref={chatAttachmentInputRef}
                       type="file"
                       className="hidden"
-                      accept=".pdf,.jpg,.jpeg,.png,.webp,.txt,.docx,.xlsx,.pptx,application/pdf,image/jpeg,image/png,image/webp,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                      accept=".pdf,.jpg,.jpeg,.png,.webp,.txt,.csv,.docx,.xlsx,.pptx,application/pdf,image/jpeg,image/png,image/webp,text/plain,text/csv,application/csv,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.presentationml.presentation"
                       onChange={(event) => {
                         const file = event.target.files?.[0]
                         if (file) void sendChatAttachment(file)
@@ -1994,7 +2103,8 @@ function MeetStatusCard({
 
 export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
   const [accessToken, setAccessToken] = useState<string | null>(null)
-  const [participantName, setParticipantName] = useState('')
+  const [participantNameField, setParticipantNameField] = useState(createMeetingNameFieldState)
+  const participantName = participantNameField.value
   const [roomData, setRoomData] = useState<Extract<RoomResponse, { ok: true }>['room'] | null>(null)
   const [membership, setMembership] = useState<Extract<RoomResponse, { ok: true }>['membership']>(null)
   const [pendingRequests, setPendingRequests] = useState<Extract<RequestsResponse, { ok: true }>['requests']>([])
@@ -2058,9 +2168,6 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
     setJoinIssue(null)
     setRoomData(data.room)
     setMembership(data.membership)
-    if (data.membership?.displayName && isValidDisplayName(data.membership.displayName)) {
-      setParticipantName(normalizeDisplayName(data.membership.displayName))
-    }
   }, [authHeaders, roomName])
 
   const loadRequests = useCallback(async () => {
@@ -2087,7 +2194,6 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
   }, [authHeaders, inCall, roomName])
 
   useEffect(() => {
-    setParticipantName(`Convidado-${Math.floor(1000 + Math.random() * 9000)}`)
     void loadRoom()
   }, [loadRoom])
 
@@ -2124,11 +2230,7 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
         emailName
 
       if (isValidDisplayName(suggestedName || '')) {
-        setParticipantName((current) =>
-          current && !current.startsWith('Convidado-')
-            ? current
-            : normalizeDisplayName(suggestedName || ''),
-        )
+        setParticipantNameField((current) => initializeMeetingName(current, suggestedName))
       }
     }
 
@@ -2240,7 +2342,9 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
     }
 
     setJoinIssue(null)
-    if (data.displayName) setParticipantName(data.displayName)
+    if (data.displayName) {
+      setParticipantNameField((current) => confirmMeetingName(current, data.displayName))
+    }
     await loadRoom()
   }
 
@@ -2629,7 +2733,7 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
                 id="participant-name"
                 value={participantName}
                 maxLength={MAX_DISPLAY_NAME_LENGTH}
-                onChange={(event) => setParticipantName(event.target.value)}
+                onChange={(event) => setParticipantNameField((current) => editMeetingName(current, event.target.value))}
                 aria-invalid={!participantNameIsValid}
                 className="mt-3 w-full rounded-full border border-blue-500/20 bg-black/55 px-4 py-3 text-base text-white outline-none transition placeholder:text-zinc-600 focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10 aria-[invalid=true]:border-red-400/70 aria-[invalid=true]:focus:ring-red-500/10"
                 placeholder="Seu nome"

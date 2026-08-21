@@ -28,6 +28,7 @@ const expectedMimesByExtension: Readonly<Record<string, readonly string[]>> = {
   jpg: ['image/jpeg'], jpeg: ['image/jpeg'], png: ['image/png'], webp: ['image/webp'], gif: ['image/gif'], pdf: ['application/pdf'],
   mp4: ['video/mp4', 'audio/mp4'], mov: ['video/quicktime'], webm: ['video/webm', 'audio/webm'], ogg: ['video/ogg', 'audio/ogg'], ogv: ['video/ogg'],
   mp3: ['audio/mpeg'], m4a: ['audio/mp4'], wav: ['audio/wav', 'audio/x-wav'], txt: ['text/plain'],
+  csv: ['text/csv', 'application/csv', 'text/comma-separated-values', 'application/vnd.ms-excel'],
   docx: ['application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
   xlsx: ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
   pptx: ['application/vnd.openxmlformats-officedocument.presentationml.presentation'],
