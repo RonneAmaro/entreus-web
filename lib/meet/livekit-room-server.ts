@@ -8,6 +8,19 @@ export type LiveKitRoomSummary = {
   numParticipants?: number
 }
 
+export type LiveKitParticipantSummary = {
+  identity: string
+  name?: string
+  kind?: number
+  attributes?: Record<string, string>
+  tracks?: Array<{
+    sid: string
+    type: number
+    source: number
+    muted?: boolean
+  }>
+}
+
 export type LiveKitRoomService = {
   listRooms(names?: string[]): Promise<LiveKitRoomSummary[]>
   createRoom(options: {
@@ -16,6 +29,7 @@ export type LiveKitRoomService = {
     departureTimeout: number
   }): Promise<LiveKitRoomSummary>
   deleteRoom(roomName: string): Promise<void>
+  listParticipants?(roomName: string): Promise<LiveKitParticipantSummary[]>
 }
 
 type LiveKitServerConfig = {
@@ -92,6 +106,16 @@ export async function getLiveKitMeetRoom(
 ) {
   const rooms = await service.listRooms([roomName])
   return rooms.find((room) => room.name === roomName) ?? null
+}
+
+export async function listLiveKitMeetParticipants(
+  roomName: string,
+  service: LiveKitRoomService = createLiveKitRoomService(),
+) {
+  if (!service.listParticipants) {
+    throw new Error('LIVEKIT_PARTICIPANT_LOOKUP_UNAVAILABLE')
+  }
+  return service.listParticipants(roomName)
 }
 
 export async function deleteLiveKitMeetRoom(

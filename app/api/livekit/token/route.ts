@@ -21,6 +21,7 @@ import {
   createServerIssuedLiveKitIdentity,
   validateMeetingParticipantName,
 } from '@/lib/meet/participant-name'
+import { createServerIssuedParticipantAttributes } from '@/lib/meet/participant-identity'
 
 const MAX_ROOM_NAME_LENGTH = 80
 
@@ -140,7 +141,11 @@ export async function POST(request: Request): Promise<Response> {
 
     const membership = await getMembership(supabase, updatedRoom.id, auth.user.id)
 
-    if (!canJoinRoom(membership)) {
+    if (
+      !canJoinRoom(membership)
+      || membership?.user_id !== auth.user.id
+      || membership.room_id !== updatedRoom.id
+    ) {
       return jsonError('Você ainda não tem autorização para entrar nesta sala.', 403)
     }
 
@@ -211,6 +216,7 @@ export async function POST(request: Request): Promise<Response> {
       identity,
       name: participantName,
       ttl: secondsLeft,
+      attributes: createServerIssuedParticipantAttributes(confirmedRoom, membership!),
     })
 
     accessToken.addGrant({
@@ -219,6 +225,7 @@ export async function POST(request: Request): Promise<Response> {
       canPublish: true,
       canSubscribe: true,
       canPublishData: true,
+      canUpdateOwnMetadata: false,
     })
 
     const token = await accessToken.toJwt()

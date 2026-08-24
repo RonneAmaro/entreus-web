@@ -64,7 +64,14 @@ beforeEach(() => {
     expires_at: new Date(Date.now() + 60_000).toISOString(),
   }))
   state.expireRoomIfNeeded.mockImplementation(async (_db: unknown, room: unknown) => room)
-  state.getMembership.mockResolvedValue({ status: 'approved', display_name: 'Alice' })
+  state.getMembership.mockResolvedValue({
+    id: 'member-a',
+    room_id: 'room-id',
+    user_id: 'user-a',
+    role: 'participant',
+    status: 'approved',
+    display_name: 'Alice',
+  })
   state.canJoinRoom.mockReturnValue(true)
   state.ensureLiveKitMeetRoom.mockResolvedValue({ room: { name: 'room-a' }, created: true })
   state.deleteLiveKitMeetRoom.mockResolvedValue({ deleted: true })
@@ -88,6 +95,21 @@ beforeEach(() => {
 })
 
 describe('LiveKit token lifecycle gate', () => {
+  it('rejects a membership row that does not belong to the authenticated user and room', async () => {
+    state.getMembership.mockResolvedValue({
+      id: 'member-forged',
+      room_id: 'other-room',
+      user_id: 'other-user',
+      role: 'owner',
+      status: 'approved',
+      display_name: 'Alice',
+    })
+    const { POST } = await import('@/app/api/livekit/token/route')
+    expect((await POST(tokenRequest('198.51.100.200'))).status).toBe(403)
+    expect(state.ensureLiveKitMeetRoom).not.toHaveBeenCalled()
+    expect(state.accessToken).not.toHaveBeenCalled()
+  })
+
   it('does not issue a token for an ended room', async () => {
     state.roomStatus = 'ended'
     const { POST } = await import('@/app/api/livekit/token/route')

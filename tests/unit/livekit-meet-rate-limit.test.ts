@@ -112,9 +112,16 @@ beforeEach(() => {
   state.supabase = createSupabase()
   state.requireUser.mockResolvedValue({ user: { id: state.userId, email: 'a@example.com' } })
   state.getSupabaseAdmin.mockReturnValue(state.supabase)
-  state.getRoomByName.mockResolvedValue(room())
+  state.getRoomByName.mockImplementation(async (_supabase: unknown, roomName: string) => room(roomName))
   state.expireRoomIfNeeded.mockImplementation(async (_supabase: unknown, value: unknown) => value)
-  state.getMembership.mockResolvedValue({ id: 'member-a', status: 'approved', display_name: 'Alice' })
+  state.getMembership.mockImplementation(async (_supabase: unknown, roomId: string, userId: string) => ({
+    id: `member-${userId}-${roomId}`,
+    room_id: roomId,
+    user_id: userId,
+    role: 'participant',
+    status: 'approved',
+    display_name: 'Alice',
+  }))
   state.canJoinRoom.mockReturnValue(true)
   state.toJwt.mockResolvedValue('jwt-token')
   state.ensureLiveKitMeetRoom.mockResolvedValue({ room: { name: 'room-a' }, created: false })
@@ -154,16 +161,32 @@ describe('LiveKit token rate limits', () => {
     const response = await route.POST!(request(
       'http://localhost/api/livekit/token',
       '198.51.100.150',
-      { roomName: 'room-a', participantName: '  Ronne   Meet  ' },
+      {
+        roomName: 'room-a',
+        participantName: '  Ronne   Meet  ',
+        'entreus.user_id': 'forged-user',
+        'entreus.role': 'owner',
+      },
     ))
 
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toMatchObject({ participantName: 'Ronne Meet' })
     expect(state.accessToken).toHaveBeenCalledTimes(1)
-    const options = state.accessToken.mock.calls[0]?.[2] as { identity: string; name: string }
+    const options = state.accessToken.mock.calls[0]?.[2] as {
+      identity: string
+      name: string
+      attributes: Record<string, string>
+    }
     expect(options.name).toBe('Ronne Meet')
     expect(options.identity).toMatch(/^user-a-[0-9a-f]{8}$/)
     expect(options.identity).not.toContain('Ronne')
+    expect(options.attributes).toEqual({
+      'entreus.user_id': 'user-a',
+      'entreus.member_id': 'member-user-a-id-room-a',
+      'entreus.room_id': 'id-room-a',
+      'entreus.role': 'participant',
+    })
+    expect(Object.values(options.attributes)).not.toContain('forged-user')
     expect(state.supabase.from).not.toHaveBeenCalled()
   })
 

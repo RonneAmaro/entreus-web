@@ -79,6 +79,7 @@ import {
 } from '@/lib/meet/room-ui-lifecycle'
 import Image from 'next/image'
 import Link from 'next/link'
+import MeetTranscriptionPanel from './MeetTranscriptionPanel'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
 type TokenResponse =
@@ -1325,6 +1326,11 @@ function PortugueseConference({
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <main className={`relative min-w-0 flex-1 transition-[padding] duration-300 ${sidePanel ? 'lg:pr-0' : ''}`}>
+          <MeetTranscriptionPanel
+            roomName={roomName}
+            isModerator={isModerator}
+            authHeaders={authHeaders}
+          />
           {hasPresentationLayout && activePresentationTrack ? (
             <div className="entreus-meet-presentation flex h-full min-h-0 flex-col gap-2 p-2 pb-[calc(7.75rem+env(safe-area-inset-bottom))] sm:gap-3 sm:p-4 sm:pb-28 lg:flex-row">
               <section className="min-h-0 flex-1 overflow-hidden rounded-2xl border border-blue-300/15 bg-zinc-950 shadow-2xl shadow-black/40 ring-1 ring-blue-200/10">
