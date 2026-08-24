@@ -34,6 +34,7 @@ import {
   useConnectionState,
   useLocalParticipant,
   useParticipants,
+  useRoomContext,
   useTracks,
 } from '@livekit/components-react'
 import '@livekit/components-styles'
@@ -71,6 +72,11 @@ import {
   X,
 } from 'lucide-react'
 import { ConnectionState as LiveKitConnectionState, Track } from 'livekit-client'
+import {
+  getMeetLeaveAction,
+  isMeetRoomFinal,
+  shouldRunMeetCountdown,
+} from '@/lib/meet/room-ui-lifecycle'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
@@ -174,6 +180,10 @@ type RecordingsResponse =
 type RecordingActionResponse =
   | { ok: true; recording: PublicMeetRecording }
   | { ok: false; error: string }
+
+type EndRoomResponse =
+  | { ok: true; ended: true; endedAt: string }
+  | { ok: false; ended?: boolean; cleanupPending?: boolean; error: string }
 
 type MeetRoomClientProps = {
   roomName: string
@@ -595,6 +605,7 @@ function PortugueseConference({
   handRaised,
   hands,
   isModerator,
+  isOwner,
   mediaPermissionMessage,
   participantName,
   pendingRequests,
@@ -605,6 +616,7 @@ function PortugueseConference({
   soundAlertsEnabled,
   authHeaders,
   onModerateRequest,
+  onEndMeeting,
   onRetryMediaPermissions,
   onToggleSoundAlerts,
   onToggleHand,
@@ -612,6 +624,7 @@ function PortugueseConference({
   handRaised: boolean
   hands: Extract<HandsResponse, { ok: true }>['hands']
   isModerator: boolean
+  isOwner: boolean
   mediaPermissionMessage: string | null
   participantName: string
   pendingRequests: Extract<RequestsResponse, { ok: true }>['requests']
@@ -622,6 +635,7 @@ function PortugueseConference({
   soundAlertsEnabled: boolean
   authHeaders: () => Promise<{ Authorization: string } | null>
   onModerateRequest: (memberId: string, action: 'approve' | 'reject') => Promise<void>
+  onEndMeeting: () => Promise<boolean>
   onRetryMediaPermissions: () => Promise<void>
   onToggleSoundAlerts: () => void
   onToggleHand: () => void
@@ -631,6 +645,7 @@ function PortugueseConference({
     { source: Track.Source.ScreenShare, withPlaceholder: false },
   ])
   const connectionState = useConnectionState()
+  const liveKitRoom = useRoomContext()
   const { localParticipant } = useLocalParticipant()
   const participants = useParticipants()
   const [microphoneEnabled, setMicrophoneEnabled] = useState(true)
@@ -654,6 +669,9 @@ function PortugueseConference({
   const [recordings, setRecordings] = useState<PublicMeetRecording[]>([])
   const [canManageRecordings, setCanManageRecordings] = useState(false)
   const [showRecordingConfirmation, setShowRecordingConfirmation] = useState(false)
+  const [showEndConfirmation, setShowEndConfirmation] = useState(false)
+  const [endAction, setEndAction] = useState<'idle' | 'ending'>('idle')
+  const [endActionError, setEndActionError] = useState<string | null>(null)
   const [recordingAction, setRecordingAction] = useState<'idle' | 'starting' | 'stopping' | 'downloading'>('idle')
   const [recordingActionError, setRecordingActionError] = useState<string | null>(null)
   const [compactLayout, setCompactLayout] = useState(false)
@@ -673,6 +691,23 @@ function PortugueseConference({
   const showTimeWarning = typeof secondsLeft === 'number' && secondsLeft > 0 && secondsLeft <= 60
   const pendingRequestCount = isModerator ? pendingRequests.length : 0
   const canControlRecording = canManageRecordings || isModerator
+  const leaveAction = getMeetLeaveAction(isOwner)
+
+  async function confirmEndMeeting() {
+    setEndAction('ending')
+    setEndActionError(null)
+
+    try {
+      const ended = await onEndMeeting()
+      if (!ended) {
+        setEndActionError('Não foi possível encerrar a reunião agora.')
+        return
+      }
+      await liveKitRoom.disconnect()
+    } finally {
+      setEndAction('idle')
+    }
+  }
 
   const loadRecordings = useCallback(async () => {
     const headers = await authHeaders()
@@ -1585,9 +1620,21 @@ function PortugueseConference({
                 </button>
               </div>
 
-              <DisconnectButton className="!m-0 inline-flex !h-11 !min-h-0 !w-11 shrink-0 items-center justify-center !rounded-full !border !border-red-300/50 !bg-red-600/95 !p-0 !text-white text-white shadow-md shadow-red-950/25 transition hover:!border-red-100/70 hover:!bg-red-500 focus:outline-none focus:ring-2 focus:ring-red-100/45 sm:!h-11 sm:!w-12" title="Sair">
-                <PhoneOff className="h-5 w-5 text-white stroke-[2.9]" />
-              </DisconnectButton>
+              {isOwner ? (
+                <button
+                  type="button"
+                  onClick={() => setShowEndConfirmation(true)}
+                  className="!m-0 inline-flex !h-11 !min-h-0 !w-11 shrink-0 items-center justify-center !rounded-full !border !border-red-300/50 !bg-red-600/95 !p-0 !text-white text-white shadow-md shadow-red-950/25 transition hover:!border-red-100/70 hover:!bg-red-500 focus:outline-none focus:ring-2 focus:ring-red-100/45 sm:!h-11 sm:!w-12"
+                  aria-label={leaveAction.label}
+                  title={leaveAction.title}
+                >
+                  <PhoneOff className="h-5 w-5 text-white stroke-[2.9]" />
+                </button>
+              ) : (
+                <DisconnectButton className="!m-0 inline-flex !h-11 !min-h-0 !w-11 shrink-0 items-center justify-center !rounded-full !border !border-red-300/50 !bg-red-600/95 !p-0 !text-white text-white shadow-md shadow-red-950/25 transition hover:!border-red-100/70 hover:!bg-red-500 focus:outline-none focus:ring-2 focus:ring-red-100/45 sm:!h-11 sm:!w-12" title={leaveAction.title}>
+                  <PhoneOff className="h-5 w-5 text-white stroke-[2.9]" />
+                </DisconnectButton>
+              )}
             </div>
           </div>
 
@@ -1782,12 +1829,21 @@ function PortugueseConference({
                       </div>
 
                       <div className="mt-3 grid grid-cols-2 gap-2">
-                        <DisconnectButton className={sheetDangerActionClass} title="Sair da sala">
-                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-500/25 text-white ring-1 ring-red-100/25">
-                            <PhoneOff className="h-5 w-5 stroke-[2.8]" />
-                          </span>
-                          <span>Sair da sala</span>
-                        </DisconnectButton>
+                        {isOwner ? (
+                          <button type="button" onClick={() => setShowEndConfirmation(true)} className={sheetDangerActionClass} title={leaveAction.title}>
+                            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-500/25 text-white ring-1 ring-red-100/25">
+                              <PhoneOff className="h-5 w-5 stroke-[2.8]" />
+                            </span>
+                            <span>{leaveAction.label}</span>
+                          </button>
+                        ) : (
+                          <DisconnectButton className={sheetDangerActionClass} title={leaveAction.title}>
+                            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-500/25 text-white ring-1 ring-red-100/25">
+                              <PhoneOff className="h-5 w-5 stroke-[2.8]" />
+                            </span>
+                            <span>{leaveAction.label}</span>
+                          </DisconnectButton>
+                        )}
                         <button type="button" onClick={() => setIsMeetMoreOptionsOpen(false)} className={sheetActionClass}>
                           <span className={sheetIconClass}>
                             <X className="h-5 w-5" />
@@ -1798,6 +1854,34 @@ function PortugueseConference({
                     </div>
                   ) : null}
         </main>
+
+        {showEndConfirmation ? (
+          <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="end-meeting-confirmation-title">
+            <section className="w-full max-w-lg rounded-[2rem] border border-red-300/30 bg-[linear-gradient(145deg,rgba(48,8,16,0.98),rgba(9,12,24,0.98))] p-6 shadow-2xl shadow-black/60 ring-1 ring-red-100/10 sm:p-7">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full border border-red-300/35 bg-red-500/15 text-red-100">
+                <PhoneOff className="h-5 w-5" />
+              </div>
+              <h2 id="end-meeting-confirmation-title" className="mt-5 text-2xl font-black text-white">Encerrar reunião?</h2>
+              <p className="mt-3 text-sm leading-6 text-zinc-200">
+                Encerrar a reunião para todos os participantes? Todos serão desconectados e ninguém poderá entrar novamente.
+              </p>
+              {endActionError ? (
+                <p role="alert" className="mt-4 rounded-2xl border border-red-300/30 bg-red-950/45 px-4 py-3 text-sm font-semibold text-red-100">
+                  {endActionError}
+                </p>
+              ) : null}
+              <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <button type="button" onClick={() => setShowEndConfirmation(false)} disabled={endAction === 'ending'} className="inline-flex min-h-11 items-center justify-center rounded-full border border-white/15 bg-white/[0.06] px-5 text-sm font-bold text-zinc-100 transition hover:bg-white/[0.1] disabled:opacity-50">
+                  Cancelar
+                </button>
+                <button type="button" onClick={() => void confirmEndMeeting()} disabled={endAction === 'ending'} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-red-600 px-5 text-sm font-black text-white transition hover:bg-red-500 disabled:opacity-50">
+                  {endAction === 'ending' ? <Loader2 className="h-4 w-4 animate-spin" /> : <PhoneOff className="h-4 w-4" />}
+                  Encerrar reunião
+                </button>
+              </div>
+            </section>
+          </div>
+        ) : null}
 
         {showRecordingConfirmation ? (
           <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="recording-confirmation-title">
@@ -2117,6 +2201,7 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
   const [joinIssue, setJoinIssue] = useState<JoinIssue>(null)
   const [mediaPermissionMessage, setMediaPermissionMessage] = useState<string | null>(null)
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null)
+  const [roomEndNotice, setRoomEndNotice] = useState<string | null>(null)
   const [soundAlertsEnabled, setSoundAlertsEnabled] = useState(true)
   const seenRequestIdsRef = useRef<Set<string>>(new Set())
   const requestsInitializedRef = useRef(false)
@@ -2124,7 +2209,7 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
 
   const isModerator = membership?.status === 'approved' && (membership.role === 'owner' || membership.role === 'admin')
   const isApproved = membership?.status === 'approved'
-  const expired = roomData?.status === 'expired' || roomData?.status === 'ended' || secondsLeft === 0
+  const expired = Boolean(roomData && isMeetRoomFinal(roomData.status)) || secondsLeft === 0
   const inCall = joinState === 'connected' && Boolean(accessToken && serverUrl)
   const normalizedParticipantName = normalizeDisplayName(participantName)
   const participantNameIsValid = isValidDisplayName(participantName)
@@ -2140,7 +2225,7 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
     return { Authorization: `Bearer ${session.access_token}` }
   }, [])
 
-  const loadRoom = useCallback(async () => {
+  const loadRoom = useCallback(async (reconcile = false) => {
     const headers = await authHeaders()
 
     if (!headers) {
@@ -2151,7 +2236,8 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
       return
     }
 
-    const response = await fetch(`/api/meet/rooms/${encodeURIComponent(roomName)}`, { headers })
+    const reconciliationQuery = reconcile ? '?reconcile=1' : ''
+    const response = await fetch(`/api/meet/rooms/${encodeURIComponent(roomName)}${reconciliationQuery}`, { headers })
     const data = (await response.json()) as RoomResponse
 
     setLoading(false)
@@ -2194,7 +2280,7 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
   }, [authHeaders, inCall, roomName])
 
   useEffect(() => {
-    void loadRoom()
+    void loadRoom(true)
   }, [loadRoom])
 
   useEffect(() => {
@@ -2242,7 +2328,7 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
   }, [])
 
   useEffect(() => {
-    if (!roomData?.expiresAt) return
+    if (!roomData?.expiresAt || !shouldRunMeetCountdown(roomData.status)) return
 
     function updateRemaining() {
       const remaining = Math.max(0, Math.floor((Date.parse(roomData!.expiresAt) - Date.now()) / 1000))
@@ -2254,6 +2340,12 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
     const timer = window.setInterval(updateRemaining, 1000)
     return () => window.clearInterval(timer)
   }, [roomData])
+
+  useEffect(() => {
+    if (inCall || !roomData || isMeetRoomFinal(roomData.status)) return
+    const timer = window.setInterval(() => void loadRoom(true), 30_000)
+    return () => window.clearInterval(timer)
+  }, [inCall, loadRoom, roomData?.status])
 
   useEffect(() => {
     if (membership?.status !== 'pending' && !isModerator) return
@@ -2454,6 +2546,35 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
     }
   }
 
+  async function endMeeting() {
+    const headers = await authHeaders()
+    if (!headers) return false
+
+    try {
+      const response = await fetch(`/api/meet/rooms/${encodeURIComponent(roomName)}/end`, {
+        method: 'POST',
+        headers,
+      })
+      const data = (await response.json()) as EndRoomResponse
+
+      if (data.ended) {
+        setRoomData((current) => current ? { ...current, status: 'ended' } : current)
+        setSecondsLeft(null)
+        setRoomEndNotice(!data.ok ? data.error : null)
+        setJoinState('idle')
+        setAccessToken(null)
+        setServerUrl(null)
+        return true
+      }
+
+      setError(data.error)
+      return false
+    } catch {
+      setError('Não foi possível encerrar a reunião agora.')
+      return false
+    }
+  }
+
   if (joinState === 'loading') {
     return (
       <MeetStatusCard
@@ -2493,14 +2614,20 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
   }
 
   if (roomData && expired) {
+    const wasExplicitlyEnded = roomData.status === 'ended'
     return (
       <MeetStatusCard
         title="A sala foi encerrada."
-        description={`O tempo desta chamada terminou (${roomPlanLabel}).`}
+        description={wasExplicitlyEnded ? 'Esta reunião foi encerrada pelo criador.' : `O tempo desta chamada terminou (${roomPlanLabel}).`}
         icon={Clock3}
         primaryAction={{ label: 'Criar nova sala', href: '/meet' }}
         secondaryAction={{ label: 'Voltar ao Meet', href: '/meet' }}
       >
+        {roomEndNotice ? (
+          <p role="alert" className="mx-auto mt-5 max-w-md rounded-2xl border border-amber-300/25 bg-amber-300/10 px-4 py-3 text-sm font-semibold text-amber-100">
+            {roomEndNotice}
+          </p>
+        ) : null}
         {roomPlan === 'free' ? (
           <div className="mx-auto mt-5 max-w-md rounded-2xl border border-amber-300/20 bg-amber-300/10 px-4 py-3 text-sm font-semibold text-amber-100">
             Usuarios VIP podem criar salas de ate 60 minutos.
@@ -2548,6 +2675,7 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
             setJoinState('idle')
             setAccessToken(null)
             setServerUrl(null)
+            void loadRoom(true)
           }}
           onError={(roomError) => {
             console.error('Meet room error', roomError)
@@ -2565,6 +2693,7 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
             handRaised={Boolean(membership?.handRaised)}
             hands={hands}
             isModerator={Boolean(isModerator)}
+            isOwner={Boolean(roomData?.isOwner)}
             mediaPermissionMessage={mediaPermissionMessage}
             participantName={normalizedParticipantName}
             pendingRequests={pendingRequests}
@@ -2575,6 +2704,7 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
             soundAlertsEnabled={soundAlertsEnabled}
             authHeaders={authHeaders}
             onModerateRequest={moderate}
+            onEndMeeting={endMeeting}
             onRetryMediaPermissions={retryMediaPermissions}
             onToggleSoundAlerts={() => setSoundAlertsEnabled((current) => !current)}
             onToggleHand={toggleHand}

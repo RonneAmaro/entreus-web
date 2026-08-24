@@ -13,7 +13,21 @@ const state = vi.hoisted(() => ({
   getProfileDisplayName: vi.fn(),
   accessToken: vi.fn(),
   toJwt: vi.fn(),
+  ensureLiveKitMeetRoom: vi.fn(),
+  deleteLiveKitMeetRoom: vi.fn(),
+  reconcileMeetRoomLifecycle: vi.fn(),
+  markMeetRoomLiveKitCreated: vi.fn(),
   supabase: {} as Record<string, unknown>,
+}))
+
+vi.mock('@/lib/meet/livekit-room-server', () => ({
+  ensureLiveKitMeetRoom: state.ensureLiveKitMeetRoom,
+  deleteLiveKitMeetRoom: state.deleteLiveKitMeetRoom,
+}))
+
+vi.mock('@/lib/meet/room-lifecycle-reconciliation-server', () => ({
+  reconcileMeetRoomLifecycle: state.reconcileMeetRoomLifecycle,
+  markMeetRoomLiveKitCreated: state.markMeetRoomLiveKitCreated,
 }))
 
 vi.mock('@/lib/meet-server', () => ({
@@ -103,6 +117,18 @@ beforeEach(() => {
   state.getMembership.mockResolvedValue({ id: 'member-a', status: 'approved', display_name: 'Alice' })
   state.canJoinRoom.mockReturnValue(true)
   state.toJwt.mockResolvedValue('jwt-token')
+  state.ensureLiveKitMeetRoom.mockResolvedValue({ room: { name: 'room-a' }, created: false })
+  state.deleteLiveKitMeetRoom.mockResolvedValue({ deleted: true })
+  state.reconcileMeetRoomLifecycle.mockImplementation(async (_supabase: unknown, value: unknown) => ({
+    room: value,
+    checkedLiveKit: false,
+    liveKitRoom: null,
+    cleanupError: null,
+  }))
+  state.markMeetRoomLiveKitCreated.mockImplementation(async (_supabase: unknown, value: object) => ({
+    ...value,
+    livekit_created_at: '2026-08-24T12:00:00.000Z',
+  }))
   state.accessToken.mockReset()
   state.isActiveVipUser.mockResolvedValue(false)
   state.getMeetPlanForCreator.mockReturnValue({ plan: 'free', durationMinutes: 20 })
@@ -195,7 +221,7 @@ describe('LiveKit token rate limits', () => {
       const response = await route.POST!(request('http://localhost/api/livekit/token', '198.51.100.3'))
       expect(response.status).toBe(index < 20 ? 200 : 429)
     }
-    expect(state.getRoomByName).toHaveBeenCalledTimes(20)
+    expect(state.getRoomByName).toHaveBeenCalledTimes(40)
     expect(state.accessToken).toHaveBeenCalledTimes(20)
   })
 

@@ -11,6 +11,12 @@ import {
 import { AccessToken } from 'livekit-server-sdk'
 import { NextResponse } from 'next/server'
 import { createRateLimiter, createRateLimitExceededResponse } from '@/lib/rate-limit'
+import { deleteLiveKitMeetRoom, ensureLiveKitMeetRoom } from '@/lib/meet/livekit-room-server'
+import {
+  markMeetRoomLiveKitCreated,
+  reconcileMeetRoomLifecycle,
+} from '@/lib/meet/room-lifecycle-reconciliation-server'
+import { logServerEvent } from '@/lib/logging/safe-logger'
 import {
   createServerIssuedLiveKitIdentity,
   validateMeetingParticipantName,
@@ -147,11 +153,58 @@ export async function POST(request: Request): Promise<Response> {
       }
       return jsonError('Informe seu nome para entrar na chamada.', 400)
     }
+
+    const reconciliation = await reconcileMeetRoomLifecycle(supabase, updatedRoom)
+    if (reconciliation.cleanupError) {
+      logServerEvent('warn', {
+        event: 'meet.room_reconciliation_recording_cleanup_pending',
+        error: reconciliation.cleanupError,
+      })
+    }
+    if (reconciliation.room.status !== 'active') {
+      return jsonError('Esta sala foi encerrada.', 403)
+    }
     const participantName = participantNameValidation.value
 
+    const ensured = reconciliation.liveKitRoom
+      ? { room: reconciliation.liveKitRoom, created: false as const }
+      : await ensureLiveKitMeetRoom(reconciliation.room.room_name)
+
+    let markedRoom
+    try {
+      markedRoom = await markMeetRoomLiveKitCreated(supabase, reconciliation.room)
+    } catch (markerError) {
+      if (ensured.created) {
+        try {
+          await deleteLiveKitMeetRoom(reconciliation.room.room_name)
+        } catch (cleanupError) {
+          logServerEvent('warn', {
+            event: 'meet.livekit_marker_failure_cleanup_pending',
+            error: cleanupError,
+          })
+        }
+      }
+      throw markerError
+    }
+
+    if (markedRoom.status !== 'active') {
+      if (ensured.created) await deleteLiveKitMeetRoom(reconciliation.room.room_name)
+      return jsonError('Esta sala foi encerrada.', 403)
+    }
+
+    const confirmedRoom = await getRoomByName(supabase, markedRoom.room_name)
+    if (
+      !confirmedRoom ||
+      confirmedRoom.status !== 'active' ||
+      hasRoomExpired(confirmedRoom)
+    ) {
+      await deleteLiveKitMeetRoom(markedRoom.room_name)
+      return jsonError('Esta sala expirou.', 403)
+    }
+
     const secondsLeft = Math.max(
-      60,
-      Math.floor((Date.parse(updatedRoom.expires_at) - Date.now()) / 1000),
+      1,
+      Math.floor((Date.parse(confirmedRoom.expires_at) - Date.now()) / 1000),
     )
     const identity = createServerIssuedLiveKitIdentity(auth.user.id)
     const accessToken = new AccessToken(livekitApiKey, livekitApiSecret, {
@@ -162,7 +215,7 @@ export async function POST(request: Request): Promise<Response> {
 
     accessToken.addGrant({
       roomJoin: true,
-      room: updatedRoom.room_name,
+      room: confirmedRoom.room_name,
       canPublish: true,
       canSubscribe: true,
       canPublishData: true,
@@ -174,7 +227,7 @@ export async function POST(request: Request): Promise<Response> {
       ok: true,
       token,
       url: livekitUrl,
-      roomName: updatedRoom.room_name,
+      roomName: confirmedRoom.room_name,
       participantName,
     })
   } catch {

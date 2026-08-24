@@ -16,6 +16,7 @@ export type MeetRoom = {
   starts_at: string
   expires_at: string
   ended_at: string | null
+  livekit_created_at: string | null
   is_recording_enabled: boolean
   is_translation_enabled: boolean
 }

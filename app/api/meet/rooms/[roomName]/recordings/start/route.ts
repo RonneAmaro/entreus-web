@@ -134,6 +134,7 @@ export async function POST(request: Request, context: StartRecordingContext) {
         storage_key: egress.storageKey,
       })
       .eq('id', recordingId)
+      .eq('status', 'preparing')
       .select('id, status, created_at, started_at, ended_at, duration_seconds, file_size_bytes, error_message, storage_key, storage_bucket, egress_id, compression_profile, retention_expires_at, storage_estimate_bytes')
       .single()
 
@@ -147,6 +148,7 @@ export async function POST(request: Request, context: StartRecordingContext) {
         .from('meet_room_recordings')
         .update({ status: 'failed', ended_at: new Date().toISOString(), error_message: MEET_RECORDING_FAILURE_MESSAGE })
         .eq('id', recordingId)
+        .eq('status', 'preparing')
       return jsonError(MEET_RECORDING_FAILURE_MESSAGE, 500)
     }
 
@@ -159,6 +161,7 @@ export async function POST(request: Request, context: StartRecordingContext) {
       .from('meet_room_recordings')
       .update({ status: 'failed', ended_at: new Date().toISOString(), error_message: MEET_RECORDING_FAILURE_MESSAGE })
       .eq('id', recordingId)
+      .eq('status', 'preparing')
     return jsonError(MEET_RECORDING_FAILURE_MESSAGE, 502)
   }
 }
