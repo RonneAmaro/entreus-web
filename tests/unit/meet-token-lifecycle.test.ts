@@ -133,6 +133,19 @@ describe('LiveKit token lifecycle gate', () => {
     expect(state.markMeetRoomLiveKitCreated.mock.invocationCallOrder[0]).toBeLessThan(state.accessToken.mock.invocationCallOrder[0])
   })
 
+  it('mints all participant attributes from the confirmed room and approved membership', async () => {
+    const { POST } = await import('@/app/api/livekit/token/route')
+    expect((await POST(tokenRequest('198.51.100.213'))).status).toBe(200)
+    expect(state.accessToken).toHaveBeenCalledWith('key', 'secret', expect.objectContaining({
+      attributes: {
+        'entreus.user_id': 'user-a',
+        'entreus.member_id': 'member-a',
+        'entreus.room_id': 'room-id',
+        'entreus.role': 'participant',
+      },
+    }))
+  })
+
   it('does not generate a JWT when LiveKit room creation fails', async () => {
     state.ensureLiveKitMeetRoom.mockRejectedValue(new Error('unavailable'))
     const { POST } = await import('@/app/api/livekit/token/route')

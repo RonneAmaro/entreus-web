@@ -1,6 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { describe, expect, it, vi } from 'vitest'
-import { ENTREUS_LIVEKIT_ATTRIBUTES } from '@/lib/meet/participant-identity'
+import {
+  ENTREUS_LIVEKIT_ATTRIBUTES,
+  createServerIssuedParticipantAttributes,
+} from '@/lib/meet/participant-identity'
 import {
   evaluateTranscriptionAge,
   getTranscriptRetentionExpiry,
@@ -16,6 +19,60 @@ const attributes = {
   [ENTREUS_LIVEKIT_ATTRIBUTES.memberId]: 'member-a',
   [ENTREUS_LIVEKIT_ATTRIBUTES.roomId]: 'room-a',
   [ENTREUS_LIVEKIT_ATTRIBUTES.role]: 'participant',
+}
+
+function createParticipantMembershipDatabase(rows: Array<Record<string, unknown>>) {
+  const from = vi.fn(() => {
+    let filtered = [...rows]
+    const builder: Record<string, unknown> & PromiseLike<{
+      data: Array<Record<string, unknown>>
+      error: null
+    }> = {
+      select: vi.fn(() => builder),
+      eq: vi.fn((column: string, value: unknown) => {
+        filtered = filtered.filter((row) => row[column] === value)
+        return builder
+      }),
+      in: vi.fn((column: string, values: unknown[]) => {
+        filtered = filtered.filter((row) => values.includes(row[column]))
+        return builder
+      }),
+      then: (resolve, reject) => Promise.resolve({ data: filtered, error: null }).then(resolve, reject),
+    }
+    return builder
+  })
+  return { from } as unknown as SupabaseClient
+}
+
+function participantMembership(overrides: Record<string, unknown> = {}) {
+  return {
+    id: '22222222-2222-4222-8222-222222222222',
+    room_id: 'room-a',
+    user_id: userId,
+    role: 'participant',
+    status: 'approved',
+    display_name: 'Fixture',
+    ...overrides,
+  }
+}
+
+function connectedParticipant(overrides: Record<string, unknown> = {}) {
+  const member = participantMembership() as never
+  return {
+    identity,
+    kind: 0,
+    attributes: createServerIssuedParticipantAttributes({ id: 'room-a' }, member),
+    ...overrides,
+  }
+}
+
+function participantService(participant: ReturnType<typeof connectedParticipant>) {
+  return {
+    listRooms: vi.fn(),
+    createRoom: vi.fn(),
+    deleteRoom: vi.fn(),
+    listParticipants: vi.fn(async () => [participant]),
+  }
 }
 
 function createSegmentDatabase(overrides: {
@@ -145,12 +202,72 @@ describe('Meet transcription server foundation', () => {
       {} as SupabaseClient,
       room,
       service([{ identity: 'sip-a', kind: 3 }]),
-    )).rejects.toThrow('MEET_TRANSCRIPTION_UNATTRIBUTED_PARTICIPANT')
+    )).rejects.toThrow('MEET_TRANSCRIPTION_PARTICIPANT_IDENTITY_INVALID')
     await expect(listValidatedConnectedParticipants(
       {} as SupabaseClient,
       room,
       service([{ identity: 'agent-a', kind: 4 }]),
     )).resolves.toEqual([])
+  })
+
+  it('resolves a strict server identity with matching attributes or with attributes omitted', async () => {
+    const database = createParticipantMembershipDatabase([participantMembership()])
+    const room = { id: 'room-a', room_name: 'room-name' } as never
+
+    await expect(listValidatedConnectedParticipants(
+      database,
+      room,
+      participantService(connectedParticipant()),
+    )).resolves.toMatchObject([{ member: { id: '22222222-2222-4222-8222-222222222222' } }])
+    await expect(listValidatedConnectedParticipants(
+      database,
+      room,
+      participantService(connectedParticipant({ attributes: {} })),
+    )).resolves.toMatchObject([{ member: { user_id: userId, room_id: 'room-a', status: 'approved' } }])
+  })
+
+  it.each([
+    [ENTREUS_LIVEKIT_ATTRIBUTES.memberId, '33333333-3333-4333-8333-333333333333'],
+    [ENTREUS_LIVEKIT_ATTRIBUTES.roomId, 'room-b'],
+    [ENTREUS_LIVEKIT_ATTRIBUTES.userId, '44444444-4444-4444-8444-444444444444'],
+    [ENTREUS_LIVEKIT_ATTRIBUTES.role, 'owner'],
+  ])('fails closed when a present %s attribute does not match the database', async (key, value) => {
+    const database = createParticipantMembershipDatabase([participantMembership()])
+    const participant = connectedParticipant()
+    participant.attributes = { ...participant.attributes, [key]: value }
+
+    await expect(listValidatedConnectedParticipants(
+      database,
+      { id: 'room-a', room_name: 'room-name' } as never,
+      participantService(participant),
+    )).rejects.toThrow('MEET_TRANSCRIPTION_PARTICIPANT_IDENTITY_INVALID')
+  })
+
+  it('rejects malformed identities, cross-room users, revoked members and ambiguous membership', async () => {
+    const room = { id: 'room-a', room_name: 'room-name' } as never
+    await expect(listValidatedConnectedParticipants(
+      createParticipantMembershipDatabase([participantMembership()]),
+      room,
+      participantService(connectedParticipant({ identity: `${userId}-nothex!!`, attributes: {} })),
+    )).rejects.toThrow('MEET_TRANSCRIPTION_PARTICIPANT_IDENTITY_INVALID')
+    await expect(listValidatedConnectedParticipants(
+      createParticipantMembershipDatabase([participantMembership({ room_id: 'room-b' })]),
+      room,
+      participantService(connectedParticipant({ attributes: {} })),
+    )).rejects.toThrow('MEET_TRANSCRIPTION_PARTICIPANT_IDENTITY_INVALID')
+    await expect(listValidatedConnectedParticipants(
+      createParticipantMembershipDatabase([participantMembership({ status: 'left' })]),
+      room,
+      participantService(connectedParticipant({ attributes: {} })),
+    )).rejects.toThrow('MEET_TRANSCRIPTION_PARTICIPANT_IDENTITY_INVALID')
+    await expect(listValidatedConnectedParticipants(
+      createParticipantMembershipDatabase([
+        participantMembership(),
+        participantMembership({ id: '55555555-5555-4555-8555-555555555555' }),
+      ]),
+      room,
+      participantService(connectedParticipant({ attributes: {} })),
+    )).rejects.toThrow('MEET_TRANSCRIPTION_PARTICIPANT_MEMBERSHIP_AMBIGUOUS')
   })
 
   it('persists a final segment with server-derived room/member/user and speaker snapshot', async () => {

@@ -15,6 +15,7 @@ import {
   toPublicMeetTranscript,
   type MeetTranscript,
 } from '@/lib/meet/transcription-server'
+import { logMeetTranscriptionFailure } from '@/lib/meet/transcription-diagnostics'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -96,33 +97,62 @@ export async function POST(request: Request, context: TranscriptionContext): Pro
     return jsonError('Esta sala não está ativa para iniciar uma transcrição.', 403)
   }
 
+  let existing: MeetTranscript | null
   try {
-    let existing = await getOpenMeetTranscript(access.supabase, access.room.id)
+    existing = await getOpenMeetTranscript(access.supabase, access.room.id)
     if (existing && hasMeetTranscriptExpired(existing)) {
       await reconcileMeetTranscriptionConsentState(access.supabase, access.room, existing)
       existing = null
     }
-    if (existing) return jsonError('Já existe uma solicitação de transcrição nesta sala.', 409)
+  } catch (error) {
+    logMeetTranscriptionFailure('open_transcript_lookup', error)
+    return jsonError('Não foi possível solicitar a transcrição.', 500)
+  }
+  if (existing) return jsonError('Já existe uma solicitação de transcrição nesta sala.', 409)
 
-    const participants = await listValidatedConnectedParticipants(access.supabase, access.room)
-    if (participants.length === 0) {
-      return jsonError('Nenhum participante conectado foi encontrado para solicitar consentimento.', 409)
-    }
+  let participants: Awaited<ReturnType<typeof listValidatedConnectedParticipants>>
+  try {
+    participants = await listValidatedConnectedParticipants(access.supabase, access.room)
+  } catch (error) {
+    logMeetTranscriptionFailure('livekit_participants_lookup', error)
+    return jsonError('Não foi possível solicitar a transcrição.', 500)
+  }
+  if (participants.length === 0) {
+    logMeetTranscriptionFailure(
+      'livekit_participants_lookup',
+      new Error('MEET_TRANSCRIPTION_NO_CONNECTED_PARTICIPANTS'),
+    )
+    return jsonError('Nenhum participante conectado foi encontrado para solicitar consentimento.', 409)
+  }
 
-    const age = await assertParticipantsAreAdults(access.supabase, participants)
-    if (!age.eligible) {
-      return jsonError(
-        age.reason === 'minor'
-          ? MEET_TRANSCRIPTION_MINOR_BLOCKED_MESSAGE
-          : age.reason === 'unverified'
-            ? MEET_TRANSCRIPTION_AGE_VERIFICATION_REQUIRED_MESSAGE
-            : MEET_TRANSCRIPTION_AGE_UNKNOWN_MESSAGE,
-        403,
-      )
-    }
+  let age: Awaited<ReturnType<typeof assertParticipantsAreAdults>>
+  try {
+    age = await assertParticipantsAreAdults(access.supabase, participants)
+  } catch (error) {
+    logMeetTranscriptionFailure('age_validation', error)
+    return jsonError('Não foi possível solicitar a transcrição.', 500)
+  }
+  if (!age.eligible) {
+    logMeetTranscriptionFailure(
+      'age_validation',
+      new Error('MEET_TRANSCRIPTION_AGE_VALIDATION_FAILED'),
+    )
+    return jsonError(
+      age.reason === 'minor'
+        ? MEET_TRANSCRIPTION_MINOR_BLOCKED_MESSAGE
+        : age.reason === 'unverified'
+          ? MEET_TRANSCRIPTION_AGE_VERIFICATION_REQUIRED_MESSAGE
+          : MEET_TRANSCRIPTION_AGE_UNKNOWN_MESSAGE,
+      403,
+    )
+  }
 
-    const transcriptId = crypto.randomUUID()
-    const now = new Date().toISOString()
+  let transcript: MeetTranscript
+  let transcriptId: string
+  let now: string
+  try {
+    transcriptId = crypto.randomUUID()
+    now = new Date().toISOString()
     const { data, error } = await access.supabase
       .from('meet_transcripts')
       .insert({
@@ -134,8 +164,15 @@ export async function POST(request: Request, context: TranscriptionContext): Pro
       })
       .select('*')
       .single()
-    if (error || !data) return jsonError('Não foi possível solicitar a transcrição.', 500)
+    if (error) throw error
+    if (!data) throw new Error('MEET_TRANSCRIPTION_TRANSCRIPT_INSERT_EMPTY')
+    transcript = data as MeetTranscript
+  } catch (error) {
+    logMeetTranscriptionFailure('transcript_insert', error)
+    return jsonError('Não foi possível solicitar a transcrição.', 500)
+  }
 
+  try {
     const { error: consentError } = await access.supabase
       .from('meet_transcript_consents')
       .insert(participants.map(({ participant, member }) => ({
@@ -146,6 +183,7 @@ export async function POST(request: Request, context: TranscriptionContext): Pro
         livekit_participant_identity: participant.identity,
       })))
     if (consentError) {
+      logMeetTranscriptionFailure('consent_insert', consentError)
       await access.supabase
         .from('meet_transcripts')
         .update({ status: 'failed', ended_at: now })
@@ -153,9 +191,22 @@ export async function POST(request: Request, context: TranscriptionContext): Pro
         .eq('status', 'pending_consent')
       return jsonError('Não foi possível registrar a solicitação de consentimento.', 500)
     }
+  } catch (error) {
+    logMeetTranscriptionFailure('consent_insert', error)
+    return jsonError('Não foi possível solicitar a transcrição.', 500)
+  }
 
-    return publicTranscriptResponse(access, data as MeetTranscript)
-  } catch {
+  try {
+    const response = await publicTranscriptResponse(access, transcript)
+    if (!response.ok) {
+      logMeetTranscriptionFailure(
+        'public_response',
+        new Error('MEET_TRANSCRIPTION_PUBLIC_RESPONSE_FAILED'),
+      )
+    }
+    return response
+  } catch (error) {
+    logMeetTranscriptionFailure('public_response', error)
     return jsonError('Não foi possível solicitar a transcrição.', 500)
   }
 }

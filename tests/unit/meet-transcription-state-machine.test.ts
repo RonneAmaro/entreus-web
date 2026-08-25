@@ -9,6 +9,8 @@ import {
 } from '@/lib/meet/transcription-server'
 
 const now = new Date('2026-08-24T12:00:00.000Z')
+const userA = '11111111-1111-4111-8111-111111111111'
+const userB = '22222222-2222-4222-8222-222222222222'
 
 function member(id: string, userId: string) {
   return {
@@ -22,15 +24,17 @@ function member(id: string, userId: string) {
 }
 
 function participant(memberId: string, userId: string, suffix: string) {
+  const attributes: Record<string, string> = {
+    [ENTREUS_LIVEKIT_ATTRIBUTES.userId]: userId,
+    [ENTREUS_LIVEKIT_ATTRIBUTES.memberId]: memberId,
+    [ENTREUS_LIVEKIT_ATTRIBUTES.roomId]: 'room-a',
+    [ENTREUS_LIVEKIT_ATTRIBUTES.role]: 'participant',
+  }
+
   return {
     identity: `${userId}-${suffix}`,
     kind: 0,
-    attributes: {
-      [ENTREUS_LIVEKIT_ATTRIBUTES.userId]: userId,
-      [ENTREUS_LIVEKIT_ATTRIBUTES.memberId]: memberId,
-      [ENTREUS_LIVEKIT_ATTRIBUTES.roomId]: 'room-a',
-      [ENTREUS_LIVEKIT_ATTRIBUTES.role]: 'participant',
-    },
+    attributes,
     tracks: [{ sid: `TR-${memberId}`, type: 0, source: 2, muted: false }],
   }
 }
@@ -40,33 +44,33 @@ type Row = Record<string, unknown>
 function createStatefulDatabase() {
   const tables: Record<string, Row[]> = {
     meet_rooms: [{
-      id: 'room-a', room_name: 'room-name', owner_id: 'user-a', status: 'active',
+      id: 'room-a', room_name: 'room-name', owner_id: userA, status: 'active',
       expires_at: '2099-01-01T00:00:00.000Z',
     }],
-    meet_room_members: [member('member-a', 'user-a'), member('member-b', 'user-b')],
+    meet_room_members: [member('member-a', userA), member('member-b', userB)],
     profiles: [
-      { id: 'user-a', birth_date: '1990-01-01', is_minor: false },
-      { id: 'user-b', birth_date: '1991-01-01', is_minor: false },
+      { id: userA, birth_date: '1990-01-01', is_minor: false },
+      { id: userB, birth_date: '1991-01-01', is_minor: false },
     ],
     age_verification_requests: [
       {
-        id: 'age-a', user_id: 'user-a', birth_date: '1990-01-01', status: 'approved',
+        id: 'age-a', user_id: userA, birth_date: '1990-01-01', status: 'approved',
         reviewed_by: 'admin-a', reviewed_at: '2026-08-20T00:00:00.000Z',
       },
       {
-        id: 'age-b', user_id: 'user-b', birth_date: '1991-01-01', status: 'approved',
+        id: 'age-b', user_id: userB, birth_date: '1991-01-01', status: 'approved',
         reviewed_by: 'admin-a', reviewed_at: '2026-08-20T00:00:00.000Z',
       },
     ],
     meet_transcripts: [{
       id: 'transcript-a', room_id: 'room-a', status: 'ready', started_at: null, ended_at: null,
-      created_by: 'user-a', retention_expires_at: '2099-01-01T00:00:00.000Z',
+      created_by: userA, retention_expires_at: '2099-01-01T00:00:00.000Z',
       language: null, provider: null, provider_model: null,
       created_at: '2026-08-24T10:00:00.000Z', updated_at: '2026-08-24T10:00:00.000Z',
     }],
     meet_transcript_consents: [{
       id: 'consent-a', transcript_id: 'transcript-a', room_id: 'room-a',
-      member_id: 'member-a', user_id: 'user-a', livekit_participant_identity: 'user-a-a1b2c3d4',
+      member_id: 'member-a', user_id: userA, livekit_participant_identity: `${userA}-a1b2c3d4`,
       accepted_at: '2026-08-24T10:05:00.000Z', revoked_at: null,
     }],
   }
@@ -155,8 +159,8 @@ describe('Meet transcription consent reconciliation', () => {
   it('moves ready back to pending when a late participant has not consented', async () => {
     const database = createStatefulDatabase()
     const participants = [
-      participant('member-a', 'user-a', 'a1b2c3d4'),
-      participant('member-b', 'user-b', 'deadbeef'),
+      participant('member-a', userA, 'a1b2c3d4'),
+      participant('member-b', userB, 'deadbeef'),
     ]
     const transcript = database.tables.meet_transcripts[0] as MeetTranscript
     const reconciled = await reconcileMeetTranscriptionConsentState(
@@ -181,8 +185,8 @@ describe('Meet transcription consent reconciliation', () => {
       database.tables.meet_transcripts[0] as MeetTranscript,
       {
         service: service([
-          participant('member-a', 'user-a', 'a1b2c3d4'),
-          participant('member-b', 'user-b', 'deadbeef'),
+          participant('member-a', userA, 'a1b2c3d4'),
+          participant('member-b', userB, 'deadbeef'),
         ]),
         now,
       },
@@ -192,9 +196,9 @@ describe('Meet transcription consent reconciliation', () => {
 
   it('rejects an unconsented late microphone and authorizes it only after explicit consent', async () => {
     const database = createStatefulDatabase()
-    const lateParticipant = participant('member-b', 'user-b', 'deadbeef')
+    const lateParticipant = participant('member-b', userB, 'deadbeef')
     const roomService = service([
-      participant('member-a', 'user-a', 'a1b2c3d4'),
+      participant('member-a', userA, 'a1b2c3d4'),
       lateParticipant,
     ])
     const input = {
@@ -221,9 +225,22 @@ describe('Meet transcription consent reconciliation', () => {
       .resolves.toMatchObject({
         authorized: true,
         memberId: 'member-b',
-        userId: 'user-b',
+        userId: userB,
         sourceTrackSid: 'TR-member-b',
       })
+    await expect(authorizeMeetTranscriptionTrack(database.supabase, {
+      ...input,
+      participantAttributes: {},
+      service: service([
+        participant('member-a', userA, 'a1b2c3d4'),
+        { ...lateParticipant, attributes: {} },
+      ]),
+    })).resolves.toMatchObject({
+      authorized: true,
+      memberId: 'member-b',
+      userId: userB,
+      livekitParticipantIdentity: lateParticipant.identity,
+    })
     await expect(authorizeMeetTranscriptionTrack(database.supabase, {
       ...input,
       participantAttributes: {
@@ -239,7 +256,7 @@ describe('Meet transcription consent reconciliation', () => {
 
   it('rejects revoked consent and ended or expired rooms', async () => {
     const database = createStatefulDatabase()
-    const current = participant('member-a', 'user-a', 'a1b2c3d4')
+    const current = participant('member-a', userA, 'a1b2c3d4')
     const input = {
       transcriptId: 'transcript-a',
       livekitParticipantIdentity: current.identity,
@@ -278,7 +295,7 @@ describe('Meet transcription consent reconciliation', () => {
       transcript,
       room: database.tables.meet_rooms[0] as never,
       member: database.tables.meet_room_members[0] as never,
-      participantIdentity: 'user-a-a1b2c3d4',
+      participantIdentity: `${userA}-a1b2c3d4`,
       action: 'accept' as const,
       now,
     }

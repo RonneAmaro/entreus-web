@@ -19,8 +19,12 @@ import {
 } from './livekit-room-server'
 import {
   ENTREUS_LIVEKIT_ATTRIBUTES,
+  createServerIssuedParticipantAttributes,
+  hasEntreUSParticipantAttributes,
+  parseServerIssuedParticipantIdentity,
   validateServerIssuedParticipantIdentity,
 } from './participant-identity'
+import { asMeetTranscriptionStageError } from './transcription-diagnostics'
 
 export const MEET_TRANSCRIPT_RETENTION_DAYS = 15
 export const MEET_TRANSCRIPTION_UNAVAILABLE_MESSAGE =
@@ -164,39 +168,62 @@ export async function listValidatedConnectedParticipants(
   room: MeetRoom,
   service?: LiveKitRoomService,
 ): Promise<ValidatedParticipant[]> {
-  const participants = await listLiveKitMeetParticipants(room.room_name, service)
+  let participants: LiveKitParticipantSummary[]
+  try {
+    participants = await listLiveKitMeetParticipants(room.room_name, service)
+  } catch (error) {
+    throw asMeetTranscriptionStageError('livekit_participants_lookup', error)
+  }
+
   const nonHumanKinds = new Set([1, 2, 4, 7, 8])
   const humans = participants.filter((participant) => !nonHumanKinds.has(participant.kind ?? 0))
   if (humans.length === 0) return []
 
-  const memberIds = humans.map(
-    (participant) => participant.attributes?.[ENTREUS_LIVEKIT_ATTRIBUTES.memberId] || '',
-  )
-  if (memberIds.some((memberId) => !memberId)) {
-    throw new Error('MEET_TRANSCRIPTION_UNATTRIBUTED_PARTICIPANT')
-  }
-
-  const { data, error } = await supabase
-    .from('meet_room_members')
-    .select('*')
-    .eq('room_id', room.id)
-    .in('id', memberIds)
-  if (error) throw error
-
-  const members = new Map(((data ?? []) as MeetMember[]).map((member) => [member.id, member]))
-  return humans.map((participant) => {
-    const memberId = participant.attributes?.[ENTREUS_LIVEKIT_ATTRIBUTES.memberId] || ''
-    const member = members.get(memberId)
-    if (!member || !validateServerIssuedParticipantIdentity({
-      identity: participant.identity,
-      attributes: participant.attributes,
-      roomId: room.id,
-      member,
-    })) {
+  try {
+    const parsedParticipants = humans.map((participant) => ({
+      participant,
+      identity: parseServerIssuedParticipantIdentity(participant.identity),
+    }))
+    if (parsedParticipants.some(({ identity }) => !identity)) {
       throw new Error('MEET_TRANSCRIPTION_PARTICIPANT_IDENTITY_INVALID')
     }
-    return { participant, member }
-  })
+    const userIds = [...new Set(parsedParticipants.flatMap(
+      ({ identity }) => identity ? [identity.userId] : [],
+    ))]
+
+    const { data, error } = await supabase
+      .from('meet_room_members')
+      .select('*')
+      .eq('room_id', room.id)
+      .in('user_id', userIds)
+      .eq('status', 'approved')
+    if (error) throw error
+
+    const membersByUserId = new Map<string, MeetMember>()
+    for (const member of (data ?? []) as MeetMember[]) {
+      if (membersByUserId.has(member.user_id)) {
+        throw new Error('MEET_TRANSCRIPTION_PARTICIPANT_MEMBERSHIP_AMBIGUOUS')
+      }
+      membersByUserId.set(member.user_id, member)
+    }
+
+    return parsedParticipants.map(({ participant, identity }) => {
+      const member = identity ? membersByUserId.get(identity.userId) : null
+      if (!member || !validateServerIssuedParticipantIdentity({
+        identity: participant.identity,
+        attributes: hasEntreUSParticipantAttributes(participant.attributes)
+          ? participant.attributes
+          : createServerIssuedParticipantAttributes(room, member),
+        roomId: room.id,
+        member,
+      })) {
+        throw new Error('MEET_TRANSCRIPTION_PARTICIPANT_IDENTITY_INVALID')
+      }
+      return { participant, member }
+    })
+  } catch (error) {
+    throw asMeetTranscriptionStageError('livekit_participants_validation', error)
+  }
 }
 
 export async function assertParticipantsAreAdults(
@@ -207,36 +234,52 @@ export async function assertParticipantsAreAdults(
   const userIds = [...new Set(participants.map(({ member }) => member.user_id))]
   if (userIds.length === 0) return { eligible: false as const, reason: 'unknown' as const }
 
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('id, birth_date, is_minor')
-    .in('id', userIds)
-  if (error) throw error
+  let profileData: unknown[] | null
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, birth_date, is_minor')
+      .in('id', userIds)
+    if (error) throw error
+    profileData = data
+  } catch (error) {
+    throw asMeetTranscriptionStageError('age_profiles_lookup', error)
+  }
 
-  const profiles = new Map(((data ?? []) as ParticipantProfile[]).map((profile) => [profile.id, profile]))
-  const { data: verificationData, error: verificationError } = await supabase
-    .from('age_verification_requests')
-    .select('user_id, birth_date, status, reviewed_by, reviewed_at')
-    .in('user_id', userIds)
-    .eq('status', 'approved')
-    .order('reviewed_at', { ascending: false })
-  if (verificationError) throw verificationError
+  const profiles = new Map(((profileData ?? []) as ParticipantProfile[]).map((profile) => [profile.id, profile]))
+  let verificationData: unknown[] | null
+  try {
+    const { data, error } = await supabase
+      .from('age_verification_requests')
+      .select('user_id, birth_date, status, reviewed_by, reviewed_at')
+      .in('user_id', userIds)
+      .eq('status', 'approved')
+      .order('reviewed_at', { ascending: false })
+    if (error) throw error
+    verificationData = data
+  } catch (error) {
+    throw asMeetTranscriptionStageError('age_verification_lookup', error)
+  }
 
-  const verifications = new Map<string, ApprovedAgeVerification>()
-  for (const row of (verificationData ?? []) as ApprovedAgeVerification[]) {
-    if (row.reviewed_by && row.reviewed_at && !verifications.has(row.user_id)) {
-      verifications.set(row.user_id, row)
+  try {
+    const verifications = new Map<string, ApprovedAgeVerification>()
+    for (const row of (verificationData ?? []) as ApprovedAgeVerification[]) {
+      if (row.reviewed_by && row.reviewed_at && !verifications.has(row.user_id)) {
+        verifications.set(row.user_id, row)
+      }
     }
+    for (const userId of userIds) {
+      const eligibility = evaluateTranscriptionAge(
+        profiles.get(userId) ?? null,
+        verifications.get(userId) ?? null,
+        now,
+      )
+      if (!eligibility.eligible) return eligibility
+    }
+    return { eligible: true as const }
+  } catch (error) {
+    throw asMeetTranscriptionStageError('age_validation', error)
   }
-  for (const userId of userIds) {
-    const eligibility = evaluateTranscriptionAge(
-      profiles.get(userId) ?? null,
-      verifications.get(userId) ?? null,
-      now,
-    )
-    if (!eligibility.eligible) return eligibility
-  }
-  return { eligible: true as const }
 }
 
 export async function getOpenMeetTranscript(supabase: SupabaseClient, roomId: string) {
@@ -502,7 +545,9 @@ export async function authorizeMeetTranscriptionTrack(
   )
   if (!current || !validateServerIssuedParticipantIdentity({
     identity: input.livekitParticipantIdentity,
-    attributes: input.participantAttributes,
+    attributes: hasEntreUSParticipantAttributes(input.participantAttributes)
+      ? input.participantAttributes
+      : createServerIssuedParticipantAttributes(room, current.member),
     roomId: room.id,
     member: current.member,
   })) return { authorized: false, reason: 'participant_unavailable' }

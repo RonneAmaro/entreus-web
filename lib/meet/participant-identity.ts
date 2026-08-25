@@ -7,6 +7,9 @@ export const ENTREUS_LIVEKIT_ATTRIBUTES = {
   role: 'entreus.role',
 } as const
 
+const SERVER_ISSUED_PARTICIPANT_IDENTITY_PATTERN =
+  /^([0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12})-([0-9a-f]{8})$/i
+
 export type EntreUSParticipantAttributes = Record<
   (typeof ENTREUS_LIVEKIT_ATTRIBUTES)[keyof typeof ENTREUS_LIVEKIT_ATTRIBUTES],
   string
@@ -28,6 +31,20 @@ export function createServerIssuedParticipantAttributes(
   }
 }
 
+export function parseServerIssuedParticipantIdentity(identity: string) {
+  const match = SERVER_ISSUED_PARTICIPANT_IDENTITY_PATTERN.exec(identity)
+  if (!match) return null
+  return { userId: match[1].toLowerCase(), nonce: match[2].toLowerCase() }
+}
+
+export function hasEntreUSParticipantAttributes(
+  attributes?: Record<string, string> | null,
+) {
+  return Object.values(ENTREUS_LIVEKIT_ATTRIBUTES).some(
+    (key) => Object.prototype.hasOwnProperty.call(attributes ?? {}, key),
+  )
+}
+
 export function validateServerIssuedParticipantIdentity(input: {
   identity: string
   attributes?: Record<string, string> | null
@@ -35,17 +52,14 @@ export function validateServerIssuedParticipantIdentity(input: {
   member: Pick<MeetMember, 'id' | 'user_id' | 'room_id' | 'role' | 'status'>
 }) {
   if (input.member.room_id !== input.roomId) return false
-  const identityPrefix = `${input.member.user_id}-`
+  const parsedIdentity = parseServerIssuedParticipantIdentity(input.identity)
+  if (!parsedIdentity || parsedIdentity.userId !== input.member.user_id.toLowerCase()) return false
   const expectedAttributes = createServerIssuedParticipantAttributes(
     { id: input.roomId },
     input.member,
   )
 
-  if (
-    input.member.status !== 'approved'
-    || !input.identity.startsWith(identityPrefix)
-    || !/^[0-9a-f]{8}$/i.test(input.identity.slice(identityPrefix.length))
-  ) return false
+  if (input.member.status !== 'approved') return false
 
   return Object.entries(expectedAttributes).every(
     ([key, value]) => input.attributes?.[key] === value,

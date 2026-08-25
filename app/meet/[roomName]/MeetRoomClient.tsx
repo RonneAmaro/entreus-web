@@ -24,7 +24,9 @@ import {
   type MeetRecordingStatus,
 } from '@/lib/meet/recording-flow'
 import {
+  CarouselLayout,
   DisconnectButton,
+  FocusLayout,
   GridLayout,
   LiveKitRoom,
   ParticipantTile,
@@ -40,6 +42,7 @@ import {
 import '@livekit/components-styles'
 import EntreUSWordmark from '../../components/EntreUSWordmark'
 import {
+  Captions,
   Check,
   Circle,
   Clock3,
@@ -79,8 +82,21 @@ import {
 } from '@/lib/meet/room-ui-lifecycle'
 import Image from 'next/image'
 import Link from 'next/link'
-import MeetTranscriptionPanel from './MeetTranscriptionPanel'
+import MeetCaptionsPanel from './MeetCaptionsPanel'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import {
+  isMeetCaptionModeEnabled,
+  readMeetCaptionMode,
+  resolveMeetCaptionState,
+  writeMeetCaptionMode,
+  type MeetCaptionMode,
+} from '@/lib/meet/caption-preference'
+import {
+  readMeetLayoutMode,
+  resolveMeetLayoutMode,
+  writeMeetLayoutMode,
+  type MeetLayoutMode,
+} from '@/lib/meet/layout-preference'
 
 type TokenResponse =
   | {
@@ -602,6 +618,25 @@ export function InviteActions({ compact = false }: { compact?: boolean }) {
   )
 }
 
+function getMeetPreferenceStorage() {
+  try {
+    return window.localStorage
+  } catch {
+    return null
+  }
+}
+
+const MEET_LAYOUT_OPTIONS: Array<{
+  mode: MeetLayoutMode
+  label: string
+  description: string
+}> = [
+  { mode: 'auto', label: 'Automático', description: 'Adapta-se à reunião e à apresentação.' },
+  { mode: 'grid', label: 'Grade', description: 'Todos os participantes em uma grade responsiva.' },
+  { mode: 'focus', label: 'Destaque', description: 'Participante principal com os demais ao lado.' },
+  { mode: 'presentation', label: 'Apresentação', description: 'Prioriza o compartilhamento de tela quando existir.' },
+]
+
 function PortugueseConference({
   handRaised,
   hands,
@@ -675,7 +710,12 @@ function PortugueseConference({
   const [endActionError, setEndActionError] = useState<string | null>(null)
   const [recordingAction, setRecordingAction] = useState<'idle' | 'starting' | 'stopping' | 'downloading'>('idle')
   const [recordingActionError, setRecordingActionError] = useState<string | null>(null)
-  const [compactLayout, setCompactLayout] = useState(false)
+  const [captionMode, setCaptionMode] = useState<MeetCaptionMode>('off')
+  const [captionPreferenceLoaded, setCaptionPreferenceLoaded] = useState(false)
+  const [layoutMode, setLayoutMode] = useState<MeetLayoutMode>('auto')
+  const [layoutPreferenceLoaded, setLayoutPreferenceLoaded] = useState(false)
+  const [showLayoutOptions, setShowLayoutOptions] = useState(false)
+  const [focusedParticipantIdentity, setFocusedParticipantIdentity] = useState<string | null>(null)
   const [inviteFeedback, setInviteFeedback] = useState<InviteFeedback>('idle')
   const [handNotice, setHandNotice] = useState<string | null>(null)
   const [connectionNotice, setConnectionNotice] = useState<string | null>(null)
@@ -693,6 +733,35 @@ function PortugueseConference({
   const pendingRequestCount = isModerator ? pendingRequests.length : 0
   const canControlRecording = canManageRecordings || isModerator
   const leaveAction = getMeetLeaveAction(isOwner)
+  const trustedCaptionPublisherIdentity: string | null = null
+  const captionsRequested = isMeetCaptionModeEnabled(captionMode)
+  const captionState = resolveMeetCaptionState(
+    captionMode,
+    Boolean(trustedCaptionPublisherIdentity),
+  )
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const storage = getMeetPreferenceStorage()
+      setCaptionMode(readMeetCaptionMode(storage))
+      setLayoutMode(readMeetLayoutMode(storage))
+      setCaptionPreferenceLoaded(true)
+      setLayoutPreferenceLoaded(true)
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [])
+
+  function togglePersonalCaptions() {
+    const nextMode: MeetCaptionMode = captionsRequested ? 'off' : 'original'
+    setCaptionMode(nextMode)
+    writeMeetCaptionMode(getMeetPreferenceStorage(), nextMode)
+  }
+
+  function selectMeetLayout(nextMode: MeetLayoutMode) {
+    setLayoutMode(nextMode)
+    writeMeetLayoutMode(getMeetPreferenceStorage(), nextMode)
+    setShowLayoutOptions(false)
+  }
 
   async function confirmEndMeeting() {
     setEndAction('ending')
@@ -1101,7 +1170,9 @@ function PortugueseConference({
   }
 
   function toggleMoreOptionsPanel() {
-    setIsMeetMoreOptionsOpen((current) => toggleMeetOptionsPanel(current))
+    const next = toggleMeetOptionsPanel(isMeetMoreOptionsOpen)
+    setIsMeetMoreOptionsOpen(next)
+    if (!next) setShowLayoutOptions(false)
   }
 
   function requestRecordingStart() {
@@ -1238,6 +1309,18 @@ function PortugueseConference({
     'relative !m-0 inline-flex !h-11 !min-h-0 !w-11 shrink-0 items-center justify-center !rounded-full !border !border-white/5 !bg-white/[0.07] !p-0 text-blue-50 shadow-sm shadow-black/20 ring-1 ring-blue-200/5 transition hover:!bg-blue-500/20 hover:ring-blue-200/20 focus:outline-none focus:ring-2 focus:ring-blue-300/35 data-[lk-enabled=false]:!bg-black/25 data-[lk-enabled=false]:!text-zinc-500 sm:!h-11 sm:!w-11'
   const activeIconButtonClass =
     'relative !m-0 inline-flex !h-11 !min-h-0 !w-11 shrink-0 items-center justify-center !rounded-full !border !border-blue-300/20 !bg-blue-500/25 !p-0 text-blue-50 shadow-sm shadow-blue-950/25 ring-1 ring-blue-200/20 transition hover:!bg-blue-500/35 focus:outline-none focus:ring-2 focus:ring-blue-300/35 sm:!h-11 sm:!w-11'
+  const unavailableCaptionButtonClass =
+    'relative !m-0 inline-flex !h-11 !min-h-0 !w-11 shrink-0 items-center justify-center !rounded-full !border !border-amber-300/30 !bg-amber-300/15 !p-0 text-amber-50 shadow-sm shadow-amber-950/20 ring-1 ring-amber-200/15 transition hover:!bg-amber-300/20 focus:outline-none focus:ring-2 focus:ring-amber-300/40 disabled:cursor-wait disabled:opacity-70 sm:!h-11 sm:!w-11'
+  const captionButtonClass = captionState === 'unavailable'
+    ? unavailableCaptionButtonClass
+    : captionState === 'on'
+      ? activeIconButtonClass
+      : iconButtonClass
+  const captionButtonTitle = captionState === 'unavailable'
+    ? 'Legendas indisponíveis'
+    : captionState === 'on'
+      ? 'Desativar legendas'
+      : 'Legendas'
   const handButtonClass = handRaised
     ? 'relative !m-0 inline-flex !h-11 !min-h-0 !w-11 shrink-0 items-center justify-center !rounded-full !border !border-amber-300/30 !bg-amber-300/20 !p-0 text-amber-50 shadow-sm shadow-amber-950/20 ring-1 ring-amber-200/20 transition hover:!bg-amber-300/30 focus:outline-none focus:ring-2 focus:ring-amber-300/35 sm:!h-11 sm:!w-11'
     : iconButtonClass
@@ -1256,7 +1339,16 @@ function PortugueseConference({
   const screenShareTracks = tracks.filter((track) => track.source === Track.Source.ScreenShare)
   const activePresentationTrack = screenShareTracks[0] ?? null
   const cameraTracks = tracks.filter((track) => track.source === Track.Source.Camera)
-  const hasPresentationLayout = Boolean(activePresentationTrack)
+  const resolvedLayout = resolveMeetLayoutMode(layoutMode, Boolean(activePresentationTrack))
+  const manuallyFocusedTrack = focusedParticipantIdentity
+    ? cameraTracks.find((track) => track.participant.identity === focusedParticipantIdentity)
+    : null
+  const activeSpeakerTrack = cameraTracks.find((track) => track.participant.isSpeaking)
+  const focusedTrack = manuallyFocusedTrack ?? activeSpeakerTrack ?? cameraTracks[0] ?? tracks[0]
+  const focusedTrackKey = focusedTrack ? getTrackKey(focusedTrack) : null
+  const secondaryFocusTracks = focusedTrackKey
+    ? tracks.filter((track) => getTrackKey(track) !== focusedTrackKey)
+    : tracks
 
   function getTrackKey(track: (typeof tracks)[number]) {
     return `${track.participant.identity}-${track.source}-${track.publication?.trackSid || 'placeholder'}`
@@ -1326,33 +1418,60 @@ function PortugueseConference({
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <main className={`relative min-w-0 flex-1 transition-[padding] duration-300 ${sidePanel ? 'lg:pr-0' : ''}`}>
-          <MeetTranscriptionPanel
-            roomName={roomName}
-            isModerator={isModerator}
-            authHeaders={authHeaders}
+          <MeetCaptionsPanel
+            captionMode={captionMode}
+            captionState={captionState}
+            trustedPublisherIdentity={trustedCaptionPublisherIdentity}
           />
-          {hasPresentationLayout && activePresentationTrack ? (
-            <div className="entreus-meet-presentation flex h-full min-h-0 flex-col gap-2 p-2 pb-[calc(7.75rem+env(safe-area-inset-bottom))] sm:gap-3 sm:p-4 sm:pb-28 lg:flex-row">
+          {resolvedLayout === 'presentation' && activePresentationTrack ? (
+            <div data-meet-layout="presentation" className="entreus-meet-presentation flex h-full min-h-0 flex-col gap-2 overflow-hidden p-2 pb-[calc(7.75rem+env(safe-area-inset-bottom))] sm:gap-3 sm:p-4 sm:pb-28 lg:flex-row">
               <section className="min-h-0 flex-1 overflow-hidden rounded-2xl border border-blue-300/15 bg-zinc-950 shadow-2xl shadow-black/40 ring-1 ring-blue-200/10">
-                <ParticipantTile trackRef={activePresentationTrack} className="h-full min-h-[48vh] overflow-hidden rounded-2xl bg-black lg:min-h-0 [&_.lk-participant-name]:rounded-full [&_.lk-participant-name]:bg-black/65 [&_.lk-participant-name]:px-3 [&_.lk-participant-name]:py-1" />
+                <FocusLayout trackRef={activePresentationTrack} className="h-full min-h-[48vh] overflow-hidden rounded-2xl bg-black lg:min-h-0 [&_.lk-participant-name]:rounded-full [&_.lk-participant-name]:bg-black/65 [&_.lk-participant-name]:px-3 [&_.lk-participant-name]:py-1" />
               </section>
 
-              <aside className="min-h-0 shrink-0 overflow-x-auto overflow-y-hidden rounded-2xl border border-blue-300/10 bg-black/45 p-2 shadow-xl shadow-black/25 ring-1 ring-blue-200/5 backdrop-blur-xl lg:h-full lg:w-52 lg:overflow-x-hidden lg:overflow-y-auto xl:w-60">
-                <div className="flex min-w-max gap-2 lg:min-w-0 lg:flex-col">
-                  {cameraTracks.map((track) => (
-                    <ParticipantTile
-                      key={getTrackKey(track)}
-                      trackRef={track}
-                      className="h-24 w-36 shrink-0 overflow-hidden rounded-xl border border-blue-300/10 bg-zinc-950 shadow-lg shadow-black/25 lg:h-32 lg:w-full [&_.lk-participant-name]:max-w-[calc(100%-0.75rem)] [&_.lk-participant-name]:rounded-full [&_.lk-participant-name]:bg-black/65 [&_.lk-participant-name]:px-2 [&_.lk-participant-name]:py-0.5 [&_.lk-participant-name]:text-xs"
-                    />
-                  ))}
-                </div>
+              <aside className="h-28 min-h-0 shrink-0 overflow-hidden rounded-2xl border border-blue-300/10 bg-black/45 p-2 shadow-xl shadow-black/25 ring-1 ring-blue-200/5 backdrop-blur-xl lg:h-full lg:w-52 xl:w-60">
+                <CarouselLayout tracks={cameraTracks} className="h-full">
+                  <ParticipantTile className="h-24 w-36 shrink-0 overflow-hidden rounded-xl border border-blue-300/10 bg-zinc-950 shadow-lg shadow-black/25 lg:h-32 lg:w-full [&_.lk-participant-name]:max-w-[calc(100%-0.75rem)] [&_.lk-participant-name]:rounded-full [&_.lk-participant-name]:bg-black/65 [&_.lk-participant-name]:px-2 [&_.lk-participant-name]:py-0.5 [&_.lk-participant-name]:text-xs" />
+                </CarouselLayout>
               </aside>
+            </div>
+          ) : resolvedLayout === 'focus' && focusedTrack ? (
+            <div data-meet-layout="focus" className="entreus-meet-focus flex h-full min-h-0 flex-col gap-2 overflow-hidden p-2 pb-[calc(7.75rem+env(safe-area-inset-bottom))] sm:gap-3 sm:p-4 sm:pb-28 lg:flex-row">
+              <section className="relative min-h-0 flex-1 overflow-hidden rounded-2xl border border-blue-300/15 bg-zinc-950 shadow-2xl shadow-black/40 ring-1 ring-blue-200/10">
+                <FocusLayout trackRef={focusedTrack} className="h-full min-h-[48vh] overflow-hidden rounded-2xl bg-black lg:min-h-0 [&_.lk-participant-name]:rounded-full [&_.lk-participant-name]:bg-black/65 [&_.lk-participant-name]:px-3 [&_.lk-participant-name]:py-1" />
+                {focusedParticipantIdentity ? (
+                  <button
+                    type="button"
+                    onClick={() => setFocusedParticipantIdentity(null)}
+                    className="absolute left-3 top-3 z-10 rounded-full border border-blue-200/20 bg-black/75 px-3 py-2 text-xs font-bold text-blue-50 shadow-lg backdrop-blur-xl transition hover:bg-blue-500/20 focus:outline-none focus:ring-2 focus:ring-blue-300/40"
+                  >
+                    Foco automático
+                  </button>
+                ) : null}
+              </section>
+
+              {secondaryFocusTracks.length > 0 ? (
+                <aside className="h-28 min-h-0 shrink-0 overflow-hidden rounded-2xl border border-blue-300/10 bg-black/45 p-2 shadow-xl shadow-black/25 ring-1 ring-blue-200/5 backdrop-blur-xl lg:h-full lg:w-52 xl:w-60">
+                  <CarouselLayout tracks={secondaryFocusTracks} className="h-full">
+                    <ParticipantTile
+                      onParticipantClick={(event) => setFocusedParticipantIdentity(event.participant.identity)}
+                      tabIndex={0}
+                      onKeyDown={(event) => {
+                        if (event.key !== 'Enter' && event.key !== ' ') return
+                        event.preventDefault()
+                        event.currentTarget.click()
+                      }}
+                      className="h-24 w-36 shrink-0 cursor-pointer overflow-hidden rounded-xl border border-blue-300/10 bg-zinc-950 shadow-lg shadow-black/25 transition hover:border-blue-300/35 focus:outline-none focus:ring-2 focus:ring-blue-300/40 lg:h-32 lg:w-full [&_.lk-participant-name]:max-w-[calc(100%-0.75rem)] [&_.lk-participant-name]:rounded-full [&_.lk-participant-name]:bg-black/65 [&_.lk-participant-name]:px-2 [&_.lk-participant-name]:py-0.5 [&_.lk-participant-name]:text-xs"
+                    />
+                  </CarouselLayout>
+                </aside>
+              ) : null}
             </div>
           ) : (
             <GridLayout
               tracks={tracks}
-              className={`entreus-meet-grid h-full p-2 pb-[calc(7.25rem+env(safe-area-inset-bottom))] sm:p-4 sm:pb-28 [&_.lk-participant-metadata]:hidden [&_.lk-participant-name]:rounded-full [&_.lk-participant-name]:bg-black/55 [&_.lk-participant-name]:px-3 [&_.lk-participant-name]:py-1 [&_.lk-participant-tile]:overflow-hidden [&_.lk-participant-tile]:rounded-2xl [&_.lk-participant-tile]:border [&_.lk-participant-tile]:border-blue-400/15 [&_.lk-participant-tile]:bg-zinc-950 [&_.lk-participant-tile]:shadow-2xl ${compactLayout ? '[&_.lk-grid-layout]:gap-2' : ''}`}
+              data-meet-layout="grid"
+              className="entreus-meet-grid h-full overflow-hidden p-2 pb-[calc(7.25rem+env(safe-area-inset-bottom))] sm:p-4 sm:pb-28 [&_.lk-participant-metadata]:hidden [&_.lk-participant-name]:rounded-full [&_.lk-participant-name]:bg-black/55 [&_.lk-participant-name]:px-3 [&_.lk-participant-name]:py-1 [&_.lk-participant-tile]:overflow-hidden [&_.lk-participant-tile]:rounded-2xl [&_.lk-participant-tile]:border [&_.lk-participant-tile]:border-blue-400/15 [&_.lk-participant-tile]:bg-zinc-950 [&_.lk-participant-tile]:shadow-2xl"
             >
               <ParticipantTile />
             </GridLayout>
@@ -1368,6 +1487,20 @@ function PortugueseConference({
             }
 
             .entreus-meet-presentation video {
+              object-fit: contain;
+              background: #000;
+            }
+
+            .entreus-meet-focus .lk-focus-layout,
+            .entreus-meet-focus .lk-participant-tile {
+              height: 100%;
+            }
+
+            .entreus-meet-focus .lk-participant-metadata {
+              display: none;
+            }
+
+            .entreus-meet-focus video {
               object-fit: contain;
               background: #000;
             }
@@ -1577,11 +1710,28 @@ function PortugueseConference({
                 <MonitorUp className="h-5 w-5" />
               </TrackToggle>
 
+              <button
+                type="button"
+                onClick={togglePersonalCaptions}
+                disabled={!captionPreferenceLoaded}
+                className={captionButtonClass}
+                aria-label="Legendas"
+                aria-pressed={captionState === 'on'}
+                aria-describedby={captionState === 'unavailable' ? 'meet-caption-status' : undefined}
+                data-caption-state={captionState}
+                title={captionButtonTitle}
+              >
+                <Captions className="h-5 w-5" aria-hidden="true" />
+                {captionState === 'unavailable' ? (
+                  <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-amber-300 ring-2 ring-black" aria-hidden="true" />
+                ) : null}
+              </button>
+
               <button type="button" onClick={() => openPanel('chat')} className={sidePanel === 'chat' ? activeIconButtonClass : iconButtonClass} aria-label="Bate-papo" title="Bate-papo">
                 <MessageSquare className="h-5 w-5" />
                 {chatUnread ? <span className="absolute right-1 top-1 h-2.5 w-2.5 rounded-full bg-blue-300 ring-2 ring-black" /> : null}
               </button>
-              <button type="button" onClick={() => openPanel('participants')} className={sidePanel === 'participants' ? activeIconButtonClass : iconButtonClass} aria-label={pendingRequestCount > 0 ? `${pendingRequestCount} solicitações pendentes` : 'Participantes'} title="Participantes">
+              <button type="button" onClick={() => openPanel('participants')} className={`${sidePanel === 'participants' ? activeIconButtonClass : iconButtonClass} max-[359px]:hidden`} aria-label={pendingRequestCount > 0 ? `${pendingRequestCount} solicitações pendentes` : 'Participantes'} title="Participantes">
                 <Users className="h-5 w-5" />
                 <span className={`absolute -right-1 -top-1 min-w-5 rounded-full px-1 text-[10px] font-bold text-white ${pendingRequestCount > 0 ? 'bg-amber-400 text-black' : 'bg-blue-500'}`}>
                   {pendingRequestCount > 0 ? pendingRequestCount : visibleParticipants.length}
@@ -1817,12 +1967,50 @@ function PortugueseConference({
                               <span>{screenShareEnabled ? 'Parar apresentação' : 'Apresentar'}</span>
                             </TrackToggle>
 
-                            <button type="button" onClick={() => setCompactLayout((current) => !current)} className={sheetActionClass}>
-                              <span className={sheetIconClass}>
-                                <LayoutGrid className="h-5 w-5" />
-                              </span>
-                              <span>Layout</span>
-                            </button>
+                            <div className="col-span-2">
+                              <button
+                                type="button"
+                                onClick={() => setShowLayoutOptions((current) => !current)}
+                                disabled={!layoutPreferenceLoaded}
+                                className={sheetActionClass}
+                                aria-label="Layout"
+                                aria-haspopup="true"
+                                aria-expanded={showLayoutOptions}
+                                aria-controls="meet-layout-options"
+                              >
+                                <span className={sheetIconClass}>
+                                  <LayoutGrid className="h-5 w-5" />
+                                </span>
+                                <span className="min-w-0 flex-1">
+                                  <span className="block">Layout</span>
+                                  <span className="mt-0.5 block text-xs font-normal text-zinc-400">
+                                    {MEET_LAYOUT_OPTIONS.find((option) => option.mode === layoutMode)?.label}
+                                  </span>
+                                </span>
+                              </button>
+
+                              {showLayoutOptions ? (
+                                <div id="meet-layout-options" role="radiogroup" aria-label="Escolher layout" className="mt-2 grid grid-cols-1 gap-2 rounded-2xl border border-blue-300/10 bg-black/30 p-2 sm:grid-cols-2">
+                                  {MEET_LAYOUT_OPTIONS.map((option) => (
+                                    <button
+                                      key={option.mode}
+                                      type="button"
+                                      role="radio"
+                                      aria-checked={layoutMode === option.mode}
+                                      onClick={() => selectMeetLayout(option.mode)}
+                                      className={`min-h-16 rounded-2xl border px-3 py-2 text-left transition focus:outline-none focus:ring-2 focus:ring-blue-300/35 ${
+                                        layoutMode === option.mode
+                                          ? 'border-blue-300/35 bg-blue-500/20 text-blue-50'
+                                          : 'border-white/5 bg-white/[0.04] text-zinc-200 hover:border-blue-300/20 hover:bg-blue-500/10'
+                                      }`}
+                                    >
+                                      <span className="block text-sm font-black">{option.label}</span>
+                                      <span className="mt-1 block text-xs leading-4 text-zinc-400">{option.description}</span>
+                                    </button>
+                                  ))}
+                                </div>
+                              ) : null}
+                            </div>
 
                             <button type="button" onClick={() => void document.documentElement.requestFullscreen?.()} className={`${sheetActionClass} col-span-2 sm:col-span-1`}>
                               <span className={sheetIconClass}>

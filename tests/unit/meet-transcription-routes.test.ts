@@ -7,6 +7,8 @@ const state = vi.hoisted(() => ({
   participants: [] as Array<Record<string, unknown>>,
   age: { eligible: true } as { eligible: boolean; reason?: 'minor' | 'unknown' | 'unverified' },
   consentAction: null as null | 'accept' | 'revoke',
+  transcriptInsertError: null as null | Record<string, unknown>,
+  logServerEvent: vi.fn(),
   getMeetTranscriptionAccess: vi.fn(),
   getOpenMeetTranscript: vi.fn(),
   hasMeetTranscriptExpired: vi.fn(),
@@ -16,6 +18,10 @@ const state = vi.hoisted(() => ({
   reconcileMeetTranscriptionConsentState: vi.fn(),
   recordMeetTranscriptConsent: vi.fn(),
   toPublicMeetTranscript: vi.fn(),
+}))
+
+vi.mock('@/lib/logging/safe-logger', () => ({
+  logServerEvent: state.logServerEvent,
 }))
 
 vi.mock('@/lib/meet-server', () => ({
@@ -87,9 +93,9 @@ function createDatabase() {
     })
     builder.single = vi.fn(async () => ({
       data: table === 'meet_transcripts'
-        ? transcript()
+        ? state.transcriptInsertError ? null : transcript()
         : consent({ accepted_at: '2026-08-24T10:00:00.000Z' }),
-      error: null,
+      error: table === 'meet_transcripts' ? state.transcriptInsertError : null,
     }))
     builder.maybeSingle = vi.fn(async () => ({
       data: table === 'meet_transcripts'
@@ -132,6 +138,7 @@ beforeEach(() => {
   }]
   state.age = { eligible: true }
   state.consentAction = null
+  state.transcriptInsertError = null
   state.getMeetTranscriptionAccess.mockImplementation(async () => state.access)
   state.getOpenMeetTranscript.mockImplementation(async () => state.transcript)
   state.hasMeetTranscriptExpired.mockImplementation(
@@ -244,6 +251,85 @@ describe('Meet transcription routes', () => {
       expect.objectContaining({ table: 'meet_transcripts', action: 'insert', value: expect.objectContaining({ status: 'pending_consent' }) }),
       expect.objectContaining({ table: 'meet_transcript_consents', action: 'insert' }),
     ]))
+  })
+
+  it('logs only transcript_insert and SQLSTATE when transcript creation fails', async () => {
+    state.transcriptInsertError = {
+      name: 'PostgrestError',
+      code: '23505',
+      message: 'raw database message with user-a and secret-value',
+      details: '1990-01-01 transcript text',
+      hint: 'private hint',
+    }
+    const { POST } = await import('@/app/api/meet/rooms/[roomName]/transcription/route')
+    const response = await POST(request('/x', {}), {
+      params: Promise.resolve({ roomName: 'room-name' }),
+    })
+
+    expect(response.status).toBe(500)
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Não foi possível solicitar a transcrição.',
+    })
+    expect(state.logServerEvent).toHaveBeenCalledWith('error', {
+      event: 'meet.transcription_request_failed',
+      context: { stage: 'transcript_insert', code: '23505' },
+    })
+    const diagnosticPayload = JSON.stringify(state.logServerEvent.mock.calls)
+    expect(diagnosticPayload).not.toContain('raw database message')
+    expect(diagnosticPayload).not.toContain('user-a')
+    expect(diagnosticPayload).not.toContain('secret-value')
+    expect(diagnosticPayload).not.toContain('1990-01-01')
+    expect(diagnosticPayload).not.toContain('transcript text')
+    expect(diagnosticPayload).not.toContain('private hint')
+  })
+
+  it('logs the normalized LiveKit participant validation stage and symbolic code', async () => {
+    const { MeetTranscriptionStageError } = await import('@/lib/meet/transcription-diagnostics')
+    state.listValidatedConnectedParticipants.mockRejectedValueOnce(
+      new MeetTranscriptionStageError(
+        'livekit_participants_validation',
+        new Error('MEET_TRANSCRIPTION_PARTICIPANT_IDENTITY_INVALID'),
+      ),
+    )
+    const { POST } = await import('@/app/api/meet/rooms/[roomName]/transcription/route')
+    const response = await POST(request('/x', {}), {
+      params: Promise.resolve({ roomName: 'room-name' }),
+    })
+
+    expect(response.status).toBe(500)
+    expect(state.logServerEvent).toHaveBeenCalledWith('error', {
+      event: 'meet.transcription_request_failed',
+      context: {
+        stage: 'livekit_participants_validation',
+        code: 'MEET_TRANSCRIPTION_PARTICIPANT_IDENTITY_INVALID',
+      },
+    })
+  })
+
+  it('logs an age lookup stage without forwarding private profile data', async () => {
+    const { MeetTranscriptionStageError } = await import('@/lib/meet/transcription-diagnostics')
+    state.assertParticipantsAreAdults.mockRejectedValueOnce(
+      new MeetTranscriptionStageError('age_profiles_lookup', {
+        name: 'PostgrestError',
+        code: 'PGRST116',
+        message: 'lookup failed for user-a born 1990-01-01 using secret-value',
+      }),
+    )
+    const { POST } = await import('@/app/api/meet/rooms/[roomName]/transcription/route')
+    const response = await POST(request('/x', {}), {
+      params: Promise.resolve({ roomName: 'room-name' }),
+    })
+
+    expect(response.status).toBe(500)
+    expect(state.logServerEvent).toHaveBeenCalledWith('error', {
+      event: 'meet.transcription_request_failed',
+      context: { stage: 'age_profiles_lookup', code: 'PGRST116' },
+    })
+    const diagnosticPayload = JSON.stringify(state.logServerEvent.mock.calls)
+    expect(diagnosticPayload).not.toContain('user-a')
+    expect(diagnosticPayload).not.toContain('1990-01-01')
+    expect(diagnosticPayload).not.toContain('secret-value')
   })
 
   it('blocks start when a connected participant is a minor or age is uncertain', async () => {
