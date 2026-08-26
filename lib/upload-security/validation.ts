@@ -1,4 +1,4 @@
-import { detectFileSignature } from './file-signatures'
+import { detectFileSignature, type SignatureKind } from './file-signatures'
 import { getNormalizedExtension, isValidUploadFileName } from './filename'
 import { getUploadPolicy, type UploadContext, type UploadPolicy } from './policies'
 
@@ -44,6 +44,18 @@ export type UploadContentInput = Readonly<{
   policy?: UploadPolicy
 }>
 
+export type FileSignatureSampleStatus =
+  | 'verified'
+  | 'rejected'
+  | 'needs_deeper_inspection'
+  | 'unknown'
+
+export type FileSignatureSampleInput = Readonly<{
+  bytes: ArrayBuffer | Uint8Array
+  expectedMime: unknown
+  expectedKind: Exclude<SignatureKind, 'unknown'>
+}>
+
 const unknownMimes = new Set(['', 'application/octet-stream'])
 
 const expectedMimesByExtension: Readonly<Record<string, readonly string[]>> = Object.freeze({
@@ -86,6 +98,31 @@ export function normalizeDeclaredMime(value: unknown) {
 
   const normalized = value.split(';', 1)[0].trim().toLowerCase()
   return unknownMimes.has(normalized) ? null : normalized
+}
+
+export function validateFileSignatureSample(
+  input: FileSignatureSampleInput,
+): FileSignatureSampleStatus {
+  const expectedMime = normalizeDeclaredMime(input.expectedMime)
+  if (!expectedMime) return 'rejected'
+
+  const bytes = input.bytes instanceof Uint8Array ? input.bytes : new Uint8Array(input.bytes)
+  const signature = detectFileSignature(bytes)
+  if (signature.confidence === 'unknown') return 'unknown'
+
+  if (signature.confidence === 'high') {
+    if (!signature.detectedMime || signature.kind !== input.expectedKind) return 'rejected'
+    const minimumBytes = minimumRecognizableBytes[signature.detectedMime]
+    if (minimumBytes && bytes.byteLength < minimumBytes) return 'unknown'
+
+    const compatibleMimes = compatibleDetectedMimes[expectedMime] ?? [expectedMime]
+    return compatibleMimes.includes(signature.detectedMime) ? 'verified' : 'rejected'
+  }
+
+  const allowedContainerMimes = getShallowContainerMimes(bytes)
+  if (!allowedContainerMimes?.includes(expectedMime)) return 'rejected'
+  if (!expectedMime.startsWith(`${input.expectedKind}/`)) return 'rejected'
+  return 'needs_deeper_inspection'
 }
 
 export function validateUploadMetadata(input: UploadMetadataInput): UploadValidationResult {
@@ -163,6 +200,29 @@ function validateMetadata(
     extension,
     requiresPostUploadVerification: policy.magicBytesRequired,
   }
+}
+
+function getShallowContainerMimes(bytes: Uint8Array): readonly string[] | null {
+  if (sampleAscii(bytes, 4, 4) === 'ftyp') {
+    return ['video/mp4', 'video/quicktime', 'audio/mp4']
+  }
+  if (sampleStartsWith(bytes, [0x1a, 0x45, 0xdf, 0xa3])) {
+    return ['video/webm', 'audio/webm']
+  }
+  if (sampleAscii(bytes, 0, 4) === 'OggS') {
+    return ['video/ogg', 'audio/ogg']
+  }
+  return null
+}
+
+function sampleStartsWith(bytes: Uint8Array, signature: readonly number[]) {
+  return bytes.length >= signature.length
+    && signature.every((value, index) => bytes[index] === value)
+}
+
+function sampleAscii(bytes: Uint8Array, offset: number, length: number) {
+  if (offset < 0 || bytes.length < offset + length) return ''
+  return String.fromCharCode(...bytes.subarray(offset, offset + length))
 }
 
 function failure(code: UploadValidationCode): UploadValidationFailure {

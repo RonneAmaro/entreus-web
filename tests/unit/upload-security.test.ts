@@ -20,6 +20,7 @@ import {
   normalizeDeclaredMime,
   sanitizeUploadFileName,
   validateFileContent,
+  validateFileSignatureSample,
   validateOfficeOpenXml,
   validateUploadMetadata,
 } from '../../lib/upload-security'
@@ -247,6 +248,39 @@ describe('file signature detection', () => {
       kind: 'unknown',
     })
     expect(detectFileSignature(bytes(1, 2, 3, 4))).toMatchObject({ confidence: 'unknown' })
+  })
+})
+
+describe('file signature sample validation', () => {
+  it.each([
+    [png.slice(0, 8), 'image/png', 'image'],
+    [text('GIF89a'), 'image/gif', 'image'],
+    [bytes(0xff, 0xd8, 0xff), 'image/jpeg', 'image'],
+    [bytes(0xff, 0xe0), 'audio/mpeg', 'audio'],
+  ] as const)('fails closed for a truncated recognizable header', (sample, expectedMime, expectedKind) => {
+    expect(validateFileSignatureSample({
+      bytes: sample,
+      expectedMime,
+      expectedKind,
+    })).toBe('unknown')
+  })
+
+  it('preserves the WAV alias and coherent shallow-container states', () => {
+    expect(validateFileSignatureSample({
+      bytes: text('RIFFxxxxWAVE'),
+      expectedMime: 'audio/x-wav',
+      expectedKind: 'audio',
+    })).toBe('verified')
+    expect(validateFileSignatureSample({
+      bytes: bytes(0, 0, 0, 20, 0x66, 0x74, 0x79, 0x70),
+      expectedMime: 'video/mp4',
+      expectedKind: 'video',
+    })).toBe('needs_deeper_inspection')
+    expect(validateFileSignatureSample({
+      bytes: bytes(0, 0, 0, 20, 0x66, 0x74, 0x79, 0x70),
+      expectedMime: 'audio/ogg',
+      expectedKind: 'audio',
+    })).toBe('rejected')
   })
 })
 
