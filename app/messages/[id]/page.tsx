@@ -38,6 +38,11 @@ import {
   X,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import {
+  deleteMessageAttachment,
+  getMessageAttachmentDownload,
+  uploadAndConfirmMessageAttachment,
+} from '@/lib/message-attachments/client'
 import ExpressionPicker from '../../components/expressions/ExpressionPicker'
 import ExpressionAttachment from '../../components/expressions/ExpressionAttachment'
 import type { ExpressionAsset } from '@/lib/expressions/expression-types'
@@ -125,13 +130,14 @@ type MessageAttachment = {
   message_id: string
   conversation_id: string
   sender_id: string
-  storage_path: string
+  storage_path?: string | null
   media_type: 'image' | 'video' | 'audio'
   file_name: string | null
   file_size: number | null
   mime_type: string | null
   position: number
   created_at: string
+  needs_deeper_inspection?: boolean
   signed_url?: string
 }
 
@@ -309,32 +315,6 @@ function detectMediaType(file: File): 'image' | 'video' | 'audio' | null {
   if (isVideo(file)) return 'video'
   if (isAudio(file)) return 'audio'
   return null
-}
-
-function makeFileNameSafe(name: string) {
-  return name
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9._-]/g, '-')
-}
-
-function isPrivateMessageAttachmentR2Path(value: string | null | undefined) {
-  if (!value) return false
-
-  const trimmed = value.trim()
-  const key = trimmed.startsWith('r2://')
-    ? trimmed.slice('r2://'.length).replace(/^\/+/, '')
-    : trimmed.replace(/^\/+/, '')
-
-  return (
-    key.startsWith('private/messages/') &&
-    !key.includes('..') &&
-    !key.includes('\\') &&
-    !key.includes('\0') &&
-    !key.includes('?') &&
-    !key.includes('#')
-  )
 }
 
 function getAudioMimeType() {
@@ -1739,50 +1719,33 @@ export default function ConversationPage() {
     await markIncomingMessagesAsRead(currentUserId)
   }
 
-  async function getMessageAttachmentAuthHeaders() {
+  async function getMessageAttachmentAccessToken() {
     const {
       data: { session },
       error,
     } = await supabase.auth.getSession()
 
     if (error || !session?.access_token) return null
-
-    return {
-      Authorization: `Bearer ${session.access_token}`,
-    }
+    return session.access_token
   }
 
   async function attachSignedUrl(attachment: MessageAttachment) {
-    const headers = await getMessageAttachmentAuthHeaders()
+    const accessToken = await getMessageAttachmentAccessToken()
 
-    if (!headers) return attachment
+    if (!accessToken) return attachment
 
     try {
-      const response = await fetch(
-        `/api/messages/attachments/download?attachmentId=${encodeURIComponent(attachment.id)}`,
-        {
-          headers,
-          cache: 'no-store',
-        }
-      )
-
-      if (!response.ok) {
-        console.error('Erro ao gerar acesso privado da midia:', response.status)
-        return attachment
-      }
-
-      const data = (await response.json()) as { url?: unknown }
-      if (typeof data.url !== 'string' || !data.url) return attachment
+      const signedUrl = await getMessageAttachmentDownload({
+        accessToken,
+        attachmentId: attachment.id,
+      })
 
       return {
         ...attachment,
-        signed_url: data.url,
+        signed_url: signedUrl,
       }
-    } catch (error) {
-      console.error(
-        'Erro ao gerar acesso privado da midia:',
-        error instanceof Error ? error.message : 'Erro inesperado.'
-      )
+    } catch {
+      console.error('Erro ao gerar acesso privado da midia.')
       return attachment
     }
   }
@@ -2742,33 +2705,6 @@ export default function ConversationPage() {
     setMessage('')
 
     const deletedAt = new Date().toISOString()
-    const attachmentsToDelete = targetMessage.attachments || []
-
-    if (false && attachmentsToDelete.length > 0) {
-      const storagePaths = attachmentsToDelete
-        .map((attachment) => attachment.storage_path)
-        .filter(Boolean)
-
-      if (storagePaths.length > 0) {
-        const { error: storageError } = await supabase.storage
-          .from('message-media')
-          .remove(storagePaths)
-
-        if (storageError) {
-          console.error('Erro ao remover mídias da mensagem:', storageError)
-        }
-      }
-
-      const { error: attachmentsError } = await supabase
-        .from('message_attachments')
-        .delete()
-        .eq('message_id', messageId)
-        .eq('sender_id', userId)
-
-      if (attachmentsError) {
-        console.error('Erro ao apagar anexos da mensagem:', attachmentsError)
-      }
-    }
 
     const { error: reactionsError } = await supabase
       .from('message_reactions')
@@ -2841,24 +2777,16 @@ export default function ConversationPage() {
 
     setMessage('')
 
-    if (!isPrivateMessageAttachmentR2Path(attachment.storage_path)) {
-      const { error: storageError } = await supabase.storage
-        .from('message-media')
-        .remove([attachment.storage_path])
-
-      if (storageError) {
-        console.error('Erro ao remover arquivo do storage:', storageError.message)
-      }
+    const accessToken = await getMessageAttachmentAccessToken()
+    if (!accessToken) {
+      setMessage(t('messages.detail.errors.deleteMedia', { error: t('common.retry') }))
+      return
     }
 
-    const { error: deleteError } = await supabase
-      .from('message_attachments')
-      .delete()
-      .eq('id', attachment.id)
-      .eq('sender_id', userId)
-
-    if (deleteError) {
-      setMessage(t('messages.detail.errors.deleteMedia', { error: deleteError.message }))
+    try {
+      await deleteMessageAttachment({ accessToken, attachmentId: attachment.id })
+    } catch {
+      setMessage(t('messages.detail.errors.deleteMedia', { error: t('common.retry') }))
       return
     }
 
@@ -2910,65 +2838,38 @@ export default function ConversationPage() {
   }
 
   async function uploadMessageMedia(messageId: string, files: SelectedMedia[]) {
-    const attachmentsToInsert: Omit<MessageAttachment, 'id' | 'created_at'>[] = []
+    const accessToken = await getMessageAttachmentAccessToken()
+    if (!accessToken) {
+      throw new Error(t('messages.detail.errors.sendMedia'))
+    }
 
-    for (let index = 0; index < files.length; index++) {
-      const item = files[index]
-      const fileExt = item.file.name.split('.').pop()?.toLowerCase() || 'file'
-      const safeName = makeFileNameSafe(item.file.name)
-      const storagePath = `${conversationId}/${userId}/message-${messageId}-${index}-${Date.now()}.${fileExt}`
+    const attachments: MessageAttachment[] = []
+    let hasFailures = false
+    setUploadingMedia(true)
 
-      setUploadingMedia(true)
+    try {
+      for (let index = 0; index < files.length; index++) {
+        const item = files[index]
 
-      const { error: uploadError } = await supabase.storage
-        .from('message-media')
-        .upload(storagePath, item.file, {
-          cacheControl: '3600',
-          upsert: false,
-          contentType: item.file.type,
-        })
-
-      if (uploadError) {
-        setUploadingMedia(false)
-        throw new Error(t('messages.detail.errors.sendMediaWithReason', { error: uploadError.message }))
+        try {
+          const confirmation = await uploadAndConfirmMessageAttachment({
+            accessToken,
+            conversationId,
+            messageId,
+            file: item.file,
+            mediaType: item.mediaType,
+            position: index,
+          })
+          attachments.push(await attachSignedUrl(confirmation.attachment))
+        } catch {
+          hasFailures = true
+        }
       }
 
-      attachmentsToInsert.push({
-        message_id: messageId,
-        conversation_id: conversationId,
-        sender_id: userId,
-        storage_path: storagePath,
-        media_type: item.mediaType,
-        file_name: safeName,
-        file_size: item.file.size,
-        mime_type: item.file.type,
-        position: index,
-      })
-    }
-
-    if (attachmentsToInsert.length === 0) {
+      return { attachments, hasFailures }
+    } finally {
       setUploadingMedia(false)
-      return []
     }
-
-    const { data, error } = await supabase
-      .from('message_attachments')
-      .insert(attachmentsToInsert)
-      .select(
-        'id, message_id, conversation_id, sender_id, storage_path, media_type, file_name, file_size, mime_type, position, created_at'
-      )
-
-    setUploadingMedia(false)
-
-    if (error) {
-      throw new Error(t('messages.detail.errors.saveAttachments', { error: error.message }))
-    }
-
-    return Promise.all(
-      ((data || []) as MessageAttachment[]).map((attachment) =>
-        attachSignedUrl(attachment)
-      )
-    )
   }
 
   async function handleSendMessage(e: React.FormEvent<HTMLFormElement>) {
@@ -3013,10 +2914,10 @@ export default function ConversationPage() {
       return
     }
 
-    let uploadedAttachments: MessageAttachment[] = []
+    let uploadResult: { attachments: MessageAttachment[]; hasFailures: boolean }
 
     try {
-      uploadedAttachments = await uploadMessageMedia(data.id, selectedMedia)
+      uploadResult = await uploadMessageMedia(data.id, selectedMedia)
     } catch (uploadError) {
       setMessage(uploadError instanceof Error ? uploadError.message : t('messages.detail.errors.sendMedia'))
       setSending(false)
@@ -3031,7 +2932,7 @@ export default function ConversationPage() {
           item.id === data.id
             ? {
                 ...item,
-                attachments: uploadedAttachments,
+                attachments: uploadResult.attachments,
               }
             : item
         )
@@ -3041,7 +2942,7 @@ export default function ConversationPage() {
         ...current,
         {
           ...(data as MessageRow),
-          attachments: uploadedAttachments,
+          attachments: uploadResult.attachments,
           replyTo: replyingToMessage
             ? {
                 id: replyingToMessage.id,
@@ -3073,6 +2974,9 @@ export default function ConversationPage() {
     setReplyingToMessage(null)
     setOpenMessageEmojiPicker(false)
     setSelectedMedia([])
+    if (uploadResult.hasFailures) {
+      setMessage(t('messages.detail.errors.sendMedia'))
+    }
     setSending(false)
   }
 
