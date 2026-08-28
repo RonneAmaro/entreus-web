@@ -7,8 +7,11 @@ import {
   commentHasContent,
   decodeCommentCursor,
   encodeCommentCursor,
+  getThreadedCommentErrorKey,
+  getThreadedCommentsViewState,
   getVisualCommentDepth,
   mergeComments,
+  normalizeThreadedComment,
   type ThreadedComment,
 } from '@/lib/threaded-comments'
 
@@ -92,5 +95,39 @@ describe('threaded comment model', () => {
     const later = base({ id: '00000000-0000-4000-8000-000000000011', created_at: '2026-07-17T11:00:00.000Z' })
     const result = mergeComments([later], [earlier, later])
     expect(result.map(({ id }) => id)).toEqual([earlier.id, later.id])
+  })
+
+  it('normalizes embedded profiles returned as an object or array', () => {
+    const profile = { username: 'criadora', display_name: 'Criadora', avatar_url: null }
+    expect(normalizeThreadedComment(base({ profiles: profile })).profiles).toEqual(profile)
+    expect(normalizeThreadedComment({ ...base(), profiles: [profile] }).profiles).toEqual(profile)
+    expect(normalizeThreadedComment({ ...base(), profiles: [] }).profiles).toBeNull()
+  })
+
+  it.each([
+    [{ loading: true, hasError: false, commentCount: 0 }, 'LOADING'],
+    [{ loading: false, hasError: false, commentCount: 0 }, 'SUCCESS_EMPTY'],
+    [{ loading: false, hasError: false, commentCount: 2 }, 'SUCCESS_WITH_DATA'],
+    [{ loading: false, hasError: true, commentCount: 0 }, 'ERROR'],
+    [{ loading: false, hasError: true, commentCount: 2 }, 'SUCCESS_WITH_DATA'],
+  ] as const)('derives an explicit comments view state for %o', (input, expected) => {
+    expect(getThreadedCommentsViewState(input)).toBe(expected)
+  })
+
+  it.each([
+    ['authentication_required', 'post.comments.errors.authentication'],
+    ['comment_empty', 'post.comments.replyRequired'],
+    ['comment_too_long', 'post.comments.errors.tooLong'],
+    ['comment_rate_limited', 'post.comments.errors.rateLimited'],
+    ['comment_blocked', 'post.comments.errors.blocked'],
+    ['post_unavailable', 'post.comments.errors.postUnavailable'],
+    ['comment_max_depth', 'post.comments.errors.maxDepth'],
+  ])('maps RPC code %s to a translated user-facing key', (message, key) => {
+    expect(getThreadedCommentErrorKey({ message })).toBe(key)
+  })
+
+  it('does not expose an unknown backend message to the UI', () => {
+    expect(getThreadedCommentErrorKey({ message: 'internal table detail' }))
+      .toBe('post.comments.errors.generic')
   })
 })

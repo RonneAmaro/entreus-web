@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import PostCard from '@/app/components/PostCard'
-import RichTextLinks from '@/app/components/RichTextLinks'
+import ThreadedComments from '@/app/components/ThreadedComments'
 import { useLanguage } from '@/app/components/LanguageProvider'
 import { isAdminRole } from '@/lib/admin'
 import {
@@ -25,6 +25,7 @@ import { applyPostVisibilityFilters } from '@/lib/post-visibility'
 import { isMissingPaidPostColumnError, isPaidPost } from '@/lib/paid-posts'
 import { protectPostForViewer } from '@/lib/protected-post-access'
 import { resolveUserTier } from '@/lib/user-tiers'
+import { getThreadedCommentErrorKey } from '@/lib/threaded-comments'
 
 type VisibilityType = 'public' | 'followers' | 'private'
 
@@ -76,19 +77,6 @@ type Post = ModeratedPostFields & {
   paid_unlocked?: boolean
   profiles: Profile | null
   media?: PostMedia[]
-}
-
-type Comment = {
-  id: string
-  post_id: string
-  user_id: string
-  content: string
-  created_at: string
-  profiles: Profile | null
-}
-
-type CommentRow = Omit<Comment, 'profiles'> & {
-  profiles: Profile | Profile[] | null
 }
 
 type Like = {
@@ -166,7 +154,7 @@ export default function PostPage() {
   const [currentProfile, setCurrentProfile] = useState<CurrentProfile | null>(null)
 
   const [post, setPost] = useState<Post | null>(null)
-  const [comments, setComments] = useState<Comment[]>([])
+  const [commentsCount, setCommentsCount] = useState(0)
   const [likes, setLikes] = useState<Like[]>([])
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([])
   const [reposts, setReposts] = useState<Repost[]>([])
@@ -175,6 +163,7 @@ export default function PostPage() {
   const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(true)
   const [sendingComment, setSendingComment] = useState(false)
+  const [commentsRefreshVersion, setCommentsRefreshVersion] = useState(0)
   const [copiedPostId, setCopiedPostId] = useState<string | null>(null)
   const [canInteract, setCanInteract] = useState(false)
   const [permissionDenied, setPermissionDenied] = useState(false)
@@ -588,35 +577,18 @@ export default function PostPage() {
   async function loadComments() {
     const { data, error } = await supabase
       .from('comments')
-      .select(`
-        id,
-        post_id,
-        user_id,
-        content,
-        created_at,
-        profiles (
-          username,
-          display_name,
-          avatar_url
-        )
-      `)
+      .select('id')
       .eq('post_id', postId)
-      .order('created_at', { ascending: true })
 
     if (error) {
-      console.error('Erro ao carregar comentários:', error.message)
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('[PostPage] Comment count load failed.', error.code ? { code: error.code } : undefined)
+      }
       setMessage(t('postPage.errors.loadComments'))
       return
     }
 
-    const normalizedComments = ((data || []) as CommentRow[]).map((comment) => ({
-      ...comment,
-      profiles: Array.isArray(comment.profiles)
-        ? comment.profiles[0] || null
-        : comment.profiles,
-    })) as Comment[]
-
-    setComments(normalizedComments)
+    setCommentsCount((data || []).length)
   }
 
   async function loadLikes() {
@@ -905,37 +877,31 @@ export default function PostPage() {
     setSendingComment(true)
     setMessage('')
 
-    const { data: insertedComment, error } = await supabase
-      .from('comments')
-      .insert({
-        post_id: postId,
-        user_id: loggedUserId,
-        content: text,
+    const { error } = await supabase
+      .rpc('create_threaded_comment', {
+        p_post_id: postId,
+        p_content: text,
+        p_expression: null,
+        p_parent_comment_id: null,
+        p_client_request_id: crypto.randomUUID(),
       })
       .select('id')
       .single()
 
     if (error) {
-      console.error('Erro ao comentar na publicação:', error.message)
-      setMessage(t('postPage.errors.comment'))
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('[PostPage] Root comment RPC failed.', error.code ? { code: error.code } : undefined)
+      }
+      setMessage(t(getThreadedCommentErrorKey(error)))
       setSendingComment(false)
       return
-    }
-
-    if (post && post.user_id !== loggedUserId) {
-      await supabase.from('notifications').insert({
-        user_id: post.user_id,
-        actor_id: loggedUserId,
-        type: 'comment',
-        post_id: postId,
-        comment_id: insertedComment?.id || null,
-      })
     }
 
     setCommentInput('')
     setSendingComment(false)
 
     await loadComments()
+    setCommentsRefreshVersion((current) => current + 1)
   }
 
   async function handleCopyLink() {
@@ -1115,7 +1081,7 @@ export default function PostPage() {
             <PostCard
               post={post}
               currentUserId={loggedUserId}
-              commentsCount={comments.length}
+              commentsCount={commentsCount}
               likesCount={likes.length}
               repostsCount={reposts.length}
               liked={userLiked}
@@ -1223,69 +1189,12 @@ export default function PostPage() {
                 </p>
               )}
 
-              <div className="space-y-3">
-                {comments.length === 0 && (
-                  <p className="text-sm text-zinc-500">
-                    {t('postPage.commentsEmpty')}
-                  </p>
-                )}
-
-                {comments.map((comment) => {
-                  const commentAuthorName =
-                    comment.profiles?.display_name ||
-                    comment.profiles?.username ||
-                    t('postPage.fallbackUser')
-
-                  const commentAuthorUsername =
-                    comment.profiles?.username || t('postPage.fallbackUsername')
-
-                  const commentAvatar = comment.profiles?.avatar_url || ''
-
-                  return (
-                    <div
-                      key={comment.id}
-                      className="rounded-xl bg-zinc-50 px-4 py-3 dark:bg-zinc-800"
-                    >
-                      <div className="flex items-start gap-3">
-                        <Link href={`/u/${commentAuthorUsername}`} className="shrink-0">
-                          {commentAvatar ? (
-                            <img
-                              src={commentAvatar}
-                              alt={commentAuthorName}
-                              className="h-10 w-10 rounded-full border border-zinc-300 object-cover dark:border-zinc-700"
-                            />
-                          ) : (
-                            <div className="flex h-10 w-10 items-center justify-center rounded-full border border-zinc-300 bg-zinc-100 text-xs font-semibold text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
-                              {commentAuthorName.charAt(0).toUpperCase()}
-                            </div>
-                          )}
-                        </Link>
-
-                        <div className="min-w-0 flex-1">
-                          <Link href={`/u/${commentAuthorUsername}`} className="hover:underline">
-                            <p className="font-semibold text-black dark:text-white">
-                              {commentAuthorName}
-                            </p>
-
-                            <p className="break-all text-xs text-zinc-500">
-                              @{commentAuthorUsername}
-                            </p>
-                          </Link>
-
-                          <RichTextLinks
-                            text={comment.content}
-                            className="mt-2 whitespace-pre-wrap break-words text-sm text-zinc-800 dark:text-zinc-200"
-                          />
-
-                          <p className="mt-2 text-xs text-zinc-500">
-                            {new Date(comment.created_at).toLocaleString(language)}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
+              <ThreadedComments
+                postId={postId}
+                currentUserId={loggedUserId}
+                refreshVersion={commentsRefreshVersion}
+                onCountChange={() => void loadComments()}
+              />
             </section>
           </>
         )}

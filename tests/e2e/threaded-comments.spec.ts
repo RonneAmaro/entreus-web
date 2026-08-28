@@ -1,5 +1,7 @@
 import { expect, test, type Page, type Route } from '@playwright/test'
-import { mkdirSync, readFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
+
+test.describe.configure({ mode: 'serial' })
 
 const viewerId = '00000000-0000-4000-8000-000000000052'
 const authorId = '00000000-0000-4000-8000-000000000053'
@@ -33,7 +35,8 @@ function comment(id: string, parent: string | null, depth: number, content: stri
 function initialComments() {
   const root = comment(ids[0], null, 0, 'Comentário raiz com uma conversa completa.', 4)
   const removed = { ...comment(ids[1], null, 0, '', 1), deleted_at: '2026-07-17T11:00:00.000Z' }
-  const roots = [root, removed, ...ids.slice(2, 11).map((id, index) => comment(id, null, 0, `Comentário adicional ${index + 1}`))]
+  const ownRoot = comment(ids[2], null, 0, 'Comentário do visitante', 2, viewerId)
+  const roots = [root, removed, ownRoot, ...ids.slice(3, 11).map((id, index) => comment(id, null, 0, `Comentário adicional ${index + 2}`))]
   const replies = [
     comment(ids[11], root.id, 1, 'Primeira resposta', 1),
     comment(ids[12], root.id, 1, 'Resposta com emoji 😀'),
@@ -46,17 +49,24 @@ function initialComments() {
     comment(ids[17], ids[16], 4, 'Nível lógico cinco', 1),
     comment(ids[18], ids[17], 5, 'Nível lógico seis'),
     comment(ids[19], removed.id, 1, 'Filho preservado após remoção'),
+    comment('00000000-0000-4000-8000-000000000999', ownRoot.id, 1, 'Filho preservado no soft delete'),
+    comment('00000000-0000-4000-8000-000000000998', ownRoot.id, 1, 'Segundo filho preservado', 0, authorId),
   ]
   return [...roots, ...replies, ...deep]
 }
 
-async function mockThreadedFeed(page: Page, theme: 'dark' | 'light') {
+async function mockThreadedFeed(
+  page: Page,
+  theme: 'dark' | 'light',
+  options: { threadedRootFailures?: number } = {},
+) {
   const base = supabaseUrl()
   const ref = new URL(base).hostname.split('.')[0]
   const token = jwt()
   const user = { id: viewerId, aud: 'authenticated', role: 'authenticated', email: 'thread@example.test', app_metadata: {}, user_metadata: {} }
   let comments = initialComments()
   let failNextReply = false
+  let threadedRootFailures = options.threadedRootFailures || 0
   let reportCalls = 0
 
   await page.addInitScript(({ key, value, selectedTheme }) => {
@@ -102,7 +112,10 @@ async function mockThreadedFeed(page: Page, theme: 'dark' | 'light') {
       reportCalls += 1
       return fulfill(route, { id: 'report-1', status: 'pending' })
     }
-    if (path.includes('/rest/v1/profiles')) return fulfill(route, [{ id: viewerId, username: 'visitante', display_name: 'Visitante', role: 'user', birth_date: '1990-01-01', terms_accepted_at: '2026-01-01T00:00:00Z', privacy_accepted_at: '2026-01-01T00:00:00Z', terms_version: '2026-05', privacy_version: '2026-05', profile_content_mode: 'general', show_sensitive_content: false, wants_18_plus: false, is_minor: false }])
+    if (path.includes('/rest/v1/profiles')) return fulfill(route, [
+      { id: viewerId, username: 'visitante', display_name: 'Visitante', avatar_url: null, role: 'user', birth_date: '1990-01-01', terms_accepted_at: '2026-01-01T00:00:00Z', privacy_accepted_at: '2026-01-01T00:00:00Z', terms_version: '2026-05', privacy_version: '2026-05', profile_content_mode: 'general', show_sensitive_content: false, wants_18_plus: false, is_minor: false },
+      { id: authorId, username: 'criadora', display_name: 'Criadora', avatar_url: null, role: 'creator' },
+    ])
     if (path.includes('/rest/v1/posts')) return fulfill(route, [{
       id: postId, content: 'Publicação simulada para validar comentários encadeados.', category: 'cotidiano',
       created_at: '2026-07-17T09:00:00.000Z', user_id: authorId, image_url: null, video_url: null,
@@ -112,6 +125,11 @@ async function mockThreadedFeed(page: Page, theme: 'dark' | 'light') {
     }], 200, { 'content-range': '0-0/1' })
     if (path.includes('/rest/v1/comments')) {
       const parentFilter = url.searchParams.get('parent_comment_id')
+      const isThreadedQuery = (url.searchParams.get('select') || '').includes('reply_count')
+      if (isThreadedQuery && parentFilter === 'is.null' && threadedRootFailures > 0) {
+        threadedRootFailures -= 1
+        return fulfill(route, { message: 'simulated schema failure', code: 'PGRST204' }, 400)
+      }
       let result = comments
       if (parentFilter === 'is.null') result = comments.filter((item) => item.parent_comment_id === null)
       else if (parentFilter?.startsWith('eq.')) result = comments.filter((item) => item.parent_comment_id === parentFilter.slice(3))
@@ -122,7 +140,11 @@ async function mockThreadedFeed(page: Page, theme: 'dark' | 'light') {
   })
   await page.route('**/api/expressions/search**', (route) => fulfill(route, { ok: true, items: [{ kind: 'gif', provider: 'tenor', providerId: 'picked-gif', title: 'Festa', altText: 'GIF escolhido', previewUrl: 'https://media.tenor.com/mock/preview.webp', mediaUrl: 'https://media.tenor.com/mock/media.mp4', contentRating: 'g' }], nextCursor: null }))
   await page.route('https://media.tenor.com/**', (route) => route.fulfill({ status: 404, body: '' }))
-  return { failOnce: () => { failNextReply = true }, reportCalls: () => reportCalls }
+  return {
+    failOnce: () => { failNextReply = true },
+    failRootOnce: () => { threadedRootFailures += 1 },
+    reportCalls: () => reportCalls,
+  }
 }
 
 async function openThread(page: Page) {
@@ -163,6 +185,61 @@ test('threaded comments interactions, security states and retry', async ({ page 
   expect(errors).toEqual([])
 })
 
+test('root load error excludes empty state and retry recovers', async ({ page }) => {
+  await mockThreadedFeed(page, 'dark', { threadedRootFailures: 1 })
+  await page.goto('/feed', { waitUntil: 'domcontentloaded' })
+
+  const alert = page.getByRole('alert').filter({ hasText: 'Não foi possível carregar os comentários.' })
+  await expect(alert).toBeVisible({ timeout: 20_000 })
+  await expect(page.getByText('Seja a primeira pessoa a comentar.')).toHaveCount(0)
+  await alert.getByRole('button', { name: 'Tentar novamente' }).click()
+  await expect(page.getByText('Comentário raiz com uma conversa completa.')).toBeVisible()
+  await expect(alert).toHaveCount(0)
+})
+
+test('secondary refresh failure preserves the existing conversation', async ({ page }) => {
+  const mock = await mockThreadedFeed(page, 'dark')
+  await openThread(page)
+  await page.getByText('Comentário raiz com uma conversa completa.').locator('..').getByRole('button', { name: 'Responder' }).first().click()
+  const composer = page.getByPlaceholder('Responder a @criadora').first()
+  await composer.fill('Resposta que dispara atualização')
+  mock.failRootOnce()
+  await composer.locator('..').getByRole('button', { name: 'Responder' }).click()
+
+  await expect(page.getByText('Comentário raiz com uma conversa completa.')).toBeVisible()
+  const alert = page.getByRole('alert').filter({ hasText: 'Não foi possível carregar os comentários.' })
+  await expect(alert).toBeVisible()
+  await alert.getByRole('button', { name: 'Tentar novamente' }).click()
+  await expect(alert).toHaveCount(0)
+})
+
+test('owner edits and soft-deletes a comment while preserving its child', async ({ page }) => {
+  await mockThreadedFeed(page, 'dark')
+  await page.goto('/feed', { waitUntil: 'domcontentloaded' })
+  const ownNode = page.getByRole('listitem', { name: 'Comentário no nível 1' })
+    .filter({ hasText: 'Comentário do visitante' })
+  await expect(ownNode).toBeVisible({ timeout: 20_000 })
+
+  await ownNode.getByRole('button', { name: 'Opções do comentário' }).click()
+  await ownNode.getByRole('button', { name: 'Editar' }).click()
+  const editor = page.getByPlaceholder('Editar comentário')
+  await editor.fill('Comentário editado pelo visitante')
+  await editor.locator('..').getByRole('button', { name: 'Salvar' }).click()
+  const editedNode = page.getByRole('listitem', { name: 'Comentário no nível 1' })
+    .filter({ hasText: 'Comentário editado pelo visitante' })
+  await expect(editedNode).toBeVisible()
+
+  await editedNode.getByRole('button', { name: 'Opções do comentário' }).click()
+  page.once('dialog', (dialog) => dialog.accept())
+  await editedNode.getByRole('button', { name: 'Excluir' }).click()
+  const removedOwnNode = page.getByRole('listitem', { name: 'Comentário no nível 1' })
+    .filter({ has: page.getByRole('button', { name: 'Ver 2 respostas' }) })
+  await expect(removedOwnNode.getByLabel('Comentário removido')).toBeVisible()
+  await removedOwnNode.getByRole('button', { name: 'Ver 2 respostas' }).click()
+  await expect(page.getByText('Filho preservado no soft delete')).toBeVisible()
+  await expect(page.getByText('Segundo filho preservado')).toBeVisible()
+})
+
 for (const shot of [
   { name: 'desktop-dark.png', theme: 'dark' as const, width: 1440, height: 900 },
   { name: 'desktop-light.png', theme: 'light' as const, width: 1440, height: 900 },
@@ -170,24 +247,23 @@ for (const shot of [
   { name: 'mobile-dark.png', theme: 'dark' as const, width: 390, height: 844 },
   { name: 'mobile-light.png', theme: 'light' as const, width: 360, height: 800 },
 ]) {
-  test(`visual threaded comments ${shot.name}`, async ({ page }) => {
+  test(`visual threaded comments ${shot.name}`, async ({ page }, testInfo) => {
     await mockThreadedFeed(page, shot.theme); await page.setViewportSize(shot); await openThread(page)
-    mkdirSync('reports/threaded-comments', { recursive: true })
     await page.getByText('Comentário raiz com uma conversa completa.').scrollIntoViewIfNeeded()
-    await page.screenshot({ path: `reports/threaded-comments/${shot.name}` })
+    await page.screenshot({ path: testInfo.outputPath(shot.name) })
   })
 }
 
-test('removed node keeps children and deep reply uses capped visual indentation', async ({ page }) => {
+test('removed node keeps children and deep reply uses capped visual indentation', async ({ page }, testInfo) => {
   await mockThreadedFeed(page, 'dark'); await page.setViewportSize({ width: 1440, height: 900 }); await openThread(page)
   await expect(page.getByLabel('Comentário removido')).toBeVisible()
   await page.getByRole('button', { name: /Ver 1 resposta/ }).last().click()
   await expect(page.getByText('Filho preservado após remoção')).toBeVisible()
   await page.getByText('Filho preservado após remoção').scrollIntoViewIfNeeded()
-  mkdirSync('reports/threaded-comments', { recursive: true }); await page.screenshot({ path: 'reports/threaded-comments/removed-comment-with-replies.png' })
+  await page.screenshot({ path: testInfo.outputPath('removed-comment-with-replies.png') })
 })
 
-test('expression reply composer restores focus with Escape', async ({ page }) => {
+test('expression reply composer restores focus with Escape', async ({ page }, testInfo) => {
   await mockThreadedFeed(page, 'dark'); await page.setViewportSize({ width: 390, height: 844 }); await openThread(page)
   await page.getByText('Primeira resposta').locator('..').getByRole('button', { name: 'Responder' }).click()
   const composer = page.getByPlaceholder('Responder a @criadora').first()
@@ -197,5 +273,5 @@ test('expression reply composer restores focus with Escape', async ({ page }) =>
   await page.getByRole('dialog').getByRole('tab', { name: 'GIFs' }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Selecionar GIF escolhido' }).click()
   await composer.scrollIntoViewIfNeeded()
-  mkdirSync('reports/threaded-comments', { recursive: true }); await page.screenshot({ path: 'reports/threaded-comments/expression-reply.png' })
+  await page.screenshot({ path: testInfo.outputPath('expression-reply.png') })
 })

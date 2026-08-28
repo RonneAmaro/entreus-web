@@ -80,6 +80,61 @@ describe('threaded comments migration', () => {
     expect(sql).toContain('on conflict (user_id, actor_id, comment_id, type)')
   })
 
+  it('has an incremental actor-id ambiguity fix without schema or RLS changes', () => {
+    const fix = readFileSync(
+      'supabase/migrations/20260818_fix_threaded_comment_actor_id_ambiguity.sql',
+      'utf8',
+    )
+    expect(fix).toContain('create or replace function public.create_threaded_comment')
+    expect(fix).toContain('v_actor_id uuid := auth.uid()')
+    expect(fix).not.toMatch(/\n\s*actor_id uuid := auth\.uid\(\)/)
+    expect(fix).toContain("set search_path = ''")
+    expect(fix).toContain('security definer')
+    expect(fix).toContain('on conflict (user_id, actor_id, comment_id, type)')
+    expect(fix).not.toMatch(/alter table|create table|create index|create policy|drop policy/i)
+  })
+
+  it('uses the authoritative root-comment RPC in the single post flow', () => {
+    const page = readFileSync('app/post/[id]/page.tsx', 'utf8')
+    const createStart = page.indexOf('async function handleCreateComment')
+    const createEnd = page.indexOf('async function handleCopyLink', createStart)
+    const createFlow = page.slice(createStart, createEnd)
+
+    expect(createFlow).toContain(".rpc('create_threaded_comment'")
+    expect(createFlow).toContain('p_parent_comment_id: null')
+    expect(createFlow).toContain('p_client_request_id: crypto.randomUUID()')
+    expect(createFlow).not.toContain(".from('comments')")
+    expect(createFlow).not.toContain(".from('notifications')")
+    expect(page).toContain('<ThreadedComments')
+  })
+
+  it('synchronizes a newly created feed root with the threaded list', () => {
+    const feed = readFileSync('app/feed/page.tsx', 'utf8')
+    const createStart = feed.indexOf('async function handleCreateComment')
+    const createEnd = feed.indexOf('async function handleToggleLike', createStart)
+    const createFlow = feed.slice(createStart, createEnd)
+
+    expect(createFlow).toContain(".rpc('create_threaded_comment'")
+    expect(createFlow).toContain(".select('id, post_id, user_id, content, expression, created_at')")
+    expect(createFlow).toContain('p_parent_comment_id: null')
+    expect(createFlow).toContain('p_client_request_id: crypto.randomUUID()')
+    expect(createFlow).not.toContain(".from('notifications')")
+    expect(feed).toContain('threadedCommentsRefreshByPostId')
+    expect(feed).toContain('refreshVersion={threadedCommentsRefreshByPostId[post.id] || 0}')
+  })
+
+  it('loads profiles separately and keeps ERROR mutually exclusive with EMPTY', () => {
+    const component = readFileSync('app/components/ThreadedComments.tsx', 'utf8')
+    expect(component).toContain(".from('comments').select(SELECT)")
+    expect(component).toContain(".from('profiles')")
+    expect(component).not.toMatch(/const SELECT = .*profiles\(/)
+    expect(component).toContain("viewState === 'SUCCESS_EMPTY'")
+    expect(component).toContain("viewState === 'LOADING'")
+    expect(component).toContain("t('common.retry')")
+    expect(component).toContain('const hasVisibleRoots = roots.length > 0')
+    expect(component).toContain('append ? mergeComments(current, page) : page')
+  })
+
   it('applies rate limiting and grants only callable RPCs', () => {
     expect(sql).toContain("created_at > now() - interval '1 minute'")
     expect(sql).toContain('if recent_count >= 12')

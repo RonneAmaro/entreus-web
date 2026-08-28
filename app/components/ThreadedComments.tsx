@@ -4,12 +4,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown, ChevronUp, Loader2, MessageCircle, MoreHorizontal, Send, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import {
+  MAX_LOGICAL_COMMENT_DEPTH,
   MAX_VISUAL_COMMENT_DEPTH,
   REPLY_PAGE_SIZE,
   ROOT_COMMENT_PAGE_SIZE,
   commentHasContent,
+  getThreadedCommentErrorKey,
+  getThreadedCommentsViewState,
   getVisualCommentDepth,
   mergeComments,
+  normalizeThreadedComment,
   type ThreadedComment,
 } from '@/lib/threaded-comments'
 import type { ExpressionAsset } from '@/lib/expressions/expression-types'
@@ -18,19 +22,53 @@ import ExpressionPicker from './expressions/ExpressionPicker'
 import { useLanguage } from './LanguageProvider'
 import { formatDateTime } from '@/lib/i18n'
 
-const SELECT = `id, post_id, user_id, parent_comment_id, content, expression, depth, reply_count, deleted_at, edited_at, created_at, profiles(username, display_name, avatar_url)`
+const SELECT = 'id, post_id, user_id, parent_comment_id, content, expression, depth, reply_count, deleted_at, edited_at, created_at'
 
-function normalize(row: ThreadedComment & { profiles: ThreadedComment['profiles'] | ThreadedComment['profiles'][] }) {
-  return { ...row, profiles: Array.isArray(row.profiles) ? row.profiles[0] || null : row.profiles } as ThreadedComment
+type CommentLoadError = {
+  message: string
+  scope: 'roots' | 'replies'
+  parent?: ThreadedComment
+}
+
+function logSafeCommentError(context: string, error: { code?: string } | null | undefined) {
+  if (process.env.NODE_ENV === 'development') {
+    console.warn(`[ThreadedComments] ${context}`, error?.code ? { code: error.code } : undefined)
+  }
+}
+
+async function hydrateProfiles(rows: ThreadedComment[]) {
+  const userIds = [...new Set(rows.map(({ user_id }) => user_id).filter(Boolean))]
+  if (userIds.length === 0) return rows
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, username, display_name, avatar_url')
+    .in('id', userIds)
+
+  if (error) {
+    logSafeCommentError('Profile hydration failed.', error)
+    return rows
+  }
+
+  const profilesById = new Map((data || []).map((profile) => [profile.id, profile]))
+  return rows.map((comment) => ({ ...comment, profiles: profilesById.get(comment.user_id) || null }))
+}
+
+function normalizeRows(data: unknown[] | null) {
+  return (data || []).map((row) => normalizeThreadedComment({
+    ...(row as Omit<ThreadedComment, 'profiles'>),
+    profiles: null,
+  }))
 }
 
 type Props = {
   postId: string
   currentUserId: string
+  refreshVersion?: number
   onCountChange?: () => void
 }
 
-export default function ThreadedComments({ postId, currentUserId, onCountChange }: Props) {
+export default function ThreadedComments({ postId, currentUserId, refreshVersion = 0, onCountChange }: Props) {
   const { t } = useLanguage()
   const [roots, setRoots] = useState<ThreadedComment[]>([])
   const [replies, setReplies] = useState<Record<string, ThreadedComment[]>>({})
@@ -39,54 +77,83 @@ export default function ThreadedComments({ postId, currentUserId, onCountChange 
   const [hasMoreReplies, setHasMoreReplies] = useState<Record<string, boolean>>({})
   const [loading, setLoading] = useState(true)
   const [loadingTarget, setLoadingTarget] = useState<string | null>(null)
-  const [error, setError] = useState('')
+  const [error, setError] = useState<CommentLoadError | null>(null)
+  const loadedPostId = useRef(postId)
 
   const loadRoots = useCallback(async (append = false) => {
-    setLoadingTarget(append ? 'roots' : null)
-    if (!append) setLoading(true)
-    setError('')
-    let query = supabase.from('comments').select(SELECT)
-      .eq('post_id', postId).is('parent_comment_id', null)
-      .order('created_at', { ascending: false }).order('id', { ascending: false })
-      .limit(ROOT_COMMENT_PAGE_SIZE + 1)
-    const cursor = append ? roots[roots.length - 1] : null
-    if (cursor) query = query.or(`created_at.lt.${cursor.created_at},and(created_at.eq.${cursor.created_at},id.lt.${cursor.id})`)
-    const { data, error: queryError } = await query
-    if (queryError) {
-      setError(t('post.comments.loadError'))
-    } else {
-      const page = (data || []).slice(0, ROOT_COMMENT_PAGE_SIZE).map((row) => normalize(row as never))
-      setRoots((current) => append ? [...current, ...page.filter((item) => !current.some(({ id }) => id === item.id))] : page)
-      setHasMoreRoots((data || []).length > ROOT_COMMENT_PAGE_SIZE)
+    const hasVisibleRoots = roots.length > 0
+    setLoadingTarget(append || hasVisibleRoots ? 'roots' : null)
+    if (!append && !hasVisibleRoots) setLoading(true)
+    setError(null)
+    try {
+      let query = supabase.from('comments').select(SELECT)
+        .eq('post_id', postId).is('parent_comment_id', null)
+        .order('created_at', { ascending: false }).order('id', { ascending: false })
+        .limit(ROOT_COMMENT_PAGE_SIZE + 1)
+      const cursor = append ? roots[roots.length - 1] : null
+      if (cursor) query = query.or(`created_at.lt.${cursor.created_at},and(created_at.eq.${cursor.created_at},id.lt.${cursor.id})`)
+      const { data, error: queryError } = await query
+      if (queryError) {
+        logSafeCommentError('Root comment load failed.', queryError)
+        setError({ message: t('post.comments.loadError'), scope: 'roots' })
+      } else {
+        const page = await hydrateProfiles(normalizeRows(data).slice(0, ROOT_COMMENT_PAGE_SIZE))
+        setRoots((current) => append ? mergeComments(current, page) : page)
+        setHasMoreRoots((data || []).length > ROOT_COMMENT_PAGE_SIZE)
+      }
+    } catch {
+      logSafeCommentError('Unexpected root comment load failure.', null)
+      setError({ message: t('post.comments.loadError'), scope: 'roots' })
+    } finally {
+      setLoading(false)
+      setLoadingTarget(null)
     }
-    setLoading(false)
-    setLoadingTarget(null)
   }, [postId, roots, t])
 
   useEffect(() => {
-    const task = window.setTimeout(() => void loadRoots(false), 0)
+    const task = window.setTimeout(() => {
+      if (loadedPostId.current !== postId) {
+        loadedPostId.current = postId
+        setRoots([])
+        setReplies({})
+        setExpanded(new Set())
+        setHasMoreRoots(false)
+        setHasMoreReplies({})
+        setLoading(true)
+      }
+      setError(null)
+      void loadRoots(false)
+    }, 0)
     return () => window.clearTimeout(task)
-  }, [postId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [postId, refreshVersion]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function loadReplies(parent: ThreadedComment, append = false) {
     setLoadingTarget(parent.id)
-    setError('')
+    setError(null)
     const current = replies[parent.id] || []
-    let query = supabase.from('comments').select(SELECT)
-      .eq('post_id', postId).eq('parent_comment_id', parent.id)
-      .order('created_at', { ascending: true }).order('id', { ascending: true })
-      .limit(REPLY_PAGE_SIZE + 1)
-    const cursor = append ? current[current.length - 1] : null
-    if (cursor) query = query.or(`created_at.gt.${cursor.created_at},and(created_at.eq.${cursor.created_at},id.gt.${cursor.id})`)
-    const { data, error: queryError } = await query
-    if (queryError) setError(t('post.comments.repliesLoadError'))
-    else {
-      const page = (data || []).slice(0, REPLY_PAGE_SIZE).map((row) => normalize(row as never))
-      setReplies((all) => ({ ...all, [parent.id]: append ? mergeComments(current, page) : page }))
-      setHasMoreReplies((all) => ({ ...all, [parent.id]: (data || []).length > REPLY_PAGE_SIZE }))
-      setExpanded((all) => new Set(all).add(parent.id))
+    try {
+      let query = supabase.from('comments').select(SELECT)
+        .eq('post_id', postId).eq('parent_comment_id', parent.id)
+        .order('created_at', { ascending: true }).order('id', { ascending: true })
+        .limit(REPLY_PAGE_SIZE + 1)
+      const cursor = append ? current[current.length - 1] : null
+      if (cursor) query = query.or(`created_at.gt.${cursor.created_at},and(created_at.eq.${cursor.created_at},id.gt.${cursor.id})`)
+      const { data, error: queryError } = await query
+      if (queryError) {
+        logSafeCommentError('Reply load failed.', queryError)
+        setError({ message: t('post.comments.repliesLoadError'), scope: 'replies', parent })
+      } else {
+        const page = await hydrateProfiles(normalizeRows(data).slice(0, REPLY_PAGE_SIZE))
+        setReplies((all) => ({ ...all, [parent.id]: append ? mergeComments(current, page) : page }))
+        setHasMoreReplies((all) => ({ ...all, [parent.id]: (data || []).length > REPLY_PAGE_SIZE }))
+        setExpanded((all) => new Set(all).add(parent.id))
+      }
+    } catch {
+      logSafeCommentError('Unexpected reply load failure.', null)
+      setError({ message: t('post.comments.repliesLoadError'), scope: 'replies', parent })
+    } finally {
+      setLoadingTarget(null)
     }
-    setLoadingTarget(null)
   }
 
   function collapse(parentId: string) {
@@ -107,15 +174,27 @@ export default function ThreadedComments({ postId, currentUserId, onCountChange 
     onCountChange?.()
   }
 
-  if (loading) return <div role="status" className="flex items-center gap-2 py-4 text-sm text-zinc-500"><Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" /> {t('post.comments.loading')}</div>
+  const viewState = getThreadedCommentsViewState({
+    loading,
+    hasError: Boolean(error),
+    commentCount: roots.length,
+  })
+
+  if (viewState === 'LOADING') return <div role="status" className="flex items-center gap-2 py-4 text-sm text-zinc-500"><Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" /> {t('post.comments.loading')}</div>
 
   return <section aria-label={t('post.comments.label')} className="mt-4 border-t border-zinc-200/70 pt-4 dark:border-zinc-800/70">
     <div className="mb-3 flex items-center justify-between gap-3">
       <h3 className="text-sm font-black text-zinc-800 dark:text-zinc-100">{t('post.comments.conversation')}</h3>
       <span className="text-xs font-semibold text-zinc-500">{t('post.comments.pageSize')}</span>
     </div>
-    {error && <div role="alert" className="mb-3 rounded-xl bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-200">{error}</div>}
-    {roots.length === 0 ? <p className="py-3 text-sm text-zinc-500">{t('post.comments.empty')}</p> :
+    {error && <div role="alert" className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-200">
+      <span>{error.message}</span>
+      <button type="button" disabled={loadingTarget !== null} onClick={() => void (error.scope === 'replies' && error.parent ? loadReplies(error.parent) : loadRoots(false))} className="min-h-10 rounded-full border border-red-300 px-3 font-bold disabled:opacity-60 dark:border-red-800">
+        {t('common.retry')}
+      </button>
+    </div>}
+    {viewState === 'SUCCESS_EMPTY' && <p className="py-3 text-sm text-zinc-500">{t('post.comments.empty')}</p>}
+    {roots.length > 0 &&
       <div role="list" className="space-y-3">{roots.map((root) =>
         <CommentNode key={root.id} comment={root} currentUserId={currentUserId} childrenByParent={replies}
           expanded={expanded} hasMoreReplies={hasMoreReplies} loadingTarget={loadingTarget}
@@ -146,17 +225,49 @@ function CommentNode(props: NodeProps) {
   const [editing, setEditing] = useState(false)
   const [menu, setMenu] = useState(false)
   const [reported, setReported] = useState(false)
+  const [actionError, setActionError] = useState('')
   const input = useRef<HTMLTextAreaElement>(null)
   const trigger = useRef<HTMLButtonElement>(null)
   const children = childrenByParent[comment.id] || []
   const open = expanded.has(comment.id)
   const visualDepth = getVisualCommentDepth(comment.depth)
-  const author = comment.profiles?.display_name || comment.profiles?.username || 'Pessoa'
+  const author = comment.profiles?.display_name || comment.profiles?.username || t('post.comments.person')
 
   useEffect(() => { if (replying) input.current?.focus() }, [replying])
   const closeReply = () => { setReplying(false); trigger.current?.focus() }
 
-  return <div role="listitem" aria-label={`Comentário no nível ${comment.depth + 1}`} className={comment.depth ? 'mt-3' : ''}>
+  async function deleteComment() {
+    setMenu(false)
+    if (!window.confirm(t('post.comments.deleteConfirm'))) return
+    setActionError('')
+    const { error } = await supabase.rpc('delete_threaded_comment', { p_comment_id: comment.id })
+    if (error) {
+      logSafeCommentError('Comment delete failed.', error)
+      setActionError(t(getThreadedCommentErrorKey(error)))
+      return
+    }
+    await onRefresh(comment)
+  }
+
+  async function reportComment() {
+    const reason = window.prompt(t('post.comments.reportPrompt'))
+    if (!reason) return
+    setActionError('')
+    const { error } = await supabase.rpc('report_threaded_comment', {
+      p_comment_id: comment.id,
+      p_reason: reason,
+      p_client_request_id: crypto.randomUUID(),
+    })
+    if (error) {
+      logSafeCommentError('Comment report failed.', error)
+      setActionError(t(getThreadedCommentErrorKey(error)))
+      return
+    }
+    setReported(true)
+    setMenu(false)
+  }
+
+  return <div role="listitem" aria-label={t('post.comments.levelLabel', { level: comment.depth + 1 })} className={comment.depth ? 'mt-3' : ''}>
     <article className="relative rounded-[1.35rem] bg-zinc-50/90 p-3 ring-1 ring-zinc-200/60 dark:bg-zinc-900/75 dark:ring-zinc-800/70"
       style={{ marginInlineStart: `${visualDepth * 12}px` }}>
       {comment.depth >= MAX_VISUAL_COMMENT_DEPTH && <div aria-hidden className="absolute bottom-3 left-0 top-3 w-0.5 rounded-full bg-blue-400/60" />}
@@ -165,19 +276,14 @@ function CommentNode(props: NodeProps) {
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
             <div><strong className="text-sm">{author}</strong>{comment.profiles?.username && <span className="ml-1 text-xs text-zinc-500">@{comment.profiles.username}</span>}
-              {comment.depth >= MAX_VISUAL_COMMENT_DEPTH && comment.parent_comment_id && <p className="text-xs font-semibold text-blue-600 dark:text-blue-300">respondendo na conversa</p>}</div>
-            {!comment.deleted_at && <div className="relative">
+              {comment.depth >= MAX_VISUAL_COMMENT_DEPTH && comment.parent_comment_id && <p className="text-xs font-semibold text-blue-600 dark:text-blue-300">{t('post.comments.replyingInConversation')}</p>}</div>
+            {!comment.deleted_at && currentUserId && <div className="relative">
               <button type="button" onClick={() => setMenu(!menu)} aria-label={t('post.comments.options')} className="min-h-10 min-w-10 rounded-full hover:bg-zinc-200 dark:hover:bg-zinc-800"><MoreHorizontal className="mx-auto h-4 w-4" /></button>
               {menu && <div className="absolute right-0 z-20 w-36 rounded-xl border bg-white p-1 shadow-xl dark:border-zinc-700 dark:bg-zinc-950">
                 {comment.user_id === currentUserId ? <>
                   <button type="button" onClick={() => { setEditing(true); setMenu(false) }} className="min-h-10 w-full rounded-lg px-3 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800">{t('post.comments.edit')}</button>
-                  <button type="button" onClick={async () => { setMenu(false); if (!window.confirm(t('post.comments.delete'))) return; const { error } = await supabase.rpc('delete_threaded_comment', { p_comment_id: comment.id }); if (!error) await onRefresh(comment) }} className="min-h-10 w-full rounded-lg px-3 text-left text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30">{t('post.comments.delete')}</button>
-                </> : <button type="button" disabled={reported} onClick={async () => {
-                  const reason = window.prompt(t('post.comments.reportPrompt'))
-                  if (!reason) return
-                  const { error } = await supabase.rpc('report_threaded_comment', { p_comment_id: comment.id, p_reason: reason, p_client_request_id: crypto.randomUUID() })
-                  if (!error) { setReported(true); setMenu(false) }
-                }} className="min-h-10 w-full rounded-lg px-3 text-left text-sm text-red-600 hover:bg-red-50 disabled:text-zinc-400 dark:hover:bg-red-950/30">{reported ? t('post.comments.reported') : t('post.comments.report')}</button>}
+                  <button type="button" onClick={() => void deleteComment()} className="min-h-10 w-full rounded-lg px-3 text-left text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30">{t('post.comments.delete')}</button>
+                </> : <button type="button" disabled={reported} onClick={() => void reportComment()} className="min-h-10 w-full rounded-lg px-3 text-left text-sm text-red-600 hover:bg-red-50 disabled:text-zinc-400 dark:hover:bg-red-950/30">{reported ? t('post.comments.reported') : t('post.comments.report')}</button>}
               </div>}
             </div>}
           </div>
@@ -186,22 +292,23 @@ function CommentNode(props: NodeProps) {
             <><p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-zinc-800 dark:text-zinc-200">{comment.content}</p>
               {comment.expression && <div className="mt-2"><ExpressionAttachment expression={comment.expression} compact /></div>}</>}
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-zinc-500">
-            {!comment.deleted_at && <button ref={trigger} type="button" onClick={() => setReplying(true)} className="min-h-9 rounded-full px-2 font-bold hover:bg-zinc-200 dark:hover:bg-zinc-800">{t('post.comments.reply')}</button>}
+            {!comment.deleted_at && currentUserId && comment.depth < MAX_LOGICAL_COMMENT_DEPTH - 1 && <button ref={trigger} type="button" onClick={() => setReplying(true)} className="min-h-9 rounded-full px-2 font-bold hover:bg-zinc-200 dark:hover:bg-zinc-800">{t('post.comments.reply')}</button>}
             <time dateTime={comment.created_at}>{formatDateTime(language, comment.created_at)}</time>
             {comment.edited_at && <span>{t('post.comments.edited')}</span>}
           </div>
+          {actionError && <p role="alert" className="mt-2 text-xs text-red-600">{actionError}</p>}
           {replying && <CommentComposer mode="reply" comment={comment} currentUserId={currentUserId} inputRef={input} onCancel={closeReply} onSaved={async () => { closeReply(); await onExpand(comment); await onRefresh(comment) }} />}
         </div>
       </div>
     </article>
     {comment.reply_count > 0 && <div className="ml-3">
       {!open ? <button type="button" aria-expanded="false" aria-controls={`replies-${comment.id}`} onClick={() => void onExpand(comment)} disabled={loadingTarget === comment.id} className="mt-2 flex min-h-10 items-center gap-2 rounded-full px-3 text-sm font-bold text-blue-700 hover:bg-blue-50 dark:text-blue-300 dark:hover:bg-blue-950/30">
-        {loadingTarget === comment.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <ChevronDown className="h-4 w-4" />} Ver {comment.reply_count} {comment.reply_count === 1 ? 'resposta' : 'respostas'}
+        {loadingTarget === comment.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <ChevronDown className="h-4 w-4" />} {t(comment.reply_count === 1 ? 'post.comments.viewReply' : 'post.comments.viewReplies', { count: comment.reply_count })}
       </button> : <div id={`replies-${comment.id}`} className="border-l border-blue-300/50 pl-1 dark:border-blue-800/60">
         {children.map((child) => <CommentNode key={child.id} {...props} comment={child} />)}
         <div className="flex flex-wrap gap-2">
-          {hasMoreReplies[comment.id] && <button type="button" onClick={() => void onExpand(comment, true)} className="min-h-10 rounded-full px-3 text-sm font-bold text-blue-700 dark:text-blue-300">Ver mais respostas</button>}
-          <button type="button" aria-expanded="true" aria-controls={`replies-${comment.id}`} onClick={() => onCollapse(comment.id)} className="flex min-h-10 items-center gap-1 rounded-full px-3 text-sm font-bold text-zinc-600 dark:text-zinc-300"><ChevronUp className="h-4 w-4" /> Recolher</button>
+          {hasMoreReplies[comment.id] && <button type="button" onClick={() => void onExpand(comment, true)} className="min-h-10 rounded-full px-3 text-sm font-bold text-blue-700 dark:text-blue-300">{t('post.comments.viewMoreReplies')}</button>}
+          <button type="button" aria-expanded="true" aria-controls={`replies-${comment.id}`} onClick={() => onCollapse(comment.id)} className="flex min-h-10 items-center gap-1 rounded-full px-3 text-sm font-bold text-zinc-600 dark:text-zinc-300"><ChevronUp className="h-4 w-4" /> {t('post.comments.collapse')}</button>
         </div>
       </div>}
     </div>}
@@ -229,13 +336,18 @@ function CommentComposer({ mode, comment, currentUserId, inputRef, onCancel, onS
     const result = mode === 'reply'
       ? await supabase.rpc('create_threaded_comment', { p_post_id: comment.post_id, p_content: content, p_expression: expression, p_parent_comment_id: comment.id, p_client_request_id: requestId })
       : await supabase.rpc('edit_threaded_comment', { p_comment_id: comment.id, p_content: content, p_expression: expression })
-    if (result.error) { setError(result.error.message); setSending(false); return }
+    if (result.error) {
+      logSafeCommentError(`Comment ${mode} failed.`, result.error)
+      setError(t(getThreadedCommentErrorKey(result.error)))
+      setSending(false)
+      return
+    }
     await onSaved()
     setSending(false)
   }
   return <div className="mt-3 rounded-xl border border-zinc-200 bg-white p-2 dark:border-zinc-700 dark:bg-zinc-950">
-    <label className="sr-only" htmlFor={`composer-${mode}-${comment.id}`}>{mode === 'reply' ? t('post.comments.replyPlaceholder', { username: comment.profiles?.username || 'comment' }) : t('post.comments.editPlaceholder')}</label>
-    <textarea ref={inputRef} id={`composer-${mode}-${comment.id}`} value={content} onChange={(event) => setContent(event.target.value.slice(0, 2000))} placeholder={mode === 'reply' ? t('post.comments.replyPlaceholder', { username: comment.profiles?.username || 'user' }) : t('post.comments.editPlaceholder')} className="min-h-20 w-full resize-none bg-transparent p-2 text-sm outline-none" />
+    <label className="sr-only" htmlFor={`composer-${mode}-${comment.id}`}>{mode === 'reply' ? t('post.comments.replyPlaceholder', { username: comment.profiles?.username || t('post.comments.person') }) : t('post.comments.editPlaceholder')}</label>
+    <textarea ref={inputRef} id={`composer-${mode}-${comment.id}`} value={content} onChange={(event) => setContent(event.target.value.slice(0, 2000))} placeholder={mode === 'reply' ? t('post.comments.replyPlaceholder', { username: comment.profiles?.username || t('post.comments.person') }) : t('post.comments.editPlaceholder')} className="min-h-20 w-full resize-none bg-transparent p-2 text-sm outline-none" />
     {expression && <div className="flex items-start gap-2 p-2"><ExpressionAttachment expression={expression} compact /><button type="button" aria-label={t('post.comments.removeExpression')} onClick={() => setExpression(null)}><X className="h-4 w-4" /></button></div>}
     {error && <p role="alert" className="px-2 text-xs text-red-600">{error}</p>}
     <div className="flex items-center justify-between gap-2">
