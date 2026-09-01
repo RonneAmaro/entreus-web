@@ -464,7 +464,7 @@ async function processPaymentId(
     }
   }
 
-  let { data, error } = await supabase.rpc('complete_mercadopago_payment_order_v2', {
+  const { data, error } = await supabase.rpc('complete_mercadopago_payment_order_v2', {
     p_provider_payment_id: providerPaymentId,
     p_provider_status: providerStatus,
     p_external_reference: paymentExternalReference,
@@ -480,26 +480,6 @@ async function processPaymentId(
       provider_preference_id: preferenceId,
     },
   })
-
-  if (error && paymentExternalReference) {
-    logServerEvent('info', {
-      event: 'mercadopago_webhook.legacy_rpc_fallback_attempt',
-      requestId,
-      context: {
-        paymentId: providerPaymentId,
-        externalReference: paymentExternalReference,
-      },
-    })
-
-    const fallbackResult = await supabase.rpc('complete_mercadopago_payment_order', {
-      p_external_reference: paymentExternalReference,
-      p_provider_payment_id: providerPaymentId,
-      p_provider_status: providerStatus,
-    })
-
-    data = fallbackResult.data
-    error = fallbackResult.error
-  }
 
   if (error) {
     logServerEvent('error', {

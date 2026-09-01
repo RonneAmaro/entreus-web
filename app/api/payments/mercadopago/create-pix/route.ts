@@ -5,14 +5,11 @@ import { getRequestCorrelationId, logServerEvent } from '@/lib/logging/safe-logg
 import { resolveMercadoPagoNotificationUrl } from '@/lib/payments/public-urls'
 import { paymentError } from '@/lib/payments/errors'
 import { getBearerAuthorization } from '@/lib/payments/server-auth'
-
-type PaymentOrder = {
-  id: string
-  external_reference: string
-  product_type: 'itacash'
-  amount_itacash: number
-  total_brl_cents: number
-}
+import {
+  attachTrustedMercadoPagoPix,
+  createTrustedPaymentOrder,
+  type TrustedPaymentOrder,
+} from '@/lib/payments/payment-orders-server'
 
 type MercadoPagoPixPayment = {
   id?: number | string
@@ -117,17 +114,18 @@ export async function POST(request: Request) {
 
     const totals = calculatePaymentTotals(amountItacash * 10, paymentMethod.value)
 
-    const { data: orderData, error: orderError } = await supabase.rpc('create_payment_order', {
-      p_product_type: 'itacash',
-      p_product_id: null,
-      p_amount_itacash: amountItacash,
-      p_base_amount_brl_cents: totals.baseAmountBrlCents,
-      p_platform_fee_percent: PLATFORM_FEE_PERCENT,
-      p_platform_fee_brl_cents: totals.platformFeeBrlCents,
-      p_operator_fee_percent: totals.operatorFeePercent,
-      p_operator_fee_brl_cents: totals.operatorFeeBrlCents,
-      p_total_brl_cents: totals.totalBrlCents,
-      p_metadata: {
+    const { data: orderData, error: orderError } = await createTrustedPaymentOrder({
+      userId: user.id,
+      productType: 'itacash',
+      productId: null,
+      amountItacash,
+      baseAmountBrlCents: totals.baseAmountBrlCents,
+      platformFeePercent: PLATFORM_FEE_PERCENT,
+      platformFeeBrlCents: totals.platformFeeBrlCents,
+      operatorFeePercent: totals.operatorFeePercent,
+      operatorFeeBrlCents: totals.operatorFeeBrlCents,
+      totalBrlCents: totals.totalBrlCents,
+      metadata: {
         payment_method_option: paymentMethod.value,
         provider_payment_method: 'pix',
       },
@@ -146,7 +144,7 @@ export async function POST(request: Request) {
       )
     }
 
-    const order = orderData as PaymentOrder
+    const order = orderData as TrustedPaymentOrder
     const expirationDate = new Date(Date.now() + PIX_EXPIRATION_MINUTES * 60 * 1000)
 
     const paymentResponse = await fetch('https://api.mercadopago.com/v1/payments', {
@@ -196,17 +194,18 @@ export async function POST(request: Request) {
       )
     }
 
-    const { error: attachError } = await supabase.rpc('attach_mercadopago_pix_payment', {
-      p_order_id: order.id,
-      p_provider_payment_id: String(payment.id),
-      p_provider_status: payment.status || 'pending',
-      p_pix_qr_code: transactionData.qr_code || null,
-      p_pix_qr_code_base64: transactionData.qr_code_base64 || null,
-      p_pix_ticket_url: transactionData.ticket_url || null,
-      p_expires_at: payment.date_of_expiration || expirationDate.toISOString(),
+    const { data: attachedOrder, error: attachError } = await attachTrustedMercadoPagoPix({
+      orderId: order.id,
+      userId: user.id,
+      providerPaymentId: String(payment.id),
+      providerStatus: payment.status || 'pending',
+      pixQrCode: transactionData.qr_code || null,
+      pixQrCodeBase64: transactionData.qr_code_base64 || null,
+      pixTicketUrl: transactionData.ticket_url || null,
+      expiresAt: payment.date_of_expiration || expirationDate.toISOString(),
     })
 
-    if (attachError) {
+    if (attachError || !attachedOrder) {
       logServerEvent('error', {
         event: 'mercadopago_pix.attach_failed',
         requestId,

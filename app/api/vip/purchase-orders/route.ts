@@ -4,24 +4,13 @@ import { calculatePaymentTotals, PLATFORM_FEE_PERCENT } from '@/lib/payment-fees
 import { getSafeCheckoutUrl } from '@/lib/vip-checkout-flow'
 import { getVipPurchasePlan, VIP_PRICE_VERSION } from '@/lib/vip-plans'
 import { getRequestCorrelationId, logServerEvent } from '@/lib/logging/safe-logger'
+import {
+  createTrustedPaymentOrder,
+  type TrustedPaymentOrder,
+} from '@/lib/payments/payment-orders-server'
 
 type CreateVipOrderBody = {
   plan_key?: unknown
-}
-
-type PaymentOrder = {
-  id: string
-  external_reference: string
-  product_id: string | null
-  product_type: 'vip_plus'
-  status: string
-  base_amount_brl_cents: number
-  platform_fee_brl_cents: number
-  operator_fee_brl_cents: number
-  total_brl_cents: number
-  metadata: Record<string, unknown> | null
-  provider_init_point?: string | null
-  created_at?: string
 }
 
 function getSupabaseForRequest(request: Request) {
@@ -64,17 +53,18 @@ export async function POST(request: Request) {
 
     const totals = calculatePaymentTotals(plan.amountBrlCents, 'mercadopago_pix')
 
-    const { data: orderData, error: orderError } = await supabase.rpc('create_payment_order', {
-      p_product_type: 'vip_plus',
-      p_product_id: plan.planKey,
-      p_amount_itacash: null,
-      p_base_amount_brl_cents: totals.baseAmountBrlCents,
-      p_platform_fee_percent: PLATFORM_FEE_PERCENT,
-      p_platform_fee_brl_cents: totals.platformFeeBrlCents,
-      p_operator_fee_percent: totals.operatorFeePercent,
-      p_operator_fee_brl_cents: totals.operatorFeeBrlCents,
-      p_total_brl_cents: totals.totalBrlCents,
-      p_metadata: {
+    const { data: orderData, error: orderError } = await createTrustedPaymentOrder({
+      userId: user.id,
+      productType: 'vip_plus',
+      productId: plan.planKey,
+      amountItacash: null,
+      baseAmountBrlCents: totals.baseAmountBrlCents,
+      platformFeePercent: PLATFORM_FEE_PERCENT,
+      platformFeeBrlCents: totals.platformFeeBrlCents,
+      operatorFeePercent: totals.operatorFeePercent,
+      operatorFeeBrlCents: totals.operatorFeeBrlCents,
+      totalBrlCents: totals.totalBrlCents,
+      metadata: {
         purpose: 'vip_subscription',
         plan_key: plan.planKey,
         plan_label: plan.label,
@@ -100,7 +90,7 @@ export async function POST(request: Request) {
       )
     }
 
-    const order = orderData as PaymentOrder
+    const order = orderData as TrustedPaymentOrder
 
     return NextResponse.json({
       ok: true,
@@ -158,7 +148,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ ok: false, error: 'NÃ£o foi possÃ­vel consultar pagamentos pendentes agora.' }, { status: 500 })
     }
 
-    const order = data as PaymentOrder | null
+    const order = data as TrustedPaymentOrder | null
     const checkoutUrl = getSafeCheckoutUrl(order?.provider_init_point)
     const plan = getVipPurchasePlan(order?.product_id)
 

@@ -7,16 +7,13 @@ import { getRequestCorrelationId, logServerEvent } from '@/lib/logging/safe-logg
 import { resolveMercadoPagoPublicUrls } from '@/lib/payments/public-urls'
 import { paymentError } from '@/lib/payments/errors'
 import { getBearerAuthorization } from '@/lib/payments/server-auth'
+import {
+  attachTrustedMercadoPagoPreference,
+  createTrustedPaymentOrder,
+  type TrustedPaymentOrder,
+} from '@/lib/payments/payment-orders-server'
 
 type ProductType = 'itacash' | 'vip_plus'
-
-type PaymentOrder = {
-  id: string
-  external_reference: string
-  product_type: ProductType
-  amount_itacash: number | null
-  total_brl_cents: number
-}
 
 type MercadoPagoPreference = {
   id?: string
@@ -120,17 +117,18 @@ export async function POST(request: Request) {
 
     const totals = calculateTotals(productType, amountItacash, paymentMethod.value, vipPlan?.amountBrlCents || null)
 
-    const { data: orderData, error: orderError } = await supabase.rpc('create_payment_order', {
-      p_product_type: productType,
-      p_product_id: productType === 'vip_plus' ? vipPlan!.planKey : null,
-      p_amount_itacash: amountItacash,
-      p_base_amount_brl_cents: totals.baseAmountBrlCents,
-      p_platform_fee_percent: PLATFORM_FEE_PERCENT,
-      p_platform_fee_brl_cents: totals.platformFeeBrlCents,
-      p_operator_fee_percent: totals.operatorFeePercent,
-      p_operator_fee_brl_cents: totals.operatorFeeBrlCents,
-      p_total_brl_cents: totals.totalBrlCents,
-      p_metadata:
+    const { data: orderData, error: orderError } = await createTrustedPaymentOrder({
+      userId: user.id,
+      productType,
+      productId: productType === 'vip_plus' ? vipPlan!.planKey : null,
+      amountItacash,
+      baseAmountBrlCents: totals.baseAmountBrlCents,
+      platformFeePercent: PLATFORM_FEE_PERCENT,
+      platformFeeBrlCents: totals.platformFeeBrlCents,
+      operatorFeePercent: totals.operatorFeePercent,
+      operatorFeeBrlCents: totals.operatorFeeBrlCents,
+      totalBrlCents: totals.totalBrlCents,
+      metadata:
         productType === 'vip_plus'
           ? {
               purpose: 'vip_subscription',
@@ -157,7 +155,7 @@ export async function POST(request: Request) {
       )
     }
 
-    const order = orderData as PaymentOrder
+    const order = orderData as TrustedPaymentOrder
     const title =
       productType === 'vip_plus'
         ? `EntreUS ${vipPlan!.label}`
@@ -239,13 +237,14 @@ export async function POST(request: Request) {
       )
     }
 
-    const { error: attachError } = await supabase.rpc('attach_mercadopago_preference', {
-      p_order_id: order.id,
-      p_provider_preference_id: preference.id,
-      p_provider_init_point: initPoint,
+    const { data: attachedOrder, error: attachError } = await attachTrustedMercadoPagoPreference({
+      orderId: order.id,
+      userId: user.id,
+      providerPreferenceId: preference.id,
+      providerInitPoint: initPoint,
     })
 
-    if (attachError) {
+    if (attachError || !attachedOrder) {
       logServerEvent('error', {
         event: 'mercadopago_preference.attach_failed',
         requestId,

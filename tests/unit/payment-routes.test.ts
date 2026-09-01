@@ -1,19 +1,35 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { createClient } from '@supabase/supabase-js'
 
 const mocks = vi.hoisted(() => ({
   getUser: vi.fn(),
   rpc: vi.fn(),
   insert: vi.fn(),
+  paymentInsert: vi.fn(),
+  paymentUpdate: vi.fn(),
+  paymentSelect: vi.fn(),
+  paymentEq: vi.fn(),
+  paymentSingle: vi.fn(),
+  paymentMaybeSingle: vi.fn(),
   storageList: vi.fn(),
   log: vi.fn(),
   qr: vi.fn(),
 }))
 
+const paymentBuilder = {
+  insert: mocks.paymentInsert,
+  update: mocks.paymentUpdate,
+  select: mocks.paymentSelect,
+  eq: mocks.paymentEq,
+  single: mocks.paymentSingle,
+  maybeSingle: mocks.paymentMaybeSingle,
+}
+
 vi.mock('@supabase/supabase-js', () => ({
   createClient: vi.fn(() => ({
     auth: { getUser: mocks.getUser },
     rpc: mocks.rpc,
-    from: vi.fn(() => ({ insert: mocks.insert })),
+    from: vi.fn((table: string) => table === 'payment_orders' ? paymentBuilder : { insert: mocks.insert }),
     storage: { from: vi.fn(() => ({ list: mocks.storageList })) },
   })),
 }))
@@ -35,6 +51,7 @@ const safeEnv = {
   NEXT_PUBLIC_SUPABASE_URL: 'https://project.supabase.co',
   NEXT_PUBLIC_SUPABASE_ANON_KEY: 'public-test-key',
   MERCADO_PAGO_ACCESS_TOKEN: 'test-access-token',
+  SUPABASE_SERVICE_ROLE_KEY: 'server-only-test-key',
   MERCADO_PAGO_NOTIFICATION_URL: 'https://hooks.entreus.vercel.app/mp',
   MERCADO_PAGO_RETURN_BASE_URL: 'https://entreus.vercel.app',
   NEXT_PUBLIC_SITE_URL: 'https://fallback.entreus.vercel.app',
@@ -60,6 +77,12 @@ beforeEach(() => {
   mocks.getUser.mockReset()
   mocks.rpc.mockReset()
   mocks.insert.mockReset()
+  mocks.paymentInsert.mockReset().mockReturnValue(paymentBuilder)
+  mocks.paymentUpdate.mockReset().mockReturnValue(paymentBuilder)
+  mocks.paymentSelect.mockReset().mockReturnValue(paymentBuilder)
+  mocks.paymentEq.mockReset().mockReturnValue(paymentBuilder)
+  mocks.paymentSingle.mockReset()
+  mocks.paymentMaybeSingle.mockReset()
   mocks.storageList.mockReset()
   mocks.log.mockReset()
   mocks.qr.mockReset()
@@ -101,12 +124,12 @@ describe('POST create-preference', () => {
   })
 
   it('handles internal order and provider failures safely', async () => {
-    mocks.rpc.mockResolvedValueOnce({ data: null, error: new Error('database details') })
+    mocks.paymentSingle.mockResolvedValueOnce({ data: null, error: new Error('database details') })
     const orderFailure = await createPreference.POST(post('/api/payments/mercadopago/create-preference', { product_type: 'vip_plus', plan_key: 'vip_30d' }))
     expect(orderFailure.status).toBe(400)
     expect(await orderFailure.text()).not.toContain('database details')
 
-    mocks.rpc.mockResolvedValueOnce({ data: order('vip_plus'), error: null })
+    mocks.paymentSingle.mockResolvedValueOnce({ data: order('vip_plus'), error: null })
     vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({ message: 'provider private detail' }), { status: 400 }))
     const providerFailure = await createPreference.POST(post('/api/payments/mercadopago/create-preference', { product_type: 'vip_plus', plan_key: 'vip_30d' }))
     expect(providerFailure.status).toBe(502)
@@ -115,20 +138,31 @@ describe('POST create-preference', () => {
 
   it('prefers explicit notification/return URLs and returns only a safe checkout URL', async () => {
     vi.stubEnv('NEXT_PUBLIC_SITE_URL', 'http://localhost:3000')
-    mocks.rpc.mockResolvedValueOnce({ data: order('vip_plus'), error: null }).mockResolvedValueOnce({ data: true, error: null })
+    mocks.paymentSingle.mockResolvedValueOnce({ data: order('vip_plus'), error: null })
+    mocks.paymentMaybeSingle.mockResolvedValueOnce({ data: { id: requestId }, error: null })
     vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({ id: 'pref-test', init_point: 'https://www.mercadopago.com.br/checkout/v1/redirect?pref_id=test' }), { status: 200 }))
     const response = await createPreference.POST(post('/api/payments/mercadopago/create-preference', { product_type: 'vip_plus', plan_key: 'vip_30d' }))
     expect(response.status).toBe(200)
     const providerBody = JSON.parse(String(vi.mocked(fetch).mock.calls[0][1]?.body))
+    const insertedOrder = mocks.paymentInsert.mock.calls[0][0]
     expect(providerBody.notification_url).toBe(safeEnv.MERCADO_PAGO_NOTIFICATION_URL)
     expect(providerBody.back_urls.success).toMatch(new RegExp(`^${safeEnv.MERCADO_PAGO_RETURN_BASE_URL}`))
+    expect(insertedOrder).toMatchObject({
+      user_id: user.id,
+      product_type: 'vip_plus',
+      product_id: 'vip_30d',
+      base_amount_brl_cents: 1990,
+      total_brl_cents: 2050,
+    })
+    expect(vi.mocked(createClient).mock.calls.some((call) => call[1] === safeEnv.SUPABASE_SERVICE_ROLE_KEY)).toBe(true)
     expect(JSON.stringify(mocks.log.mock.calls)).not.toContain(safeEnv.MERCADO_PAGO_ACCESS_TOKEN)
     expect(JSON.stringify(mocks.log.mock.calls)).not.toContain(user.email)
   })
 
   it('reaches the mocked provider with both explicit URLs and a localhost site URL', async () => {
     vi.stubEnv('NEXT_PUBLIC_SITE_URL', 'http://localhost:3000')
-    mocks.rpc.mockResolvedValueOnce({ data: order('vip_plus'), error: null }).mockResolvedValueOnce({ data: true, error: null })
+    mocks.paymentSingle.mockResolvedValueOnce({ data: order('vip_plus'), error: null })
+    mocks.paymentMaybeSingle.mockResolvedValueOnce({ data: { id: requestId }, error: null })
     vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({ id: 'pref-runtime', init_point: 'https://www.mercadopago.com.br/checkout/v1/redirect?pref_id=runtime' }), { status: 200 }))
     const response = await createPreference.POST(post('/api/payments/mercadopago/create-preference', { product_type: 'vip_plus', plan_key: 'vip_30d' }))
     expect(response.status).toBe(200)
@@ -148,24 +182,33 @@ describe('POST create-pix', () => {
   })
 
   it('handles order, missing QR and persistence failures', async () => {
-    mocks.rpc.mockResolvedValueOnce({ data: null, error: new Error('db') })
+    mocks.paymentSingle.mockResolvedValueOnce({ data: null, error: new Error('db') })
     expect((await createPix.POST(post('/api/payments/mercadopago/create-pix', { amount_itacash: 100 }))).status).toBe(400)
 
-    mocks.rpc.mockResolvedValueOnce({ data: order(), error: null })
+    mocks.paymentSingle.mockResolvedValueOnce({ data: order(), error: null })
     vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({ id: 'pay-test' }), { status: 200 }))
     expect((await createPix.POST(post('/api/payments/mercadopago/create-pix', { amount_itacash: 100 }))).status).toBe(502)
 
-    mocks.rpc.mockResolvedValueOnce({ data: order(), error: null }).mockResolvedValueOnce({ data: null, error: new Error('attach') })
+    mocks.paymentSingle.mockResolvedValueOnce({ data: order(), error: null })
+    mocks.paymentMaybeSingle.mockResolvedValueOnce({ data: null, error: new Error('attach') })
     vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({ id: 'pay-test', point_of_interaction: { transaction_data: { qr_code: 'safe-br-code' } } }), { status: 200 }))
     expect((await createPix.POST(post('/api/payments/mercadopago/create-pix', { amount_itacash: 100 }))).status).toBe(500)
   })
 
   it('returns automatic QR and never logs secrets', async () => {
-    mocks.rpc.mockResolvedValueOnce({ data: order(), error: null }).mockResolvedValueOnce({ data: true, error: null })
+    mocks.paymentSingle.mockResolvedValueOnce({ data: order(), error: null })
+    mocks.paymentMaybeSingle.mockResolvedValueOnce({ data: { id: requestId }, error: null })
     vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({ id: 'pay-test', status: 'pending', point_of_interaction: { transaction_data: { qr_code: 'safe-br-code', qr_code_base64: 'c2FmZQ==' } } }), { status: 200 }))
     const response = await createPix.POST(post('/api/payments/mercadopago/create-pix', { amount_itacash: 100 }))
     expect(response.status).toBe(200)
     expect((await response.json()).qr_code).toBe('safe-br-code')
+    expect(mocks.paymentInsert.mock.calls[0][0]).toMatchObject({
+      user_id: user.id,
+      product_type: 'itacash',
+      amount_itacash: 100,
+      base_amount_brl_cents: 1000,
+      total_brl_cents: 1030,
+    })
     expect(JSON.stringify(mocks.log.mock.calls)).not.toContain(safeEnv.MERCADO_PAGO_ACCESS_TOKEN)
     expect(JSON.stringify(mocks.log.mock.calls)).not.toContain(user.email)
   })
