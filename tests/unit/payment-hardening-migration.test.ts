@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 const hardeningMigration = readFileSync(
-  'supabase/migrations/20260901200000_harden_mercadopago_payment_rpcs.sql',
+  'supabase/migrations/20260901202052_harden_mercadopago_payment_rpcs.sql',
   'utf8',
 ).toLowerCase()
 const webhookSource = readFileSync('app/api/payments/mercadopago/webhook/route.ts', 'utf8')

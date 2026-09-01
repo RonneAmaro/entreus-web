@@ -867,12 +867,6 @@ export default function PublicProfilePage() {
         .eq("follower_id", loggedUserId)
         .eq("following_id", profile.id);
 
-      await supabase
-        .from("follows")
-        .delete()
-        .eq("follower_id", profile.id)
-        .eq("following_id", loggedUserId);
-
       const { error } = await supabase.from("blocks").insert({
         blocker_id: loggedUserId,
         blocked_id: profile.id,

@@ -2318,6 +2318,7 @@ export default function ConversationPage() {
         },
         {
           onConflict: 'blocker_id,blocked_id',
+          ignoreDuplicates: true,
         }
       )
 
