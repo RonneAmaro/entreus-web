@@ -176,6 +176,9 @@ export default function PosterLabPage() {
   const previewCoverageHeight = calculationMode === 'automatic' && automaticGrid.ok
     ? automaticGrid.layout.posterHeightMm
     : posterHeight
+  const previewPhysicalWidth = paperSize.width * effectiveColumns
+  const previewPhysicalHeight = paperSize.height * effectiveRows
+  const previewMaxWidthPx = (620 * previewPhysicalWidth) / previewPhysicalHeight
   const pdfCanvasWidth = calculationMode === 'automatic' && automaticGrid.ok
     ? posterWidth
     : finalPosterWidth
@@ -935,8 +938,11 @@ export default function PosterLabPage() {
               {previewUrl ? (
                 <div className="w-full max-w-3xl">
                   <div
-                    className="relative mx-auto w-full max-h-[620px] overflow-hidden rounded-2xl bg-white shadow-lg"
-                    style={{ aspectRatio: `${previewCoverageWidth} / ${previewCoverageHeight}` }}
+                    className="relative mx-auto overflow-hidden rounded-2xl bg-white shadow-lg"
+                    style={{
+                      aspectRatio: `${previewPhysicalWidth} / ${previewPhysicalHeight}`,
+                      width: `min(100%, ${previewMaxWidthPx}px)`,
+                    }}
                   >
                     <div data-testid="poster-artwork-bleed" className="absolute inset-0 overflow-hidden bg-white">
                       <img
