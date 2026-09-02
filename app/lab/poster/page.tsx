@@ -164,6 +164,24 @@ export default function PosterLabPage() {
   const printableHeight = posterLayout?.printableHeightMm || 0
   const posterWidth = posterLayout?.posterWidthMm || 0
   const posterHeight = posterLayout?.posterHeightMm || 0
+  const finalPosterWidth = calculationMode === 'automatic' && automaticGrid.ok
+    ? automaticGrid.targetWidthMm
+    : posterWidth
+  const finalPosterHeight = calculationMode === 'automatic' && automaticGrid.ok
+    ? automaticGrid.targetHeightMm
+    : posterHeight
+  const previewCoverageWidth = calculationMode === 'automatic' && automaticGrid.ok
+    ? automaticGrid.layout.posterWidthMm
+    : posterWidth
+  const previewCoverageHeight = calculationMode === 'automatic' && automaticGrid.ok
+    ? automaticGrid.layout.posterHeightMm
+    : posterHeight
+  const pdfCanvasWidth = calculationMode === 'automatic' && automaticGrid.ok
+    ? posterWidth
+    : finalPosterWidth
+  const pdfCanvasHeight = calculationMode === 'automatic' && automaticGrid.ok
+    ? posterHeight
+    : finalPosterHeight
   const totalPages = posterLayout?.pageCount || 0
   const marginValue = mmToUnit(marginMm, measurementUnit)
   const overlapValue = mmToUnit(overlapMm, measurementUnit)
@@ -171,9 +189,7 @@ export default function PosterLabPage() {
   const maxOverlapValue = mmToUnit(20, measurementUnit)
   const unitStep = getUnitInputStep(measurementUnit)
   const automaticFeedback = calculationMode === 'automatic' && !automaticGrid.ok
-    ? automaticGrid.reason === 'target_smaller_than_page'
-      ? 'O tamanho desejado é menor do que a área imprimível de uma folha. Aumente o tamanho final ou escolha outro papel.'
-      : 'Informe uma largura e uma altura final válidas para calcular a grade.'
+    ? 'Informe uma largura e uma altura final válidas para calcular a grade.'
     : ''
   const previewInsetX = Math.min(18, (marginMm / paperSize.width) * 100)
   const previewInsetY = Math.min(18, (marginMm / paperSize.height) * 100)
@@ -302,8 +318,8 @@ export default function PosterLabPage() {
         throw new Error(t('labPoster.messages.posterPrepareError'))
       }
 
-      const posterPixelWidth = Math.round(posterWidth * pxPerMm)
-      const posterPixelHeight = Math.round(posterHeight * pxPerMm)
+      const posterPixelWidth = Math.round(pdfCanvasWidth * pxPerMm)
+      const posterPixelHeight = Math.round(pdfCanvasHeight * pxPerMm)
 
       const maxDimension = 9000
 
@@ -372,14 +388,14 @@ export default function PosterLabPage() {
 
           const sourceX = column * (pagePixelWidth - overlapPixels)
           const sourceY = row * (pagePixelHeight - overlapPixels)
-          const sourceW = Math.min(
+          const sourceW = Math.max(0, Math.min(
             posterCanvas.width - sourceX,
             pagePixelWidth,
-          )
-          const sourceH = Math.min(
+          ))
+          const sourceH = Math.max(0, Math.min(
             posterCanvas.height - sourceY,
             pagePixelHeight,
-          )
+          ))
 
           const pageCanvas = document.createElement('canvas')
           const pageContext = pageCanvas.getContext('2d')
@@ -388,22 +404,25 @@ export default function PosterLabPage() {
             throw new Error(t('labPoster.messages.pageGenerateError'))
           }
 
-          pageCanvas.width = sourceW
-          pageCanvas.height = sourceH
+          pageCanvas.width = pagePixelWidth
+          pageCanvas.height = pagePixelHeight
 
           pageContext.fillStyle = '#ffffff'
-          pageContext.fillRect(0, 0, sourceW, sourceH)
-          pageContext.drawImage(
-            posterCanvas,
-            sourceX,
-            sourceY,
-            sourceW,
-            sourceH,
-            0,
-            0,
-            sourceW,
-            sourceH
-          )
+          pageContext.fillRect(0, 0, pagePixelWidth, pagePixelHeight)
+
+          if (sourceW > 0 && sourceH > 0) {
+            pageContext.drawImage(
+              posterCanvas,
+              sourceX,
+              sourceY,
+              sourceW,
+              sourceH,
+              0,
+              0,
+              sourceW,
+              sourceH
+            )
+          }
 
           const pageImage = pageCanvas.toDataURL('image/jpeg', 0.92)
 
@@ -843,11 +862,25 @@ export default function PosterLabPage() {
                 <p>
                   {t('labPoster.config.pages')} <strong>{totalPages}</strong>
                 </p>
-                <p>
-                  {t('labPoster.config.posterApprox')}{' '}
-                  <strong>{formatDimension(posterWidth, posterHeight, measurementUnit)}</strong>
-                </p>
-                {measurementUnit !== 'mm' && (
+                {calculationMode === 'automatic' && automaticGrid.ok ? (
+                  <>
+                    <p>
+                      Tamanho final desejado: <strong>{formatDimension(finalPosterWidth, finalPosterHeight, targetUnit)}</strong>
+                    </p>
+                    <p>
+                      Área total coberta pelas folhas: <strong>{formatDimension(posterWidth, posterHeight, measurementUnit)}</strong>
+                    </p>
+                    <p className="text-xs opacity-80">
+                      Sobra para recorte: {formatUnitNumber(automaticGrid.trimWidthMm, measurementUnit)} {measurementUnit} horizontal / {formatUnitNumber(automaticGrid.trimHeightMm, measurementUnit)} {measurementUnit} vertical
+                    </p>
+                  </>
+                ) : (
+                  <p>
+                    {t('labPoster.config.posterApprox')}{' '}
+                    <strong>{formatDimension(posterWidth, posterHeight, measurementUnit)}</strong>
+                  </p>
+                )}
+                {measurementUnit !== 'mm' && calculationMode !== 'automatic' && (
                   <p className="text-xs opacity-75">
                     {posterWidth.toFixed(1)} x {posterHeight.toFixed(1)} mm
                   </p>
@@ -903,13 +936,15 @@ export default function PosterLabPage() {
                 <div className="w-full max-w-3xl">
                   <div
                     className="relative mx-auto w-full max-h-[620px] overflow-hidden rounded-2xl bg-white shadow-lg"
-                    style={{ aspectRatio: `${posterWidth} / ${posterHeight}` }}
+                    style={{ aspectRatio: `${previewCoverageWidth} / ${previewCoverageHeight}` }}
                   >
-                    <img
-                      src={previewUrl}
-                      alt={t('labPoster.preview.alt')}
-                      className={`block h-full w-full ${fitMode === 'cover' ? 'object-cover' : 'object-contain'}`}
-                    />
+                    <div data-testid="poster-artwork-bleed" className="absolute inset-0 overflow-hidden bg-white">
+                      <img
+                        src={previewUrl}
+                        alt={t('labPoster.preview.alt')}
+                        className={`block h-full w-full ${fitMode === 'cover' ? 'object-cover' : 'object-contain'}`}
+                      />
+                    </div>
 
                     <div
                       data-testid="poster-grid-overlay"
@@ -954,10 +989,42 @@ export default function PosterLabPage() {
                         )
                       })}
                     </div>
+
+                    {calculationMode === 'automatic' && automaticGrid.ok && (
+                      <>
+                        <div
+                          data-testid="poster-trim-right"
+                          aria-label="Área de recorte horizontal"
+                          className="pointer-events-none absolute bottom-0 right-0 top-0 border-l border-dashed border-zinc-500/60 bg-zinc-950/35"
+                          style={{ width: `${(automaticGrid.trimWidthMm / previewCoverageWidth) * 100}%` }}
+                        >
+                          {automaticGrid.trimWidthMm > 0 && (
+                            <span className="absolute left-1 top-1 rounded bg-zinc-950/75 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                              Área de recorte
+                            </span>
+                          )}
+                        </div>
+                        <div
+                          data-testid="poster-trim-bottom"
+                          aria-label="Área de recorte vertical"
+                          className="pointer-events-none absolute bottom-0 left-0 right-0 border-t border-dashed border-zinc-500/60 bg-zinc-950/35"
+                          style={{ height: `${(automaticGrid.trimHeightMm / previewCoverageHeight) * 100}%` }}
+                        />
+                        <div
+                          data-testid="poster-final-boundary"
+                          aria-label="Borda do tamanho final desejado"
+                          className="pointer-events-none absolute left-0 top-0 border-2 border-emerald-400 shadow-[0_0_0_1px_rgba(255,255,255,0.8)]"
+                          style={{
+                            width: `${(finalPosterWidth / previewCoverageWidth) * 100}%`,
+                            height: `${(finalPosterHeight / previewCoverageHeight) * 100}%`,
+                          }}
+                        />
+                      </>
+                    )}
                   </div>
 
                   <p className="mx-auto mt-3 max-w-xl text-center text-xs leading-5 text-zinc-500 dark:text-zinc-400">
-                    A prévia mostra como as folhas ficarão montadas. As linhas tracejadas indicam a área útil de impressão; a sobreposição é aplicada na geração do PDF.
+                    A prévia mostra como as folhas ficarão montadas. A borda verde indica o tamanho final desejado; a arte continua na Área de recorte para permitir o recorte físico depois da montagem.
                   </p>
                 </div>
               ) : (
