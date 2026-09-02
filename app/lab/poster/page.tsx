@@ -6,14 +6,24 @@ import { useMemo, useRef, useState } from 'react'
 import { ArrowLeft, CreditCard, Download, FileText, Heart, ImageIcon, Landmark, Loader2, Upload } from 'lucide-react'
 import { jsPDF } from 'jspdf'
 import { useLanguage } from '../../components/LanguageProvider'
+import {
+  calculateAutomaticPosterGrid,
+  calculatePosterLayout,
+  getPaperSize,
+  getUnitInputStep,
+  mmToUnit,
+  type Orientation,
+  type PaperKey,
+  type UnitKey,
+  unitToMm,
+} from '@/lib/poster-layout'
 
 const PIX_DONATION_URL = 'https://nubank.com.br/cobrar/u2kum/69fca421-184d-459c-a125-f760fc56c264'
 const MERCADO_PAGO_DONATION_URL = 'https://link.mercadopago.com.br/entreuslab'
 
-type PaperKey = 'a4' | 'a3' | 'letter'
-type Orientation = 'portrait' | 'landscape'
 type FitMode = 'contain' | 'cover'
-type UnitKey = 'mm' | 'cm' | 'm'
+type CalculationMode = 'manual' | 'automatic'
+type TargetUnit = 'cm' | 'm'
 
 type SourceInfo = {
   fileName: string
@@ -23,48 +33,11 @@ type SourceInfo = {
   pageCount?: number
 }
 
-const PAPER_SIZES_MM: Record<PaperKey, { label: string; width: number; height: number }> = {
-  a4: {
-    label: 'A4',
-    width: 210,
-    height: 297,
-  },
-  a3: {
-    label: 'A3',
-    width: 297,
-    height: 420,
-  },
-  letter: {
-    label: 'Letter',
-    width: 215.9,
-    height: 279.4,
-  },
-}
-
 const DPI_OPTIONS = [
   { labelKey: 'labPoster.config.fast', value: 100 },
   { labelKey: 'labPoster.config.good', value: 130 },
   { labelKey: 'labPoster.config.high', value: 160 },
 ]
-
-
-function unitToMm(value: number, unit: UnitKey) {
-  if (unit === 'cm') return value * 10
-  if (unit === 'm') return value * 1000
-  return value
-}
-
-function mmToUnit(valueMm: number, unit: UnitKey) {
-  if (unit === 'cm') return valueMm / 10
-  if (unit === 'm') return valueMm / 1000
-  return valueMm
-}
-
-function getUnitInputStep(unit: UnitKey) {
-  if (unit === 'm') return 0.01
-  if (unit === 'cm') return 0.1
-  return 1
-}
 
 function formatUnitNumber(valueMm: number, unit: UnitKey) {
   const value = mmToUnit(valueMm, unit)
@@ -82,22 +55,6 @@ function formatUnitNumber(valueMm: number, unit: UnitKey) {
 
 function formatDimension(widthMm: number, heightMm: number, unit: UnitKey) {
   return `${formatUnitNumber(widthMm, unit)} x ${formatUnitNumber(heightMm, unit)} ${unit}`
-}
-
-function getPaperSize(paper: PaperKey, orientation: Orientation) {
-  const base = PAPER_SIZES_MM[paper]
-
-  if (orientation === 'landscape') {
-    return {
-      width: base.height,
-      height: base.width,
-    }
-  }
-
-  return {
-    width: base.width,
-    height: base.height,
-  }
 }
 
 function fileToImage(file: File, errorMessage: string) {
@@ -168,6 +125,10 @@ export default function PosterLabPage() {
   const [orientation, setOrientation] = useState<Orientation>('portrait')
   const [columns, setColumns] = useState(3)
   const [rows, setRows] = useState(2)
+  const [calculationMode, setCalculationMode] = useState<CalculationMode>('manual')
+  const [targetWidth, setTargetWidth] = useState(100)
+  const [targetHeight, setTargetHeight] = useState(50)
+  const [targetUnit, setTargetUnit] = useState<TargetUnit>('cm')
   const [marginMm, setMarginMm] = useState(8)
   const [overlapMm, setOverlapMm] = useState(0)
   const [fitMode, setFitMode] = useState<FitMode>('contain')
@@ -176,16 +137,48 @@ export default function PosterLabPage() {
   const [dpi, setDpi] = useState(130)
 
   const paperSize = useMemo(() => getPaperSize(paper, orientation), [paper, orientation])
-  const printableWidth = Math.max(20, paperSize.width - marginMm * 2)
-  const printableHeight = Math.max(20, paperSize.height - marginMm * 2)
-  const posterWidth = printableWidth * columns
-  const posterHeight = printableHeight * rows
-  const totalPages = columns * rows
+  const sourceAspectRatio = sourceInfo && sourceInfo.height > 0 ? sourceInfo.width / sourceInfo.height : undefined
+  const automaticGrid = useMemo(
+    () => calculateAutomaticPosterGrid({
+      paperWidthMm: paperSize.width,
+      paperHeightMm: paperSize.height,
+      marginMm,
+      overlapMm,
+      targetWidthMm: unitToMm(targetWidth, targetUnit),
+      targetHeightMm: unitToMm(targetHeight, targetUnit),
+      sourceAspectRatio,
+    }),
+    [marginMm, overlapMm, paperSize.height, paperSize.width, sourceAspectRatio, targetHeight, targetUnit, targetWidth],
+  )
+  const effectiveColumns = calculationMode === 'automatic' && automaticGrid.ok ? automaticGrid.columns : columns
+  const effectiveRows = calculationMode === 'automatic' && automaticGrid.ok ? automaticGrid.rows : rows
+  const posterLayout = calculatePosterLayout({
+    paperWidthMm: paperSize.width,
+    paperHeightMm: paperSize.height,
+    marginMm,
+    overlapMm,
+    columns: effectiveColumns,
+    rows: effectiveRows,
+  })
+  const printableWidth = posterLayout?.printableWidthMm || 0
+  const printableHeight = posterLayout?.printableHeightMm || 0
+  const posterWidth = posterLayout?.posterWidthMm || 0
+  const posterHeight = posterLayout?.posterHeightMm || 0
+  const totalPages = posterLayout?.pageCount || 0
   const marginValue = mmToUnit(marginMm, measurementUnit)
   const overlapValue = mmToUnit(overlapMm, measurementUnit)
   const maxMarginValue = mmToUnit(30, measurementUnit)
   const maxOverlapValue = mmToUnit(20, measurementUnit)
   const unitStep = getUnitInputStep(measurementUnit)
+  const automaticFeedback = calculationMode === 'automatic' && !automaticGrid.ok
+    ? automaticGrid.reason === 'target_smaller_than_page'
+      ? 'O tamanho desejado é menor do que a área imprimível de uma folha. Aumente o tamanho final ou escolha outro papel.'
+      : 'Informe uma largura e uma altura final válidas para calcular a grade.'
+    : ''
+  const previewInsetX = Math.min(18, (marginMm / paperSize.width) * 100)
+  const previewInsetY = Math.min(18, (marginMm / paperSize.height) * 100)
+  const previewOverlapX = printableWidth > 0 ? Math.min(24, (overlapMm / printableWidth) * 100) : 0
+  const previewOverlapY = printableHeight > 0 ? Math.min(24, (overlapMm / printableHeight) * 100) : 0
 
   async function handleFile(fileToLoad: File | null) {
     if (!fileToLoad) return
@@ -292,6 +285,11 @@ export default function PosterLabPage() {
       return
     }
 
+    if (!posterLayout || automaticFeedback) {
+      setMessage(automaticFeedback || 'Revise as medidas da página antes de gerar o PDF.')
+      return
+    }
+
     setGenerating(true)
     setMessage('')
 
@@ -366,29 +364,21 @@ export default function PosterLabPage() {
       const pagePixelHeight = Math.round(printableHeight * pxPerMm)
       const overlapPixels = Math.round(overlapMm * pxPerMm)
 
-      for (let row = 0; row < rows; row++) {
-        for (let column = 0; column < columns; column++) {
+      for (let row = 0; row < effectiveRows; row++) {
+        for (let column = 0; column < effectiveColumns; column++) {
           if (row > 0 || column > 0) {
             pdf.addPage(paper, orientation)
           }
 
-          const cropX = column * pagePixelWidth
-          const cropY = row * pagePixelHeight
-
-          const extraLeft = column > 0 ? overlapPixels : 0
-          const extraTop = row > 0 ? overlapPixels : 0
-          const extraRight = column < columns - 1 ? overlapPixels : 0
-          const extraBottom = row < rows - 1 ? overlapPixels : 0
-
-          const sourceX = Math.max(0, cropX - extraLeft)
-          const sourceY = Math.max(0, cropY - extraTop)
+          const sourceX = column * (pagePixelWidth - overlapPixels)
+          const sourceY = row * (pagePixelHeight - overlapPixels)
           const sourceW = Math.min(
             posterCanvas.width - sourceX,
-            pagePixelWidth + extraLeft + extraRight
+            pagePixelWidth,
           )
           const sourceH = Math.min(
             posterCanvas.height - sourceY,
-            pagePixelHeight + extraTop + extraBottom
+            pagePixelHeight,
           )
 
           const pageCanvas = document.createElement('canvas')
@@ -626,6 +616,90 @@ export default function PosterLabPage() {
                   </select>
                 </div>
 
+                <div className="col-span-2 rounded-2xl border border-blue-200 bg-blue-50 p-3 dark:border-blue-900/70 dark:bg-blue-950/20">
+                  <label className="mb-2 block text-sm font-semibold text-zinc-800 dark:text-zinc-100">
+                    Modo de cálculo
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setCalculationMode('manual')}
+                      className={`rounded-xl px-3 py-2 text-sm font-bold transition ${
+                        calculationMode === 'manual'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-white text-zinc-700 hover:bg-blue-100 dark:bg-black dark:text-zinc-200 dark:hover:bg-zinc-900'
+                      }`}
+                    >
+                      Manual
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCalculationMode('automatic')}
+                      className={`rounded-xl px-3 py-2 text-sm font-bold transition ${
+                        calculationMode === 'automatic'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-white text-zinc-700 hover:bg-blue-100 dark:bg-black dark:text-zinc-200 dark:hover:bg-zinc-900'
+                      }`}
+                    >
+                      Automático por tamanho
+                    </button>
+                  </div>
+                  <p className="mt-2 text-xs leading-5 text-zinc-600 dark:text-zinc-300">
+                    Informe o tamanho final desejado. O sistema calcula a grade usando o papel, margens e sobreposição.
+                  </p>
+                </div>
+
+                {calculationMode === 'automatic' && (
+                  <>
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-zinc-600 dark:text-zinc-400">
+                        Largura final desejada ({targetUnit})
+                      </label>
+                      <input
+                        type="number"
+                        min={targetUnit === 'm' ? 0.01 : 1}
+                        step={targetUnit === 'm' ? 0.01 : 0.1}
+                        value={targetWidth}
+                        onChange={(event) => setTargetWidth(Number(event.target.value))}
+                        className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 outline-none dark:border-zinc-700 dark:bg-black"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-zinc-600 dark:text-zinc-400">
+                        Altura final desejada ({targetUnit})
+                      </label>
+                      <input
+                        type="number"
+                        min={targetUnit === 'm' ? 0.01 : 1}
+                        step={targetUnit === 'm' ? 0.01 : 0.1}
+                        value={targetHeight}
+                        onChange={(event) => setTargetHeight(Number(event.target.value))}
+                        className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 outline-none dark:border-zinc-700 dark:bg-black"
+                      />
+                    </div>
+
+                    <div className="col-span-2">
+                      <label className="mb-1 block text-sm font-medium text-zinc-600 dark:text-zinc-400">
+                        Unidade do tamanho final
+                      </label>
+                      <select
+                        value={targetUnit}
+                        onChange={(event) => setTargetUnit(event.target.value as TargetUnit)}
+                        className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 outline-none dark:border-zinc-700 dark:bg-black"
+                      >
+                        <option value="cm">Centímetros</option>
+                        <option value="m">Metros</option>
+                      </select>
+                      {automaticFeedback && (
+                        <p role="status" className="mt-2 text-xs font-medium text-amber-700 dark:text-amber-300">
+                          {automaticFeedback}
+                        </p>
+                      )}
+                    </div>
+                  </>
+                )}
+
                 <div>
                   <label className="mb-1 block text-sm font-medium text-zinc-600 dark:text-zinc-400">
                     {t('labPoster.config.columns')}
@@ -634,9 +708,10 @@ export default function PosterLabPage() {
                     type="number"
                     min={1}
                     max={10}
-                    value={columns}
+                    value={effectiveColumns}
                     onChange={(event) => setColumns(Number(event.target.value))}
-                    className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 outline-none dark:border-zinc-700 dark:bg-black"
+                    disabled={calculationMode === 'automatic'}
+                    className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 outline-none disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-black"
                   />
                 </div>
 
@@ -648,9 +723,10 @@ export default function PosterLabPage() {
                     type="number"
                     min={1}
                     max={10}
-                    value={rows}
+                    value={effectiveRows}
                     onChange={(event) => setRows(Number(event.target.value))}
-                    className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 outline-none dark:border-zinc-700 dark:bg-black"
+                    disabled={calculationMode === 'automatic'}
+                    className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 outline-none disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-black"
                   />
                 </div>
 
@@ -759,6 +835,11 @@ export default function PosterLabPage() {
               </div>
 
               <div className="mt-4 rounded-2xl bg-zinc-50 p-4 text-sm text-zinc-600 dark:bg-zinc-900 dark:text-zinc-300">
+                {calculationMode === 'automatic' && automaticGrid.ok && (
+                  <p className="mb-2 rounded-xl bg-blue-100 px-3 py-2 text-blue-900 dark:bg-blue-950/60 dark:text-blue-100">
+                    Grade automática: <strong>{effectiveColumns} colunas × {effectiveRows} linhas</strong>
+                  </p>
+                )}
                 <p>
                   {t('labPoster.config.pages')} <strong>{totalPages}</strong>
                 </p>
@@ -775,6 +856,11 @@ export default function PosterLabPage() {
                   {t('labPoster.config.printableArea')}{' '}
                   <strong>{formatDimension(printableWidth, printableHeight, measurementUnit)}</strong>
                 </p>
+                {calculationMode === 'automatic' && automaticGrid.ok && (
+                  <p className="mt-1 text-xs opacity-80">
+                    Arte preservada dentro de até {formatDimension(automaticGrid.artworkWidthMm, automaticGrid.artworkHeightMm, targetUnit)}.
+                  </p>
+                )}
                 {measurementUnit !== 'mm' && (
                   <p className="text-xs opacity-75">
                     {printableWidth.toFixed(1)} x {printableHeight.toFixed(1)} mm
@@ -785,9 +871,9 @@ export default function PosterLabPage() {
               <button
                 type="button"
                 onClick={generatePosterPdf}
-                disabled={!sourceCanvas || generating || loadingFile}
+                disabled={!sourceCanvas || generating || loadingFile || Boolean(automaticFeedback) || !posterLayout}
                 className={`mt-5 flex w-full items-center justify-center gap-2 rounded-2xl px-5 py-3 font-bold transition ${
-                  !sourceCanvas || generating || loadingFile
+                  !sourceCanvas || generating || loadingFile || Boolean(automaticFeedback) || !posterLayout
                     ? 'cursor-not-allowed bg-zinc-200 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-500'
                     : 'bg-black text-white hover:opacity-90 dark:bg-white dark:text-black'
                 }`}
@@ -815,27 +901,64 @@ export default function PosterLabPage() {
             <div className="mt-4 flex min-h-[520px] items-center justify-center rounded-3xl bg-zinc-100 p-4 dark:bg-black">
               {previewUrl ? (
                 <div className="w-full max-w-3xl">
-                  <img
-                    src={previewUrl}
-                    alt={t('labPoster.preview.alt')}
-                    className="mx-auto max-h-[620px] rounded-2xl object-contain shadow-lg"
-                  />
-
                   <div
-                    className="mx-auto mt-4 grid max-w-md gap-1 rounded-2xl border border-zinc-300 bg-white p-2 dark:border-zinc-700 dark:bg-zinc-950"
-                    style={{
-                      gridTemplateColumns: `repeat(${Math.min(columns, 8)}, minmax(0, 1fr))`,
-                    }}
+                    className="relative mx-auto w-full max-h-[620px] overflow-hidden rounded-2xl bg-white shadow-lg"
+                    style={{ aspectRatio: `${posterWidth} / ${posterHeight}` }}
                   >
-                    {Array.from({ length: Math.min(totalPages, 80) }).map((_, index) => (
-                      <div
-                        key={index}
-                        className="aspect-[3/4] rounded border border-blue-300 bg-blue-50 text-center text-[10px] font-semibold text-blue-700 dark:border-blue-800 dark:bg-blue-950/50 dark:text-blue-200"
-                      >
-                        {index + 1}
-                      </div>
-                    ))}
+                    <img
+                      src={previewUrl}
+                      alt={t('labPoster.preview.alt')}
+                      className={`block h-full w-full ${fitMode === 'cover' ? 'object-cover' : 'object-contain'}`}
+                    />
+
+                    <div
+                      data-testid="poster-grid-overlay"
+                      aria-label={`Prévia com ${effectiveColumns} colunas e ${effectiveRows} linhas`}
+                      className="pointer-events-none absolute inset-0 grid overflow-hidden rounded-2xl border-2 border-blue-500/90 bg-blue-950/5"
+                      style={{
+                        gridTemplateColumns: `repeat(${effectiveColumns}, minmax(0, 1fr))`,
+                        gridTemplateRows: `repeat(${effectiveRows}, minmax(0, 1fr))`,
+                      }}
+                    >
+                      {Array.from({ length: totalPages }).map((_, index) => {
+                        const column = index % effectiveColumns
+                        const row = Math.floor(index / effectiveColumns)
+
+                        return (
+                          <div
+                            key={index}
+                            className="relative border border-white/90 bg-blue-500/10 shadow-[inset_0_0_0_1px_rgba(30,64,175,0.65)]"
+                            style={{
+                              padding: `${previewInsetY}% ${previewInsetX}%`,
+                            }}
+                          >
+                            <div className="h-full w-full border border-dashed border-blue-950/50 bg-white/5" />
+                            {overlapMm > 0 && column < effectiveColumns - 1 && (
+                              <span
+                                aria-hidden="true"
+                                className="absolute bottom-0 right-0 top-0 bg-blue-700/20"
+                                style={{ width: `${previewOverlapX}%` }}
+                              />
+                            )}
+                            {overlapMm > 0 && row < effectiveRows - 1 && (
+                              <span
+                                aria-hidden="true"
+                                className="absolute bottom-0 left-0 right-0 bg-blue-700/20"
+                                style={{ height: `${previewOverlapY}%` }}
+                              />
+                            )}
+                            <span className="absolute left-1/2 top-1/2 inline-flex h-7 min-w-7 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-white/90 bg-blue-700/85 px-1 text-xs font-black text-white shadow-sm">
+                              {index + 1}
+                            </span>
+                          </div>
+                        )
+                      })}
+                    </div>
                   </div>
+
+                  <p className="mx-auto mt-3 max-w-xl text-center text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+                    A prévia mostra como as folhas ficarão montadas. As linhas tracejadas indicam a área útil de impressão; a sobreposição é aplicada na geração do PDF.
+                  </p>
                 </div>
               ) : (
                 <div className="text-center text-zinc-500">
