@@ -35,8 +35,12 @@ describe('poster layout calculations', () => {
     })
   })
 
-  it('uses the selected orientation when calculating the printable area', () => {
-    expect(getPaperSize('a4', 'landscape')).toEqual({ width: 297, height: 210 })
+  it('preserves the physical A4 paper ratios for both orientations', () => {
+    const portrait = getPaperSize('a4', 'portrait')
+    const landscape = getPaperSize('a4', 'landscape')
+
+    expect(portrait.width / portrait.height).toBeCloseTo(210 / 297, 8)
+    expect(landscape.width / landscape.height).toBeCloseTo(297 / 210, 8)
   })
 
   it('covers a 100 by 50 cm target with A4 portrait sheets', () => {
@@ -158,6 +162,10 @@ describe('poster page integration', () => {
     expect(source).toContain('data-testid="poster-trim-right"')
     expect(source).toContain('data-testid="poster-trim-bottom"')
     expect(source).toContain('Área de recorte')
+    expect(source).toContain('const previewPhysicalWidth = paperSize.width * effectiveColumns')
+    expect(source).toContain('const previewPhysicalHeight = paperSize.height * effectiveRows')
+    expect(source).toContain('width: `min(100%, ${previewMaxWidthPx}px)`')
+    expect(source).not.toContain('max-h-[620px]')
   })
 
   it('supports automatic calculation and returning to manual columns and rows', () => {
