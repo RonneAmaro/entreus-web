@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
-const migrationPath = 'supabase/migrations/20260901210000_enable_social_baseline_rls.sql'
+const migrationPath = 'supabase/migrations/20260902123427_enable_social_baseline_rls.sql'
 const sql = readFileSync(migrationPath, 'utf8').toLowerCase()
 const publicProfilePage = readFileSync('app/u/[username]/page.tsx', 'utf8')
 const messagesPage = readFileSync('app/messages/[id]/page.tsx', 'utf8')
