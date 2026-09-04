@@ -25,6 +25,7 @@
     "env:normalize:write": "node scripts/env-local-maintenance.js --normalize --write",
     "lint": "eslint",
     "test:e2e": "playwright test",
+    "test:e2e:comments": "node scripts/run-playwright-external-server.mjs tests/e2e/threaded-comments.spec.ts --workers=1 --reporter=list",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:report": "playwright show-report",

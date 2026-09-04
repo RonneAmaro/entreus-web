@@ -1,10 +1,11 @@
 import { expect, test, type Page, type Route } from '@playwright/test'
-import { mkdirSync, readFileSync } from 'node:fs'
+import { mkdirSync } from 'node:fs'
 
 const viewerId = '00000000-0000-4000-8000-000000000052'
 const authorId = '00000000-0000-4000-8000-000000000053'
 const postId = '00000000-0000-4000-8000-000000000054'
 const ids = Array.from({ length: 20 }, (_, index) => `00000000-0000-4000-8000-${String(index + 100).padStart(12, '0')}`)
+const e2eSupabaseUrl = 'https://entreus-e2e.invalid'
 
 type MockComment = {
   id: string; post_id: string; user_id: string; parent_comment_id: string | null
@@ -14,9 +15,7 @@ type MockComment = {
 }
 
 function supabaseUrl() {
-  const line = readFileSync('.env.local', 'utf8').split(/\r?\n/).find((entry) => entry.startsWith('NEXT_PUBLIC_SUPABASE_URL='))
-  if (!line) throw new Error('Supabase URL required')
-  return line.split('=').slice(1).join('=').trim().replace(/^['"]|['"]$/g, '').replace(/\/$/, '')
+  return e2eSupabaseUrl.replace(/\/$/, '')
 }
 function jwt() {
   const encode = (value: object) => Buffer.from(JSON.stringify(value)).toString('base64url')
@@ -102,7 +101,10 @@ async function mockThreadedFeed(page: Page, theme: 'dark' | 'light') {
       reportCalls += 1
       return fulfill(route, { id: 'report-1', status: 'pending' })
     }
-    if (path.includes('/rest/v1/profiles')) return fulfill(route, [{ id: viewerId, username: 'visitante', display_name: 'Visitante', role: 'user', birth_date: '1990-01-01', terms_accepted_at: '2026-01-01T00:00:00Z', privacy_accepted_at: '2026-01-01T00:00:00Z', terms_version: '2026-05', privacy_version: '2026-05', profile_content_mode: 'general', show_sensitive_content: false, wants_18_plus: false, is_minor: false }])
+    if (path.includes('/rest/v1/profiles')) {
+      const profile = { id: viewerId, username: 'visitante', display_name: 'Visitante', role: 'user', birth_date: '1990-01-01', parental_consent_status: 'not_required', terms_accepted_at: '2026-01-01T00:00:00Z', privacy_accepted_at: '2026-01-01T00:00:00Z', terms_version: '2026-05', privacy_version: '2026-05', profile_content_mode: 'general', show_sensitive_content: false, wants_18_plus: false, is_minor: false }
+      return fulfill(route, request.headers().accept?.includes('application/vnd.pgrst.object+json') ? profile : [profile])
+    }
     if (path.includes('/rest/v1/posts')) return fulfill(route, [{
       id: postId, content: 'Publicação simulada para validar comentários encadeados.', category: 'cotidiano',
       created_at: '2026-07-17T09:00:00.000Z', user_id: authorId, image_url: null, video_url: null,

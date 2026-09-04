@@ -1,5 +1,8 @@
 import { defineConfig, devices } from '@playwright/test'
 
+const e2eSupabaseUrl = 'https://entreus-e2e.invalid'
+const e2eSupabaseAnonKey = 'e2e-anon-key'
+
 export default defineConfig({
   testDir: './tests/e2e',
   timeout: 30_000,
@@ -18,6 +21,11 @@ export default defineConfig({
     url: 'http://localhost:3000',
     reuseExistingServer: true,
     timeout: 120_000,
+    env: {
+      ...process.env,
+      NEXT_PUBLIC_SUPABASE_URL: e2eSupabaseUrl,
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: e2eSupabaseAnonKey,
+    },
   },
   use: {
     baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000',
