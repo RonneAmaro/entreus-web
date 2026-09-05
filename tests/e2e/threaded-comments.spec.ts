@@ -57,6 +57,8 @@ async function mockThreadedFeed(page: Page, theme: 'dark' | 'light') {
   let comments = initialComments()
   let failNextReply = false
   let reportCalls = 0
+  let directCommentPatch = false
+  let directCommentDelete = false
 
   await page.addInitScript(({ key, value, selectedTheme }) => {
     localStorage.setItem(key, JSON.stringify(value)); localStorage.setItem('theme', selectedTheme); localStorage.setItem('entreus-language', 'pt')
@@ -113,6 +115,8 @@ async function mockThreadedFeed(page: Page, theme: 'dark' | 'light') {
       profiles: { username: 'criadora', display_name: 'Criadora', avatar_url: null, vip_status: null },
     }], 200, { 'content-range': '0-0/1' })
     if (path.includes('/rest/v1/comments')) {
+      if (request.method() === 'PATCH') directCommentPatch = true
+      if (request.method() === 'DELETE') directCommentDelete = true
       const parentFilter = url.searchParams.get('parent_comment_id')
       let result = comments
       if (parentFilter === 'is.null') result = comments.filter((item) => item.parent_comment_id === null)
@@ -124,7 +128,12 @@ async function mockThreadedFeed(page: Page, theme: 'dark' | 'light') {
   })
   await page.route('**/api/expressions/search**', (route) => fulfill(route, { ok: true, items: [{ kind: 'gif', provider: 'tenor', providerId: 'picked-gif', title: 'Festa', altText: 'GIF escolhido', previewUrl: 'https://media.tenor.com/mock/preview.webp', mediaUrl: 'https://media.tenor.com/mock/media.mp4', contentRating: 'g' }], nextCursor: null }))
   await page.route('https://media.tenor.com/**', (route) => route.fulfill({ status: 404, body: '' }))
-  return { failOnce: () => { failNextReply = true }, reportCalls: () => reportCalls }
+  return {
+    failOnce: () => { failNextReply = true },
+    reportCalls: () => reportCalls,
+    directCommentPatch: () => directCommentPatch,
+    directCommentDelete: () => directCommentDelete,
+  }
 }
 
 async function openThread(page: Page) {
@@ -150,6 +159,15 @@ test('threaded comments interactions, security states and retry', async ({ page 
   await expect(composer).toHaveValue('Texto preservado')
   await composer.locator('..').getByRole('button', { name: 'Responder' }).click()
   await expect(page.getByText('Texto preservado')).toBeVisible()
+  await page.getByText('Texto preservado').locator('..').getByRole('button', { name: 'Opções do comentário' }).click()
+  await page.getByRole('button', { name: 'Editar' }).click()
+  await page.getByPlaceholder('Editar comentário').fill('Texto editado pela RPC')
+  await page.getByPlaceholder('Editar comentário').locator('..').getByRole('button', { name: 'Salvar' }).click()
+  await expect(page.getByText('Texto editado pela RPC')).toBeVisible()
+  await page.getByText('Texto editado pela RPC').locator('..').getByRole('button', { name: 'Opções do comentário' }).click()
+  page.once('dialog', (dialog) => dialog.accept())
+  await page.getByRole('button', { name: 'Excluir' }).click()
+  await expect(page.getByText('Texto editado pela RPC')).toBeHidden()
   await page.getByText('Primeira resposta').locator('..').getByRole('button', { name: 'Responder' }).first().click()
   await composer.fill('😀'); await composer.locator('..').getByRole('button', { name: 'Responder' }).click()
   await page.getByText('Primeira resposta').locator('..').getByRole('button', { name: 'Responder' }).first().click()
@@ -161,6 +179,8 @@ test('threaded comments interactions, security states and retry', async ({ page 
   page.once('dialog', (dialog) => dialog.accept('Spam repetitivo e assédio.'))
   await page.getByRole('button', { name: 'Denunciar' }).click()
   await expect.poll(() => mock.reportCalls()).toBe(1)
+  expect(mock.directCommentPatch()).toBe(false)
+  expect(mock.directCommentDelete()).toBe(false)
   await expect(page.locator('body')).toHaveJSProperty('scrollWidth', await page.locator('body').evaluate((body) => body.clientWidth))
   expect(errors).toEqual([])
 })

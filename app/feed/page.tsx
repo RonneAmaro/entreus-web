@@ -3392,22 +3392,21 @@ function FeedContent() {
     setSavingCommentId(null)
   }
 
-  async function handleSaveCommentEdit(commentId: string) {
+  async function handleSaveCommentEdit(comment: Comment) {
     if (!editCommentContent.trim()) {
       setMessage(t('feed.messages.emptyCommentEdit'))
       return
     }
 
-    setSavingCommentId(commentId)
+    setSavingCommentId(comment.id)
     setMessage('')
 
     const { error } = await supabase
-      .from('comments')
-      .update({
-        content: editCommentContent.trim(),
+      .rpc('edit_threaded_comment', {
+        p_comment_id: comment.id,
+        p_content: editCommentContent.trim(),
+        p_expression: comment.expression || null,
       })
-      .eq('id', commentId)
-      .eq('user_id', userId)
 
     if (error) {
       setMessage(t('feed.messages.editCommentError'))
@@ -3429,10 +3428,7 @@ function FeedContent() {
     if (!confirmDelete) return
 
     const { error } = await supabase
-      .from('comments')
-      .delete()
-      .eq('id', commentId)
-      .eq('user_id', userId)
+      .rpc('delete_threaded_comment', { p_comment_id: commentId })
 
     if (error) {
       setMessage(t('feed.messages.deleteCommentError'))
@@ -4845,7 +4841,7 @@ function FeedContent() {
                                       <div className="mt-2 flex flex-col gap-2 sm:flex-row">
                                         <button
                                           type="button"
-                                          onClick={() => handleSaveCommentEdit(comment.id)}
+                                          onClick={() => handleSaveCommentEdit(comment)}
                                           disabled={savingCommentId === comment.id}
                                           className="rounded-full bg-zinc-950 px-4 py-2 text-sm font-bold text-white transition hover:scale-[1.02] hover:bg-black disabled:opacity-60 dark:bg-white dark:text-black"
                                         >
