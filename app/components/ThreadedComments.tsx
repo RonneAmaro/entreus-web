@@ -30,9 +30,12 @@ type Props = {
   currentUserId: string
   refreshVersion?: number
   onCountChange?: () => void
+  rootComposer?: boolean
+  rootComposerId?: string
+  onVisibleCountChange?: (count: number) => void
 }
 
-export default function ThreadedComments({ postId, currentUserId, refreshVersion = 0, onCountChange }: Props) {
+export default function ThreadedComments({ postId, currentUserId, refreshVersion = 0, onCountChange, rootComposer = false, rootComposerId, onVisibleCountChange }: Props) {
   const { t } = useLanguage()
   const [roots, setRoots] = useState<ThreadedComment[]>([])
   const [replies, setReplies] = useState<Record<string, ThreadedComment[]>>({})
@@ -91,6 +94,23 @@ export default function ThreadedComments({ postId, currentUserId, refreshVersion
     return () => window.clearTimeout(task)
   }, [postId, refreshVersion]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    onVisibleCountChange?.(roots.length + roots.reduce((count, root) => count + root.reply_count, 0))
+  }, [onVisibleCountChange, roots])
+
+  async function createRoot(content: string) {
+    const { error: createError } = await supabase.rpc('create_threaded_comment', {
+      p_post_id: postId,
+      p_content: content,
+      p_expression: null,
+      p_parent_comment_id: null,
+      p_client_request_id: crypto.randomUUID(),
+    })
+    if (createError) throw createError
+    await loadRoots(false)
+    onCountChange?.()
+  }
+
   async function loadReplies(parent: ThreadedComment, append = false) {
     setLoadingTarget(parent.id)
     setError('')
@@ -137,6 +157,7 @@ export default function ThreadedComments({ postId, currentUserId, refreshVersion
       <h3 className="text-sm font-black text-zinc-800 dark:text-zinc-100">{t('post.comments.conversation')}</h3>
       <span className="text-xs font-semibold text-zinc-500">{t('post.comments.pageSize')}</span>
     </div>
+    {rootComposer && <RootCommentComposer currentUserId={currentUserId} inputId={rootComposerId} onSubmit={createRoot} />}
     {error && <div role="alert" className="mb-3 rounded-xl bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-200">{error}</div>}
     {roots.length === 0 ? <p className="py-3 text-sm text-zinc-500">{t('post.comments.empty')}</p> :
       <div role="list" className="space-y-3">{roots.map((root) =>
@@ -148,6 +169,35 @@ export default function ThreadedComments({ postId, currentUserId, refreshVersion
       {loadingTarget === 'roots' ? t('common.loading') : t('post.comments.loadMore')}
     </button>}
   </section>
+}
+
+function RootCommentComposer({ currentUserId, inputId, onSubmit }: { currentUserId: string; inputId?: string; onSubmit: (content: string) => Promise<void> }) {
+  const { t } = useLanguage()
+  const [content, setContent] = useState('')
+  const [sending, setSending] = useState(false)
+  const [error, setError] = useState('')
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault()
+    const text = content.trim()
+    if (!text) { setError(t('postPage.errors.emptyComment')); return }
+    setSending(true)
+    setError('')
+    try {
+      await onSubmit(text)
+      setContent('')
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : t('postPage.errors.comment'))
+    } finally {
+      setSending(false)
+    }
+  }
+
+  return <form onSubmit={(event) => void submit(event)} className="mb-4 flex flex-col gap-3 sm:flex-row">
+    <input id={inputId} type="text" value={content} onChange={(event) => setContent(event.target.value)} placeholder={t('postPage.commentPlaceholder')} className="flex-1 rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800" />
+    <button type="submit" disabled={sending || !currentUserId} className="rounded-xl bg-black px-5 py-3 font-medium text-white hover:opacity-90 disabled:opacity-60 dark:bg-white dark:text-black">{sending ? t('postPage.commentSending') : t('postPage.commentSubmit')}</button>
+    {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
+  </form>
 }
 
 type NodeProps = {

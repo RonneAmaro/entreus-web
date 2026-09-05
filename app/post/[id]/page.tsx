@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import PostCard from '@/app/components/PostCard'
-import RichTextLinks from '@/app/components/RichTextLinks'
+import ThreadedComments from '@/app/components/ThreadedComments'
 import { useLanguage } from '@/app/components/LanguageProvider'
 import { isAdminRole } from '@/lib/admin'
 import {
@@ -76,19 +76,6 @@ type Post = ModeratedPostFields & {
   paid_unlocked?: boolean
   profiles: Profile | null
   media?: PostMedia[]
-}
-
-type Comment = {
-  id: string
-  post_id: string
-  user_id: string
-  content: string
-  created_at: string
-  profiles: Profile | null
-}
-
-type CommentRow = Omit<Comment, 'profiles'> & {
-  profiles: Profile | Profile[] | null
 }
 
 type Like = {
@@ -166,15 +153,13 @@ export default function PostPage() {
   const [currentProfile, setCurrentProfile] = useState<CurrentProfile | null>(null)
 
   const [post, setPost] = useState<Post | null>(null)
-  const [comments, setComments] = useState<Comment[]>([])
+  const [commentsCount, setCommentsCount] = useState(0)
   const [likes, setLikes] = useState<Like[]>([])
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([])
   const [reposts, setReposts] = useState<Repost[]>([])
 
-  const [commentInput, setCommentInput] = useState('')
   const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(true)
-  const [sendingComment, setSendingComment] = useState(false)
   const [copiedPostId, setCopiedPostId] = useState<string | null>(null)
   const [canInteract, setCanInteract] = useState(false)
   const [permissionDenied, setPermissionDenied] = useState(false)
@@ -215,7 +200,6 @@ export default function PostPage() {
     )
 
     await Promise.all([
-      loadComments(),
       loadLikes(),
       loadReposts(),
       loggedUserId ? loadBookmarks(loggedUserId) : Promise.resolve(),
@@ -522,7 +506,6 @@ export default function PostPage() {
       setPost(normalizedPost)
 
       await Promise.all([
-        loadComments(),
         loadLikes(),
         loadReposts(),
         currentUserId ? loadBookmarks(currentUserId) : Promise.resolve(),
@@ -583,40 +566,6 @@ export default function PostPage() {
     }
 
     return false
-  }
-
-  async function loadComments() {
-    const { data, error } = await supabase
-      .from('comments')
-      .select(`
-        id,
-        post_id,
-        user_id,
-        content,
-        created_at,
-        profiles (
-          username,
-          display_name,
-          avatar_url
-        )
-      `)
-      .eq('post_id', postId)
-      .order('created_at', { ascending: true })
-
-    if (error) {
-      console.error('Erro ao carregar comentários:', error.message)
-      setMessage(t('postPage.errors.loadComments'))
-      return
-    }
-
-    const normalizedComments = ((data || []) as CommentRow[]).map((comment) => ({
-      ...comment,
-      profiles: Array.isArray(comment.profiles)
-        ? comment.profiles[0] || null
-        : comment.profiles,
-    })) as Comment[]
-
-    setComments(normalizedComments)
   }
 
   async function loadLikes() {
@@ -887,57 +836,6 @@ export default function PostPage() {
     }
   }
 
-  async function handleCreateComment(e: React.FormEvent) {
-    e.preventDefault()
-
-    if (!loggedUserId) {
-      router.push('/login')
-      return
-    }
-
-    const text = commentInput.trim()
-
-    if (!text) {
-      setMessage(t('postPage.errors.emptyComment'))
-      return
-    }
-
-    setSendingComment(true)
-    setMessage('')
-
-    const { data: insertedComment, error } = await supabase
-      .from('comments')
-      .insert({
-        post_id: postId,
-        user_id: loggedUserId,
-        content: text,
-      })
-      .select('id')
-      .single()
-
-    if (error) {
-      console.error('Erro ao comentar na publicação:', error.message)
-      setMessage(t('postPage.errors.comment'))
-      setSendingComment(false)
-      return
-    }
-
-    if (post && post.user_id !== loggedUserId) {
-      await supabase.from('notifications').insert({
-        user_id: post.user_id,
-        actor_id: loggedUserId,
-        type: 'comment',
-        post_id: postId,
-        comment_id: insertedComment?.id || null,
-      })
-    }
-
-    setCommentInput('')
-    setSendingComment(false)
-
-    await loadComments()
-  }
-
   async function handleCopyLink() {
     const url = `${window.location.origin}/post/${postId}`
 
@@ -1115,7 +1013,7 @@ export default function PostPage() {
             <PostCard
               post={post}
               currentUserId={loggedUserId}
-              commentsCount={comments.length}
+              commentsCount={commentsCount}
               likesCount={likes.length}
               repostsCount={reposts.length}
               liked={userLiked}
@@ -1189,29 +1087,7 @@ export default function PostPage() {
             <section className="mt-5 rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900 sm:p-6">
               <h2 className="mb-4 text-lg font-bold">{t('postPage.commentsTitle')}</h2>
 
-              {canInteract ? (
-                <form
-                  onSubmit={handleCreateComment}
-                  className="mb-5 flex flex-col gap-3 sm:flex-row"
-                >
-                  <input
-                    id="single-post-comment-input"
-                    type="text"
-                    value={commentInput}
-                    onChange={(e) => setCommentInput(e.target.value)}
-                    placeholder={t('postPage.commentPlaceholder')}
-                    className="flex-1 rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800"
-                  />
-
-                  <button
-                    type="submit"
-                    disabled={sendingComment}
-                    className="rounded-xl bg-black px-5 py-3 font-medium text-white hover:opacity-90 disabled:opacity-60 dark:bg-white dark:text-black"
-                  >
-                    {sendingComment ? t('postPage.commentSending') : t('postPage.commentSubmit')}
-                  </button>
-                </form>
-              ) : (
+              {!canInteract && (
                 <p className="mb-5 text-sm text-zinc-500">
                   {t('postPage.commentLoginHint')}
                 </p>
@@ -1223,69 +1099,7 @@ export default function PostPage() {
                 </p>
               )}
 
-              <div className="space-y-3">
-                {comments.length === 0 && (
-                  <p className="text-sm text-zinc-500">
-                    {t('postPage.commentsEmpty')}
-                  </p>
-                )}
-
-                {comments.map((comment) => {
-                  const commentAuthorName =
-                    comment.profiles?.display_name ||
-                    comment.profiles?.username ||
-                    t('postPage.fallbackUser')
-
-                  const commentAuthorUsername =
-                    comment.profiles?.username || t('postPage.fallbackUsername')
-
-                  const commentAvatar = comment.profiles?.avatar_url || ''
-
-                  return (
-                    <div
-                      key={comment.id}
-                      className="rounded-xl bg-zinc-50 px-4 py-3 dark:bg-zinc-800"
-                    >
-                      <div className="flex items-start gap-3">
-                        <Link href={`/u/${commentAuthorUsername}`} className="shrink-0">
-                          {commentAvatar ? (
-                            <img
-                              src={commentAvatar}
-                              alt={commentAuthorName}
-                              className="h-10 w-10 rounded-full border border-zinc-300 object-cover dark:border-zinc-700"
-                            />
-                          ) : (
-                            <div className="flex h-10 w-10 items-center justify-center rounded-full border border-zinc-300 bg-zinc-100 text-xs font-semibold text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
-                              {commentAuthorName.charAt(0).toUpperCase()}
-                            </div>
-                          )}
-                        </Link>
-
-                        <div className="min-w-0 flex-1">
-                          <Link href={`/u/${commentAuthorUsername}`} className="hover:underline">
-                            <p className="font-semibold text-black dark:text-white">
-                              {commentAuthorName}
-                            </p>
-
-                            <p className="break-all text-xs text-zinc-500">
-                              @{commentAuthorUsername}
-                            </p>
-                          </Link>
-
-                          <RichTextLinks
-                            text={comment.content}
-                            className="mt-2 whitespace-pre-wrap break-words text-sm text-zinc-800 dark:text-zinc-200"
-                          />
-
-                          <p className="mt-2 text-xs text-zinc-500">
-                            {new Date(comment.created_at).toLocaleString(language)}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
+              <ThreadedComments postId={postId} currentUserId={loggedUserId} rootComposer={canInteract} rootComposerId="single-post-comment-input" onVisibleCountChange={setCommentsCount} />
             </section>
           </>
         )}
