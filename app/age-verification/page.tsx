@@ -171,7 +171,7 @@ export default function AgeVerificationPage() {
       .upload(path, file, {
         cacheControl: '3600',
         contentType: file.type,
-        upsert: true,
+        upsert: false,
       })
 
     if (error) {
@@ -181,22 +181,29 @@ export default function AgeVerificationPage() {
     return path
   }
 
-  async function getOrCreatePendingRequest() {
+  async function getOrCreatePendingRequest(): Promise<AgeVerificationRequest> {
     if (!profile) throw new Error('Perfil nao carregado.')
 
-    if (latestRequest?.status === 'pending') {
+    if (latestRequest?.status === 'pending' && !latestRequest.submitted_at) {
       return latestRequest
     }
 
+    // Authoritative RPC: age and ownership validated server-side from
+    // profiles.birth_date + auth.uid(). Client-supplied ids are never trusted.
+    const { data, error } = await supabase
+      .rpc('create_age_verification_request')
+
+    if (error) throw new Error(error.message)
+
+    const request = await loadRequestById(data as string)
+    return request
+  }
+
+  async function loadRequestById(requestId: string): Promise<AgeVerificationRequest> {
     const { data, error } = await supabase
       .from('age_verification_requests')
-      .insert({
-        user_id: profile.id,
-        status: 'pending',
-        birth_date: profile.birth_date || null,
-        user_statement: statement.trim() || null,
-      })
       .select('id, status, created_at, document_front_path, document_back_path, selfie_path, submitted_at, document_type')
+      .eq('id', requestId)
       .single()
 
     if (error) throw new Error(error.message)
@@ -257,43 +264,22 @@ export default function AgeVerificationPage() {
         : null
       const selfiePath = await uploadPrivateFile(selfieFile as File, request.id, 'selfie')
 
-      const { error: updateRequestError } = await supabase
-        .from('age_verification_requests')
-        .update({
-          birth_date: profile.birth_date || null,
-          user_statement: statement.trim() || null,
-          document_type: documentType,
-          document_front_path: documentFrontPath,
-          document_back_path: documentBackPath,
-          selfie_path: selfiePath,
-          submitted_at: new Date().toISOString(),
-          privacy_accepted_at: new Date().toISOString(),
-          status: 'pending',
+      // Authoritative finalize RPC: validates ownership, age, paths and object
+      // existence server-side; submitted_at is set with now() server-side.
+      const { error: finalizeError } = await supabase
+        .rpc('finalize_age_verification_request', {
+          p_request_id: request.id,
+          p_document_type: documentType,
+          p_document_front_path: documentFrontPath,
+          p_document_back_path: documentBackPath,
+          p_selfie_path: selfiePath,
+          p_user_statement: statement.trim() || null,
         })
-        .eq('id', request.id)
-        .eq('user_id', profile.id)
 
-      if (updateRequestError) throw new Error(updateRequestError.message)
+      if (finalizeError) throw new Error(finalizeError.message)
     } catch (error) {
       setSubmitting(false)
       setMessage('Nao foi possivel enviar os documentos: ' + (error instanceof Error ? error.message : 'tente novamente.'))
-      return
-    }
-
-    const { error: profileUpdateError } = await supabase
-      .from('profiles')
-      .update({
-        wants_18_plus: true,
-        age_verification_status: 'pending',
-        show_sensitive_content: false,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', profile.id)
-
-    if (profileUpdateError) {
-      setSubmitting(false)
-      setMessage('Solicitacao criada, mas o perfil nao foi atualizado: ' + profileUpdateError.message)
-      await loadPage()
       return
     }
 
