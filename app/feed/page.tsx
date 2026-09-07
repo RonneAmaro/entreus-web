@@ -45,6 +45,7 @@ import { Suspense, type ReactNode, useCallback, useEffect, useMemo, useRef, useS
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import { supabase } from '@/lib/supabase'
+import { createSocialRealtimeSubscription } from '@/lib/social-realtime'
 import { useLanguage } from '../components/LanguageProvider'
 import {
   isMissingPostModerationColumnError,
@@ -1673,6 +1674,20 @@ function FeedContent() {
     }
     return normalizedPosts
   }
+
+  // Realtime invalidation for the feed: post changes from another session
+  // trigger a debounced refetch through the same authoritative query.
+  // Raw payloads are never inserted; pagination/merge logic stays untouched.
+  useEffect(() => {
+    if (!userId) return
+    const subscription = createSocialRealtimeSubscription(supabase, {
+      channelName: `social-feed-posts-${userId}`,
+      table: 'posts',
+      onEvent: () => { void loadPosts() },
+      debounceMs: 1200,
+    })
+    return () => subscription.unsubscribe()
+  }, [userId])
 
   async function loadTierBadgeSlugs(userIds: string[]) {
     const uniqueUserIds = Array.from(new Set(userIds.filter(Boolean)))

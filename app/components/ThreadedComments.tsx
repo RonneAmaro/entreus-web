@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown, ChevronUp, Loader2, MessageCircle, MoreHorizontal, Send, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { createSocialRealtimeSubscription } from '@/lib/social-realtime'
 import {
   MAX_VISUAL_COMMENT_DEPTH,
   REPLY_PAGE_SIZE,
@@ -97,6 +98,30 @@ export default function ThreadedComments({ postId, currentUserId, refreshVersion
   useEffect(() => {
     onVisibleCountChange?.(roots.length + roots.reduce((count, root) => count + root.reply_count, 0))
   }, [onVisibleCountChange, roots])
+
+  // Realtime invalidation: remote comments (other session) trigger a
+  // debounced refetch through the same authoritative query. Raw payloads are
+  // never merged, so RLS/visibility/hydration stay intact. Subscription is
+  // scoped to this post only and removed on unmount (Strict Mode safe).
+  const realtimeRefreshRef = useRef<() => void>(() => {})
+
+  useEffect(() => {
+    realtimeRefreshRef.current = () => {
+      void loadRoots(false)
+      onCountChange?.()
+    }
+  })
+
+  useEffect(() => {
+    const subscription = createSocialRealtimeSubscription(supabase, {
+      channelName: `social-comments-post-${postId}`,
+      table: 'comments',
+      filter: `post_id=eq.${postId}`,
+      onEvent: () => realtimeRefreshRef.current(),
+      debounceMs: 800,
+    })
+    return () => subscription.unsubscribe()
+  }, [postId])
 
   async function createRoot(content: string) {
     const { error: createError } = await supabase.rpc('create_threaded_comment', {

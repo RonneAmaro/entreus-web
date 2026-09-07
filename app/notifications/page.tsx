@@ -10,6 +10,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import { supabase } from '@/lib/supabase'
+import { createSocialRealtimeSubscription } from '@/lib/social-realtime'
 import { useLanguage } from '../components/LanguageProvider'
 
 type CurrentProfile = {
@@ -377,6 +378,27 @@ export default function NotificationsPage() {
 
     loadPage()
   }, [router])
+
+  // Realtime invalidation: subscription is scoped to the authenticated user
+  // via filter user_id=eq.<uid> (RLS also protects the payload). Remote
+  // inserts/updates trigger a debounced refetch of the same authoritative
+  // list/count queries. Channel is removed on unmount (Strict Mode safe).
+  useEffect(() => {
+    if (!userId) return
+    const subscription = createSocialRealtimeSubscription(supabase, {
+      channelName: `social-notifications-user-${userId}`,
+      table: 'notifications',
+      filter: `user_id=eq.${userId}`,
+      onEvent: () => {
+        void Promise.all([
+          loadNotifications(userId),
+          loadUnreadNotificationsCount(userId),
+        ])
+      },
+      debounceMs: 800,
+    })
+    return () => subscription.unsubscribe()
+  }, [userId])
 
   async function loadUnreadNotificationsCount(currentUserId: string = userId) {
     if (!currentUserId) return
