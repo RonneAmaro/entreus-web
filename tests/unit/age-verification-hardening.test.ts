@@ -48,6 +48,25 @@ describe('age verification hardening migration structure', () => {
     expect(ageMigration).toContain('submitted_at = now()')
   })
 
+  it('path ownership helper is defined BEFORE finalize (no forward reference at apply time)', () => {
+    const helperIndex = ageMigration.indexOf('create or replace function public.age_verification_path_owned')
+    const finalizeIndex = ageMigration.indexOf('create or replace function public.finalize_age_verification_request(')
+    expect(helperIndex).toBeGreaterThan(-1)
+    expect(finalizeIndex).toBeGreaterThan(helperIndex)
+    // Helper defined exactly once.
+    expect((ageMigration.match(/create or replace function public\.age_verification_path_owned/g) || []).length).toBe(1)
+  })
+
+  it('real legacy direct-insert policy is explicitly dropped (name from 20260517 migration)', () => {
+    expect(ageMigration).toContain('drop policy if exists "Users can create their own age verification requests"')
+  })
+
+  it('historical policy-name variant drops are preserved alongside the real one', () => {
+    expect(ageMigration).toContain('drop policy if exists "Users can insert own age verification requests"')
+    expect(ageMigration).toContain('drop policy if exists "Users can create own age verification requests"')
+    expect(ageMigration).toContain('drop policy if exists "Users can delete own age verification requests"')
+  })
+
   it('both RPCs are SECURITY DEFINER with safe search_path', () => {
     expect((ageMigration.match(/security definer/g) || []).length).toBe(2)
     expect((ageMigration.match(/set search_path = ''/g) || []).length).toBeGreaterThanOrEqual(3)

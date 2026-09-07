@@ -69,6 +69,22 @@ begin
 end;
 $$;
 
+-- Path ownership helper (stable, read-only). Defined BEFORE finalize because
+-- finalize references it; order matters on first application.
+create or replace function public.age_verification_path_owned(
+  p_path text,
+  p_uid uuid,
+  p_request_id uuid
+)
+returns boolean
+language sql
+stable
+set search_path = ''
+as $$
+  select p_path like (p_uid::text || '/' || p_request_id::text || '/%')
+    and p_path <> (p_uid::text || '/' || p_request_id::text || '/');
+$$;
+
 -- ============ RPC: finalize_age_verification_request ============
 
 create or replace function public.finalize_age_verification_request(
@@ -162,21 +178,6 @@ begin
 end;
 $$;
 
--- Path ownership helper (stable, read-only).
-create or replace function public.age_verification_path_owned(
-  p_path text,
-  p_uid uuid,
-  p_request_id uuid
-)
-returns boolean
-language sql
-stable
-set search_path = ''
-as $$
-  select p_path like (p_uid::text || '/' || p_request_id::text || '/%')
-    and p_path <> (p_uid::text || '/' || p_request_id::text || '/');
-$$;
-
 -- ============ Grants: authenticated only, never anon ============
 
 revoke all on function public.create_age_verification_request() from public, anon;
@@ -193,6 +194,12 @@ drop policy if exists "Users can update own pending age verification documents"
 
 -- Direct user INSERT removed: request creation goes through create RPC.
 drop policy if exists "Users can insert own age verification requests"
+  on public.age_verification_requests;
+
+-- Real legacy policy name (created in 20260517_create_age_verification_requests.sql).
+-- Without this explicit drop the direct INSERT would remain available outside
+-- the RPC. Kept as its own drop so the historical variant drops remain intact.
+drop policy if exists "Users can create their own age verification requests"
   on public.age_verification_requests;
 
 drop policy if exists "Users can create own age verification requests"
