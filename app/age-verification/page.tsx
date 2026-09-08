@@ -76,10 +76,6 @@ export default function AgeVerificationPage() {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [latestRequest, setLatestRequest] = useState<AgeVerificationRequest | null>(null)
 
-  useEffect(() => {
-    loadPage()
-  }, [])
-
   const age = useMemo(() => calculateAge(profile?.birth_date || null), [profile?.birth_date])
   const hasBirthDate = age !== null
   const isMinor = Boolean(profile?.is_minor || (age !== null && age < 18))
@@ -145,6 +141,13 @@ export default function AgeVerificationPage() {
 
     setLoading(false)
   }
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadPage()
+    // Initial authenticated state is loaded once when this route mounts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   function validateFile(file: File | null, allowedTypes: string[], label: string, required = true) {
     if (!file) return required ? `${label} e obrigatorio.` : ''
@@ -257,12 +260,27 @@ export default function AgeVerificationPage() {
     setMessage('')
 
     try {
-      const request = await getOrCreatePendingRequest()
-      const documentFrontPath = await uploadPrivateFile(documentFrontFile as File, request.id, 'document-front')
-      const documentBackPath = documentBackFile
-        ? await uploadPrivateFile(documentBackFile, request.id, 'document-back')
-        : null
-      const selfiePath = await uploadPrivateFile(selfieFile as File, request.id, 'selfie')
+      let request: AgeVerificationRequest
+      try {
+        request = await getOrCreatePendingRequest()
+      } catch {
+        setMessage('Nao foi possivel iniciar a solicitacao. Tente novamente.')
+        return
+      }
+
+      let documentFrontPath: string
+      let documentBackPath: string | null
+      let selfiePath: string
+      try {
+        documentFrontPath = await uploadPrivateFile(documentFrontFile as File, request.id, 'document-front')
+        documentBackPath = documentBackFile
+          ? await uploadPrivateFile(documentBackFile, request.id, 'document-back')
+          : null
+        selfiePath = await uploadPrivateFile(selfieFile as File, request.id, 'selfie')
+      } catch {
+        setMessage('Nao foi possivel enviar os arquivos. Tente novamente.')
+        return
+      }
 
       // Authoritative finalize RPC: validates ownership, age, paths and object
       // existence server-side; submitted_at is set with now() server-side.
@@ -276,22 +294,22 @@ export default function AgeVerificationPage() {
           p_user_statement: statement.trim() || null,
         })
 
-      if (finalizeError) throw new Error(finalizeError.message)
-    } catch (error) {
-      setSubmitting(false)
-      setMessage('Nao foi possivel enviar os documentos: ' + (error instanceof Error ? error.message : 'tente novamente.'))
-      return
-    }
+      if (finalizeError) {
+        setMessage('Nao foi possivel concluir o envio. Tente novamente.')
+        return
+      }
 
-    setSubmitting(false)
-    setAcceptedStatement(false)
-    setPrivacyAccepted(false)
-    setStatement('')
-    setDocumentFrontFile(null)
-    setDocumentBackFile(null)
-    setSelfieFile(null)
-    setMessage('Sua solicitacao foi enviada para analise.')
-    await loadPage()
+      setAcceptedStatement(false)
+      setPrivacyAccepted(false)
+      setStatement('')
+      setDocumentFrontFile(null)
+      setDocumentBackFile(null)
+      setSelfieFile(null)
+      await loadPage()
+      setMessage('Sua solicitacao foi enviada para analise.')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
