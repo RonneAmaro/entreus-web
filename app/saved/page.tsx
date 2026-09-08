@@ -745,14 +745,6 @@ export default function SavedPage() {
       )
     }
 
-    if (repostedPost && repostedPost.user_id !== userId) {
-      await supabase.from('notifications').insert({
-        user_id: repostedPost.user_id,
-        actor_id: userId,
-        type: 'repost',
-        post_id: postId,
-      })
-    }
   }
 
   async function handleToggleLike(postId: string) {
@@ -813,16 +805,6 @@ export default function SavedPage() {
       )
     }
 
-    const likedPost = posts.find((post) => post.id === postId)
-
-    if (likedPost && likedPost.user_id !== userId) {
-      await supabase.from('notifications').insert({
-        user_id: likedPost.user_id,
-        actor_id: userId,
-        type: 'like',
-        post_id: postId,
-      })
-    }
   }
 
   async function handleCopyPostLink(postId: string) {

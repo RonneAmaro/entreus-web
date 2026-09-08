@@ -676,14 +676,6 @@ export default function PostPage() {
       )
     }
 
-    if (post.user_id !== loggedUserId) {
-      await supabase.from('notifications').insert({
-        user_id: post.user_id,
-        actor_id: loggedUserId,
-        type: 'like',
-        post_id: postId,
-      })
-    }
   }
 
   async function handleToggleBookmark() {
@@ -826,14 +818,6 @@ export default function PostPage() {
       )
     }
 
-    if (post.user_id !== loggedUserId) {
-      await supabase.from('notifications').insert({
-        user_id: post.user_id,
-        actor_id: loggedUserId,
-        type: 'repost',
-        post_id: postId,
-      })
-    }
   }
 
   async function handleCopyLink() {

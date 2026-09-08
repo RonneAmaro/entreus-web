@@ -828,11 +828,6 @@ export default function PublicProfilePage() {
         return;
       }
 
-      await supabase.from("notifications").insert({
-        user_id: profile.id,
-        actor_id: loggedUserId,
-        type: "follow",
-      });
     }
 
     await refreshProfileState(profile.id, loggedUserId);
@@ -1059,14 +1054,6 @@ export default function PublicProfilePage() {
       );
     }
 
-    if (repostedPost && repostedPost.user_id !== loggedUserId) {
-      await supabase.from("notifications").insert({
-        user_id: repostedPost.user_id,
-        actor_id: loggedUserId,
-        type: "repost",
-        post_id: postId,
-      });
-    }
   }
 
   async function handleToggleLike(postId: string) {
@@ -1123,16 +1110,6 @@ export default function PublicProfilePage() {
       );
     }
 
-    const likedPost = posts.find((post) => post.id === postId);
-
-    if (likedPost && likedPost.user_id !== loggedUserId) {
-      await supabase.from("notifications").insert({
-        user_id: likedPost.user_id,
-        actor_id: loggedUserId,
-        type: "like",
-        post_id: postId,
-      });
-    }
   }
 
   async function handleCopyPostLink(postId: string) {

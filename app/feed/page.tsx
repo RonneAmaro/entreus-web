@@ -2033,11 +2033,6 @@ function FeedContent() {
         return
       }
 
-      await supabase.from('notifications').insert({
-        user_id: targetUserId,
-        actor_id: userId,
-        type: 'follow',
-      })
     }
 
     await refreshAfterFollowChange()
@@ -2306,14 +2301,6 @@ function FeedContent() {
       )
     }
 
-    if (repostedPost && repostedPost.user_id !== userId) {
-      await supabase.from('notifications').insert({
-        user_id: repostedPost.user_id,
-        actor_id: userId,
-        type: 'repost',
-        post_id: postId,
-      })
-    }
   }
 
   function getEffectiveImageContentType(file: File) {
@@ -3347,17 +3334,6 @@ function FeedContent() {
           like.id === optimisticLike.id ? data : like
         )
       )
-    }
-
-    const likedPost = posts.find((post) => post.id === postId)
-
-    if (likedPost && likedPost.user_id !== userId) {
-      await supabase.from('notifications').insert({
-        user_id: likedPost.user_id,
-        actor_id: userId,
-        type: 'like',
-        post_id: postId,
-      })
     }
 
     likeActionInProgressRef.current.delete(postId)
