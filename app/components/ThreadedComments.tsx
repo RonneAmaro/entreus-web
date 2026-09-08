@@ -9,6 +9,7 @@ import {
   REPLY_PAGE_SIZE,
   ROOT_COMMENT_PAGE_SIZE,
   commentHasContent,
+  filterBlockedComments,
   getVisualCommentDepth,
   mergeComments,
   type ThreadedComment,
@@ -24,6 +25,27 @@ const SELECT = `id, post_id, user_id, parent_comment_id, content, expression, de
 
 function normalize(row: ThreadedComment & { profiles: ThreadedComment['profiles'] | ThreadedComment['profiles'][] }) {
   return { ...row, profiles: Array.isArray(row.profiles) ? row.profiles[0] || null : row.profiles } as ThreadedComment
+}
+
+async function loadBlockedCommentAuthorIds(currentUserId: string) {
+  if (!currentUserId) return { ids: new Set<string>(), failed: false }
+
+  const [blockedByMe, blockedMe] = await Promise.all([
+    supabase.from('blocks').select('blocked_id').eq('blocker_id', currentUserId),
+    supabase.from('blocks').select('blocker_id').eq('blocked_id', currentUserId),
+  ])
+
+  if (blockedByMe.error || blockedMe.error) {
+    return { ids: new Set<string>(), failed: true }
+  }
+
+  return {
+    ids: new Set([
+      ...(blockedByMe.data || []).map(({ blocked_id }) => blocked_id).filter(Boolean),
+      ...(blockedMe.data || []).map(({ blocker_id }) => blocker_id).filter(Boolean),
+    ]),
+    failed: false,
+  }
 }
 
 type Props = {
@@ -78,17 +100,28 @@ export default function ThreadedComments({ postId, currentUserId, refreshVersion
       .limit(ROOT_COMMENT_PAGE_SIZE + 1)
     const cursor = append ? roots[roots.length - 1] : null
     if (cursor) query = query.or(`created_at.lt.${cursor.created_at},and(created_at.eq.${cursor.created_at},id.lt.${cursor.id})`)
-    const { data, error: queryError } = await query
-    if (queryError) {
+    const [{ data, error: queryError }, blockedAuthors] = await Promise.all([
+      query,
+      loadBlockedCommentAuthorIds(currentUserId),
+    ])
+    if (queryError || blockedAuthors.failed) {
       setError(t('post.comments.loadError'))
+      if (!append) {
+        setRoots([])
+        setHasMoreRoots(false)
+      }
     } else {
-      const page = await hydrateMedia((data || []).slice(0, ROOT_COMMENT_PAGE_SIZE).map((row) => normalize(row as never)))
+      const visibleRows = filterBlockedComments(
+        (data || []).slice(0, ROOT_COMMENT_PAGE_SIZE).map((row) => normalize(row as never)),
+        blockedAuthors.ids,
+      )
+      const page = await hydrateMedia(visibleRows)
       setRoots((current) => append ? [...current, ...page.filter((item) => !current.some(({ id }) => id === item.id))] : page)
       setHasMoreRoots((data || []).length > ROOT_COMMENT_PAGE_SIZE)
     }
     setLoading(false)
     setLoadingTarget(null)
-  }, [postId, roots, t])
+  }, [currentUserId, postId, roots, t])
 
   useEffect(() => {
     const task = window.setTimeout(() => void loadRoots(false), 0)
@@ -146,10 +179,21 @@ export default function ThreadedComments({ postId, currentUserId, refreshVersion
       .limit(REPLY_PAGE_SIZE + 1)
     const cursor = append ? current[current.length - 1] : null
     if (cursor) query = query.or(`created_at.gt.${cursor.created_at},and(created_at.eq.${cursor.created_at},id.gt.${cursor.id})`)
-    const { data, error: queryError } = await query
-    if (queryError) setError(t('post.comments.repliesLoadError'))
+    const [{ data, error: queryError }, blockedAuthors] = await Promise.all([
+      query,
+      loadBlockedCommentAuthorIds(currentUserId),
+    ])
+    if (queryError || blockedAuthors.failed) {
+      setError(t('post.comments.repliesLoadError'))
+      setReplies((all) => ({ ...all, [parent.id]: [] }))
+      setHasMoreReplies((all) => ({ ...all, [parent.id]: false }))
+    }
     else {
-      const page = await hydrateMedia((data || []).slice(0, REPLY_PAGE_SIZE).map((row) => normalize(row as never)))
+      const visibleRows = filterBlockedComments(
+        (data || []).slice(0, REPLY_PAGE_SIZE).map((row) => normalize(row as never)),
+        blockedAuthors.ids,
+      )
+      const page = await hydrateMedia(visibleRows)
       setReplies((all) => ({ ...all, [parent.id]: append ? mergeComments(current, page) : page }))
       setHasMoreReplies((all) => ({ ...all, [parent.id]: (data || []).length > REPLY_PAGE_SIZE }))
       setExpanded((all) => new Set(all).add(parent.id))
@@ -244,6 +288,8 @@ function CommentNode(props: NodeProps) {
   const [editing, setEditing] = useState(false)
   const [menu, setMenu] = useState(false)
   const [reported, setReported] = useState(false)
+  const [reporting, setReporting] = useState(false)
+  const [reportError, setReportError] = useState('')
   const input = useRef<HTMLTextAreaElement>(null)
   const trigger = useRef<HTMLButtonElement>(null)
   const children = childrenByParent[comment.id] || []
@@ -270,15 +316,25 @@ function CommentNode(props: NodeProps) {
                 {comment.user_id === currentUserId ? <>
                   <button type="button" onClick={() => { setEditing(true); setMenu(false) }} className="min-h-10 w-full rounded-lg px-3 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800">{t('post.comments.edit')}</button>
                   <button type="button" onClick={async () => { setMenu(false); if (!window.confirm(t('post.comments.delete'))) return; const { error } = await supabase.rpc('delete_threaded_comment', { p_comment_id: comment.id }); if (!error) await onRefresh(comment) }} className="min-h-10 w-full rounded-lg px-3 text-left text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30">{t('post.comments.delete')}</button>
-                </> : <button type="button" disabled={reported} onClick={async () => {
+                </> : <button type="button" disabled={reported || reporting} onClick={async () => {
                   const reason = window.prompt(t('post.comments.reportPrompt'))
                   if (!reason) return
+                  setReporting(true)
+                  setReportError('')
                   const { error } = await supabase.rpc('report_threaded_comment', { p_comment_id: comment.id, p_reason: reason, p_client_request_id: crypto.randomUUID() })
-                  if (!error) { setReported(true); setMenu(false) }
-                }} className="min-h-10 w-full rounded-lg px-3 text-left text-sm text-red-600 hover:bg-red-50 disabled:text-zinc-400 dark:hover:bg-red-950/30">{reported ? t('post.comments.reported') : t('post.comments.report')}</button>}
+                  setReporting(false)
+                  if (error) {
+                    setReportError(t('post.comments.reportError'))
+                    return
+                  }
+                  setReported(true)
+                  setMenu(false)
+                }} className="min-h-10 w-full rounded-lg px-3 text-left text-sm text-red-600 hover:bg-red-50 disabled:text-zinc-400 dark:hover:bg-red-950/30">{reporting ? t('post.comments.reporting') : reported ? t('post.comments.reported') : t('post.comments.report')}</button>}
               </div>}
             </div>}
           </div>
+          {reportError && <p role="alert" className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 dark:bg-red-950/30 dark:text-red-200">{reportError}</p>}
+          {reported && <p role="status" className="mt-2 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-200">{t('post.comments.reportSuccess')}</p>}
           {comment.deleted_at ? <p className="mt-2 italic text-zinc-500" aria-label={t('post.comments.removed')}>{t('post.comments.removed')}</p> :
             editing ? <CommentComposer mode="edit" comment={comment} currentUserId={currentUserId} inputRef={input} onCancel={() => setEditing(false)} onSaved={async () => { setEditing(false); await onRefresh(comment) }} /> :
             <><p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-zinc-800 dark:text-zinc-200">{comment.content}</p>

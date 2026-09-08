@@ -1,8 +1,11 @@
 import { expect, test, type Page, type Route } from '@playwright/test'
-import { mkdirSync } from 'node:fs'
+
+test.describe.configure({ timeout: 90_000 })
 
 const viewerId = '00000000-0000-4000-8000-000000000052'
 const authorId = '00000000-0000-4000-8000-000000000053'
+const blockedByViewerId = '00000000-0000-4000-8000-000000000055'
+const blockedViewerId = '00000000-0000-4000-8000-000000000056'
 const postId = '00000000-0000-4000-8000-000000000054'
 const ids = Array.from({ length: 20 }, (_, index) => `00000000-0000-4000-8000-${String(index + 100).padStart(12, '0')}`)
 const e2eSupabaseUrl = 'https://entreus-e2e.invalid'
@@ -29,7 +32,7 @@ function comment(id: string, parent: string | null, depth: number, content: stri
     profiles: { username: userId === viewerId ? 'visitante' : 'criadora', display_name: userId === viewerId ? 'Visitante' : 'Criadora', avatar_url: null },
   }
 }
-function initialComments() {
+function initialComments(includeBlocked = false) {
   const root = comment(ids[0], null, 0, 'Comentário raiz com uma conversa completa.', 4)
   const removed = { ...comment(ids[1], null, 0, '', 1), deleted_at: '2026-07-17T11:00:00.000Z' }
   const roots = [root, removed, ...ids.slice(2, 11).map((id, index) => comment(id, null, 0, `Comentário adicional ${index + 1}`))]
@@ -46,16 +49,27 @@ function initialComments() {
     comment(ids[18], ids[17], 5, 'Nível lógico seis'),
     comment(ids[19], removed.id, 1, 'Filho preservado após remoção'),
   ]
-  return [...roots, ...replies, ...deep]
+  if (!includeBlocked) return [...roots, ...replies, ...deep]
+
+  root.reply_count += 1
+  return [
+    comment('00000000-0000-4000-8000-000000000090', null, 0, 'Raiz de autor bloqueado', 0, blockedByViewerId),
+    ...roots,
+    ...replies,
+    comment('00000000-0000-4000-8000-000000000091', root.id, 1, 'Resposta de autor bloqueado', 0, blockedViewerId),
+    ...deep,
+  ]
 }
 
-async function mockThreadedFeed(page: Page, theme: 'dark' | 'light') {
+async function mockThreadedFeed(page: Page, theme: 'dark' | 'light', includeBlocked = false) {
   const base = supabaseUrl()
   const ref = new URL(base).hostname.split('.')[0]
   const token = jwt()
   const user = { id: viewerId, aud: 'authenticated', role: 'authenticated', email: 'thread@example.test', app_metadata: {}, user_metadata: {} }
-  let comments = initialComments()
+  let comments = initialComments(includeBlocked)
   let failNextReply = false
+  let failNextReport = false
+  let delayNextReport = false
   let reportCalls = 0
   let directCommentPatch = false
   let directCommentDelete = false
@@ -101,7 +115,22 @@ async function mockThreadedFeed(page: Page, theme: 'dark' | 'light') {
     }
     if (path.includes('/rest/v1/rpc/report_threaded_comment')) {
       reportCalls += 1
+      if (delayNextReport) {
+        delayNextReport = false
+        await new Promise((resolve) => setTimeout(resolve, 300))
+      }
+      if (failNextReport) {
+        failNextReport = false
+        return fulfill(route, { message: 'raw_sql_report_failure' }, 500)
+      }
       return fulfill(route, { id: 'report-1', status: 'pending' })
+    }
+    if (path.includes('/rest/v1/blocks')) {
+      const blockerFilter = url.searchParams.get('blocker_id')
+      const blockedFilter = url.searchParams.get('blocked_id')
+      if (includeBlocked && blockerFilter === `eq.${viewerId}`) return fulfill(route, [{ blocked_id: blockedByViewerId }])
+      if (includeBlocked && blockedFilter === `eq.${viewerId}`) return fulfill(route, [{ blocker_id: blockedViewerId }])
+      return fulfill(route, [])
     }
     if (path.includes('/rest/v1/profiles')) {
       const profile = { id: viewerId, username: 'visitante', display_name: 'Visitante', role: 'user', birth_date: '1990-01-01', parental_consent_status: 'not_required', terms_accepted_at: '2026-01-01T00:00:00Z', privacy_accepted_at: '2026-01-01T00:00:00Z', terms_version: '2026-05', privacy_version: '2026-05', profile_content_mode: 'general', show_sensitive_content: false, wants_18_plus: false, is_minor: false }
@@ -130,6 +159,8 @@ async function mockThreadedFeed(page: Page, theme: 'dark' | 'light') {
   await page.route('https://media.tenor.com/**', (route) => route.fulfill({ status: 404, body: '' }))
   return {
     failOnce: () => { failNextReply = true },
+    failReportOnce: () => { failNextReport = true },
+    delayReportOnce: () => { delayNextReport = true },
     reportCalls: () => reportCalls,
     directCommentPatch: () => directCommentPatch,
     directCommentDelete: () => directCommentDelete,
@@ -192,11 +223,9 @@ for (const shot of [
   { name: 'mobile-dark.png', theme: 'dark' as const, width: 390, height: 844 },
   { name: 'mobile-light.png', theme: 'light' as const, width: 360, height: 800 },
 ]) {
-  test(`visual threaded comments ${shot.name}`, async ({ page }) => {
+  test(`threaded comments render at ${shot.name}`, async ({ page }) => {
     await mockThreadedFeed(page, shot.theme); await page.setViewportSize(shot); await openThread(page)
-    mkdirSync('reports/threaded-comments', { recursive: true })
     await page.getByText('Comentário raiz com uma conversa completa.').scrollIntoViewIfNeeded()
-    await page.screenshot({ path: `reports/threaded-comments/${shot.name}` })
   })
 }
 
@@ -206,7 +235,6 @@ test('removed node keeps children and deep reply uses capped visual indentation'
   await page.getByRole('button', { name: /Ver 1 resposta/ }).last().click()
   await expect(page.getByText('Filho preservado após remoção')).toBeVisible()
   await page.getByText('Filho preservado após remoção').scrollIntoViewIfNeeded()
-  mkdirSync('reports/threaded-comments', { recursive: true }); await page.screenshot({ path: 'reports/threaded-comments/removed-comment-with-replies.png' })
 })
 
 test('expression reply composer restores focus with Escape', async ({ page }) => {
@@ -219,5 +247,40 @@ test('expression reply composer restores focus with Escape', async ({ page }) =>
   await page.getByRole('dialog').getByRole('tab', { name: 'GIFs' }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Selecionar GIF escolhido' }).click()
   await composer.scrollIntoViewIfNeeded()
-  mkdirSync('reports/threaded-comments', { recursive: true }); await page.screenshot({ path: 'reports/threaded-comments/expression-reply.png' })
+})
+
+test('blocked root and reply stay hidden while unrelated comments remain', async ({ page }) => {
+  await mockThreadedFeed(page, 'dark', true)
+  await page.goto('/feed', { waitUntil: 'domcontentloaded' })
+
+  await expect(page.getByText('Comentário raiz com uma conversa completa.')).toBeVisible({ timeout: 20_000 })
+  await expect(page.getByText('Raiz de autor bloqueado')).toHaveCount(0)
+  await page.getByRole('button', { name: /Ver 5 respostas/ }).click()
+  await expect(page.getByText('Primeira resposta')).toBeVisible()
+  await page.getByRole('button', { name: 'Ver mais respostas' }).click()
+  await expect(page.getByText('Quarta resposta para paginação')).toBeVisible()
+  await expect(page.getByText('Resposta de autor bloqueado')).toHaveCount(0)
+  await expect(page.getByText('Comentário adicional 1')).toBeVisible()
+  await expect(page.getByText('Primeira resposta')).toHaveCount(1)
+})
+
+test('comment report shows safe error, loading lock and success feedback', async ({ page }) => {
+  const mock = await mockThreadedFeed(page, 'dark')
+  await openThread(page)
+  const reply = page.getByText('Resposta com emoji 😀')
+
+  await reply.locator('..').getByRole('button', { name: 'Opções do comentário' }).click()
+  page.once('dialog', (dialog) => dialog.accept('Spam repetitivo e assédio.'))
+  mock.failReportOnce()
+  await page.getByRole('button', { name: 'Denunciar' }).click()
+  await expect(page.getByRole('alert').filter({ hasText: 'Não foi possível enviar a denúncia.' })).toContainText('Não foi possível enviar a denúncia. Tente novamente.')
+  await expect(page.getByText('raw_sql_report_failure')).toHaveCount(0)
+
+  page.once('dialog', (dialog) => dialog.accept('Spam repetitivo e assédio.'))
+  mock.delayReportOnce()
+  const reportButton = page.getByRole('button', { name: 'Denunciar' })
+  await reportButton.click()
+  await expect(page.getByRole('button', { name: 'Enviando denúncia...' })).toBeDisabled()
+  await expect(page.getByRole('status').filter({ hasText: 'Denúncia enviada para análise.' })).toBeVisible()
+  expect(mock.reportCalls()).toBe(2)
 })
