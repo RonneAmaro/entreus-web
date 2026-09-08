@@ -26,6 +26,7 @@
     "lint": "eslint",
     "test:e2e": "playwright test",
     "test:e2e:comments": "node scripts/run-playwright-external-server.mjs tests/e2e/threaded-comments.spec.ts tests/e2e/post-threaded-comments.spec.ts --workers=1 --reporter=list",
+    "test:beta-critical": "vitest run tests/unit/social-realtime.test.ts tests/unit/age-verification-hardening.test.ts tests/unit/threaded-comments.test.ts tests/unit/threaded-comments-migration.test.ts tests/unit/beta-rc1-hardening.test.ts && node scripts/run-playwright-external-server.mjs tests/e2e/threaded-comments.spec.ts tests/e2e/post-threaded-comments.spec.ts tests/e2e/age-verification.spec.ts --workers=1 --reporter=list",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:report": "playwright show-report",
