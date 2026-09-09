@@ -29,6 +29,15 @@ export type SocialRealtimeSubscription = {
   unsubscribe: () => void
 }
 
+let fallbackSubscriptionSequence = 0
+
+function createPhysicalChannelName(channelName: string) {
+  const suffix = globalThis.crypto?.randomUUID?.()
+    ?? `${Date.now()}-${++fallbackSubscriptionSequence}`
+
+  return `${channelName}:subscription-${suffix}`
+}
+
 export function createSocialRealtimeSubscription(
   client: SupabaseClient,
   options: SocialRealtimeOptions,
@@ -54,7 +63,11 @@ export function createSocialRealtimeSubscription(
     }, debounceMs)
   }
 
-  let channel = client.channel(channelName)
+  // supabase-js reuses an existing channel for the same topic. A Strict Mode
+  // remount can therefore receive a channel that has already subscribed, where
+  // adding postgres_changes callbacks throws. Keep the logical name readable,
+  // but make each physical SDK topic unique.
+  let channel = client.channel(createPhysicalChannelName(channelName))
 
   for (const event of events) {
     channel = channel.on(

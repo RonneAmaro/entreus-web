@@ -55,7 +55,7 @@ describe('createSocialRealtimeSubscription', () => {
       filter: 'post_id=eq.abc',
       onEvent: () => {},
     })
-    expect(client.__channelName).toBe('social-comments-post-abc')
+    expect(client.__channelName).toMatch(/^social-comments-post-abc:subscription-/)
   })
 
   it('subscribes to the correct table with the correct filter and default events', () => {
@@ -162,6 +162,77 @@ describe('createSocialRealtimeSubscription', () => {
     handlers[0]({})
     advanceTimersByTime(500)
     expect(onEvent).not.toHaveBeenCalled()
+  })
+
+  it('uses separate physical topics when the SDK reuses a subscribed logical topic', () => {
+    const channels = new Map<string, {
+      subscribed: boolean
+      handlers: OnHandler[]
+      events: string[]
+      on: (type: string, cfg: { event: string }, cb: OnHandler) => unknown
+      subscribe: () => unknown
+    }>()
+    const removed: string[] = []
+    const client = {
+      channel(name: string) {
+        const existing = channels.get(name)
+        if (existing) return existing
+
+        const channel = {
+          subscribed: false,
+          handlers: [] as OnHandler[],
+          events: [] as string[],
+          on(_type: string, cfg: { event: string }, cb: OnHandler) {
+            if (channel.subscribed) {
+              throw new Error('cannot add postgres_changes callbacks after subscribe()')
+            }
+            channel.events.push(cfg.event)
+            channel.handlers.push(cb)
+            return channel
+          },
+          subscribe() {
+            channel.subscribed = true
+            return channel
+          },
+        }
+        channels.set(name, channel)
+        return channel
+      },
+      removeChannel(channel: { subscribed: boolean }) {
+        channel.subscribed = false
+        removed.push('channel')
+        return Promise.resolve('ok' as const)
+      },
+    } as unknown as SupabaseClient
+
+    const onEvent = vi.fn()
+    const first = createSocialRealtimeSubscription(client, {
+      channelName: 'social-comments-post-abc',
+      table: 'comments',
+      onEvent,
+      debounceMs: 25,
+    })
+    const second = createSocialRealtimeSubscription(client, {
+      channelName: 'social-comments-post-abc',
+      table: 'comments',
+      onEvent,
+      debounceMs: 25,
+    })
+
+    expect(channels).toHaveLength(2)
+    expect([...channels.values()].every((channel) => channel.events.join(',') === 'INSERT,UPDATE,DELETE')).toBe(true)
+
+    for (const channel of channels.values()) channel.handlers[0]({})
+    advanceTimersByTime(25)
+    expect(onEvent).toHaveBeenCalledTimes(2)
+
+    first.unsubscribe()
+    second.unsubscribe()
+    expect(removed).toEqual(['channel', 'channel'])
+
+    for (const channel of channels.values()) channel.handlers[0]({})
+    advanceTimersByTime(25)
+    expect(onEvent).toHaveBeenCalledTimes(2)
   })
 })
 
