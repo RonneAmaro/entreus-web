@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { Coins, Gift, Loader2, Lock, Repeat2 } from 'lucide-react'
 import PostActions from './PostActions'
+import LikerDetails from './LikerDetails'
 import GiftModal from './GiftModal'
 import TipModal from './TipModal'
 import PostMediaGallery from './PostMediaGallery'
@@ -78,6 +79,7 @@ type PostCardProps = {
   currentUserId: string
   commentsCount: number
   likesCount: number
+  likerIds?: string[]
   repostsCount?: number
   liked: boolean
   saved?: boolean
@@ -320,6 +322,7 @@ export default function PostCard({
   currentUserId,
   commentsCount,
   likesCount,
+  likerIds = [],
   repostsCount = 0,
   liked,
   saved = false,
@@ -705,24 +708,35 @@ export default function PostCard({
         </>
       )}
 
-      <PostActions
-        commentsCount={commentsCount}
-        likesCount={likesCount}
-        repostsCount={repostsCount}
-        liked={liked}
-        reposted={reposted}
-        saved={saved}
-        copied={copied}
-        showGift={canGiftAuthor}
-        showTip={canGiftAuthor}
-        onLike={onLike}
-        onCommentClick={onCommentClick}
-        onRepost={onRepost}
-        onSave={onSave}
-        onGift={() => setGiftModalOpen(true)}
-        onTip={() => setTipModalOpen(true)}
-        onShare={onShare}
-      />
+      <LikerDetails likerIds={likerIds}>
+        {({ likesPreview, likesDetails, likesDetailsId, likesDetailsOpen, likesDetailsLoading, onLikesPreview, onLikesDetails }) => (
+          <PostActions
+            commentsCount={commentsCount}
+            likesCount={likesCount}
+            repostsCount={repostsCount}
+            liked={liked}
+            reposted={reposted}
+            saved={saved}
+            copied={copied}
+            showGift={canGiftAuthor}
+            showTip={canGiftAuthor}
+            likesPreview={likesPreview}
+            likesDetails={likesDetails}
+            likesDetailsId={likesDetailsId}
+            likesDetailsOpen={likesDetailsOpen}
+            likesDetailsLoading={likesDetailsLoading}
+            onLike={onLike}
+            onLikesPreview={onLikesPreview}
+            onLikesDetails={onLikesDetails}
+            onCommentClick={onCommentClick}
+            onRepost={onRepost}
+            onSave={onSave}
+            onGift={() => setGiftModalOpen(true)}
+            onTip={() => setTipModalOpen(true)}
+            onShare={onShare}
+          />
+        )}
+      </LikerDetails>
 
       <GiftModal
         open={giftModalOpen}

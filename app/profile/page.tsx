@@ -9,6 +9,7 @@ import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import { Camera, ImageIcon, LinkIcon, MapPin, Maximize2, Search, ShieldAlert, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { useLikesRealtimeRefresh } from '@/lib/use-likes-realtime'
 import PostCard from '../components/PostCard'
 import UserBadges from '../components/UserBadges'
 import UserBadgesPanel from '../components/UserBadgesPanel'
@@ -670,6 +671,12 @@ export default function ProfilePage() {
 
     setLikes(data || [])
   }
+
+  useLikesRealtimeRefresh({
+    enabled: Boolean(userId),
+    channelName: `social-profile-likes-${userId}`,
+    refresh: loadLikes,
+  })
 
   async function loadComments() {
     const { data, error } = await supabase
@@ -2296,6 +2303,7 @@ export default function ProfilePage() {
                   currentUserId={userId}
                   commentsCount={postComments.length}
                   likesCount={postLikes.length}
+                  likerIds={postLikes.map((like) => like.user_id)}
                   repostsCount={postReposts.length}
                   liked={userLiked}
                   saved={postSaved}

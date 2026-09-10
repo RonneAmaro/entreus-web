@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { useLikesRealtimeRefresh } from '@/lib/use-likes-realtime'
 import PostCard from '@/app/components/PostCard'
 import ThreadedComments from '@/app/components/ThreadedComments'
 import { useLanguage } from '@/app/components/LanguageProvider'
@@ -583,6 +584,12 @@ export default function PostPage() {
     setLikes(data || [])
   }
 
+  useLikesRealtimeRefresh({
+    enabled: Boolean(postId),
+    channelName: `social-post-likes-${postId}`,
+    refresh: loadLikes,
+  })
+
   async function loadBookmarks(currentUserId: string) {
     const { data, error } = await supabase
       .from('bookmarks')
@@ -999,6 +1006,7 @@ export default function PostPage() {
               currentUserId={loggedUserId}
               commentsCount={commentsCount}
               likesCount={likes.length}
+              likerIds={likes.map((like) => like.user_id)}
               repostsCount={reposts.length}
               liked={userLiked}
               saved={postSaved}

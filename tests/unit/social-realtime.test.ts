@@ -164,6 +164,22 @@ describe('createSocialRealtimeSubscription', () => {
     expect(onEvent).not.toHaveBeenCalled()
   })
 
+  it('wires INSERT, DELETE, and UPDATE invalidations for a likes subscription', () => {
+    const { client, config, handlers } = makeMockClient()
+    const onEvent = vi.fn()
+    createSocialRealtimeSubscription(client, {
+      channelName: 'social-feed-likes-u1',
+      table: 'likes',
+      onEvent,
+      debounceMs: 50,
+    })
+
+    expect(config.map((item) => item.event)).toEqual(['INSERT', 'UPDATE', 'DELETE'])
+    handlers.forEach((handler) => handler({}))
+    advanceTimersByTime(50)
+    expect(onEvent).toHaveBeenCalledTimes(1)
+  })
+
   it('uses separate physical topics when the SDK reuses a subscribed logical topic', () => {
     const channels = new Map<string, {
       subscribed: boolean

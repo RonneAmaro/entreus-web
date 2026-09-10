@@ -7,6 +7,7 @@ import PostMoreMenu from '../components/PostMoreMenu'
 import PostMediaGallery from '../components/PostMediaGallery'
 import ProtectedPostMedia from '../components/ProtectedPostMedia'
 import PostActions from '../components/PostActions'
+import LikerDetails from '../components/LikerDetails'
 import GiftModal from '../components/GiftModal'
 import TipModal from '../components/TipModal'
 import LinkPreview, { LinkedPostText } from '../components/LinkPreview'
@@ -46,6 +47,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import { supabase } from '@/lib/supabase'
 import { createSocialRealtimeSubscription } from '@/lib/social-realtime'
+import { useLikesRealtimeRefresh } from '@/lib/use-likes-realtime'
 import { useLanguage } from '../components/LanguageProvider'
 import {
   isMissingPostModerationColumnError,
@@ -1832,6 +1834,12 @@ function FeedContent() {
       setLikes(data || [])
     }
   }
+
+  useLikesRealtimeRefresh({
+    enabled: Boolean(userId),
+    channelName: `social-feed-likes-${userId}`,
+    refresh: () => loadLikes(),
+  })
 
   async function loadCommentLikes(
     currentCommentIds: string[] = comments.map((comment) => comment.id),
@@ -4658,39 +4666,50 @@ function FeedContent() {
                       </>
                     )}
 
-                    <PostActions
-                      commentsCount={postComments.length}
-                      likesCount={postLikes.length}
-                      repostsCount={postReposts.length}
-                      liked={userLiked}
-                      reposted={postReposted}
-                      saved={postSaved}
-                      copied={copiedPostId === post.id}
-                      showGift={post.user_id !== userId && !isBlockedRelation}
-                      showTip={post.user_id !== userId && !isBlockedRelation}
-                      onLike={() => handleToggleLike(post.id)}
-                      onCommentClick={() => handleOpenReplyModal(post.id)}
-                      onRepost={() => handleToggleRepost(post.id)}
-                      onSave={() => handleToggleBookmark(post.id)}
-                      onGift={() =>
-                        setGiftRecipient({
-                          id: post.user_id,
-                          name: authorName,
-                          username: post.profiles?.username,
-                          avatarUrl: authorAvatar,
-                        })
-                      }
-                      onTip={() =>
-                        setTipRecipient({
-                          id: post.user_id,
-                          name: authorName,
-                          username: post.profiles?.username,
-                          avatarUrl: authorAvatar,
-                          postId: post.id,
-                        })
-                      }
-                      onShare={() => handleCopyPostLink(post.id)}
-                    />
+                    <LikerDetails likerIds={postLikes.map((like) => like.user_id)}>
+                      {({ likesPreview, likesDetails, likesDetailsId, likesDetailsOpen, likesDetailsLoading, onLikesPreview, onLikesDetails }) => (
+                        <PostActions
+                          commentsCount={postComments.length}
+                          likesCount={postLikes.length}
+                          repostsCount={postReposts.length}
+                          liked={userLiked}
+                          reposted={postReposted}
+                          saved={postSaved}
+                          copied={copiedPostId === post.id}
+                          showGift={post.user_id !== userId && !isBlockedRelation}
+                          showTip={post.user_id !== userId && !isBlockedRelation}
+                          likesPreview={likesPreview}
+                          likesDetails={likesDetails}
+                          likesDetailsId={likesDetailsId}
+                          likesDetailsOpen={likesDetailsOpen}
+                          likesDetailsLoading={likesDetailsLoading}
+                          onLike={() => handleToggleLike(post.id)}
+                          onLikesPreview={onLikesPreview}
+                          onLikesDetails={onLikesDetails}
+                          onCommentClick={() => handleOpenReplyModal(post.id)}
+                          onRepost={() => handleToggleRepost(post.id)}
+                          onSave={() => handleToggleBookmark(post.id)}
+                          onGift={() =>
+                            setGiftRecipient({
+                              id: post.user_id,
+                              name: authorName,
+                              username: post.profiles?.username,
+                              avatarUrl: authorAvatar,
+                            })
+                          }
+                          onTip={() =>
+                            setTipRecipient({
+                              id: post.user_id,
+                              name: authorName,
+                              username: post.profiles?.username,
+                              avatarUrl: authorAvatar,
+                              postId: post.id,
+                            })
+                          }
+                          onShare={() => handleCopyPostLink(post.id)}
+                        />
+                      )}
+                    </LikerDetails>
 
                     <p className="mb-4 mt-3 text-xs text-zinc-500 dark:text-zinc-600">
                       {item.type === 'repost'

@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useTheme } from "next-themes";
 import { supabase } from "@/lib/supabase";
+import { useLikesRealtimeRefresh } from "@/lib/use-likes-realtime";
 import AppSidebar from "../../components/AppSidebar";
 import MobileNavigation from "../../components/MobileNavigation";
 import BrandHeader from "../../components/BrandHeader";
@@ -579,6 +580,12 @@ export default function PublicProfilePage() {
 
     setLikes(data || []);
   }
+
+  useLikesRealtimeRefresh({
+    enabled: Boolean(profile?.id),
+    channelName: `social-public-profile-likes-${profile?.id || username}`,
+    refresh: loadLikes,
+  });
 
   async function loadComments() {
     const { data, error } = await supabase
@@ -1606,6 +1613,7 @@ export default function PublicProfilePage() {
         currentUserId={loggedUserId}
         commentsCount={postComments.length}
         likesCount={postLikes.length}
+        likerIds={postLikes.map((like) => like.user_id)}
         repostsCount={postReposts.length}
         liked={userLiked}
         saved={postSaved}
@@ -2346,6 +2354,7 @@ export default function PublicProfilePage() {
                     currentUserId={loggedUserId}
                     commentsCount={postComments.length}
                     likesCount={postLikes.length}
+                    likerIds={postLikes.map((like) => like.user_id)}
                     repostsCount={postReposts.length}
                     liked={userLiked}
                     saved={postSaved}

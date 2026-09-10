@@ -1,6 +1,6 @@
 'use client'
 
-import { memo } from 'react'
+import { memo, type ReactNode } from 'react'
 import { Bookmark, Gift, Heart, MessageCircle, Repeat2, Share2 } from 'lucide-react'
 import { useLanguage } from './LanguageProvider'
 
@@ -14,7 +14,14 @@ type PostActionsProps = {
   copied?: boolean
   showGift?: boolean
   showTip?: boolean
+  likesPreview?: string
+  likesDetails?: ReactNode
+  likesDetailsId?: string
+  likesDetailsOpen?: boolean
+  likesDetailsLoading?: boolean
   onLike: () => void
+  onLikesPreview?: () => void
+  onLikesDetails?: () => void
   onCommentClick: () => void
   onRepost?: () => void
   onSave?: () => void
@@ -41,7 +48,14 @@ function PostActions({
   copied = false,
   showGift = false,
   showTip = false,
+  likesPreview = '',
+  likesDetails,
+  likesDetailsId,
+  likesDetailsOpen = false,
+  likesDetailsLoading = false,
   onLike,
+  onLikesPreview,
+  onLikesDetails,
   onCommentClick,
   onRepost,
   onSave,
@@ -58,20 +72,40 @@ function PostActions({
   return (
     <div className="mt-4 border-t border-zinc-100 pt-3 text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
       <div className={`${actionColumns === 7 ? 'grid-cols-7' : actionColumns === 6 ? 'grid-cols-6' : 'grid-cols-5'} grid items-center gap-1 sm:flex sm:justify-between sm:gap-1.5`}>
-        <button
-          type="button"
-          onClick={onLike}
-          className={`${actionButtonClass} ${
-            liked
-              ? 'text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30'
-              : 'hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/30'
-          }`}
-          aria-label={liked ? t('post.actions.unlike') : t('post.actions.like')}
-        >
-          <Heart className={`h-5 w-5 shrink-0 ${liked ? 'fill-current' : ''}`} />
-          <span className={countClass}>{likesCount}</span>
-          <ActionTooltip label={t('post.actions.like')} />
-        </button>
+        <div className="group/action relative flex h-10 min-w-0 items-center justify-center gap-1 rounded-full px-2 text-sm transition sm:h-10 sm:min-w-10 sm:px-2">
+          <button
+            type="button"
+            onClick={onLike}
+            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300 ${
+              liked
+                ? 'text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30'
+                : 'hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/30'
+            }`}
+            aria-label={liked ? t('post.actions.unlike') : t('post.actions.like')}
+          >
+            <Heart className={`h-5 w-5 shrink-0 ${liked ? 'fill-current' : ''}`} />
+          </button>
+          <button
+            type="button"
+            onMouseEnter={onLikesPreview}
+            onFocus={onLikesPreview}
+            onClick={onLikesDetails}
+            disabled={likesCount === 0}
+            aria-label={`${likesCount} ${t('post.actions.like')}`}
+            aria-expanded={likesDetailsOpen}
+            aria-controls={likesDetailsOpen ? likesDetailsId : undefined}
+            className={`${countClass} rounded px-1 transition hover:bg-red-50 hover:text-red-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300 disabled:cursor-default disabled:hover:bg-transparent disabled:hover:text-current dark:hover:bg-red-950/30`}
+          >
+            {likesCount}
+          </button>
+          {likesPreview && !likesDetailsOpen && (
+            <span className="pointer-events-none absolute -top-12 left-1/2 z-10 hidden w-max max-w-56 -translate-x-1/2 truncate rounded-full border border-white/10 bg-zinc-950/95 px-2.5 py-1 text-[11px] font-black text-white shadow-lg shadow-zinc-950/20 ring-1 ring-blue-300/10 backdrop-blur sm:block">
+              {likesPreview}
+            </span>
+          )}
+          {!likesPreview && !likesDetailsOpen && !likesDetailsLoading && <ActionTooltip label={t('post.actions.like')} />}
+          {likesDetails}
+        </div>
 
         <button
           type="button"

@@ -9,6 +9,7 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import { supabase } from '@/lib/supabase'
+import { useLikesRealtimeRefresh } from '@/lib/use-likes-realtime'
 import { useLanguage } from '../components/LanguageProvider'
 import {
   isMissingPostModerationColumnError,
@@ -347,6 +348,12 @@ export default function SavedPage() {
 
     setLikes(data || [])
   }
+
+  useLikesRealtimeRefresh({
+    enabled: Boolean(userId),
+    channelName: `social-saved-likes-${userId}`,
+    refresh: loadLikes,
+  })
 
   async function loadReposts() {
     const { data, error } = await supabase
@@ -973,6 +980,7 @@ export default function SavedPage() {
                 currentUserId={userId}
                 commentsCount={postComments.length}
                 likesCount={postLikes.length}
+                likerIds={postLikes.map((like) => like.user_id)}
                 repostsCount={postReposts.length}
                 liked={userLiked}
                 saved={postSaved}

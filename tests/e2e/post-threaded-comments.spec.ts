@@ -3,6 +3,7 @@ import { expect, test, type Route } from '@playwright/test'
 const e2eSupabaseUrl = 'https://entreus-e2e.invalid'
 const viewerId = '00000000-0000-4000-8000-000000000052'
 const authorId = '00000000-0000-4000-8000-000000000053'
+const likerId = '00000000-0000-4000-8000-000000000057'
 const postId = '00000000-0000-4000-8000-000000000054'
 
 function jwt() {
@@ -48,13 +49,24 @@ test('post page uses threaded comments RPC without legacy comment writes', async
       if (request.method() === 'POST' && payload?.type === 'comment') legacyCommentNotification = true
       return fulfill(route, [])
     }
-    if (path.includes('/rest/v1/profiles')) return fulfill(route, request.headers().accept?.includes('application/vnd.pgrst.object+json') ? profile : [profile])
+    if (path.includes('/rest/v1/profiles')) {
+      if (url.searchParams.get('id')?.includes(likerId)) {
+        return fulfill(route, [{ id: likerId, username: 'pessoa-curtiu', display_name: 'Pessoa que curtiu', avatar_url: null }])
+      }
+      return fulfill(route, request.headers().accept?.includes('application/vnd.pgrst.object+json') ? profile : [profile])
+    }
+    if (path.includes('/rest/v1/likes')) return fulfill(route, [{ id: 'like-1', post_id: postId, user_id: likerId }])
     if (path.includes('/rest/v1/posts')) return fulfill(route, { id: postId, content: 'Publicação simulada da página individual.', category: 'cotidiano', created_at: '2026-07-17T09:00:00.000Z', user_id: authorId, image_url: null, video_url: null, visibility: 'public', is_sensitive: false, community_type: 'general', content_rating: 'safe', moderation_status: 'active', is_paid: false, price_itacash: null, profiles: { username: 'criadora', display_name: 'Criadora', avatar_url: null, vip_status: null, vip_expires_at: null, profile_theme: null } })
     return fulfill(route, [])
   })
 
   await page.goto(`/post/${postId}`, { waitUntil: 'domcontentloaded' })
   await expect(page.getByText('Publicação simulada da página individual.')).toBeVisible({ timeout: 20_000 })
+  const likesCount = page.getByRole('button', { name: '1 Curtir' })
+  await likesCount.hover()
+  await expect(page.getByText('Pessoa que curtiu')).toBeVisible()
+  await likesCount.click()
+  await expect(page.getByRole('dialog', { name: 'Curtir' })).toContainText('Pessoa que curtiu')
   await expect(page.getByRole('region', { name: 'Comentários' })).toBeVisible()
   await expect(page.getByText('Comentário raiz da página do post.')).toBeVisible()
 
