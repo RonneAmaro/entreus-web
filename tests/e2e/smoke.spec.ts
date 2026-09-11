@@ -1,9 +1,12 @@
 import { expect, test, type Page } from '@playwright/test'
-import { loadEnvConfig } from '@next/env'
 
-loadEnvConfig(process.cwd(), true, { info() {}, error() {} })
-
-const supabaseProjectHost = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL!).hostname
+// The regular Playwright webServer and the external-server runner both use the
+// deterministic E2E Supabase endpoint. Production-build runs keep their own
+// configured URL, so the storage key follows the server actually under test.
+const smokeSupabaseUrl = process.env.PLAYWRIGHT_EXTERNAL_SERVER === '1' || process.env.PLAYWRIGHT_PRODUCTION_BUILD === '1'
+  ? (process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://entreus-e2e.invalid')
+  : 'https://entreus-e2e.invalid'
+const supabaseProjectHost = new URL(smokeSupabaseUrl).hostname
 const smokeAuthStorageKey = `sb-${supabaseProjectHost.split('.')[0]}-auth-token`
 const smokeSession = JSON.stringify({
   access_token: 'smoke-access-token',
