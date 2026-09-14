@@ -10,6 +10,7 @@ import { isNavigationItemActive } from '@/lib/navigation/navigation-search'
 import { useAdminPendingAlerts } from '../hooks/useAdminPendingAlerts'
 import { useNavigationRuntime } from '../hooks/useNavigationRuntime'
 import EntreUSHub from './EntreUSHub'
+import AccountMenu from './AccountMenu'
 import { useLanguage } from './LanguageProvider'
 
 type AppSidebarProps = {
@@ -86,10 +87,7 @@ export default function AppSidebar({
           <button type="button" onClick={post} aria-label={t('nav.post')} title={t('nav.post')} className="flex h-12 w-12 items-center justify-center rounded-2xl text-zinc-500 transition hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"><PenLine className="h-5 w-5" /></button>
         </nav>
 
-        <Link href="/profile" aria-label={displayName ? t('nav.openUserProfile', { name: displayName }) : t('nav.openMyProfile')} title={displayName || username || t('nav.profile')} className="absolute bottom-[max(env(safe-area-inset-bottom),16px)] left-1/2 flex h-11 w-11 -translate-x-1/2 items-center justify-center rounded-full text-zinc-400 ring-1 ring-white/10 transition hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400">{avatarUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element -- Profile media can use approved runtime hosts outside next/image config.
-          <img src={avatarUrl} alt="" className="h-9 w-9 rounded-full object-cover" />
-        ) : <User className="h-5 w-5" />}</Link>
+        <AccountMenu displayName={displayName} username={username} avatarUrl={avatarUrl} onLogout={onLogout} variant="desktop" />
       </aside>
 
       <EntreUSHub open={hubOpen} onClose={closeHub} userId={runtime.userId} isAdmin={runtime.isAdmin} unreadNotificationsCount={unreadNotificationsCount} unreadMessagesCount={runtime.unreadMessages} adminPendingCount={adminPendingCount} mounted={mounted} theme={theme} displayName={displayName} username={username} avatarUrl={avatarUrl} onToggleTheme={onToggleTheme} onLogout={onLogout} />

@@ -4,12 +4,13 @@ import { useEffect, useRef, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Home, MessageCircle, PenLine, User } from 'lucide-react'
+import { Home, MessageCircle, PenLine } from 'lucide-react'
 import type { ComposeIntent } from '@/lib/compose-intent'
 import { isNavigationItemActive } from '@/lib/navigation/navigation-search'
 import { useAdminPendingAlerts } from '../hooks/useAdminPendingAlerts'
 import { useNavigationRuntime } from '../hooks/useNavigationRuntime'
 import EntreUSHub from './EntreUSHub'
+import AccountMenu from './AccountMenu'
 import EntreUSWordmark from './EntreUSWordmark'
 import { useLanguage } from './LanguageProvider'
 
@@ -67,10 +68,7 @@ export default function MobileNavigation({
         <Link href="/feed" className={itemClass(isNavigationItemActive(pathname, '/feed'))} aria-label={t('nav.home')} aria-current={isNavigationItemActive(pathname, '/feed') ? 'page' : undefined}><Home className="h-5 w-5" /><span>{t('nav.home')}</span></Link>
         <Link href="/messages" className={itemClass(isNavigationItemActive(pathname, '/messages'))} aria-label={t('nav.messages')} aria-current={isNavigationItemActive(pathname, '/messages') ? 'page' : undefined}><span className="relative"><MessageCircle className="h-5 w-5" />{badge}</span><span>{t('nav.messages')}</span></Link>
         <button ref={hubButtonRef} type="button" onClick={() => setHubOpen(true)} aria-label={t('nav.openHub')} aria-expanded={hubOpen} aria-controls="entreus-hub" data-active={hubOpen} className="relative -mt-5 flex min-h-16 flex-col items-center justify-center gap-0.5 rounded-2xl text-[10px] font-black text-zinc-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 dark:text-zinc-100"><span className="entreus-hub-trigger flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-400 to-blue-700 shadow-lg shadow-blue-500/30 data-[active=true]:ring-2 data-[active=true]:ring-blue-200/80" data-active={hubOpen}><Image src="/logo-icon.png" alt="" width={34} height={34} className="h-8 w-8 rounded-full object-contain" /></span><EntreUSWordmark /></button>
-        <Link href="/profile" className={itemClass(isNavigationItemActive(pathname, '/profile'))} aria-label={t('nav.profile')} aria-current={isNavigationItemActive(pathname, '/profile') ? 'page' : undefined}>{avatarUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element -- Profile media can use approved runtime hosts outside next/image config.
-          <img src={avatarUrl} alt="" className="h-6 w-6 rounded-full object-cover" />
-        ) : <User className="h-5 w-5" />}<span>{t('nav.profile')}</span></Link>
+        <AccountMenu displayName={displayName} avatarUrl={avatarUrl} onLogout={onLogout} variant="mobile" />
         <button type="button" onClick={() => onPostClick('text')} className={itemClass(false)} aria-label={t('nav.post')}><PenLine className="h-5 w-5" /><span>{t('nav.post')}</span></button>
       </nav>
 
