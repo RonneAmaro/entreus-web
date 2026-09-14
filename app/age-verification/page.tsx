@@ -27,6 +27,17 @@ type AgeVerificationRequest = {
 }
 
 type DocumentType = 'rg' | 'cnh' | 'passport' | 'other'
+type SubmissionStage =
+  | 'CREATE_REQUEST_FAILED'
+  | 'LOAD_REQUEST_FAILED'
+  | 'DOCUMENT_FRONT_UPLOAD_FAILED'
+  | 'DOCUMENT_BACK_UPLOAD_FAILED'
+  | 'SELFIE_UPLOAD_FAILED'
+  | 'FINALIZE_FAILED'
+type FileRule = {
+  mimeTypes: readonly string[]
+  extensions: readonly string[]
+}
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024
 const DOCUMENT_TYPES: { value: DocumentType; label: string }[] = [
@@ -35,8 +46,49 @@ const DOCUMENT_TYPES: { value: DocumentType; label: string }[] = [
   { value: 'passport', label: 'Passaporte' },
   { value: 'other', label: 'Outro documento' },
 ]
-const DOCUMENT_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
-const SELFIE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+const DOCUMENT_FILE_RULE: FileRule = {
+  mimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'],
+  extensions: ['jpg', 'jpeg', 'png', 'webp', 'pdf'],
+}
+const SELFIE_FILE_RULE: FileRule = {
+  mimeTypes: ['image/jpeg', 'image/png', 'image/webp'],
+  extensions: ['jpg', 'jpeg', 'png', 'webp'],
+}
+
+function getFileExtension(file: File) {
+  return file.name.split('.').pop()?.toLowerCase() || ''
+}
+
+function sanitizeDiagnosticMessage(error: unknown) {
+  const message = error && typeof error === 'object' && 'message' in error
+    ? String(error.message || '')
+    : ''
+
+  const sanitized = message
+    .replace(/https?:\/\/\S+/gi, '[redacted-url]')
+    .replace(/[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{8,}/g, '[redacted-token]')
+    .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, '[redacted-id]')
+    .replace(/\b(?:[\w.-]+\/){2,}[^\s]+/g, '[redacted-path]')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  return sanitized.slice(0, 160) || 'No safe error message available.'
+}
+
+function reportSubmissionDiagnostic(stage: SubmissionStage, error: unknown) {
+  if (process.env.NODE_ENV === 'production') return
+
+  const details = error && typeof error === 'object' ? error as Record<string, unknown> : {}
+  const statusCandidate = details.status ?? details.statusCode
+  const diagnostic = {
+    stage,
+    errorCode: typeof details.code === 'string' ? details.code.slice(0, 80) : 'UNKNOWN',
+    status: typeof statusCandidate === 'number' ? statusCandidate : null,
+    message: sanitizeDiagnosticMessage(error),
+  }
+
+  console.warn('[age-verification]', JSON.stringify(diagnostic))
+}
 
 function calculateAge(birthDateValue: string | null) {
   if (!birthDateValue) return null
@@ -149,20 +201,14 @@ export default function AgeVerificationPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  function validateFile(file: File | null, allowedTypes: string[], label: string, required = true) {
+  function validateFile(file: File | null, rule: FileRule, label: string, required = true) {
     if (!file) return required ? `${label} e obrigatorio.` : ''
-    if (!allowedTypes.includes(file.type)) return `${label} deve ser JPG, PNG, WEBP${allowedTypes.includes('application/pdf') ? ' ou PDF' : ''}.`
+    const formats = rule.mimeTypes.includes('application/pdf') ? 'JPG, PNG, WEBP ou PDF' : 'JPG, PNG ou WEBP'
+    if (!file.type || !rule.mimeTypes.includes(file.type) || !rule.extensions.includes(getFileExtension(file))) {
+      return `${label} deve ser ${formats}. HEIC e HEIF nao sao suportados.`
+    }
     if (file.size > MAX_FILE_SIZE) return `${label} deve ter no maximo 5 MB.`
     return ''
-  }
-
-  function getFileExtension(file: File) {
-    const extension = file.name.split('.').pop()?.toLowerCase()
-    if (extension) return extension
-    if (file.type === 'application/pdf') return 'pdf'
-    if (file.type === 'image/png') return 'png'
-    if (file.type === 'image/webp') return 'webp'
-    return 'jpg'
   }
 
   async function uploadPrivateFile(file: File, requestId: string, kind: string) {
@@ -184,7 +230,7 @@ export default function AgeVerificationPage() {
     return path
   }
 
-  async function getOrCreatePendingRequest(): Promise<AgeVerificationRequest> {
+  async function getOrCreatePendingRequest(): Promise<Pick<AgeVerificationRequest, 'id'>> {
     if (!profile) throw new Error('Perfil nao carregado.')
 
     if (latestRequest?.status === 'pending' && !latestRequest.submitted_at) {
@@ -198,8 +244,8 @@ export default function AgeVerificationPage() {
 
     if (error) throw new Error(error.message)
 
-    const request = await loadRequestById(data as string)
-    return request
+    if (typeof data !== 'string' || !data) throw new Error('CREATE_REQUEST_NO_ID')
+    return { id: data }
   }
 
   async function loadRequestById(requestId: string): Promise<AgeVerificationRequest> {
@@ -247,9 +293,9 @@ export default function AgeVerificationPage() {
     }
 
     const validationError =
-      validateFile(documentFrontFile, DOCUMENT_MIME_TYPES, 'A frente do documento') ||
-      validateFile(documentBackFile, DOCUMENT_MIME_TYPES, 'O verso do documento', false) ||
-      validateFile(selfieFile, SELFIE_MIME_TYPES, 'A selfie')
+      validateFile(documentFrontFile, DOCUMENT_FILE_RULE, 'A frente do documento') ||
+      validateFile(documentBackFile, DOCUMENT_FILE_RULE, 'O verso do documento', false) ||
+      validateFile(selfieFile, SELFIE_FILE_RULE, 'A selfie')
 
     if (validationError) {
       setMessage(validationError)
@@ -260,11 +306,21 @@ export default function AgeVerificationPage() {
     setMessage('')
 
     try {
+      let pendingRequest: Pick<AgeVerificationRequest, 'id'>
+      try {
+        pendingRequest = await getOrCreatePendingRequest()
+      } catch (error) {
+        reportSubmissionDiagnostic('CREATE_REQUEST_FAILED', error)
+        setMessage('Nao foi possivel iniciar a solicitacao. Tente novamente.')
+        return
+      }
+
       let request: AgeVerificationRequest
       try {
-        request = await getOrCreatePendingRequest()
-      } catch {
-        setMessage('Nao foi possivel iniciar a solicitacao. Tente novamente.')
+        request = await loadRequestById(pendingRequest.id)
+      } catch (error) {
+        reportSubmissionDiagnostic('LOAD_REQUEST_FAILED', error)
+        setMessage('Nao foi possivel carregar a solicitacao. Tente novamente.')
         return
       }
 
@@ -273,12 +329,27 @@ export default function AgeVerificationPage() {
       let selfiePath: string
       try {
         documentFrontPath = await uploadPrivateFile(documentFrontFile as File, request.id, 'document-front')
+      } catch (error) {
+        reportSubmissionDiagnostic('DOCUMENT_FRONT_UPLOAD_FAILED', error)
+        setMessage('Nao foi possivel enviar a frente do documento. Tente novamente.')
+        return
+      }
+
+      try {
         documentBackPath = documentBackFile
           ? await uploadPrivateFile(documentBackFile, request.id, 'document-back')
           : null
+      } catch (error) {
+        reportSubmissionDiagnostic('DOCUMENT_BACK_UPLOAD_FAILED', error)
+        setMessage('Nao foi possivel enviar o verso do documento. Tente novamente.')
+        return
+      }
+
+      try {
         selfiePath = await uploadPrivateFile(selfieFile as File, request.id, 'selfie')
-      } catch {
-        setMessage('Nao foi possivel enviar os arquivos. Tente novamente.')
+      } catch (error) {
+        reportSubmissionDiagnostic('SELFIE_UPLOAD_FAILED', error)
+        setMessage('Nao foi possivel enviar a selfie. Tente novamente.')
         return
       }
 
@@ -295,6 +366,7 @@ export default function AgeVerificationPage() {
         })
 
       if (finalizeError) {
+        reportSubmissionDiagnostic('FINALIZE_FAILED', finalizeError)
         setMessage('Nao foi possivel concluir o envio. Tente novamente.')
         return
       }

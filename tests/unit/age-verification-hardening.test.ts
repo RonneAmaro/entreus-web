@@ -121,4 +121,29 @@ describe('age verification frontend structure', () => {
   it('upload path is scoped to <uid>/<requestId>/', () => {
     expect(agePage).toContain('`${profile.id}/${requestId}/${kind}-')
   })
+
+  it('keeps file validation strict for MIME, extension, size and unsupported HEIC/HEIF files', () => {
+    expect(agePage).toContain("extensions: ['jpg', 'jpeg', 'png', 'webp', 'pdf']")
+    expect(agePage).toContain("extensions: ['jpg', 'jpeg', 'png', 'webp']")
+    expect(agePage).toContain('!file.type || !rule.mimeTypes.includes(file.type) || !rule.extensions.includes(getFileExtension(file))')
+    expect(agePage).toContain('HEIC e HEIF nao sao suportados.')
+    expect(agePage).toContain('file.size > MAX_FILE_SIZE')
+  })
+
+  it('records safe diagnostics per failed submission stage outside production only', () => {
+    for (const stage of [
+      'CREATE_REQUEST_FAILED',
+      'LOAD_REQUEST_FAILED',
+      'DOCUMENT_FRONT_UPLOAD_FAILED',
+      'DOCUMENT_BACK_UPLOAD_FAILED',
+      'SELFIE_UPLOAD_FAILED',
+      'FINALIZE_FAILED',
+    ]) {
+      expect(agePage).toContain(`'${stage}'`)
+    }
+    expect(agePage).toContain("if (process.env.NODE_ENV === 'production') return")
+    expect(agePage).toContain("console.warn('[age-verification]', JSON.stringify(diagnostic))")
+    expect(agePage).toContain(".replace(/https?:\\/\\/\\S+/gi, '[redacted-url]')")
+    expect(agePage).toContain(".replace(/\\b(?:[\\w.-]+\\/){2,}[^\\s]+/g, '[redacted-path]')")
+  })
 })

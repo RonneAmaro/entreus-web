@@ -15,6 +15,7 @@ type Scenario = {
   failCreate?: boolean
   failStorage?: boolean
   failFinalize?: boolean
+  storageErrorMessage?: string
 }
 
 function yearsAgo(years: number) {
@@ -79,7 +80,7 @@ async function mockAgeVerification(page: Page, scenario: Scenario) {
     if (path.includes('/storage/v1/object/age-verifications/')) {
       if (scenario.failStorage && !storageFailed) {
         storageFailed = true
-        return fulfill(route, { message: 'raw_storage_failure' }, 500)
+        return fulfill(route, { message: scenario.storageErrorMessage || 'raw_storage_failure' }, 500)
       }
       return fulfill(route, { Key: path.replace('/storage/v1/object/', '') })
     }
@@ -166,8 +167,30 @@ test('create RPC failure is visible and does not leak backend details', async ({
 test('storage failure is visible and does not leak backend details', async ({ page }) => {
   await openAgePage(page, { birthDate: yearsAgo(30), failStorage: true })
   await submitFakeDocuments(page)
-  await expect(page.getByText('Nao foi possivel enviar os arquivos. Tente novamente.')).toBeVisible()
+  await expect(page.getByText('Nao foi possivel enviar a frente do documento. Tente novamente.')).toBeVisible()
   await expect(page.getByText('raw_storage_failure')).toHaveCount(0)
+})
+
+test('development diagnostics identify the failed upload stage without retaining paths or tokens', async ({ page }) => {
+  const diagnostics: string[] = []
+  page.on('console', (message) => {
+    if (message.type() === 'warning' && message.text().startsWith('[age-verification]')) {
+      diagnostics.push(message.text())
+    }
+  })
+
+  await openAgePage(page, {
+    birthDate: yearsAgo(30),
+    failStorage: true,
+    storageErrorMessage: 'https://storage.example.test/00000000-0000-4000-8000-000000000201/00000000-0000-4000-8000-000000000202/front.png?token=secret',
+  })
+  await submitFakeDocuments(page)
+
+  await expect(page.getByText('Nao foi possivel enviar a frente do documento. Tente novamente.')).toBeVisible()
+  expect(diagnostics.some((diagnostic) => diagnostic.includes('DOCUMENT_FRONT_UPLOAD_FAILED'))).toBe(true)
+  expect(diagnostics.some((diagnostic) => diagnostic.includes('[redacted-url]'))).toBe(true)
+  expect(diagnostics.join('\n')).not.toContain('secret')
+  expect(diagnostics.join('\n')).not.toContain('00000000-0000-4000-8000-000000000201')
 })
 
 test('finalize RPC failure is visible and does not leak backend details', async ({ page }) => {

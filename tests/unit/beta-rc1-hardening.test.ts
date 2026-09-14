@@ -61,9 +61,11 @@ describe('safe beta error feedback', () => {
     expect(commentsComponent).not.toContain('setReportError(error.message)')
   })
 
-  it('separates age create, storage and finalize failures without raw backend messages', () => {
+  it('separates age create, each upload stage and finalize failures without raw backend messages', () => {
     expect(agePage).toContain('Nao foi possivel iniciar a solicitacao. Tente novamente.')
-    expect(agePage).toContain('Nao foi possivel enviar os arquivos. Tente novamente.')
+    expect(agePage).toContain('Nao foi possivel enviar a frente do documento. Tente novamente.')
+    expect(agePage).toContain('Nao foi possivel enviar o verso do documento. Tente novamente.')
+    expect(agePage).toContain('Nao foi possivel enviar a selfie. Tente novamente.')
     expect(agePage).toContain('Nao foi possivel concluir o envio. Tente novamente.')
     expect(agePage).not.toContain('Nao foi possivel enviar os documentos: ')
   })
