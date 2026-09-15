@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import GoogleLogo from '../components/GoogleLogo'
 import { signInWithSocialProvider, supabase } from '@/lib/supabase'
 import { getAuthErrorMessage } from '@/lib/auth/auth-error-messages'
+import { getAuthenticatedDestination } from '@/lib/auth/authenticated-destination'
 import { ensureProfile } from '@/lib/auth/ensure-profile'
 import { getSafeRedirectParam } from '@/lib/auth/safe-redirect'
 import { useLanguage } from '../components/LanguageProvider'
@@ -44,22 +45,8 @@ export default function LoginPage() {
       const repaired = await ensureProfile(supabase as never, user.id)
       if (!active) return
 
-      if (!repaired.profile) {
-        router.replace('/complete-profile')
-        return
-      }
-
-      if (repaired.profile.is_minor && repaired.profile.parental_consent_status !== 'approved') {
-        router.replace('/account-pending')
-        return
-      }
-
-      if (!repaired.profile.username || !repaired.profile.birth_date) {
-        router.replace('/complete-profile')
-        return
-      }
-
-      router.replace(getSafeRedirectParam(searchParams, '/feed'))
+      const destination = getAuthenticatedDestination(repaired.profile)
+      router.replace(destination === '/feed' ? getSafeRedirectParam(searchParams, destination) : destination)
     }
 
     void checkSession()
@@ -88,9 +75,8 @@ export default function LoginPage() {
 
     if (data.user) {
       const repaired = await ensureProfile(supabase as never, data.user.id)
-      if (!repaired.profile) { router.push('/complete-profile'); setLoading(false); return }
-      if (repaired.profile.is_minor && repaired.profile.parental_consent_status !== 'approved') { router.push('/account-pending'); setLoading(false); return }
-      if (!repaired.profile.username || !repaired.profile.birth_date) { router.push('/complete-profile'); setLoading(false); return }
+      const destination = getAuthenticatedDestination(repaired.profile)
+      if (destination !== '/feed') { router.push(destination); setLoading(false); return }
     }
     router.push(getSafeRedirectParam(searchParams, '/feed'))
     setLoading(false)

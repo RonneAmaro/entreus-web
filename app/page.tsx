@@ -2,6 +2,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { cookies, headers } from 'next/headers'
 import { resolveLocalePreference, translate } from '@/lib/i18n'
+import { RootSessionGate } from './components/RootSessionGate'
 
 export default async function HomePage() {
   const [cookieStore, headerStore] = await Promise.all([cookies(), headers()])
@@ -32,7 +33,8 @@ export default async function HomePage() {
   ]
 
   return (
-    <main className="min-h-screen bg-black px-4 py-6 text-white sm:px-6 sm:py-8">
+    <RootSessionGate>
+      <main className="min-h-screen bg-black px-4 py-6 text-white sm:px-6 sm:py-8">
       <section className="mx-auto w-full max-w-6xl">
         <div className="overflow-hidden rounded-[2rem] border border-zinc-800 bg-zinc-950 shadow-2xl shadow-black/30">
           <div className="grid items-center gap-8 px-4 py-6 sm:px-8 sm:py-10 lg:grid-cols-[1.05fr_0.95fr] lg:gap-10">
@@ -120,6 +122,7 @@ export default async function HomePage() {
           </div>
         </div>
       </section>
-    </main>
+      </main>
+    </RootSessionGate>
   )
 }
