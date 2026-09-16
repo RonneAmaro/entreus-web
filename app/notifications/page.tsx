@@ -6,7 +6,7 @@ import BrandHeader from '../components/BrandHeader'
 import UserBadges from '../components/UserBadges'
 import Link from 'next/link'
 import { AlertTriangle, Award, Banknote, Bell, CheckCheck, CheckCircle2, Coins, Gift, Heart, MessageCircle, Repeat2, UserPlus } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import { supabase } from '@/lib/supabase'
@@ -315,12 +315,16 @@ function getNotificationHref(notification: NotificationView) {
   return '/notifications'
 }
 
+const subscribeToHydration = () => () => {}
+const getHydratedSnapshot = () => true
+const getServerHydratedSnapshot = () => false
+
 export default function NotificationsPage() {
   const router = useRouter()
   const { theme, setTheme } = useTheme()
   const { t } = useLanguage()
 
-  const [mounted, setMounted] = useState(false)
+  const mounted = useSyncExternalStore(subscribeToHydration, getHydratedSnapshot, getServerHydratedSnapshot)
   const [userId, setUserId] = useState('')
   const [email, setEmail] = useState('')
   const [currentProfile, setCurrentProfile] = useState<CurrentProfile | null>(null)
@@ -331,10 +335,6 @@ export default function NotificationsPage() {
   const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(true)
   const [markingAll, setMarkingAll] = useState(false)
-
-  useEffect(() => {
-    setMounted(true)
-  }, [])
 
   useEffect(() => {
     async function loadPage() {

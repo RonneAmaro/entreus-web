@@ -75,7 +75,7 @@ export async function POST(request: Request) {
   }
 
   const auth = await requireUser(request)
-  if ('error' in auth) return auth.error
+  if (auth.error) return auth.error
 
   const livekitUrl = readRequiredEnv('LIVEKIT_URL')
   const livekitApiKey = readRequiredEnv('LIVEKIT_API_KEY')

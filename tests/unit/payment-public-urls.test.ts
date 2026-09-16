@@ -26,11 +26,11 @@ describe('Mercado Pago public URLs', () => {
     'https://[2606:4700:4700::1111]/callback',
   ])('accepts public HTTPS URL %s', (url) => expect(isPublicHttpsUrl(url)).toBe(true))
   it('prefers explicit notification and return URLs', () => {
-    const env = { MERCADO_PAGO_NOTIFICATION_URL: 'https://hooks.example.com/mp', MERCADO_PAGO_RETURN_BASE_URL: 'https://return.example.com', NEXT_PUBLIC_SITE_URL: 'https://site.example.com' } as NodeJS.ProcessEnv
+    const env = { NODE_ENV: 'test', MERCADO_PAGO_NOTIFICATION_URL: 'https://hooks.example.com/mp', MERCADO_PAGO_RETURN_BASE_URL: 'https://return.example.com', NEXT_PUBLIC_SITE_URL: 'https://site.example.com' } satisfies NodeJS.ProcessEnv
     expect(resolveMercadoPagoPublicUrls(env)).toEqual({ notificationUrl: 'https://hooks.example.com/mp', returnBaseUrl: 'https://return.example.com' })
   })
   it('uses both explicit public URLs even when the site URL is localhost', () => {
-    const env = { MERCADO_PAGO_NOTIFICATION_URL: 'https://entreus.vercel.app/api/payments/mercadopago/webhook', MERCADO_PAGO_RETURN_BASE_URL: 'https://entreus.vercel.app', NEXT_PUBLIC_SITE_URL: 'http://localhost:3000' } as NodeJS.ProcessEnv
+    const env = { NODE_ENV: 'test', MERCADO_PAGO_NOTIFICATION_URL: 'https://entreus.vercel.app/api/payments/mercadopago/webhook', MERCADO_PAGO_RETURN_BASE_URL: 'https://entreus.vercel.app', NEXT_PUBLIC_SITE_URL: 'http://localhost:3000' } satisfies NodeJS.ProcessEnv
     expect(resolveMercadoPagoPublicUrls(env)).toEqual({ notificationUrl: env.MERCADO_PAGO_NOTIFICATION_URL, returnBaseUrl: env.MERCADO_PAGO_RETURN_BASE_URL })
     expect(inspectMercadoPagoPublicUrlConfiguration(env)).toEqual({
       notification: { present: true, source: 'explicit', protocol: 'https:', hostname: 'entreus.vercel.app', valid: true },
@@ -38,9 +38,9 @@ describe('Mercado Pago public URLs', () => {
     })
   })
   it('fails independently when a specific URL is absent and the site is localhost', () => {
-    expect(resolveMercadoPagoPublicUrls({ MERCADO_PAGO_NOTIFICATION_URL: 'https://entreus.vercel.app/webhook', NEXT_PUBLIC_SITE_URL: 'http://localhost:3000' } as NodeJS.ProcessEnv)).toBeNull()
-    expect(resolveMercadoPagoPublicUrls({ MERCADO_PAGO_RETURN_BASE_URL: 'https://entreus.vercel.app', NEXT_PUBLIC_SITE_URL: 'http://localhost:3000' } as NodeJS.ProcessEnv)).toBeNull()
+    expect(resolveMercadoPagoPublicUrls({ NODE_ENV: 'test', MERCADO_PAGO_NOTIFICATION_URL: 'https://entreus.vercel.app/webhook', NEXT_PUBLIC_SITE_URL: 'http://localhost:3000' } satisfies NodeJS.ProcessEnv)).toBeNull()
+    expect(resolveMercadoPagoPublicUrls({ NODE_ENV: 'test', MERCADO_PAGO_RETURN_BASE_URL: 'https://entreus.vercel.app', NEXT_PUBLIC_SITE_URL: 'http://localhost:3000' } satisfies NodeJS.ProcessEnv)).toBeNull()
   })
-  it('uses a public site only as fallback', () => expect(resolveMercadoPagoNotificationUrl({ NEXT_PUBLIC_SITE_URL: 'https://site.example.com/' } as NodeJS.ProcessEnv)).toBe('https://site.example.com/api/payments/mercadopago/webhook'))
-  it('does not bypass an invalid explicit URL', () => expect(resolveMercadoPagoNotificationUrl({ MERCADO_PAGO_NOTIFICATION_URL: 'http://localhost/x', NEXT_PUBLIC_SITE_URL: 'https://site.example.com' } as NodeJS.ProcessEnv)).toBeNull())
+  it('uses a public site only as fallback', () => expect(resolveMercadoPagoNotificationUrl({ NODE_ENV: 'test', NEXT_PUBLIC_SITE_URL: 'https://site.example.com/' } satisfies NodeJS.ProcessEnv)).toBe('https://site.example.com/api/payments/mercadopago/webhook'))
+  it('does not bypass an invalid explicit URL', () => expect(resolveMercadoPagoNotificationUrl({ NODE_ENV: 'test', MERCADO_PAGO_NOTIFICATION_URL: 'http://localhost/x', NEXT_PUBLIC_SITE_URL: 'https://site.example.com' } satisfies NodeJS.ProcessEnv)).toBeNull())
 })

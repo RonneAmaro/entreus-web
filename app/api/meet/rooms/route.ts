@@ -54,7 +54,7 @@ export async function POST(request: Request) {
   }
 
   const auth = await requireUser(request)
-  if ('error' in auth) return auth.error
+  if (auth.error) return auth.error
 
   const userRateLimit = await MEET_ROOM_CREATE_USER_LIMITER.check({
     key: `${auth.user.id}:meet-room-create`,
@@ -143,7 +143,7 @@ export async function POST(request: Request) {
 
 export async function GET(request: Request) {
   const auth = await requireUser(request)
-  if ('error' in auth) return auth.error
+  if (auth.error) return auth.error
 
   const supabase = getSupabaseAdmin()
   if (!supabase) return jsonError('Configuração Supabase ausente no servidor.', 500)
