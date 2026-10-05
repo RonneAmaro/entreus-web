@@ -520,6 +520,7 @@ export default function VideoEditor({ mode = 'publish' }: VideoEditorProps) {
   const [photoTransition, setPhotoTransition] = useState<PhotoTransition>('fade')
   const [photoMessage, setPhotoMessage] = useState('')
   const [localDraftMessage, setLocalDraftMessage] = useState('')
+  const [isBlankProject, setIsBlankProject] = useState(false)
 
   function setRenderStage(stage: string, message?: string) {
     renderStageRef.current = stage
@@ -755,6 +756,7 @@ export default function VideoEditor({ mode = 'publish' }: VideoEditorProps) {
     imageElementsRef.current.clear()
 
     setEditorMode('video')
+    setIsBlankProject(false)
     setVideoFile(file)
     setVideoUrl(URL.createObjectURL(file))
     setVideoName(file.name)
@@ -785,6 +787,20 @@ export default function VideoEditor({ mode = 'publish' }: VideoEditorProps) {
 
     loadVideoFile(file)
     event.target.value = ''
+  }
+
+  function startBlankProject() {
+    videoRef.current?.pause()
+    audioRef.current?.pause()
+    voicePlaybackRef.current?.pause()
+    setIsPlaying(false)
+    setCurrentTime(0)
+    setEditorMode('video')
+    setBaseVideoDuration(DEFAULT_VIDEO_DURATION)
+    setDuration(DEFAULT_VIDEO_DURATION)
+    setActivePanel('add')
+    setIsBlankProject(true)
+    setLocalDraftMessage('Projeto vazio criado. Adicione um vídeo, fotos ou áudio para começar.')
   }
 
   useEffect(() => {
@@ -872,6 +888,7 @@ export default function VideoEditor({ mode = 'publish' }: VideoEditorProps) {
 
       if (!hasBaseVideo) {
         setEditorMode('photos')
+        setIsBlankProject(false)
         setVideoFile(null)
         if (videoUrl) URL.revokeObjectURL(videoUrl)
         setVideoUrl('')
@@ -3753,8 +3770,9 @@ export default function VideoEditor({ mode = 'publish' }: VideoEditorProps) {
   const timelineDuration = editorMode === 'photos' ? photoSlidesDuration : duration
   const timelineProgressPercent = timelineDuration > 0 ? (currentTime / timelineDuration) * 100 : 0
   const hasEditorMedia = Boolean(videoUrl || photoSlides.length > 0)
+  const isProjectOpen = hasEditorMedia || isBlankProject
   const canPublish = Boolean((editorMode === 'video' && videoFile) || (editorMode === 'photos' && photoSlides.length > 0))
-  const controlsVisible = Boolean(hasEditorMedia && !isPlaying)
+  const controlsVisible = Boolean(isProjectOpen && !isPlaying)
   const sourceMediaBytes = editorMode === 'video'
     ? (videoFile?.size || 0) + photoSlides.reduce((total, slide) => total + slide.file.size, 0)
     : photoSlides.reduce((total, slide) => total + slide.file.size, 0)
@@ -3864,9 +3882,9 @@ export default function VideoEditor({ mode = 'publish' }: VideoEditorProps) {
               </button>
               <div className="min-w-0">
                 <p className="truncate text-base font-black leading-none sm:text-lg">
-                  {editorMode === 'photos' ? 'Fotos em video' : videoName || 'Editar video'}
+                  {editorMode === 'photos' ? 'Fotos em video' : videoName || (isBlankProject ? 'Projeto vazio' : 'Editar video')}
                 </p>
-                {hasEditorMedia && (
+                {isProjectOpen && (
                   <p className="mt-1 text-xs font-semibold text-zinc-500">
                     {formatEditorTime(currentTime)} / {formatEditorTime(editorMode === 'photos' ? photoSlidesDuration : duration)}
                     <span className="mx-1 text-zinc-700">|</span>
@@ -3876,7 +3894,7 @@ export default function VideoEditor({ mode = 'publish' }: VideoEditorProps) {
               </div>
             </div>
 
-            {hasEditorMedia && (
+            {isProjectOpen && (
             <div className="flex shrink-0 items-center gap-2">
               <button
                 type="button"
@@ -3897,8 +3915,8 @@ export default function VideoEditor({ mode = 'publish' }: VideoEditorProps) {
             </div>
           )}
 
-          <div className={`relative z-0 flex flex-1 items-center justify-center px-2 py-2 transition-all sm:px-5 sm:py-3 ${hasEditorMedia ? 'min-h-[min(52dvh,34rem)] sm:min-h-[30rem]' : 'min-h-[min(62dvh,34rem)] sm:min-h-[34rem]'}`}>
-            <div className={`relative isolate w-full overflow-hidden bg-black shadow-2xl shadow-black/40 ${hasEditorMedia ? 'rounded-xl sm:rounded-[1.25rem]' : 'rounded-[1.25rem] border border-white/10'}`}>
+          <div className={`relative z-0 flex flex-1 items-center justify-center px-2 py-2 transition-all sm:px-5 sm:py-3 ${isProjectOpen ? 'min-h-[min(52dvh,34rem)] sm:min-h-[30rem]' : 'min-h-[min(62dvh,34rem)] sm:min-h-[34rem]'}`}>
+            <div className={`relative isolate w-full overflow-hidden bg-black shadow-2xl shadow-black/40 ${isProjectOpen ? 'rounded-xl sm:rounded-[1.25rem]' : 'rounded-[1.25rem] border border-white/10'}`}>
             {editorMode === 'video' && videoUrl ? (
               <div
                 className="relative mx-auto w-full max-h-[68vh]"
@@ -4227,15 +4245,33 @@ export default function VideoEditor({ mode = 'publish' }: VideoEditorProps) {
                   {audioName ? ' + audio' : ''}
                 </div>
               </div>
+            ) : isBlankProject ? (
+              <div className="flex min-h-[24rem] flex-col items-center justify-center px-6 text-center text-zinc-400 sm:min-h-[30rem]">
+                <div className="flex h-16 w-16 items-center justify-center rounded-full border border-sky-300/25 bg-sky-500/10 text-sky-100">
+                  <Plus className="h-7 w-7" />
+                </div>
+                <p className="mt-4 text-xl font-black text-white">Projeto vazio</p>
+                <p className="mt-2 max-w-sm text-sm leading-6 text-zinc-400">Use as ferramentas abaixo para adicionar vídeo, fotos, áudio, texto ou figurinhas. A exportação fica disponível depois da primeira mídia visual.</p>
+              </div>
             ) : (
               <div className="flex min-h-[24rem] flex-col items-center justify-center px-6 text-center text-zinc-400 sm:min-h-[32rem]">
                 <div className="flex h-16 w-16 items-center justify-center rounded-full border border-blue-300/25 bg-blue-500/10 text-blue-100">
                   <Video className="h-7 w-7" />
                 </div>
-                <p className="mt-4 text-xl font-black text-white">Selecione um video</p>
-                <label className="mt-5 inline-flex cursor-pointer items-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-black text-black transition hover:bg-blue-50">
+                <p className="mt-4 text-xl font-black text-white">Comece um projeto</p>
+                <p className="mt-2 max-w-sm text-sm leading-6">Abra um projeto vazio ou adicione a primeira mídia.</p>
+                <div className="mt-5 flex flex-wrap justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={startBlankProject}
+                  className="inline-flex items-center gap-2 rounded-full bg-sky-500 px-5 py-3 text-sm font-black text-white transition hover:bg-sky-400"
+                >
+                  <Plus className="h-4 w-4" />
+                  Novo projeto vazio
+                </button>
+                <label className="inline-flex cursor-pointer items-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-black text-black transition hover:bg-blue-50">
                   <Upload className="h-4 w-4" />
-                  Escolher arquivo
+                  Adicionar vídeo
                   <input
                     type="file"
                     accept="video/*,.mp4,.mov,.webm,.m4v"
@@ -4243,12 +4279,34 @@ export default function VideoEditor({ mode = 'publish' }: VideoEditorProps) {
                     className="sr-only"
                   />
                 </label>
+                <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-amber-300/25 bg-amber-500/10 px-5 py-3 text-sm font-black text-amber-50 transition hover:bg-amber-500/20">
+                  <ImageIcon className="h-4 w-4" />
+                  Adicionar fotos
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,.png,.jpg,.jpeg"
+                    multiple
+                    onChange={handlePhotoSlidesChange}
+                    className="sr-only"
+                  />
+                </label>
+                <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-violet-300/25 bg-violet-500/10 px-5 py-3 text-sm font-black text-violet-50 transition hover:bg-violet-500/20">
+                  <Music className="h-4 w-4" />
+                  Adicionar áudio
+                  <input
+                    type="file"
+                    accept="audio/*,.mp3,.m4a,.wav,.ogg,.aac"
+                    onChange={handleAudioChange}
+                    className="sr-only"
+                  />
+                </label>
+                </div>
               </div>
             )}
             </div>
           </div>
 
-          {hasEditorMedia && (
+          {isProjectOpen && (
             <div
               className={`relative z-20 shrink-0 border-t border-white/10 bg-black/85 px-3 pt-3 transition-all duration-300 sm:px-5 lg:pb-3 ${
                 activePanel === 'text' ? 'pb-[calc(6.5rem+env(safe-area-inset-bottom))]' : 'pb-3'
@@ -5024,7 +5082,7 @@ export default function VideoEditor({ mode = 'publish' }: VideoEditorProps) {
           )}
         </div>
 
-        {hasEditorMedia && (
+        {isProjectOpen && (
         <aside
           onPointerDown={(event) => event.stopPropagation()}
           onPointerUp={(event) => event.stopPropagation()}
