@@ -29,6 +29,7 @@ import {
   isSupportedLocalVideoDraftSource,
   loadLocalVideoDraft,
 } from '@/lib/local-video-drafts'
+import { getPhotoSlideAtTime, getTimelinePlaybackTime } from '@/lib/video-timeline'
 
 type VideoFilter = 'normal' | 'mono' | 'sepia' | 'warm'
 
@@ -696,17 +697,36 @@ export default function VideoEditor({ mode = 'publish' }: VideoEditorProps) {
     currentTimeRef.current = currentTime
   }, [currentTime])
 
+  const hasReachedVideoPhotoSequence = currentTime >= baseVideoDuration
+
   useEffect(() => {
     if (!isPlaying) return
 
+    const isVideoClock = editorMode === 'video' && Boolean(videoRef.current) && currentTimeRef.current < baseVideoDuration
+    const playbackDuration = editorMode === 'photos'
+      ? photoSlides.reduce((total, slide) => total + slide.duration, 0)
+      : duration
+    const startedAt = performance.now()
+    const startedFrom = currentTimeRef.current
     let animationFrame = 0
 
-    function syncTime() {
+    function syncTime(now: number) {
       const video = videoRef.current
 
-      if (video && currentTimeRef.current < baseVideoDuration) {
+      if (isVideoClock && video) {
         setCurrentTime(video.currentTime)
         syncPreviewAudioTracks(video.currentTime, true)
+      } else {
+        const nextTime = getTimelinePlaybackTime(startedAt, startedFrom, now, playbackDuration)
+        setCurrentTime(nextTime)
+        syncPreviewAudioTracks(nextTime, true)
+
+        if (nextTime >= playbackDuration) {
+          setIsPlaying(false)
+          pauseBackgroundMusic()
+          syncPreviewAudioTracks(playbackDuration, false)
+          return
+        }
       }
 
       animationFrame = window.requestAnimationFrame(syncTime)
@@ -714,41 +734,22 @@ export default function VideoEditor({ mode = 'publish' }: VideoEditorProps) {
 
     animationFrame = window.requestAnimationFrame(syncTime)
 
-    return () => {
-      window.cancelAnimationFrame(animationFrame)
-    }
+    return () => window.cancelAnimationFrame(animationFrame)
   }, [
     audioUrl,
+    baseVideoDuration,
+    hasReachedVideoPhotoSequence,
+    duration,
+    editorMode,
     isPlaying,
     musicStartTime,
     musicVolume,
-    baseVideoDuration,
+    photoSlides,
     voiceDuration,
     voiceStartTime,
     voiceUrl,
     voiceVolume,
   ])
-
-  useEffect(() => {
-    if (!isPlaying || editorMode !== 'video' || photoSlides.length === 0 || currentTime < baseVideoDuration) return
-
-    const startedAt = performance.now()
-    const startedFrom = currentTime
-    const timer = window.setInterval(() => {
-      const nextTime = clamp(startedFrom + (performance.now() - startedAt) / 1000, baseVideoDuration, duration)
-      setCurrentTime(nextTime)
-      syncPreviewAudioTracks(nextTime, true)
-
-      if (nextTime >= duration) {
-        window.clearInterval(timer)
-        setIsPlaying(false)
-        pauseBackgroundMusic()
-        syncPreviewAudioTracks(duration, false)
-      }
-    }, 80)
-
-    return () => window.clearInterval(timer)
-  }, [baseVideoDuration, currentTime, duration, editorMode, isPlaying, photoSlides.length])
 
   function loadVideoFile(file: File, message = '') {
     if (videoUrl) URL.revokeObjectURL(videoUrl)
@@ -1376,7 +1377,8 @@ export default function VideoEditor({ mode = 'publish' }: VideoEditorProps) {
   async function startPreviewPlayback() {
     const video = videoRef.current
     if (!video) {
-      await playBackgroundMusic()
+      syncPreviewAudioTracks(currentTime, true)
+      setIsPlaying(true)
       return
     }
 
@@ -1394,16 +1396,15 @@ export default function VideoEditor({ mode = 'publish' }: VideoEditorProps) {
 
   async function playBackgroundMusic() {
     const audio = audioRef.current
-    const video = videoRef.current
-    if (!audio || !video || !audioUrl) return
+    if (!audio || !audioUrl) return
 
-    if (video.currentTime < musicStartTime) {
+    if (currentTime < musicStartTime) {
       audio.pause()
       audio.currentTime = musicTrimStart
       return
     }
 
-    syncBackgroundMusic(video.currentTime)
+    syncBackgroundMusic(currentTime)
     audio.loop = true
     audio.volume = musicVolume
 
@@ -1805,10 +1806,9 @@ export default function VideoEditor({ mode = 'publish' }: VideoEditorProps) {
 
   async function togglePlayback() {
     const video = videoRef.current
-    if (!video) return
 
     if (isPlaying) {
-      video.pause()
+      video?.pause()
       pauseBackgroundMusic()
       setIsPlaying(false)
     } else {
@@ -3035,26 +3035,11 @@ export default function VideoEditor({ mode = 'publish' }: VideoEditorProps) {
   }
 
   function getActivePhotoSlide() {
-    const selectedSlide = photoSlides.find((slide) => slide.id === activePhotoId)
-    if (selectedSlide && editorMode === 'photos') return selectedSlide
-
-    let elapsed = 0
-    const relativeTime = editorMode === 'video' && videoFile
-      ? currentTime - baseVideoDuration
-      : currentTime
-
-    if (relativeTime < 0) return selectedSlide || null
-
-    for (const slide of [...photoSlides].sort((a, b) => a.order - b.order)) {
-      const start = elapsed
-      const end = elapsed + slide.duration
-      if (relativeTime >= start && relativeTime < end) return slide
-      elapsed = end
-    }
-
-    return editorMode === 'video' && videoFile
-      ? photoSlides[photoSlides.length - 1] || null
-      : selectedSlide || photoSlides[photoSlides.length - 1] || null
+    return getPhotoSlideAtTime(
+      photoSlides,
+      currentTime,
+      editorMode === 'video' && videoFile ? baseVideoDuration : 0
+    )
   }
 
   function buildPhotoVideoFilter(slides: PhotoSlide[], useFade: boolean) {
@@ -3917,6 +3902,33 @@ export default function VideoEditor({ mode = 'publish' }: VideoEditorProps) {
 
           <div className={`relative z-0 flex flex-1 items-center justify-center px-2 py-2 transition-all sm:px-5 sm:py-3 ${isProjectOpen ? 'min-h-[min(52dvh,34rem)] sm:min-h-[30rem]' : 'min-h-[min(62dvh,34rem)] sm:min-h-[34rem]'}`}>
             <div className={`relative isolate w-full overflow-hidden bg-black shadow-2xl shadow-black/40 ${isProjectOpen ? 'rounded-xl sm:rounded-[1.25rem]' : 'rounded-[1.25rem] border border-white/10'}`}>
+            {isProjectOpen && (
+              <>
+                <audio
+                  ref={audioRef}
+                  src={audioUrl}
+                  preload="metadata"
+                  loop
+                  onLoadedMetadata={() => {
+                    const nextDuration = audioRef.current?.duration || 0
+                    setAudioDuration(Number.isFinite(nextDuration) ? nextDuration : 0)
+                    syncBackgroundMusic(currentTime)
+                    if (isPlaying) void playBackgroundMusic()
+                  }}
+                  className="hidden"
+                />
+                <audio
+                  ref={voicePlaybackRef}
+                  src={voiceUrl}
+                  preload="metadata"
+                  onLoadedMetadata={() => {
+                    syncVoiceTrack(currentTime)
+                    if (isPlaying) syncPreviewAudioTracks(currentTime, true)
+                  }}
+                  className="hidden"
+                />
+              </>
+            )}
             {editorMode === 'video' && videoUrl ? (
               <div
                 className="relative mx-auto w-full max-h-[68vh]"
@@ -3942,29 +3954,6 @@ export default function VideoEditor({ mode = 'publish' }: VideoEditorProps) {
                     className="absolute inset-0 z-[5] h-full w-full bg-black object-contain"
                   />
                 )}
-                <audio
-                  ref={audioRef}
-                  src={audioUrl}
-                  preload="metadata"
-                  loop
-                  onLoadedMetadata={() => {
-                    const nextDuration = audioRef.current?.duration || 0
-                    setAudioDuration(Number.isFinite(nextDuration) ? nextDuration : 0)
-                    syncBackgroundMusic(currentTime)
-                    if (isPlaying) void playBackgroundMusic()
-                  }}
-                  className="hidden"
-                />
-                <audio
-                  ref={voicePlaybackRef}
-                  src={voiceUrl}
-                  preload="metadata"
-                  onLoadedMetadata={() => {
-                    syncVoiceTrack(currentTime)
-                    if (isPlaying) syncPreviewAudioTracks(currentTime, true)
-                  }}
-                  className="hidden"
-                />
                 <canvas
                   ref={canvasRef}
                   width={canvasSize.width}
@@ -4236,6 +4225,12 @@ export default function VideoEditor({ mode = 'publish' }: VideoEditorProps) {
                   src={activePhotoSlide.previewUrl}
                   alt={activePhotoSlide.file.name}
                   className="h-full w-full object-contain"
+                />
+                <button
+                  type="button"
+                  onClick={() => void togglePlayback()}
+                  className="absolute inset-0 z-10 cursor-pointer"
+                  aria-label={isPlaying ? 'Pausar preview' : 'Reproduzir preview'}
                 />
                 <div className="absolute bottom-3 left-3 rounded-full bg-black/55 px-3 py-1 text-xs font-black text-white ring-1 ring-white/10">
                   {activePhotoSlide.order + 1} / {photoSlides.length}
