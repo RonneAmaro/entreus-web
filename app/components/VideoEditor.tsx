@@ -4232,6 +4232,14 @@ export default function VideoEditor({ mode = 'publish' }: VideoEditorProps) {
                   className="absolute inset-0 z-10 cursor-pointer"
                   aria-label={isPlaying ? 'Pausar preview' : 'Reproduzir preview'}
                 />
+                {!isPlaying && (
+                  <div
+                    className="pointer-events-none absolute left-1/2 top-1/2 z-20 flex h-16 w-16 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white shadow-2xl ring-1 ring-white/25 backdrop-blur-md sm:h-20 sm:w-20"
+                    aria-hidden="true"
+                  >
+                    <Play className="ml-1 h-8 w-8 fill-current sm:h-9 sm:w-9" />
+                  </div>
+                )}
                 <div className="absolute bottom-3 left-3 rounded-full bg-black/55 px-3 py-1 text-xs font-black text-white ring-1 ring-white/10">
                   {activePhotoSlide.order + 1} / {photoSlides.length}
                 </div>
