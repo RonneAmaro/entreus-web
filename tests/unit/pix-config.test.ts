@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { inspectPixConfiguration, resolvePixConfiguration } from '@/lib/payments/pix-config'
 
-const valid = { PIX_KEY: '123e4567-e89b-42d3-a456-426614174000', PIX_RECEIVER_NAME: 'EntreUS', PIX_RECEIVER_CITY: 'Manaus' }
+const valid = { NODE_ENV: 'test', PIX_KEY: '123e4567-e89b-42d3-a456-426614174000', PIX_RECEIVER_NAME: 'EntreUS', PIX_RECEIVER_CITY: 'Manaus' } satisfies NodeJS.ProcessEnv
 
 describe('manual Pix configuration', () => {
   it('recognizes a valid UUID random key without exposing it in diagnostics', () => {

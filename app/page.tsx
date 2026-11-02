@@ -2,9 +2,15 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { cookies, headers } from 'next/headers'
 import { resolveLocalePreference, translate } from '@/lib/i18n'
-import { RootSessionGate } from './components/RootSessionGate'
+import { redirect } from 'next/navigation'
+import { createClient } from '@/lib/supabase/server'
+import { resolveEntryDestination } from '@/lib/auth/session-routing'
+
+export const dynamic = 'force-dynamic'
 
 export default async function HomePage() {
+  const destination = await resolveEntryDestination(await createClient())
+  if (destination) redirect(destination)
   const [cookieStore, headerStore] = await Promise.all([cookies(), headers()])
   const locale = resolveLocalePreference({
     cookieLocale: cookieStore.get('entreus-locale')?.value,
@@ -33,7 +39,7 @@ export default async function HomePage() {
   ]
 
   return (
-    <RootSessionGate>
+    <>
       <main className="min-h-screen bg-black px-4 py-6 text-white sm:px-6 sm:py-8">
       <section className="mx-auto w-full max-w-6xl">
         <div className="overflow-hidden rounded-[2rem] border border-zinc-800 bg-zinc-950 shadow-2xl shadow-black/30">
@@ -123,6 +129,6 @@ export default async function HomePage() {
         </div>
       </section>
       </main>
-    </RootSessionGate>
+    </>
   )
 }

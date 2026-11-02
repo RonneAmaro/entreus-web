@@ -1,9 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { getSafeRedirectParam } from '@/lib/auth/safe-redirect'
-import { supabase } from '@/lib/supabase'
+import { supabase, getBrowserUser } from '@/lib/supabase'
 import { useLanguage } from '../../components/LanguageProvider'
 import {
   blocksMinorAccess,
@@ -57,9 +56,7 @@ function readPendingOAuthProfile() {
   }
 }
 
-function logAuthCallbackError(stage: string, error: unknown) {
-  console.error(`[auth/callback] ${stage}`, error)
-}
+
 
 function getMetadataText(metadata: Record<string, unknown>, keys: string[]) {
   for (const key of keys) {
@@ -101,7 +98,6 @@ async function getAvailableUsername(userId: string, email: string | null | undef
       .maybeSingle()
 
     if (error) {
-      logAuthCallbackError('profiles username availability check failed', error)
       continue
     }
 
@@ -137,10 +133,6 @@ async function insertProfileWithUsernameRetry(
     if (!error) return null
 
     lastError = error
-    logAuthCallbackError('profiles insert failed for username candidate', {
-      username,
-      error,
-    })
 
     if (!isUsernameConflict(error)) break
   }
@@ -149,7 +141,6 @@ async function insertProfileWithUsernameRetry(
 }
 
 export default function AuthCallbackPage() {
-  const router = useRouter()
   const { t } = useLanguage()
   const [message, setMessage] = useState('')
 
@@ -159,49 +150,10 @@ export default function AuthCallbackPage() {
     async function finishOAuthLogin() {
       const searchParams = new URLSearchParams(window.location.search)
       const safeNext = getSafeRedirectParam(searchParams, '/feed')
-      const code = searchParams.get('code')
-      const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''))
-      const isPasswordRecovery =
-        searchParams.get('type') === 'recovery' || hashParams.get('type') === 'recovery'
-
-      if (isPasswordRecovery) {
-        if (code) {
-          const { error } = await supabase.auth.exchangeCodeForSession(code)
-
-          if (error) {
-            logAuthCallbackError('password recovery exchangeCodeForSession failed', error)
-            if (!cancelled) {
-              setMessage(t('auth.callback.recoveryInvalid'))
-            }
-            return
-          }
-        }
-
-        if (!cancelled) {
-          const recoveryHash = window.location.hash
-          window.location.replace(`/reset-password?flow=recovery${recoveryHash}`)
-        }
-        return
-      }
-
-      if (code) {
-        const { error } = await supabase.auth.exchangeCodeForSession(code)
-
-        if (error) {
-          logAuthCallbackError('exchangeCodeForSession failed', error)
-          if (!cancelled) setMessage(t('auth.callback.oauthError'))
-          return
-        }
-      }
-
       const {
         data: { user },
-        error: userError,
-      } = await supabase.auth.getUser()
+      } = await getBrowserUser()
 
-      if (userError) {
-        logAuthCallbackError('getUser failed', userError)
-      }
 
       if (!user) {
         if (!cancelled) setMessage(t('auth.callback.sessionMissing'))
@@ -236,7 +188,6 @@ export default function AuthCallbackPage() {
       }
 
       if (loadProfileError && !cancelled) {
-        logAuthCallbackError('profiles select failed', loadProfileError)
         setMessage(PROFILE_FINALIZE_ERROR)
         return
       }
@@ -342,7 +293,6 @@ export default function AuthCallbackPage() {
       }
 
       if (profileError && !cancelled) {
-        logAuthCallbackError(typedExistingProfile ? 'profiles update failed' : 'profiles insert failed', profileError)
         setMessage(PROFILE_FINALIZE_ERROR)
         return
       }
@@ -375,11 +325,11 @@ export default function AuthCallbackPage() {
         }
 
         if (isProfileIncomplete(completedProfile)) {
-          router.replace('/complete-profile')
+          window.location.replace('/complete-profile')
           return
         }
 
-        router.replace(blocksMinorAccess(completedProfile) ? '/account-pending' : safeNext)
+        window.location.replace(blocksMinorAccess(completedProfile) ? '/account-pending' : safeNext)
       }
     }
 
@@ -388,7 +338,7 @@ export default function AuthCallbackPage() {
     return () => {
       cancelled = true
     }
-  }, [router, t])
+  }, [t])
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-white px-6 text-black dark:bg-black dark:text-white">

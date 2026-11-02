@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { MessageCircle } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import { supabase, getBrowserUser } from '@/lib/supabase'
 
 type StartConversationButtonProps = {
   targetUserId: string
@@ -35,7 +35,7 @@ export default function StartConversationButton({
     const {
       data: { user },
       error: userError,
-    } = await supabase.auth.getUser()
+    } = await getBrowserUser()
 
     if (userError || !user) {
       setLoading(false)

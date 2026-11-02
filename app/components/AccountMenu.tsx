@@ -50,7 +50,11 @@ export default function AccountMenu({
   async function handleLogout() {
     if (loggingOut) return
     setLoggingOut(true)
-    await onLogout()
+    try {
+      await onLogout()
+    } finally {
+      setLoggingOut(false)
+    }
   }
 
   const isMobile = variant === 'mobile'

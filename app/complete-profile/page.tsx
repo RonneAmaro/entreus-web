@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { AtSign, CalendarDays, CheckCircle2, Mail, ShieldCheck, UserRound, UsersRound } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import { supabase, getBrowserUser } from '@/lib/supabase'
 import {
   blocksMinorAccess,
   calculateAge,
@@ -62,7 +62,7 @@ export default function CompleteProfilePage() {
     async function loadProfile() {
       const {
         data: { user },
-      } = await supabase.auth.getUser()
+      } = await getBrowserUser()
 
       if (!active) return
 

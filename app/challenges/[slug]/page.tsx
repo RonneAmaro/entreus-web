@@ -13,7 +13,7 @@ import {
   Trophy,
   X,
 } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import { supabase, getBrowserUser } from '@/lib/supabase'
 import {
   isMissingPostModerationColumnError,
   isModeratedHidden,
@@ -162,7 +162,7 @@ export default function ChallengeDetailPage() {
 
     const {
       data: { user },
-    } = await supabase.auth.getUser()
+    } = await getBrowserUser()
 
     const currentUserId = user?.id || ''
     setUserId(currentUserId)

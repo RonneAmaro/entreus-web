@@ -1,12 +1,13 @@
 import { createServer } from 'node:net'
 import { request } from 'node:http'
 import { spawn } from 'node:child_process'
+import { startAuthFixture, fixtureUrl } from '../tests/e2e/auth-fixture-server.mjs'
 
 const port = Number.parseInt(process.env.PLAYWRIGHT_EXTERNAL_PORT || '3105', 10)
 const baseUrl = `http://localhost:${port}`
 const e2eEnvironment = {
   ...process.env,
-  NEXT_PUBLIC_SUPABASE_URL: 'https://entreus-e2e.invalid',
+  NEXT_PUBLIC_SUPABASE_URL: fixtureUrl,
   NEXT_PUBLIC_SUPABASE_ANON_KEY: 'e2e-anon-key',
   PLAYWRIGHT_EXTERNAL_SERVER: '1',
   PLAYWRIGHT_BASE_URL: baseUrl,
@@ -73,6 +74,7 @@ function stopServer(server) {
 }
 
 let server
+let closeFixture
 let playwrightExitCode = 1
 
 console.log('[runner] START')
@@ -81,10 +83,12 @@ try {
   if (!Number.isInteger(port) || port < 1 || port > 65_535) throw new Error('PLAYWRIGHT_EXTERNAL_PORT must be a valid TCP port')
 
   await assertPortAvailable()
+  closeFixture = await startAuthFixture()
   server = spawn(process.execPath, ['node_modules/next/dist/bin/next', 'dev', '--webpack', '--hostname', 'localhost', '--port', String(port)], {
     cwd: process.cwd(),
     env: e2eEnvironment,
     stdio: 'inherit',
+    windowsHide: true,
   })
   console.log(`[runner] NEXT_PID=${server.pid}`)
   const serverFailure = new Promise((_, reject) => server.once('error', reject))
@@ -105,6 +109,7 @@ try {
   console.log('[runner] CLEANUP_START')
   console.log(`[runner] CLEANUP_NEXT_PID=${server?.pid ?? 'none'}`)
   stopServer(server)
+  if (closeFixture) await closeFixture()
   console.log('[runner] CLEANUP_DONE')
 }
 

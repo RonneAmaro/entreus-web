@@ -16,7 +16,7 @@ import {
 } from 'lucide-react'
 import { useLanguage } from '@/app/components/LanguageProvider'
 import { isAdminRole } from '@/lib/admin'
-import { supabase } from '@/lib/supabase'
+import { supabase, getBrowserUser } from '@/lib/supabase'
 
 type AdminProfile = {
   id: string
@@ -115,7 +115,7 @@ export default function AdminR2OrphansPage() {
 
     const {
       data: { user },
-    } = await supabase.auth.getUser()
+    } = await getBrowserUser()
 
     if (!user) {
       router.push('/login')

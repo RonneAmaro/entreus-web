@@ -1,5 +1,6 @@
+import { seedSession } from './session-fixture'
 import { expect, test, type Page } from '@playwright/test'
-import { mkdirSync, readFileSync } from 'node:fs'
+import { mkdirSync } from 'node:fs'
 
 const userId = '00000000-0000-4000-8000-000000000050'
 const authenticatedRoutes = [
@@ -11,11 +12,7 @@ const publicRoutes = ['/login', '/signup', '/forgot-password']
 
 test.setTimeout(240_000)
 
-function publicSupabaseUrl() {
-  const line = readFileSync('.env.local', 'utf8').split(/\r?\n/).find((entry) => entry.startsWith('NEXT_PUBLIC_SUPABASE_URL='))
-  if (!line) throw new Error('NEXT_PUBLIC_SUPABASE_URL is required for intercepted theme tests.')
-  return line.slice(line.indexOf('=') + 1).trim().replace(/^['"]|['"]$/g, '').replace(/\/$/, '')
-}
+function publicSupabaseUrl() { return process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost:54329' }
 
 function fakeJwt() {
   const encode = (value: object) => Buffer.from(JSON.stringify(value)).toString('base64url')
@@ -27,8 +24,8 @@ async function installFakeSession(page: Page, theme: 'dark' | 'light') {
   const projectRef = new URL(supabaseUrl).hostname.split('.')[0]
   const token = fakeJwt()
   const user = { id: userId, aud: 'authenticated', role: 'authenticated', email: 'theme-audit@example.test', app_metadata: {}, user_metadata: {} }
-  await page.addInitScript(({ key, session, selectedTheme }) => {
-    window.localStorage.setItem(key, JSON.stringify(session))
+  await seedSession(page, ({ key, selectedTheme }) => {
+    void key;
     if (!window.localStorage.getItem('theme')) window.localStorage.setItem('theme', selectedTheme)
     window.localStorage.setItem('entreus-language', 'pt')
   }, { key: `sb-${projectRef}-auth-token`, session: { access_token: token, refresh_token: 'theme-test-refresh', expires_at: 4102444800, expires_in: 3600, token_type: 'bearer', user }, selectedTheme: theme })

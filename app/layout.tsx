@@ -5,6 +5,7 @@ import { resolveLocalePreference } from '@/lib/i18n'
 import { Providers } from './providers'
 import { LanguageProvider } from './components/LanguageProvider'
 import PWARegister from './components/PWARegister'
+import LegacySessionMigration from './components/LegacySessionMigration'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -98,6 +99,7 @@ export default async function RootLayout({
       <body>
         <Providers>
           <PWARegister />
+          <LegacySessionMigration />
           <LanguageProvider initialLocale={locale}>{children}</LanguageProvider>
         </Providers>
       </body>

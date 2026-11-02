@@ -15,7 +15,8 @@ import {
   Shield,
   User,
 } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import { supabase, getBrowserUser } from '@/lib/supabase'
+import { signOutCurrentBrowser } from '@/lib/auth/logout'
 import {
   getSafeProfileContentMode,
   PROFILE_CONTENT_MODE_OPTIONS,
@@ -57,7 +58,7 @@ export default function SettingsPage() {
     async function loadSettings() {
       const {
         data: { user },
-      } = await supabase.auth.getUser()
+      } = await getBrowserUser()
 
       if (!active) return
 
@@ -112,8 +113,7 @@ export default function SettingsPage() {
   const profileContentModeNeedsConfirmation = profileContentModeRequiresConfirmation(profileContentMode)
 
   async function handleLogout() {
-    await supabase.auth.signOut()
-    router.replace('/login')
+    await signOutCurrentBrowser(supabase.auth, (path) => window.location.replace(path))
   }
 
   async function saveLocale(nextLocale: Locale) {

@@ -1,14 +1,11 @@
+import { seedSession } from './session-fixture'
 import { expect, test, type Page } from '@playwright/test'
-import { mkdirSync, readFileSync } from 'node:fs'
+import { mkdirSync } from 'node:fs'
 import type { CreatorStudioOverview } from '@/lib/creator/creator-studio'
 
 const userId = '00000000-0000-4000-8000-000000000053'
 const postId = '00000000-0000-4000-8000-000000000054'
-function supabaseUrl() {
-  const line = readFileSync('.env.local', 'utf8').split(/\r?\n/).find((item) => item.startsWith('NEXT_PUBLIC_SUPABASE_URL='))
-  if (!line) throw new Error('Supabase URL required')
-  return line.split('=').slice(1).join('=').trim().replace(/^['"]|['"]$/g, '').replace(/\/$/, '')
-}
+function supabaseUrl() { return process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost:54329' }
 function jwt() {
   const encode = (value: object) => Buffer.from(JSON.stringify(value)).toString('base64url')
   return `${encode({ alg: 'HS256' })}.${encode({ sub: userId, role: 'authenticated', exp: 4102444800 })}.test`
@@ -35,8 +32,8 @@ async function mockStudio(page: Page, theme: 'dark' | 'light', data = overview()
   const ref = new URL(base).hostname.split('.')[0]
   const token = jwt()
   const user = { id: userId, aud: 'authenticated', role: 'authenticated', email: 'creator@example.test', app_metadata: {}, user_metadata: {} }
-  await page.addInitScript(({ key, value, selectedTheme }) => {
-    localStorage.setItem(key, JSON.stringify(value))
+  await seedSession(page, ({ key, selectedTheme }) => {
+    void key;
     localStorage.setItem('theme', selectedTheme)
   }, { key: `sb-${ref}-auth-token`, value: { access_token: token, refresh_token: 'test', expires_at: 4102444800, user }, selectedTheme: theme })
   await page.route(`${base}/**`, (route) => route.abort())

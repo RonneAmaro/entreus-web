@@ -5,6 +5,7 @@ export async function ensureProfile(client: ProfileClient, userId: string) {
   const profiles = client.from('profiles')
   const existing = await profiles.select('id, username, birth_date, is_minor, parental_consent_status').eq('id', userId).maybeSingle()
   if (existing.data) return { profile: existing.data, created: false, error: null }
+  if (existing.error) return { profile: null, created: false, error: existing.error }
   const created = await profiles.upsert({ id: userId }, { onConflict: 'id', ignoreDuplicates: true })
   if (created.error) return { profile: null, created: false, error: created.error }
   const recovered = await profiles.select('id, username, birth_date, is_minor, parental_consent_status').eq('id', userId).maybeSingle()

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import { supabase, getBrowserUser } from '@/lib/supabase'
 import { useLikesRealtimeRefresh } from '@/lib/use-likes-realtime'
 import PostCard from '@/app/components/PostCard'
 import ThreadedComments from '@/app/components/ThreadedComments'
@@ -222,7 +222,7 @@ export default function PostPage() {
 
       const {
         data: { user },
-      } = await supabase.auth.getUser()
+      } = await getBrowserUser()
 
       const currentUserId = user?.id || ''
       setLoggedUserId(currentUserId)

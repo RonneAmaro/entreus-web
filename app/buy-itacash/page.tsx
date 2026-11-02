@@ -21,7 +21,8 @@ import {
   Sparkles,
   Wallet,
 } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import { supabase, getBrowserUser } from '@/lib/supabase'
+import { signOutCurrentBrowser } from '@/lib/auth/logout'
 import {
   calculatePaymentTotals,
   paymentMethodOptions,
@@ -129,7 +130,7 @@ export default function BuyItaCashPage() {
   async function checkSession() {
     const {
       data: { user },
-    } = await supabase.auth.getUser()
+    } = await getBrowserUser()
 
     if (!user) {
       setMessage(t('purchase.errors.signInToBuy'))
@@ -173,8 +174,7 @@ export default function BuyItaCashPage() {
   }
 
   async function handleLogout() {
-    await supabase.auth.signOut()
-    router.push('/login')
+    await signOutCurrentBrowser(supabase.auth, (path) => window.location.replace(path))
   }
 
   function handleToggleTheme() {

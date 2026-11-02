@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, CheckCircle2, FileText, Loader2, ShieldAlert, Upload } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
-import { supabase } from '@/lib/supabase'
+import { supabase, getBrowserUser } from '@/lib/supabase'
 import EntreUSWordmark from '../components/EntreUSWordmark'
 
 type Profile = {
@@ -148,7 +148,7 @@ export default function AgeVerificationPage() {
 
     const {
       data: { user },
-    } = await supabase.auth.getUser()
+    } = await getBrowserUser()
 
     if (!user) {
       router.push('/login')

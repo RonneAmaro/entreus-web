@@ -1,13 +1,9 @@
+import { seedSession } from './session-fixture'
 import { expect, test, type Page } from '@playwright/test'
-import { readFileSync } from 'node:fs'
 
 const userId = '00000000-0000-4000-8000-000000000050'
 
-function publicSupabaseUrl() {
-  const line = readFileSync('.env.local', 'utf8').split(/\r?\n/).find((entry) => entry.startsWith('NEXT_PUBLIC_SUPABASE_URL='))
-  if (!line) throw new Error('NEXT_PUBLIC_SUPABASE_URL is required for the intercepted browser test.')
-  return line.slice(line.indexOf('=') + 1).trim().replace(/^['"]|['"]$/g, '').replace(/\/$/, '')
-}
+function publicSupabaseUrl() { return process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost:54329' }
 
 function fakeJwt() {
   const encode = (value: object) => Buffer.from(JSON.stringify(value)).toString('base64url')
@@ -25,8 +21,8 @@ async function installFakeSession(
   const token = fakeJwt()
   const user = { id: userId, aud: 'authenticated', role: 'authenticated', email: 'navigation@example.test', app_metadata: {}, user_metadata: {} }
 
-  await page.addInitScript(({ key, session, theme }) => {
-    window.localStorage.setItem(key, JSON.stringify(session))
+  await seedSession(page, ({ key, theme }) => {
+    void key;
     if (theme) window.localStorage.setItem('theme', theme)
     window.localStorage.setItem('entreus-language', 'pt')
   }, {

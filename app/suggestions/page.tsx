@@ -17,7 +17,7 @@ import {
   Send,
   Sparkles,
 } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import { supabase, getBrowserUser } from '@/lib/supabase'
 
 type SuggestionCategory =
   | 'feature'
@@ -199,7 +199,7 @@ export default function SuggestionsPage() {
 
       const {
         data: { user },
-      } = await supabase.auth.getUser()
+      } = await getBrowserUser()
 
       if (user) {
         setUserId(user.id)
@@ -262,7 +262,7 @@ export default function SuggestionsPage() {
 
     const {
       data: { user },
-    } = await supabase.auth.getUser()
+    } = await getBrowserUser()
 
     if (!user) {
       setSuccessMessage('')
@@ -301,7 +301,7 @@ export default function SuggestionsPage() {
   async function handleVote(suggestion: SuggestionItem, nextVote: -1 | 1) {
     const {
       data: { user },
-    } = await supabase.auth.getUser()
+    } = await getBrowserUser()
 
     if (!user) {
       setSuccessMessage('')

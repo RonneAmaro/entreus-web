@@ -1,6 +1,6 @@
 import { defineConfig, devices } from '@playwright/test'
 
-const e2eSupabaseUrl = 'https://entreus-e2e.invalid'
+const e2eSupabaseUrl = 'http://localhost:54329'
 const e2eSupabaseAnonKey = 'e2e-anon-key'
 
 export default defineConfig({
@@ -15,7 +15,7 @@ export default defineConfig({
   reporter: [['list'], ['html', { open: 'never' }]],
   globalSetup: process.env.PLAYWRIGHT_PRODUCTION_BUILD === '1'
     ? './tests/e2e/production-server-global-setup.ts'
-    : undefined,
+    : process.env.PLAYWRIGHT_EXTERNAL_SERVER === '1' ? undefined : './tests/e2e/fixture-global-setup.ts',
   webServer: process.env.PLAYWRIGHT_EXTERNAL_SERVER === '1' || process.env.PLAYWRIGHT_PRODUCTION_BUILD === '1' ? undefined : {
     command: 'node node_modules/next/dist/bin/next dev --webpack --hostname localhost --port 3000',
     url: 'http://localhost:3000',

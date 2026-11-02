@@ -1,6 +1,7 @@
+import { seedSession } from './session-fixture'
 import { expect, test, type Route } from '@playwright/test'
 
-const e2eSupabaseUrl = 'https://entreus-e2e.invalid'
+const e2eSupabaseUrl = 'http://localhost:54329'
 const viewerId = '00000000-0000-4000-8000-000000000052'
 const authorId = '00000000-0000-4000-8000-000000000053'
 const likerId = '00000000-0000-4000-8000-000000000057'
@@ -22,8 +23,8 @@ test('post page uses threaded comments RPC without legacy comment writes', async
   let legacyCommentPost = false
   let legacyCommentNotification = false
 
-  await page.addInitScript(({ key, value }) => {
-    localStorage.setItem(key, JSON.stringify(value))
+  await seedSession(page, ({ key }) => {
+    void key;
     localStorage.setItem('entreus-language', 'pt')
   }, { key: `sb-${ref}-auth-token`, value: { access_token: token, refresh_token: 'test', expires_at: 4102444800, user } })
   await page.routeWebSocket(`${base.replace(/^http/, 'ws')}/realtime/v1/websocket**`, (socket) => socket.close())

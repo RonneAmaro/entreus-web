@@ -8,7 +8,8 @@ import { Bookmark } from 'lucide-react'
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
-import { supabase } from '@/lib/supabase'
+import { supabase, getBrowserUser } from '@/lib/supabase'
+import { signOutCurrentBrowser } from '@/lib/auth/logout'
 import { useLikesRealtimeRefresh } from '@/lib/use-likes-realtime'
 import { useLanguage } from '../components/LanguageProvider'
 import {
@@ -195,7 +196,7 @@ export default function SavedPage() {
     async function loadPageData() {
       const {
         data: { user },
-      } = await supabase.auth.getUser()
+      } = await getBrowserUser()
 
       if (!user) {
         router.push('/login')
@@ -863,8 +864,7 @@ export default function SavedPage() {
   }
 
   async function handleLogout() {
-    await supabase.auth.signOut()
-    router.push('/login')
+    await signOutCurrentBrowser(supabase.auth, (path) => window.location.replace(path))
   }
 
   function handleToggleTheme() {

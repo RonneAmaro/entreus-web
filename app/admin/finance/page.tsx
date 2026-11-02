@@ -28,7 +28,7 @@ import {
   type FinancialRecordKind,
   type FinancialSummary,
 } from '@/lib/admin-finance'
-import { supabase } from '@/lib/supabase'
+import { supabase, getBrowserUser } from '@/lib/supabase'
 
 type AdminProfile = {
   id: string
@@ -237,7 +237,7 @@ export default function AdminFinancePage() {
 
     const {
       data: { user },
-    } = await supabase.auth.getUser()
+    } = await getBrowserUser()
 
     if (!user) {
       router.push('/login')

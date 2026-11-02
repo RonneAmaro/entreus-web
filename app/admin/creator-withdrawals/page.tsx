@@ -15,7 +15,7 @@ import {
   XCircle,
 } from 'lucide-react'
 import { useLanguage } from '@/app/components/LanguageProvider'
-import { supabase } from '@/lib/supabase'
+import { supabase, getBrowserUser } from '@/lib/supabase'
 import { isAdminRole } from '@/lib/admin'
 import {
   CREATOR_WITHDRAWAL_ERROR_MESSAGES,
@@ -226,7 +226,7 @@ export default function AdminCreatorWithdrawalsPage() {
 
     const {
       data: { user },
-    } = await supabase.auth.getUser()
+    } = await getBrowserUser()
 
     if (!user) {
       router.push('/login')

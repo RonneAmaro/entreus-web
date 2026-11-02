@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useTheme } from "next-themes";
-import { supabase } from "@/lib/supabase";
+import { supabase, getBrowserUser } from "@/lib/supabase";
 import { useLikesRealtimeRefresh } from "@/lib/use-likes-realtime";
 import AppSidebar from "../../components/AppSidebar";
 import MobileNavigation from "../../components/MobileNavigation";
@@ -245,7 +245,7 @@ export default function PublicProfilePage() {
 
       const {
         data: { user },
-      } = await supabase.auth.getUser();
+      } = await getBrowserUser();
 
       setLoggedUserId(user?.id || "");
       setEmail(user?.email || "");
@@ -1298,8 +1298,8 @@ export default function PublicProfilePage() {
   }
 
   async function handleLogout() {
-    await supabase.auth.signOut();
-    router.push("/login");
+    const { error } = await supabase.auth.signOut({ scope: 'local' });
+    if (!error) window.location.replace('/login');
   }
 
   function handleToggleTheme() {

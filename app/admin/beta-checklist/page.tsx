@@ -29,7 +29,7 @@ import {
   type BetaChecklistProgress,
   type BetaChecklistStatus,
 } from '@/lib/beta-checklist'
-import { supabase } from '@/lib/supabase'
+import { supabase, getBrowserUser } from '@/lib/supabase'
 
 type AdminState = 'loading' | 'denied' | 'ready'
 
@@ -131,7 +131,7 @@ export default function AdminBetaChecklistPage() {
     async function verifyAdmin() {
       const {
         data: { user },
-      } = await supabase.auth.getUser()
+      } = await getBrowserUser()
 
       if (!active) return
 

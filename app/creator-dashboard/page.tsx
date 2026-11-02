@@ -30,7 +30,8 @@ import { useLanguage } from '../components/LanguageProvider'
 import MobileNavigation from '../components/MobileNavigation'
 import { CreatorChecklist, CreatorDashboardStats } from '../components/CreatorDashboardStats'
 import ItaCashAmount from '../components/ItaCashAmount'
-import { supabase } from '@/lib/supabase'
+import { supabase, getBrowserUser } from '@/lib/supabase'
+import { signOutCurrentBrowser } from '@/lib/auth/logout'
 import { blocksMinorAccess, isProfileIncomplete } from '@/lib/profile-completion'
 import {
   summarizeCreatorDashboard,
@@ -288,7 +289,7 @@ export default function CreatorDashboardPage() {
     const {
       data: { user },
       error: userError,
-    } = await supabase.auth.getUser()
+    } = await getBrowserUser()
 
     if (userError || !user) {
       router.push('/login')
@@ -466,8 +467,7 @@ export default function CreatorDashboardPage() {
   }, [loadDashboard])
 
   async function handleLogout() {
-    await supabase.auth.signOut()
-    router.push('/login')
+    await signOutCurrentBrowser(supabase.auth, (path) => window.location.replace(path))
   }
 
   async function handleWithdrawalSubmit(event: FormEvent<HTMLFormElement>) {

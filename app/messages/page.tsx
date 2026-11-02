@@ -15,7 +15,8 @@ import {
   MessageSquarePlus,
   Search,
 } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import { supabase, getBrowserUser } from '@/lib/supabase'
+import { signOutCurrentBrowser } from '@/lib/auth/logout'
 import UserBadges from '../components/UserBadges'
 import { useLanguage } from '../components/LanguageProvider'
 
@@ -200,7 +201,7 @@ export default function MessagesPage() {
 
       const {
         data: { user },
-      } = await supabase.auth.getUser()
+      } = await getBrowserUser()
 
       if (!user) {
         router.push('/login')
@@ -532,8 +533,7 @@ export default function MessagesPage() {
   }
 
   async function handleLogout() {
-    await supabase.auth.signOut()
-    router.push('/login')
+    await signOutCurrentBrowser(supabase.auth, (path) => window.location.replace(path))
   }
 
   function handleToggleTheme() {

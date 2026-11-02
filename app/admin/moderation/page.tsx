@@ -23,7 +23,7 @@ import {
   type ModeratedPostFields,
   type ModerationStatus,
 } from '@/lib/post-moderation'
-import { supabase } from '@/lib/supabase'
+import { supabase, getBrowserUser } from '@/lib/supabase'
 
 type AdminProfile = {
   id: string
@@ -135,7 +135,7 @@ export default function AdminModerationPage() {
 
     const {
       data: { user },
-    } = await supabase.auth.getUser()
+    } = await getBrowserUser()
 
     if (!user) {
       router.push('/login')

@@ -1,3 +1,4 @@
+import { seedSession } from './session-fixture'
 import { expect, test, type Page, type Route } from '@playwright/test'
 
 test.describe.configure({ timeout: 90_000 })
@@ -8,7 +9,7 @@ const blockedByViewerId = '00000000-0000-4000-8000-000000000055'
 const blockedViewerId = '00000000-0000-4000-8000-000000000056'
 const postId = '00000000-0000-4000-8000-000000000054'
 const ids = Array.from({ length: 20 }, (_, index) => `00000000-0000-4000-8000-${String(index + 100).padStart(12, '0')}`)
-const e2eSupabaseUrl = 'https://entreus-e2e.invalid'
+const e2eSupabaseUrl = 'http://localhost:54329'
 
 type MockComment = {
   id: string; post_id: string; user_id: string; parent_comment_id: string | null
@@ -74,8 +75,8 @@ async function mockThreadedFeed(page: Page, theme: 'dark' | 'light', includeBloc
   let directCommentPatch = false
   let directCommentDelete = false
 
-  await page.addInitScript(({ key, value, selectedTheme }) => {
-    localStorage.setItem(key, JSON.stringify(value)); localStorage.setItem('theme', selectedTheme); localStorage.setItem('entreus-language', 'pt')
+  await seedSession(page, ({ key, selectedTheme }) => {
+    void key; localStorage.setItem('theme', selectedTheme); localStorage.setItem('entreus-language', 'pt')
   }, { key: `sb-${ref}-auth-token`, value: { access_token: token, refresh_token: 'test', expires_at: 4102444800, user }, selectedTheme: theme })
   await page.routeWebSocket(`${base.replace(/^http/, 'ws')}/realtime/v1/websocket**`, (socket) => socket.close())
 

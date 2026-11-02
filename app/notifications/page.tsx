@@ -9,7 +9,8 @@ import { AlertTriangle, Award, Banknote, Bell, CheckCheck, CheckCircle2, Coins, 
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
-import { supabase } from '@/lib/supabase'
+import { supabase, getBrowserUser } from '@/lib/supabase'
+import { signOutCurrentBrowser } from '@/lib/auth/logout'
 import { createSocialRealtimeSubscription } from '@/lib/social-realtime'
 import { useLanguage } from '../components/LanguageProvider'
 
@@ -343,7 +344,7 @@ export default function NotificationsPage() {
 
       const {
         data: { user },
-      } = await supabase.auth.getUser()
+      } = await getBrowserUser()
 
       if (!user) {
         router.push('/login')
@@ -705,8 +706,7 @@ export default function NotificationsPage() {
   }
 
   async function handleLogout() {
-    await supabase.auth.signOut()
-    router.push('/login')
+    await signOutCurrentBrowser(supabase.auth, (path) => window.location.replace(path))
   }
 
   function handleToggleTheme() {

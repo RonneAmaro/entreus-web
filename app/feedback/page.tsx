@@ -13,7 +13,7 @@ import {
   MessageSquareText,
   Send,
 } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import { supabase, getBrowserUser } from '@/lib/supabase'
 import { getMailtoHref, siteConfig } from '@/lib/site-config'
 
 type FeedbackType = 'bug' | 'feedback' | 'idea' | 'content' | 'safety' | 'other'
@@ -69,7 +69,7 @@ export default function FeedbackPage() {
 
     const {
       data: { user },
-    } = await supabase.auth.getUser()
+    } = await getBrowserUser()
 
     const { error } = await supabase
       .from('internal_feedback_reports')

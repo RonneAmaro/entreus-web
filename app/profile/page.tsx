@@ -8,7 +8,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import { Camera, ImageIcon, LinkIcon, MapPin, Maximize2, Search, ShieldAlert, X } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import { supabase, getBrowserUser } from '@/lib/supabase'
+import { signOutCurrentBrowser } from '@/lib/auth/logout'
 import { useLikesRealtimeRefresh } from '@/lib/use-likes-realtime'
 import PostCard from '../components/PostCard'
 import UserBadges from '../components/UserBadges'
@@ -320,7 +321,7 @@ export default function ProfilePage() {
     async function loadPage() {
       const {
         data: { user },
-      } = await supabase.auth.getUser()
+      } = await getBrowserUser()
 
       if (!user) {
         router.push('/login')
@@ -1545,8 +1546,7 @@ export default function ProfilePage() {
   }
 
   async function handleLogout() {
-    await supabase.auth.signOut()
-    router.push('/login')
+    await signOutCurrentBrowser(supabase.auth, (path) => window.location.replace(path))
   }
 
   function handleToggleTheme() {

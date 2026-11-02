@@ -10,7 +10,8 @@ import BrandHeader from '../components/BrandHeader'
 import MobileNavigation from '../components/MobileNavigation'
 import UserBadges from '../components/UserBadges'
 import { useLanguage } from '../components/LanguageProvider'
-import { supabase } from '@/lib/supabase'
+import { supabase, getBrowserUser } from '@/lib/supabase'
+import { signOutCurrentBrowser } from '@/lib/auth/logout'
 
 type Profile = {
   id: string
@@ -74,7 +75,7 @@ export default function SearchPage() {
     async function checkUser() {
       const {
         data: { user },
-      } = await supabase.auth.getUser()
+      } = await getBrowserUser()
 
       if (!user) {
         router.push('/login')
@@ -221,8 +222,7 @@ export default function SearchPage() {
   }
 
   async function handleLogout() {
-    await supabase.auth.signOut()
-    router.push('/login')
+    await signOutCurrentBrowser(supabase.auth, (path) => window.location.replace(path))
   }
 
   function handleToggleTheme() {

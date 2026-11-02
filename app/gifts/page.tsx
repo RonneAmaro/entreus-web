@@ -27,7 +27,8 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import { supabase, getBrowserUser } from '@/lib/supabase'
+import { signOutCurrentBrowser } from '@/lib/auth/logout'
 
 type DigitalGift = {
   id: string
@@ -270,7 +271,7 @@ export default function GiftsPage() {
   async function loadNavigationShell() {
     const {
       data: { user },
-    } = await supabase.auth.getUser()
+    } = await getBrowserUser()
 
     if (!user) return
 
@@ -309,8 +310,7 @@ export default function GiftsPage() {
   }
 
   async function handleLogout() {
-    await supabase.auth.signOut()
-    router.push('/login')
+    await signOutCurrentBrowser(supabase.auth, (path) => window.location.replace(path))
   }
 
   function handleToggleTheme() {
