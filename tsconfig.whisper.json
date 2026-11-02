@@ -1,0 +1,22 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "incremental": false,
+    "plugins": []
+  },
+  "include": [
+    "app/components/VideoEditor.tsx",
+    "app/components/video-editor/AutomaticSubtitlesPanel.tsx",
+    "lib/video-editor/transcription.ts",
+    "lib/video-editor/whisper-runtime.ts",
+    "lib/video-editor/stickers.ts",
+    "next.config.ts",
+    "tests/e2e/whisper-local-fixture.ts",
+    "tests/e2e/video-editor-09eb2.spec.ts",
+    "tests/e2e/video-editor-09ec.spec.ts",
+    "tests/e2e/video-editor-09fa.spec.ts",
+    "tests/unit/video-editor-stickers.test.ts",
+    "tests/unit/video-editor-transcription.test.ts"
+  ],
+  "exclude": ["node_modules", ".next"]
+}

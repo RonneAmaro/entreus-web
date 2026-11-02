@@ -1,0 +1,27 @@
+import { expect, test } from '@playwright/test'
+
+const pixel = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l1cAAAAASUVORK5CYII=', 'base64')
+
+test('nome do projeto confirma, cancela e reaparece ao importar a mesma mídia', async ({ page }, testInfo) => {
+  await page.goto('/lab/video-editor')
+  const input = page.locator('aside[aria-label="Biblioteca de mídia"] input[accept^="image/png"]')
+  await input.setInputFiles({ name: 'original.png', mimeType: 'image/png', buffer: pixel })
+  const logo = page.locator('header img').first()
+  await expect(logo).toHaveAttribute('src', /logo-icon\.png/)
+  expect(await logo.locator('..').locator('..').evaluate((element) => getComputedStyle(element).backgroundColor)).toBe('rgba(0, 0, 0, 0)')
+  await page.screenshot({ path: testInfo.outputPath('studio-header.png') })
+  const rename = page.getByRole('button', { name: 'Renomear projeto: Fotos em vídeo' })
+  await rename.click()
+  const title = page.getByRole('textbox', { name: 'Nome do projeto' })
+  await title.fill('Rascunho descartado')
+  await title.press('Escape')
+  await expect(rename).toBeVisible()
+  await rename.click()
+  await title.fill('Minha viagem')
+  await title.press('Enter')
+  await expect(page.getByRole('button', { name: 'Renomear projeto: Minha viagem' })).toBeVisible()
+  await expect(page.getByRole('complementary', { name: 'Biblioteca de mídia' }).getByRole('button', { name: /original\.png Foto/ })).toBeVisible()
+  await page.reload()
+  await input.setInputFiles({ name: 'original.png', mimeType: 'image/png', buffer: pixel })
+  await expect(page.getByRole('button', { name: 'Renomear projeto: Minha viagem' })).toBeVisible()
+})

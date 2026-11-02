@@ -1,0 +1,11 @@
+# 09D.2-A — transições entre clipes
+
+Cada junção é identificada pelo ID do clipe que entra e armazena o ID do clipe anterior, o tipo (`dissolve` ou `dip-black`) e a duração. Uma junção deixa de valer se os clipes deixam de ser adjacentes. Projetos v1 anteriores sem `junctionTransitions` recebem um mapa vazio.
+
+Para uma transição de duração `d`, os últimos `d` segundos do clipe anterior e os primeiros `d` segundos do próximo ocupam o mesmo intervalo na timeline. A duração do projeto diminui `d` segundos por junção. Nenhum quadro é repetido ou inserido para compensar a redução. A duração é limitada a 2 segundos e a menos de metade de cada clipe envolvido; assim duas transições vizinhas não consomem todo um clipe intermediário. A interface mostra a duração atual do projeto e explica a redução.
+
+A prévia usa dois elementos de vídeo durante a sobreposição. A dissolução mistura as imagens progressivamente; a passagem pelo preto escurece no meio da junção. O MP4 usa `xfade=fade` ou `xfade=fadeblack` e, quando há áudio dos clipes, `acrossfade`. Fit/Fill e filtros visuais continuam aplicados antes da composição; as camadas visuais são aplicadas ao vídeo composto. Música, voz e camadas mantêm seus intervalos numéricos absolutos no projeto e o arquivo final termina na nova duração. Portanto uma camada cujo fim ultrapasse essa duração é cortada no fim do projeto; deslocamento automático de camadas por clipe não faz parte deste pacote.
+
+O `clipTransitions` antigo permanece legível para projetos anteriores. A nova interface grava apenas `junctionTransitions` para as transições reais. Corte direto é a ausência de junção. Remoção, divisão e reordenação invalidam automaticamente referências que deixam de apontar para dois clipes adjacentes.
+
+Validação: 59 testes unitários focados em 7 arquivos; E2E novo com dissolução, passagem pelo preto, prévia intermediária, MP4 horizontal e vertical, áudio AAC decodificado com energia antes, durante e depois da junção, camada de imagem visível no MP4 e recarga; 4 E2E de regressão de timeline, formatos, camadas e PiP; TypeScript, lint focado e build aprovados. O lint global permaneceu em 77 erros e 128 avisos em 65 arquivos. O runner externo Playwright terminou com `CLEANUP_DONE` e exit code 0 nas execuções finais.
