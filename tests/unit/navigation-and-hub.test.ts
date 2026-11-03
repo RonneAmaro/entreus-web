@@ -179,7 +179,7 @@ describe('responsive navigation and EntreUS Hub', () => {
     expect(hub).toContain('repeat(auto-fit,minmax')
     expect(desktop).toContain('top-1/2')
     expect(desktop).toContain('-translate-y-1/2')
-    expect(desktop).toContain('bottom-[max(env(safe-area-inset-bottom),16px)]')
+    expect(desktop).toContain('<AccountMenu')
     expect(hub).toContain("import EntreUSWordmark from './EntreUSWordmark'")
     expect(hub).toContain('flex w-full flex-col items-center text-center')
     expect(hub).toContain('max-w-44 text-center')
@@ -222,6 +222,26 @@ describe('responsive navigation and EntreUS Hub', () => {
     expect(menu).toContain('role="menu"')
     expect(menu).toContain('role="menuitem"')
     expect(menu).not.toContain('className="fixed inset-0')
+  })
+
+  it('provides an accessible account menu with profile, settings, and local logout controls', () => {
+    const accountMenu = readFileSync('app/components/AccountMenu.tsx', 'utf8')
+    const desktop = readFileSync('app/components/AppSidebar.tsx', 'utf8')
+    const mobile = readFileSync('app/components/MobileNavigation.tsx', 'utf8')
+
+    expect(accountMenu).toContain('aria-label="Abrir menu da conta"')
+    expect(accountMenu).toContain('aria-expanded={open}')
+    expect(accountMenu).toContain('aria-haspopup="menu"')
+    expect(accountMenu).toContain('role="menu"')
+    expect(accountMenu).toContain('role="menuitem"')
+    expect(accountMenu).toContain('href="/profile"')
+    expect(accountMenu).toContain('href="/settings"')
+    expect(accountMenu).toContain("'Sair'")
+    expect(accountMenu).toContain("event.key !== 'Escape'")
+    expect(accountMenu).toContain("document.addEventListener('pointerdown', closeOnPointerDown)")
+    expect(accountMenu).toContain('await onLogout()')
+    expect(desktop).toContain('<AccountMenu')
+    expect(mobile).toContain('<AccountMenu')
   })
 
   it('provides bounded prefetch and immediate navigation feedback', () => {

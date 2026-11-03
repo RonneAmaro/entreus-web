@@ -8,7 +8,9 @@ import { Bookmark } from 'lucide-react'
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
-import { supabase } from '@/lib/supabase'
+import { supabase, getBrowserUser } from '@/lib/supabase'
+import { signOutCurrentBrowser } from '@/lib/auth/logout'
+import { useLikesRealtimeRefresh } from '@/lib/use-likes-realtime'
 import { useLanguage } from '../components/LanguageProvider'
 import {
   isMissingPostModerationColumnError,
@@ -194,7 +196,7 @@ export default function SavedPage() {
     async function loadPageData() {
       const {
         data: { user },
-      } = await supabase.auth.getUser()
+      } = await getBrowserUser()
 
       if (!user) {
         router.push('/login')
@@ -347,6 +349,12 @@ export default function SavedPage() {
 
     setLikes(data || [])
   }
+
+  useLikesRealtimeRefresh({
+    enabled: Boolean(userId),
+    channelName: `social-saved-likes-${userId}`,
+    refresh: loadLikes,
+  })
 
   async function loadReposts() {
     const { data, error } = await supabase
@@ -745,14 +753,6 @@ export default function SavedPage() {
       )
     }
 
-    if (repostedPost && repostedPost.user_id !== userId) {
-      await supabase.from('notifications').insert({
-        user_id: repostedPost.user_id,
-        actor_id: userId,
-        type: 'repost',
-        post_id: postId,
-      })
-    }
   }
 
   async function handleToggleLike(postId: string) {
@@ -813,16 +813,6 @@ export default function SavedPage() {
       )
     }
 
-    const likedPost = posts.find((post) => post.id === postId)
-
-    if (likedPost && likedPost.user_id !== userId) {
-      await supabase.from('notifications').insert({
-        user_id: likedPost.user_id,
-        actor_id: userId,
-        type: 'like',
-        post_id: postId,
-      })
-    }
   }
 
   async function handleCopyPostLink(postId: string) {
@@ -874,8 +864,7 @@ export default function SavedPage() {
   }
 
   async function handleLogout() {
-    await supabase.auth.signOut()
-    router.push('/login')
+    await signOutCurrentBrowser(supabase.auth, (path) => window.location.replace(path))
   }
 
   function handleToggleTheme() {
@@ -991,6 +980,7 @@ export default function SavedPage() {
                 currentUserId={userId}
                 commentsCount={postComments.length}
                 likesCount={postLikes.length}
+                likerIds={postLikes.map((like) => like.user_id)}
                 repostsCount={postReposts.length}
                 liked={userLiked}
                 saved={postSaved}

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { Phone, PhoneOff, Video, X } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import { supabase, getBrowserUser } from '@/lib/supabase'
 
 type IncomingGlobalCall = {
   conversationId: string
@@ -30,7 +30,7 @@ export default function GlobalCallProvider({ children }: { children: React.React
     async function loadUser() {
       const {
         data: { user },
-      } = await supabase.auth.getUser()
+      } = await getBrowserUser()
 
       if (active) {
         setUserId(user?.id || '')

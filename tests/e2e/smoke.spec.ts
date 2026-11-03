@@ -1,9 +1,13 @@
+import { seedSession } from './session-fixture'
 import { expect, test, type Page } from '@playwright/test'
-import { loadEnvConfig } from '@next/env'
 
-loadEnvConfig(process.cwd(), true, { info() {}, error() {} })
-
-const supabaseProjectHost = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL!).hostname
+// The regular Playwright webServer and the external-server runner both use the
+// deterministic E2E Supabase endpoint. Production-build runs keep their own
+// configured URL, so the storage key follows the server actually under test.
+const smokeSupabaseUrl = process.env.PLAYWRIGHT_EXTERNAL_SERVER === '1' || process.env.PLAYWRIGHT_PRODUCTION_BUILD === '1'
+  ? (process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost:54329')
+  : 'http://localhost:54329'
+const supabaseProjectHost = new URL(smokeSupabaseUrl).hostname
 const smokeAuthStorageKey = `sb-${supabaseProjectHost.split('.')[0]}-auth-token`
 const smokeSession = JSON.stringify({
   access_token: 'smoke-access-token',
@@ -80,7 +84,7 @@ test('VIP plans and mocked manual Pix render without starting a real charge', as
   test.setTimeout(90_000)
   const pageErrors: string[] = []
   page.on('pageerror', (error) => pageErrors.push(error.message))
-  await page.addInitScript(({ key, value }) => window.localStorage.setItem(key, value), { key: smokeAuthStorageKey, value: smokeSession })
+  await seedSession(page, ({ key }) => { void key }, { key: smokeAuthStorageKey, value: smokeSession })
   let manualPixRequests = 0
   let externalMercadoPagoRequests = 0
   await page.route(/https?:\/\/[^/]*mercadopago\.[^/]+\/.*/, async (route) => {

@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useTheme } from "next-themes";
-import { supabase } from "@/lib/supabase";
+import { supabase, getBrowserUser } from "@/lib/supabase";
+import { useLikesRealtimeRefresh } from "@/lib/use-likes-realtime";
 import AppSidebar from "../../components/AppSidebar";
 import MobileNavigation from "../../components/MobileNavigation";
 import BrandHeader from "../../components/BrandHeader";
@@ -244,7 +245,7 @@ export default function PublicProfilePage() {
 
       const {
         data: { user },
-      } = await supabase.auth.getUser();
+      } = await getBrowserUser();
 
       setLoggedUserId(user?.id || "");
       setEmail(user?.email || "");
@@ -580,6 +581,12 @@ export default function PublicProfilePage() {
     setLikes(data || []);
   }
 
+  useLikesRealtimeRefresh({
+    enabled: Boolean(profile?.id),
+    channelName: `social-public-profile-likes-${profile?.id || username}`,
+    refresh: loadLikes,
+  });
+
   async function loadComments() {
     const { data, error } = await supabase
       .from("comments")
@@ -828,11 +835,6 @@ export default function PublicProfilePage() {
         return;
       }
 
-      await supabase.from("notifications").insert({
-        user_id: profile.id,
-        actor_id: loggedUserId,
-        type: "follow",
-      });
     }
 
     await refreshProfileState(profile.id, loggedUserId);
@@ -1059,14 +1061,6 @@ export default function PublicProfilePage() {
       );
     }
 
-    if (repostedPost && repostedPost.user_id !== loggedUserId) {
-      await supabase.from("notifications").insert({
-        user_id: repostedPost.user_id,
-        actor_id: loggedUserId,
-        type: "repost",
-        post_id: postId,
-      });
-    }
   }
 
   async function handleToggleLike(postId: string) {
@@ -1123,16 +1117,6 @@ export default function PublicProfilePage() {
       );
     }
 
-    const likedPost = posts.find((post) => post.id === postId);
-
-    if (likedPost && likedPost.user_id !== loggedUserId) {
-      await supabase.from("notifications").insert({
-        user_id: likedPost.user_id,
-        actor_id: loggedUserId,
-        type: "like",
-        post_id: postId,
-      });
-    }
   }
 
   async function handleCopyPostLink(postId: string) {
@@ -1314,8 +1298,8 @@ export default function PublicProfilePage() {
   }
 
   async function handleLogout() {
-    await supabase.auth.signOut();
-    router.push("/login");
+    const { error } = await supabase.auth.signOut({ scope: 'local' });
+    if (!error) window.location.replace('/login');
   }
 
   function handleToggleTheme() {
@@ -1629,6 +1613,7 @@ export default function PublicProfilePage() {
         currentUserId={loggedUserId}
         commentsCount={postComments.length}
         likesCount={postLikes.length}
+        likerIds={postLikes.map((like) => like.user_id)}
         repostsCount={postReposts.length}
         liked={userLiked}
         saved={postSaved}
@@ -2369,6 +2354,7 @@ export default function PublicProfilePage() {
                     currentUserId={loggedUserId}
                     commentsCount={postComments.length}
                     likesCount={postLikes.length}
+                    likerIds={postLikes.map((like) => like.user_id)}
                     repostsCount={postReposts.length}
                     liked={userLiked}
                     saved={postSaved}

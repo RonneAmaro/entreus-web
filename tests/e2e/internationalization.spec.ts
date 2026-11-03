@@ -1,5 +1,5 @@
+import { seedSession } from './session-fixture'
 import { expect, test, type Page } from '@playwright/test'
-import { readFileSync } from 'node:fs'
 
 const userId = '00000000-0000-4000-8000-000000000053'
 const postId = '00000000-0000-4000-8000-000000000054'
@@ -45,12 +45,7 @@ async function assertNoKnownPortugueseUi(page: Page, route: string) {
   }
 }
 
-function publicSupabaseUrl() {
-  const line = readFileSync('.env.local', 'utf8').split(/\r?\n/)
-    .find((entry) => entry.startsWith('NEXT_PUBLIC_SUPABASE_URL='))
-  if (!line) throw new Error('NEXT_PUBLIC_SUPABASE_URL is required.')
-  return line.slice(line.indexOf('=') + 1).trim().replace(/^['"]|['"]$/g, '').replace(/\/$/, '')
-}
+function publicSupabaseUrl() { return process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://localhost:54329' }
 
 function fakeJwt() {
   const encode = (value: object) => Buffer.from(JSON.stringify(value)).toString('base64url')
@@ -79,8 +74,8 @@ async function installSession(
     path: '/',
     sameSite: 'Lax',
   }])
-  await page.addInitScript(({ key, session }) => {
-    localStorage.setItem(key, JSON.stringify(session))
+  await seedSession(page, ({ key }) => {
+    void key;
     localStorage.setItem('theme', 'dark')
   }, {
     key: `sb-${ref}-auth-token`,

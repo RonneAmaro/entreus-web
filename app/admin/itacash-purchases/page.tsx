@@ -14,7 +14,7 @@ import {
   XCircle,
 } from 'lucide-react'
 import { useLanguage } from '@/app/components/LanguageProvider'
-import { supabase } from '@/lib/supabase'
+import { supabase, getBrowserUser } from '@/lib/supabase'
 import { usePendingItaCashPurchasesCount } from '../../hooks/usePendingItaCashPurchasesCount'
 import { isAdminRole } from '@/lib/admin'
 
@@ -161,7 +161,7 @@ export default function AdminItaCashPurchasesPage() {
 
     const {
       data: { user },
-    } = await supabase.auth.getUser()
+    } = await getBrowserUser()
 
     if (!user) {
       router.push('/login')

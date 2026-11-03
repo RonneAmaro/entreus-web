@@ -83,12 +83,23 @@ function createSupabase() {
   return { from, insert }
 }
 
+async function requireResponse(result: Promise<Response | undefined>): Promise<Response> {
+  const response = await result
+  if (!response) throw new Error('Route did not return a response')
+  return response
+}
+
 async function loadTokenRoute() {
-  return await import('@/app/api/livekit/token/route')
+  const route = await import('@/app/api/livekit/token/route')
+  return { POST: (request: Request) => requireResponse(route.POST(request)) }
 }
 
 async function loadRoomsRoute() {
-  return await import('@/app/api/meet/rooms/route')
+  const route = await import('@/app/api/meet/rooms/route')
+  return {
+    POST: (request: Request) => requireResponse(route.POST(request)),
+    GET: (request: Request) => requireResponse(route.GET(request)),
+  }
 }
 
 beforeEach(() => {

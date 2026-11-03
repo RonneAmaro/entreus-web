@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { ShieldAlert } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import { supabase, getBrowserUser } from '@/lib/supabase'
 import {
   blocksMinorAccess,
   isMissingProfileAcceptanceColumnError,
@@ -59,7 +59,7 @@ export default function ParentalAccessGuard({ children }: { children: React.Reac
 
       const {
         data: { user },
-      } = await supabase.auth.getUser()
+      } = await getBrowserUser()
 
       if (!active) return
 

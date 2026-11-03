@@ -1,0 +1,196 @@
+'use client'
+
+import Link from 'next/link'
+import { Eye, EyeOff } from 'lucide-react'
+import { useState } from 'react'
+import { useSearchParams } from 'next/navigation'
+import GoogleLogo from '../components/GoogleLogo'
+import { signInWithSocialProvider, supabase } from '@/lib/supabase'
+import { getAuthErrorMessage } from '@/lib/auth/auth-error-messages'
+import { getAuthenticatedDestination } from '@/lib/auth/authenticated-destination'
+import { ensureProfile } from '@/lib/auth/ensure-profile'
+import { getSafeRedirectParam } from '@/lib/auth/safe-redirect'
+import { useLanguage } from '../components/LanguageProvider'
+
+export default function LoginPage() {
+  const searchParams = useSearchParams()
+  const { t } = useLanguage()
+
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [socialLoading, setSocialLoading] = useState(false)
+  const [message, setMessage] = useState('')
+  async function handleLogin(e: React.FormEvent) {
+    e.preventDefault()
+    if (loading || socialLoading) return
+    setLoading(true)
+    setMessage('')
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+    })
+
+    if (error) {
+      setMessage(getAuthErrorMessage(error))
+      setLoading(false)
+      return
+    }
+
+    if (data.user) {
+      const repaired = await ensureProfile(supabase as never, data.user.id)
+      if (repaired.error) {
+        setMessage('Não foi possível carregar sua conta. Tente novamente.')
+        setLoading(false)
+        return
+      }
+      const destination = getAuthenticatedDestination(repaired.profile)
+      if (destination !== '/feed') { window.location.replace(destination); setLoading(false); return }
+    }
+    window.location.replace(getSafeRedirectParam(searchParams, '/feed'))
+    setLoading(false)
+  }
+
+  async function handleGoogleLogin() {
+    if (loading || socialLoading) return
+    setSocialLoading(true)
+    setMessage('')
+
+    const { error } = await signInWithSocialProvider('google')
+
+    if (error) {
+      setMessage(t('auth.login.googleError'))
+      setSocialLoading(false)
+    }
+  }
+
+
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-white px-6 py-10 text-black dark:bg-black dark:text-white">
+      <div className="w-full max-w-md rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 sm:p-8">
+        <div className="mb-6 text-center">
+          <h1 className="text-3xl font-bold">{t('auth.login.title')}</h1>
+
+          <p className="mt-2 text-zinc-500 dark:text-zinc-400">
+            {t('auth.login.subtitle')}
+          </p>
+        </div>
+
+        <div className="space-y-3">
+          <button
+            type="button"
+            onClick={handleGoogleLogin}
+            disabled={loading || socialLoading}
+            aria-label={t('auth.login.google')}
+            className="flex min-h-12 w-full items-center justify-center gap-3 rounded-xl border border-zinc-300 bg-white px-4 py-3 font-semibold text-zinc-900 transition hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white dark:hover:bg-zinc-800 dark:focus-visible:ring-offset-zinc-950"
+          >
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white">
+              <GoogleLogo />
+            </span>
+            {socialLoading ? t('auth.login.googleLoading') : t('auth.login.google')}
+          </button>
+          <Link href="/forgot-password" className="block text-center text-sm underline">{t('auth.login.forgot')}</Link>
+
+          <button
+            type="button"
+            disabled
+            className="flex w-full cursor-not-allowed items-center justify-center gap-3 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm font-semibold text-zinc-400 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-600"
+            title={t('auth.facebookPendingTitle')}
+          >
+            {t('auth.facebookSoon')}
+          </button>
+
+          <div className="flex items-center gap-3 py-1 text-xs font-semibold uppercase text-zinc-400">
+            <span className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
+            <span>{t('auth.emailDivider')}</span>
+            <span className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
+          </div>
+        </div>
+
+        <form onSubmit={handleLogin} className="mt-3 space-y-4">
+          <div>
+            <label htmlFor="login-email" className="mb-2 block text-sm text-zinc-700 dark:text-zinc-300">
+              {t('auth.email')}
+            </label>
+
+            <input
+              id="login-email"
+              type="email"
+              placeholder={t('auth.emailPlaceholder')}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="email"
+              className="w-full rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 outline-none transition focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
+              required
+            />
+          </div>
+
+          <div>
+            <label htmlFor="login-password" className="mb-2 block text-sm text-zinc-700 dark:text-zinc-300">
+              {t('auth.password')}
+            </label>
+
+            <div className="relative">
+              <input
+                id="login-password"
+                type={showPassword ? 'text' : 'password'}
+                placeholder={t('auth.passwordPlaceholder')}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
+                className="w-full rounded-xl border border-zinc-300 bg-zinc-50 px-4 py-3 pr-12 outline-none transition focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-900"
+                required
+              />
+
+              <button
+                type="button"
+                onClick={() => setShowPassword((current) => !current)}
+                className="absolute right-3 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full text-zinc-500 transition hover:bg-zinc-200 hover:text-black dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white"
+                aria-label={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
+              >
+                {showPassword ? (
+                  <EyeOff className="h-5 w-5" />
+                ) : (
+                  <Eye className="h-5 w-5" />
+                )}
+              </button>
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className={`w-full rounded-xl py-3 font-medium transition ${
+              loading
+                ? 'cursor-not-allowed bg-zinc-300 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300'
+                : 'bg-black text-white hover:opacity-90 dark:bg-white dark:text-black'
+            }`}
+          >
+            {loading ? t('auth.login.submitting') : t('auth.login.submit')}
+          </button>
+        </form>
+
+        {message && (
+          <p role="alert" aria-live="polite" className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-center text-sm text-red-700 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300">
+            {message}
+          </p>
+        )}
+
+        <div className="mt-6 space-y-3 text-center">
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+            {t('auth.login.noAccount')}
+          </p>
+
+          <Link
+            href="/signup"
+            className="inline-block w-full rounded-xl border border-zinc-300 px-4 py-3 transition hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
+          >
+            {t('auth.login.create')}
+          </Link>
+        </div>
+      </div>
+    </main>
+  )
+}

@@ -1,6 +1,6 @@
 'use client'
 
-import { supabase } from '@/lib/supabase'
+import { supabase, getBrowserUser } from '@/lib/supabase'
 import ExpressionPicker from '../../components/expressions/ExpressionPicker'
 import ExpressionAttachment from '../../components/expressions/ExpressionAttachment'
 import type { ExpressionAsset } from '@/lib/expressions/expression-types'
@@ -2097,7 +2097,7 @@ export default function MeetRoomClient({ roomName }: MeetRoomClientProps) {
     async function loadSuggestedDisplayName() {
       const {
         data: { user },
-      } = await supabase.auth.getUser()
+      } = await getBrowserUser()
 
       if (!active || !user) return
 

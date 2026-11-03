@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowRight, Loader2, Mail, RotateCw, ShieldAlert, ShieldCheck } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import { supabase, getBrowserUser } from '@/lib/supabase'
 import {
   isMissingProfileAcceptanceColumnError,
   isProfileIncomplete,
@@ -86,7 +86,7 @@ export default function AccountPendingPage() {
     async function loadStatus() {
       const {
         data: { user },
-      } = await supabase.auth.getUser()
+      } = await getBrowserUser()
 
       if (!active) return
 

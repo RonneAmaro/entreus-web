@@ -7,6 +7,7 @@ import {
   commentHasContent,
   decodeCommentCursor,
   encodeCommentCursor,
+  filterBlockedComments,
   getVisualCommentDepth,
   mergeComments,
   type ThreadedComment,
@@ -100,5 +101,18 @@ describe('threaded comment model', () => {
       media_url: 'https://cdn.example.test/comment.webp', media_type: 'image', created_at: base().created_at,
     }] })
     expect(comment.media?.[0].media_type).toBe('image')
+  })
+
+  it('hides blocked root authors while unrelated roots remain', () => {
+    const blocked = base({ id: '00000000-0000-4000-8000-000000000020', user_id: 'blocked-user' })
+    const unrelated = base({ id: '00000000-0000-4000-8000-000000000021', user_id: 'unrelated-user' })
+    expect(filterBlockedComments([blocked, unrelated], new Set(['blocked-user']))).toEqual([unrelated])
+  })
+
+  it('hides blocked reply authors without duplicating unrelated replies', () => {
+    const blockedReply = base({ id: '00000000-0000-4000-8000-000000000022', parent_comment_id: base().id, depth: 1, user_id: 'blocked-user' })
+    const visibleReply = base({ id: '00000000-0000-4000-8000-000000000023', parent_comment_id: base().id, depth: 1, user_id: 'visible-user' })
+    const filtered = filterBlockedComments(mergeComments([visibleReply], [blockedReply, visibleReply]), ['blocked-user'])
+    expect(filtered).toEqual([visibleReply])
   })
 })

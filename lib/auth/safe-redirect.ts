@@ -41,5 +41,5 @@ export function getSafeRedirectParam(
 
 export function buildRecoveryRedirectUrl(origin: string) {
   const safeOrigin = origin.replace(/\/+$/, '')
-  return `${safeOrigin}/reset-password?flow=recovery`
+  return `${safeOrigin}/auth/callback?type=recovery`
 }

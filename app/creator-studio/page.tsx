@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { AlertCircle, BarChart3, CheckCircle2, Circle, Eye, Heart, Loader2, MessageCircle, Users } from 'lucide-react'
 import CreatorStudioShell, { type CreatorStudioSection } from '../components/creator/CreatorStudioShell'
 import ItaCashAmount from '../components/ItaCashAmount'
-import { supabase } from '@/lib/supabase'
+import { supabase, getBrowserUser } from '@/lib/supabase'
 import { blocksMinorAccess, isProfileIncomplete } from '@/lib/profile-completion'
 import { formatDateTime, formatNumber } from '@/lib/i18n'
 import type { CreatorPeriod, CreatorStudioOverview, CreatorStudioPost } from '@/lib/creator/creator-studio'
@@ -31,7 +31,7 @@ export default function CreatorStudioPage() {
     setError('')
     const {
       data: { user },
-    } = await supabase.auth.getUser()
+    } = await getBrowserUser()
     if (!user) { router.replace('/login'); return }
     const profileResult = await supabase
       .from('profiles')

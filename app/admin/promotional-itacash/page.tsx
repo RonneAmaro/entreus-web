@@ -13,7 +13,7 @@ import {
   Sparkles,
 } from 'lucide-react'
 import { useLanguage } from '@/app/components/LanguageProvider'
-import { supabase } from '@/lib/supabase'
+import { supabase, getBrowserUser } from '@/lib/supabase'
 import { isAdminRole } from '@/lib/admin'
 
 type AdminProfile = {
@@ -96,7 +96,7 @@ export default function AdminPromotionalItaCashPage() {
 
     const {
       data: { user },
-    } = await supabase.auth.getUser()
+    } = await getBrowserUser()
 
     if (!user) {
       router.push('/login')

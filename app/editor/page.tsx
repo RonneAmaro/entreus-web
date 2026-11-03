@@ -1,12 +1,15 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import AppSidebar from '../components/AppSidebar'
 import MobileNavigation from '../components/MobileNavigation'
 import VideoEditor from '../components/VideoEditor'
-import { supabase } from '@/lib/supabase'
+import { supabase, getBrowserUser } from '@/lib/supabase'
+import { signOutCurrentBrowser } from '@/lib/auth/logout'
+
+const subscribeToHydration = () => () => {}
 
 type CurrentProfile = {
   username: string | null
@@ -18,66 +21,35 @@ export default function EditorPage() {
   const router = useRouter()
   const { theme, setTheme } = useTheme()
 
-  const [mounted, setMounted] = useState(false)
+  const mounted = useSyncExternalStore(subscribeToHydration, () => true, () => false)
   const [email, setEmail] = useState('')
   const [currentProfile, setCurrentProfile] = useState<CurrentProfile | null>(null)
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0)
 
   useEffect(() => {
-    setMounted(true)
-  }, [])
-
-  useEffect(() => {
-    loadNavigationShell()
-  }, [])
-
-  async function loadNavigationShell() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-
-    if (!user) {
-      router.push('/login')
-      return
+    let cancelled = false
+    async function loadNavigationShell() {
+      const { data: { user } } = await getBrowserUser()
+      if (cancelled) return
+      if (!user) {
+        router.push('/login')
+        return
+      }
+      setEmail(user.email || '')
+      const [profileResult, notificationsResult] = await Promise.all([
+        supabase.from('profiles').select('username, display_name, avatar_url').eq('id', user.id).maybeSingle(),
+        supabase.from('notifications').select('*', { count: 'exact', head: true }).eq('user_id', user.id).eq('read', false),
+      ])
+      if (cancelled) return
+      if (profileResult.data) setCurrentProfile(profileResult.data)
+      setUnreadNotificationsCount(notificationsResult.count || 0)
     }
-
-    setEmail(user.email || '')
-
-    await Promise.all([
-      loadNavigationProfile(user.id),
-      loadUnreadNotificationsCount(user.id),
-    ])
-  }
-
-  async function loadNavigationProfile(currentUserId: string) {
-    const { data } = await supabase
-      .from('profiles')
-      .select('username, display_name, avatar_url')
-      .eq('id', currentUserId)
-      .maybeSingle()
-
-    if (!data) return
-
-    setCurrentProfile({
-      username: data.username,
-      display_name: data.display_name,
-      avatar_url: data.avatar_url,
-    })
-  }
-
-  async function loadUnreadNotificationsCount(currentUserId: string) {
-    const { count } = await supabase
-      .from('notifications')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', currentUserId)
-      .eq('read', false)
-
-    setUnreadNotificationsCount(count || 0)
-  }
+    void loadNavigationShell()
+    return () => { cancelled = true }
+  }, [router])
 
   async function handleLogout() {
-    await supabase.auth.signOut()
-    router.push('/login')
+    await signOutCurrentBrowser(supabase.auth, (path) => window.location.replace(path))
   }
 
   function handleToggleTheme() {
@@ -89,7 +61,7 @@ export default function EditorPage() {
   }
 
   return (
-    <main className="min-h-screen overflow-hidden bg-black text-white">
+    <main className="min-h-screen overflow-hidden bg-[radial-gradient(circle_at_55%_12%,rgba(49,78,184,0.22),transparent_42%),#080911] text-white">
       <AppSidebar
         unreadNotificationsCount={unreadNotificationsCount}
         mounted={mounted}
@@ -114,16 +86,7 @@ export default function EditorPage() {
         onPostClick={handlePostClick}
       />
 
-      <section className="relative mx-auto min-h-screen w-full max-w-7xl px-3 py-16 pb-20 sm:px-5 lg:ml-[104px] lg:max-w-[calc(80rem-104px)] lg:px-8 lg:py-5">
-        <header className="relative z-10 mb-3 hidden sm:block">
-          <p className="text-xs font-black uppercase tracking-[0.24em] text-blue-300">
-            Creator Studio
-          </p>
-          <h1 className="mt-2 text-3xl font-black tracking-tight">
-            Editar video
-          </h1>
-        </header>
-
+      <section className="relative mx-auto min-h-screen w-full max-w-[90rem] px-2 py-16 pb-20 sm:px-5 lg:ml-[104px] lg:max-w-[calc(90rem-104px)] lg:px-6 lg:py-5">
         <div className="relative z-10">
           <VideoEditor />
         </div>

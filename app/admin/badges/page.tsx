@@ -16,7 +16,7 @@ import {
   UserRound,
 } from 'lucide-react'
 import { isAdminRole } from '@/lib/admin'
-import { supabase } from '@/lib/supabase'
+import { supabase, getBrowserUser } from '@/lib/supabase'
 
 type AdminProfile = {
   id: string
@@ -283,7 +283,7 @@ export default function AdminBadgesPage() {
 
       const {
         data: { user },
-      } = await supabase.auth.getUser()
+      } = await getBrowserUser()
 
       if (!user) {
         router.push('/login')

@@ -68,6 +68,12 @@ export function mergeComments(current: ThreadedComment[], incoming: ThreadedComm
   })
 }
 
+export function filterBlockedComments(comments: ThreadedComment[], blockedUserIds: Iterable<string>) {
+  const blocked = blockedUserIds instanceof Set ? blockedUserIds : new Set(blockedUserIds)
+  if (blocked.size === 0) return comments
+  return comments.filter((comment) => !blocked.has(comment.user_id))
+}
+
 export function commentHasContent(content: string, expression: ExpressionAsset | null) {
   return Boolean(content.trim() || expression)
 }

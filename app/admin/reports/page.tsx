@@ -20,7 +20,7 @@ import {
 } from 'lucide-react'
 import { isAdminRole } from '@/lib/admin'
 import { isMissingPostModerationColumnError, normalizeModerationStatus, type ModeratedPostFields } from '@/lib/post-moderation'
-import { supabase } from '@/lib/supabase'
+import { supabase, getBrowserUser } from '@/lib/supabase'
 import { notifyAdminPendingAlertsChanged } from '@/app/hooks/useAdminPendingAlerts'
 import { getSafePostCommunity, getSafePostContentRating } from '@/lib/post-classification'
 
@@ -113,7 +113,7 @@ export default function AdminReportsPage() {
 
     const {
       data: { user },
-    } = await supabase.auth.getUser()
+    } = await getBrowserUser()
 
     if (!user) {
       router.push('/login')

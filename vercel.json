@@ -1,8 +1,14 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "crons": [
     {
       "path": "/api/internal/cron/profile-media-orphan-dry-run",
       "schedule": "30 3 * * *"
     }
-  ]
+  ],
+  "git": {
+    "deploymentEnabled": {
+      "feature/video-editor-core-package-09b": false
+    }
+  }
 }

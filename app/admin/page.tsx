@@ -27,7 +27,7 @@ import {
   Trophy,
   Wallet,
 } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import { supabase, getBrowserUser } from '@/lib/supabase'
 import { useAdminPendingAlerts } from '../hooks/useAdminPendingAlerts'
 import { isAdminRole } from '@/lib/admin'
 import { filterAdminCards, normalizeAdminSearchText } from '@/lib/admin-search'
@@ -286,7 +286,7 @@ export default function AdminPage() {
 
     const {
       data: { user },
-    } = await supabase.auth.getUser()
+    } = await getBrowserUser()
 
     if (!user) {
       router.push('/login')

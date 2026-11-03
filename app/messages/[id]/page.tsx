@@ -37,7 +37,8 @@ import {
   VideoOff,
   X,
 } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import { supabase, getBrowserUser } from '@/lib/supabase'
+import { signOutCurrentBrowser } from '@/lib/auth/logout'
 import ExpressionPicker from '../../components/expressions/ExpressionPicker'
 import ExpressionAttachment from '../../components/expressions/ExpressionAttachment'
 import type { ExpressionAsset } from '@/lib/expressions/expression-types'
@@ -946,7 +947,7 @@ export default function ConversationPage() {
 
       const {
         data: { user },
-      } = await supabase.auth.getUser()
+      } = await getBrowserUser()
 
       if (!user) {
         router.push('/login')
@@ -3077,8 +3078,7 @@ export default function ConversationPage() {
   }
 
   async function handleLogout() {
-    await supabase.auth.signOut()
-    router.push('/login')
+    await signOutCurrentBrowser(supabase.auth, (path) => window.location.replace(path))
   }
 
   function handleToggleTheme() {

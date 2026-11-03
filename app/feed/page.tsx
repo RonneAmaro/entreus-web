@@ -7,6 +7,7 @@ import PostMoreMenu from '../components/PostMoreMenu'
 import PostMediaGallery from '../components/PostMediaGallery'
 import ProtectedPostMedia from '../components/ProtectedPostMedia'
 import PostActions from '../components/PostActions'
+import LikerDetails from '../components/LikerDetails'
 import GiftModal from '../components/GiftModal'
 import TipModal from '../components/TipModal'
 import LinkPreview, { LinkedPostText } from '../components/LinkPreview'
@@ -44,7 +45,10 @@ import {
 import { Suspense, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useTheme } from 'next-themes'
-import { supabase } from '@/lib/supabase'
+import { supabase, getBrowserUser } from '@/lib/supabase'
+import { signOutCurrentBrowser } from '@/lib/auth/logout'
+import { createSocialRealtimeSubscription } from '@/lib/social-realtime'
+import { useLikesRealtimeRefresh } from '@/lib/use-likes-realtime'
 import { useLanguage } from '../components/LanguageProvider'
 import {
   isMissingPostModerationColumnError,
@@ -1065,7 +1069,7 @@ function FeedContent() {
     async function loadUserAndData() {
       const {
         data: { user },
-      } = await supabase.auth.getUser()
+      } = await getBrowserUser()
 
       if (!user) {
         router.push('/login')
@@ -1674,6 +1678,20 @@ function FeedContent() {
     return normalizedPosts
   }
 
+  // Realtime invalidation for the feed: post changes from another session
+  // trigger a debounced refetch through the same authoritative query.
+  // Raw payloads are never inserted; pagination/merge logic stays untouched.
+  useEffect(() => {
+    if (!userId) return
+    const subscription = createSocialRealtimeSubscription(supabase, {
+      channelName: `social-feed-posts-${userId}`,
+      table: 'posts',
+      onEvent: () => { void loadPosts() },
+      debounceMs: 1200,
+    })
+    return () => subscription.unsubscribe()
+  }, [userId])
+
   async function loadTierBadgeSlugs(userIds: string[]) {
     const uniqueUserIds = Array.from(new Set(userIds.filter(Boolean)))
     if (uniqueUserIds.length === 0) return
@@ -1817,6 +1835,12 @@ function FeedContent() {
       setLikes(data || [])
     }
   }
+
+  useLikesRealtimeRefresh({
+    enabled: Boolean(userId),
+    channelName: `social-feed-likes-${userId}`,
+    refresh: () => loadLikes(),
+  })
 
   async function loadCommentLikes(
     currentCommentIds: string[] = comments.map((comment) => comment.id),
@@ -2018,11 +2042,6 @@ function FeedContent() {
         return
       }
 
-      await supabase.from('notifications').insert({
-        user_id: targetUserId,
-        actor_id: userId,
-        type: 'follow',
-      })
     }
 
     await refreshAfterFollowChange()
@@ -2291,14 +2310,6 @@ function FeedContent() {
       )
     }
 
-    if (repostedPost && repostedPost.user_id !== userId) {
-      await supabase.from('notifications').insert({
-        user_id: repostedPost.user_id,
-        actor_id: userId,
-        type: 'repost',
-        post_id: postId,
-      })
-    }
   }
 
   function getEffectiveImageContentType(file: File) {
@@ -3334,17 +3345,6 @@ function FeedContent() {
       )
     }
 
-    const likedPost = posts.find((post) => post.id === postId)
-
-    if (likedPost && likedPost.user_id !== userId) {
-      await supabase.from('notifications').insert({
-        user_id: likedPost.user_id,
-        actor_id: userId,
-        type: 'like',
-        post_id: postId,
-      })
-    }
-
     likeActionInProgressRef.current.delete(postId)
   }
 
@@ -3392,22 +3392,21 @@ function FeedContent() {
     setSavingCommentId(null)
   }
 
-  async function handleSaveCommentEdit(commentId: string) {
+  async function handleSaveCommentEdit(comment: Comment) {
     if (!editCommentContent.trim()) {
       setMessage(t('feed.messages.emptyCommentEdit'))
       return
     }
 
-    setSavingCommentId(commentId)
+    setSavingCommentId(comment.id)
     setMessage('')
 
     const { error } = await supabase
-      .from('comments')
-      .update({
-        content: editCommentContent.trim(),
+      .rpc('edit_threaded_comment', {
+        p_comment_id: comment.id,
+        p_content: editCommentContent.trim(),
+        p_expression: comment.expression || null,
       })
-      .eq('id', commentId)
-      .eq('user_id', userId)
 
     if (error) {
       setMessage(t('feed.messages.editCommentError'))
@@ -3429,10 +3428,7 @@ function FeedContent() {
     if (!confirmDelete) return
 
     const { error } = await supabase
-      .from('comments')
-      .delete()
-      .eq('id', commentId)
-      .eq('user_id', userId)
+      .rpc('delete_threaded_comment', { p_comment_id: commentId })
 
     if (error) {
       setMessage(t('feed.messages.deleteCommentError'))
@@ -3447,8 +3443,7 @@ function FeedContent() {
   }
 
   async function handleLogout() {
-    await supabase.auth.signOut()
-    router.push('/login')
+    await signOutCurrentBrowser(supabase.auth, (path) => window.location.replace(path))
   }
 
   function handleToggleTheme() {
@@ -4671,39 +4666,50 @@ function FeedContent() {
                       </>
                     )}
 
-                    <PostActions
-                      commentsCount={postComments.length}
-                      likesCount={postLikes.length}
-                      repostsCount={postReposts.length}
-                      liked={userLiked}
-                      reposted={postReposted}
-                      saved={postSaved}
-                      copied={copiedPostId === post.id}
-                      showGift={post.user_id !== userId && !isBlockedRelation}
-                      showTip={post.user_id !== userId && !isBlockedRelation}
-                      onLike={() => handleToggleLike(post.id)}
-                      onCommentClick={() => handleOpenReplyModal(post.id)}
-                      onRepost={() => handleToggleRepost(post.id)}
-                      onSave={() => handleToggleBookmark(post.id)}
-                      onGift={() =>
-                        setGiftRecipient({
-                          id: post.user_id,
-                          name: authorName,
-                          username: post.profiles?.username,
-                          avatarUrl: authorAvatar,
-                        })
-                      }
-                      onTip={() =>
-                        setTipRecipient({
-                          id: post.user_id,
-                          name: authorName,
-                          username: post.profiles?.username,
-                          avatarUrl: authorAvatar,
-                          postId: post.id,
-                        })
-                      }
-                      onShare={() => handleCopyPostLink(post.id)}
-                    />
+                    <LikerDetails likerIds={postLikes.map((like) => like.user_id)}>
+                      {({ likesPreview, likesDetails, likesDetailsId, likesDetailsOpen, likesDetailsLoading, onLikesPreview, onLikesDetails }) => (
+                        <PostActions
+                          commentsCount={postComments.length}
+                          likesCount={postLikes.length}
+                          repostsCount={postReposts.length}
+                          liked={userLiked}
+                          reposted={postReposted}
+                          saved={postSaved}
+                          copied={copiedPostId === post.id}
+                          showGift={post.user_id !== userId && !isBlockedRelation}
+                          showTip={post.user_id !== userId && !isBlockedRelation}
+                          likesPreview={likesPreview}
+                          likesDetails={likesDetails}
+                          likesDetailsId={likesDetailsId}
+                          likesDetailsOpen={likesDetailsOpen}
+                          likesDetailsLoading={likesDetailsLoading}
+                          onLike={() => handleToggleLike(post.id)}
+                          onLikesPreview={onLikesPreview}
+                          onLikesDetails={onLikesDetails}
+                          onCommentClick={() => handleOpenReplyModal(post.id)}
+                          onRepost={() => handleToggleRepost(post.id)}
+                          onSave={() => handleToggleBookmark(post.id)}
+                          onGift={() =>
+                            setGiftRecipient({
+                              id: post.user_id,
+                              name: authorName,
+                              username: post.profiles?.username,
+                              avatarUrl: authorAvatar,
+                            })
+                          }
+                          onTip={() =>
+                            setTipRecipient({
+                              id: post.user_id,
+                              name: authorName,
+                              username: post.profiles?.username,
+                              avatarUrl: authorAvatar,
+                              postId: post.id,
+                            })
+                          }
+                          onShare={() => handleCopyPostLink(post.id)}
+                        />
+                      )}
+                    </LikerDetails>
 
                     <p className="mb-4 mt-3 text-xs text-zinc-500 dark:text-zinc-600">
                       {item.type === 'repost'
@@ -4845,7 +4851,7 @@ function FeedContent() {
                                       <div className="mt-2 flex flex-col gap-2 sm:flex-row">
                                         <button
                                           type="button"
-                                          onClick={() => handleSaveCommentEdit(comment.id)}
+                                          onClick={() => handleSaveCommentEdit(comment)}
                                           disabled={savingCommentId === comment.id}
                                           className="rounded-full bg-zinc-950 px-4 py-2 text-sm font-bold text-white transition hover:scale-[1.02] hover:bg-black disabled:opacity-60 dark:bg-white dark:text-black"
                                         >

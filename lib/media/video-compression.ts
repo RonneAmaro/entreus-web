@@ -1,4 +1,5 @@
-import type { FFmpeg } from '@ffmpeg/ffmpeg'
+import type { FFmpeg, LogEventCallback } from '@ffmpeg/ffmpeg'
+import { loadFfmpegWithTimeout, releaseFfmpegLoadAssets } from '@/lib/media/ffmpeg-load'
 import {
   BYTES_PER_MEGABYTE,
   UPLOAD_EXTENSION_BY_MIME_TYPE,
@@ -61,10 +62,9 @@ export type VideoMp4ExportResult =
 type FfmpegRuntime = {
   ffmpeg: FFmpeg
   fetchFile: typeof import('@ffmpeg/util').fetchFile
+  onLog: LogEventCallback
 }
 
-const FFMPEG_CORE_VERSION = '0.12.10'
-const FFMPEG_CORE_BASE_URL = `https://unpkg.com/@ffmpeg/core@${FFMPEG_CORE_VERSION}/dist/umd`
 const OUTPUT_MIME_TYPE = 'video/mp4'
 const MAX_OUTPUT_DIMENSION = 720
 const VIDEO_BITRATE = '1400k'
@@ -95,7 +95,7 @@ function canUseBrowserFfmpegForVideo(file: File): boolean {
   if (typeof URL === 'undefined') return false
   if (file.size <= 0 || file.size > getVideoCompressionInputLimitBytes()) return false
 
-  const contentType = getAllowedUploadContentType(file.type, file.name)
+  const contentType = getAllowedUploadContentType(file.type.split(';', 1)[0], file.name)
 
   return Boolean(contentType && isAllowedVideoMimeType(contentType))
 }
@@ -191,30 +191,48 @@ async function getFfmpegRuntime(): Promise<FfmpegRuntime> {
 }
 
 async function loadFfmpegRuntime(): Promise<FfmpegRuntime> {
-  const [{ FFmpeg }, { fetchFile, toBlobURL }] = await Promise.all([
+  const [{ FFmpeg }, { fetchFile }] = await Promise.all([
     import('@ffmpeg/ffmpeg'),
     import('@ffmpeg/util'),
   ])
 
   const ffmpeg = new FFmpeg()
 
-  ffmpeg.on('log', ({ type, message }) => {
+  const onLog: LogEventCallback = ({ type, message }) => {
     console.info('[PostVideoCompression] FFmpeg:', { type, message })
-  })
+  }
+  ffmpeg.on('log', onLog)
 
-  await ffmpeg.load({
-    coreURL: await toBlobURL(`${FFMPEG_CORE_BASE_URL}/ffmpeg-core.js`, 'text/javascript'),
-    wasmURL: await toBlobURL(`${FFMPEG_CORE_BASE_URL}/ffmpeg-core.wasm`, 'application/wasm'),
-  })
+  try {
+    await loadFfmpegWithTimeout(ffmpeg)
+  } catch (error) {
+    ffmpeg.off('log', onLog)
+    throw error
+  }
 
-  return { ffmpeg, fetchFile }
+  return { ffmpeg, fetchFile, onLog }
+}
+
+function disposeFfmpegRuntime(runtime: FfmpegRuntime) {
+  runtime.ffmpeg.off('log', runtime.onLog)
+  runtime.ffmpeg.terminate()
+  releaseFfmpegLoadAssets(runtime.ffmpeg)
+  ffmpegRuntimePromise = null
 }
 
 async function runFfmpegCompression(
   file: File,
   options: VideoCompressionOptions,
 ): Promise<VideoCompressionResult> {
-  const { ffmpeg, fetchFile } = await getFfmpegRuntime()
+  let runtime: FfmpegRuntime
+  try {
+    runtime = await getFfmpegRuntime()
+  } catch (error) {
+    console.warn('[PostVideoCompression] Falha ao carregar FFmpeg:', error)
+    return { ok: false, reason: 'failed', message: 'Nao foi possivel carregar o motor de video. Tente novamente.' }
+  }
+  const { ffmpeg, fetchFile } = runtime
+  let failed = false
   const inputName = `post-input-${Date.now()}-${Math.random().toString(36).slice(2)}.${getInputExtension(file)}`
   const outputName = `post-output-${Date.now()}-${Math.random().toString(36).slice(2)}.mp4`
   const fallbackOutputName = `post-output-fallback-${Date.now()}-${Math.random().toString(36).slice(2)}.mp4`
@@ -271,6 +289,7 @@ async function runFfmpegCompression(
       message: 'Video otimizado para publicar mais rapido.',
     }
   } catch {
+    failed = true
     console.warn('[PostVideoCompression] Falha ao otimizar video.')
 
     return {
@@ -280,6 +299,7 @@ async function runFfmpegCompression(
     }
   } finally {
     await cleanupFfmpegFiles(ffmpeg, [inputName, outputName, fallbackOutputName])
+    if (failed) disposeFfmpegRuntime(runtime)
   }
 }
 
@@ -287,7 +307,15 @@ async function runFfmpegMp4Export(
   file: File,
   options: VideoMp4ExportOptions,
 ): Promise<VideoMp4ExportResult> {
-  const { ffmpeg, fetchFile } = await getFfmpegRuntime()
+  let runtime: FfmpegRuntime
+  try {
+    runtime = await getFfmpegRuntime()
+  } catch (error) {
+    console.warn('[PostVideoCompression] Falha ao carregar FFmpeg:', error)
+    return { ok: false, reason: 'failed', message: 'Nao foi possivel carregar o motor de video. Tente novamente.' }
+  }
+  const { ffmpeg, fetchFile } = runtime
+  let failed = false
   const inputName = `mp4-export-input-${Date.now()}-${Math.random().toString(36).slice(2)}.${getInputExtension(file)}`
   const outputName = `mp4-export-output-${Date.now()}-${Math.random().toString(36).slice(2)}.mp4`
 
@@ -316,6 +344,7 @@ async function runFfmpegMp4Export(
       message: 'Video convertido para MP4.',
     }
   } catch {
+    failed = true
     console.warn('[PostVideoCompression] Falha ao converter video para MP4.')
 
     return {
@@ -325,6 +354,7 @@ async function runFfmpegMp4Export(
     }
   } finally {
     await cleanupFfmpegFiles(ffmpeg, [inputName, outputName])
+    if (failed) disposeFfmpegRuntime(runtime)
   }
 }
 

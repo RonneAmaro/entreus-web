@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import GoogleLogo from '../components/GoogleLogo'
-import { signInWithSocialProvider, supabase } from '@/lib/supabase'
+import { signInWithSocialProvider, supabase, getBrowserUser } from '@/lib/supabase'
 import {
   CURRENT_PRIVACY_VERSION,
   CURRENT_TERMS_VERSION,
@@ -75,7 +75,7 @@ export default function SignupPage() {
     async function checkSession() {
       const {
         data: { user },
-      } = await supabase.auth.getUser()
+      } = await getBrowserUser()
 
       if (!active) return
 

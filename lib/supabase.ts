@@ -1,9 +1,17 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from './supabase/client'
+import { isAuthRetryableFetchError } from '@supabase/supabase-js'
 
-export const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+// Compatibility facade: queries and Realtime use the same cookie-backed client.
+export const supabase = createClient()
+
+/** UI identity only. Server handlers and RLS still verify every protected operation. */
+export async function getBrowserUser() {
+  const verified = await supabase.auth.getUser()
+  if (!isAuthRetryableFetchError(verified.error)) return verified
+  // A temporarily unreachable Auth service must not bounce a mounted page to login.
+  const { data: { session } } = await supabase.auth.getSession()
+  return session ? { data: { user: session.user }, error: null } : verified
+}
 
 export type SocialAuthProvider = 'google' | 'facebook'
 

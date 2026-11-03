@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, CheckCircle2, FileText, Loader2, ShieldAlert, Upload } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
-import { supabase } from '@/lib/supabase'
+import { supabase, getBrowserUser } from '@/lib/supabase'
 import EntreUSWordmark from '../components/EntreUSWordmark'
 
 type Profile = {
@@ -27,6 +27,17 @@ type AgeVerificationRequest = {
 }
 
 type DocumentType = 'rg' | 'cnh' | 'passport' | 'other'
+type SubmissionStage =
+  | 'CREATE_REQUEST_FAILED'
+  | 'LOAD_REQUEST_FAILED'
+  | 'DOCUMENT_FRONT_UPLOAD_FAILED'
+  | 'DOCUMENT_BACK_UPLOAD_FAILED'
+  | 'SELFIE_UPLOAD_FAILED'
+  | 'FINALIZE_FAILED'
+type FileRule = {
+  mimeTypes: readonly string[]
+  extensions: readonly string[]
+}
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024
 const DOCUMENT_TYPES: { value: DocumentType; label: string }[] = [
@@ -35,8 +46,49 @@ const DOCUMENT_TYPES: { value: DocumentType; label: string }[] = [
   { value: 'passport', label: 'Passaporte' },
   { value: 'other', label: 'Outro documento' },
 ]
-const DOCUMENT_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
-const SELFIE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+const DOCUMENT_FILE_RULE: FileRule = {
+  mimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'],
+  extensions: ['jpg', 'jpeg', 'png', 'webp', 'pdf'],
+}
+const SELFIE_FILE_RULE: FileRule = {
+  mimeTypes: ['image/jpeg', 'image/png', 'image/webp'],
+  extensions: ['jpg', 'jpeg', 'png', 'webp'],
+}
+
+function getFileExtension(file: File) {
+  return file.name.split('.').pop()?.toLowerCase() || ''
+}
+
+function sanitizeDiagnosticMessage(error: unknown) {
+  const message = error && typeof error === 'object' && 'message' in error
+    ? String(error.message || '')
+    : ''
+
+  const sanitized = message
+    .replace(/https?:\/\/\S+/gi, '[redacted-url]')
+    .replace(/[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{8,}/g, '[redacted-token]')
+    .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, '[redacted-id]')
+    .replace(/\b(?:[\w.-]+\/){2,}[^\s]+/g, '[redacted-path]')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  return sanitized.slice(0, 160) || 'No safe error message available.'
+}
+
+function reportSubmissionDiagnostic(stage: SubmissionStage, error: unknown) {
+  if (process.env.NODE_ENV === 'production') return
+
+  const details = error && typeof error === 'object' ? error as Record<string, unknown> : {}
+  const statusCandidate = details.status ?? details.statusCode
+  const diagnostic = {
+    stage,
+    errorCode: typeof details.code === 'string' ? details.code.slice(0, 80) : 'UNKNOWN',
+    status: typeof statusCandidate === 'number' ? statusCandidate : null,
+    message: sanitizeDiagnosticMessage(error),
+  }
+
+  console.warn('[age-verification]', JSON.stringify(diagnostic))
+}
 
 function calculateAge(birthDateValue: string | null) {
   if (!birthDateValue) return null
@@ -76,10 +128,6 @@ export default function AgeVerificationPage() {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [latestRequest, setLatestRequest] = useState<AgeVerificationRequest | null>(null)
 
-  useEffect(() => {
-    loadPage()
-  }, [])
-
   const age = useMemo(() => calculateAge(profile?.birth_date || null), [profile?.birth_date])
   const hasBirthDate = age !== null
   const isMinor = Boolean(profile?.is_minor || (age !== null && age < 18))
@@ -100,7 +148,7 @@ export default function AgeVerificationPage() {
 
     const {
       data: { user },
-    } = await supabase.auth.getUser()
+    } = await getBrowserUser()
 
     if (!user) {
       router.push('/login')
@@ -146,20 +194,21 @@ export default function AgeVerificationPage() {
     setLoading(false)
   }
 
-  function validateFile(file: File | null, allowedTypes: string[], label: string, required = true) {
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadPage()
+    // Initial authenticated state is loaded once when this route mounts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  function validateFile(file: File | null, rule: FileRule, label: string, required = true) {
     if (!file) return required ? `${label} e obrigatorio.` : ''
-    if (!allowedTypes.includes(file.type)) return `${label} deve ser JPG, PNG, WEBP${allowedTypes.includes('application/pdf') ? ' ou PDF' : ''}.`
+    const formats = rule.mimeTypes.includes('application/pdf') ? 'JPG, PNG, WEBP ou PDF' : 'JPG, PNG ou WEBP'
+    if (!file.type || !rule.mimeTypes.includes(file.type) || !rule.extensions.includes(getFileExtension(file))) {
+      return `${label} deve ser ${formats}. HEIC e HEIF nao sao suportados.`
+    }
     if (file.size > MAX_FILE_SIZE) return `${label} deve ter no maximo 5 MB.`
     return ''
-  }
-
-  function getFileExtension(file: File) {
-    const extension = file.name.split('.').pop()?.toLowerCase()
-    if (extension) return extension
-    if (file.type === 'application/pdf') return 'pdf'
-    if (file.type === 'image/png') return 'png'
-    if (file.type === 'image/webp') return 'webp'
-    return 'jpg'
   }
 
   async function uploadPrivateFile(file: File, requestId: string, kind: string) {
@@ -171,7 +220,7 @@ export default function AgeVerificationPage() {
       .upload(path, file, {
         cacheControl: '3600',
         contentType: file.type,
-        upsert: true,
+        upsert: false,
       })
 
     if (error) {
@@ -181,22 +230,29 @@ export default function AgeVerificationPage() {
     return path
   }
 
-  async function getOrCreatePendingRequest() {
+  async function getOrCreatePendingRequest(): Promise<Pick<AgeVerificationRequest, 'id'>> {
     if (!profile) throw new Error('Perfil nao carregado.')
 
-    if (latestRequest?.status === 'pending') {
+    if (latestRequest?.status === 'pending' && !latestRequest.submitted_at) {
       return latestRequest
     }
 
+    // Authoritative RPC: age and ownership validated server-side from
+    // profiles.birth_date + auth.uid(). Client-supplied ids are never trusted.
+    const { data, error } = await supabase
+      .rpc('create_age_verification_request')
+
+    if (error) throw new Error(error.message)
+
+    if (typeof data !== 'string' || !data) throw new Error('CREATE_REQUEST_NO_ID')
+    return { id: data }
+  }
+
+  async function loadRequestById(requestId: string): Promise<AgeVerificationRequest> {
     const { data, error } = await supabase
       .from('age_verification_requests')
-      .insert({
-        user_id: profile.id,
-        status: 'pending',
-        birth_date: profile.birth_date || null,
-        user_statement: statement.trim() || null,
-      })
       .select('id, status, created_at, document_front_path, document_back_path, selfie_path, submitted_at, document_type')
+      .eq('id', requestId)
       .single()
 
     if (error) throw new Error(error.message)
@@ -237,9 +293,9 @@ export default function AgeVerificationPage() {
     }
 
     const validationError =
-      validateFile(documentFrontFile, DOCUMENT_MIME_TYPES, 'A frente do documento') ||
-      validateFile(documentBackFile, DOCUMENT_MIME_TYPES, 'O verso do documento', false) ||
-      validateFile(selfieFile, SELFIE_MIME_TYPES, 'A selfie')
+      validateFile(documentFrontFile, DOCUMENT_FILE_RULE, 'A frente do documento') ||
+      validateFile(documentBackFile, DOCUMENT_FILE_RULE, 'O verso do documento', false) ||
+      validateFile(selfieFile, SELFIE_FILE_RULE, 'A selfie')
 
     if (validationError) {
       setMessage(validationError)
@@ -250,62 +306,82 @@ export default function AgeVerificationPage() {
     setMessage('')
 
     try {
-      const request = await getOrCreatePendingRequest()
-      const documentFrontPath = await uploadPrivateFile(documentFrontFile as File, request.id, 'document-front')
-      const documentBackPath = documentBackFile
-        ? await uploadPrivateFile(documentBackFile, request.id, 'document-back')
-        : null
-      const selfiePath = await uploadPrivateFile(selfieFile as File, request.id, 'selfie')
+      let pendingRequest: Pick<AgeVerificationRequest, 'id'>
+      try {
+        pendingRequest = await getOrCreatePendingRequest()
+      } catch (error) {
+        reportSubmissionDiagnostic('CREATE_REQUEST_FAILED', error)
+        setMessage('Nao foi possivel iniciar a solicitacao. Tente novamente.')
+        return
+      }
 
-      const { error: updateRequestError } = await supabase
-        .from('age_verification_requests')
-        .update({
-          birth_date: profile.birth_date || null,
-          user_statement: statement.trim() || null,
-          document_type: documentType,
-          document_front_path: documentFrontPath,
-          document_back_path: documentBackPath,
-          selfie_path: selfiePath,
-          submitted_at: new Date().toISOString(),
-          privacy_accepted_at: new Date().toISOString(),
-          status: 'pending',
+      let request: AgeVerificationRequest
+      try {
+        request = await loadRequestById(pendingRequest.id)
+      } catch (error) {
+        reportSubmissionDiagnostic('LOAD_REQUEST_FAILED', error)
+        setMessage('Nao foi possivel carregar a solicitacao. Tente novamente.')
+        return
+      }
+
+      let documentFrontPath: string
+      let documentBackPath: string | null
+      let selfiePath: string
+      try {
+        documentFrontPath = await uploadPrivateFile(documentFrontFile as File, request.id, 'document-front')
+      } catch (error) {
+        reportSubmissionDiagnostic('DOCUMENT_FRONT_UPLOAD_FAILED', error)
+        setMessage('Nao foi possivel enviar a frente do documento. Tente novamente.')
+        return
+      }
+
+      try {
+        documentBackPath = documentBackFile
+          ? await uploadPrivateFile(documentBackFile, request.id, 'document-back')
+          : null
+      } catch (error) {
+        reportSubmissionDiagnostic('DOCUMENT_BACK_UPLOAD_FAILED', error)
+        setMessage('Nao foi possivel enviar o verso do documento. Tente novamente.')
+        return
+      }
+
+      try {
+        selfiePath = await uploadPrivateFile(selfieFile as File, request.id, 'selfie')
+      } catch (error) {
+        reportSubmissionDiagnostic('SELFIE_UPLOAD_FAILED', error)
+        setMessage('Nao foi possivel enviar a selfie. Tente novamente.')
+        return
+      }
+
+      // Authoritative finalize RPC: validates ownership, age, paths and object
+      // existence server-side; submitted_at is set with now() server-side.
+      const { error: finalizeError } = await supabase
+        .rpc('finalize_age_verification_request', {
+          p_request_id: request.id,
+          p_document_type: documentType,
+          p_document_front_path: documentFrontPath,
+          p_document_back_path: documentBackPath,
+          p_selfie_path: selfiePath,
+          p_user_statement: statement.trim() || null,
         })
-        .eq('id', request.id)
-        .eq('user_id', profile.id)
 
-      if (updateRequestError) throw new Error(updateRequestError.message)
-    } catch (error) {
-      setSubmitting(false)
-      setMessage('Nao foi possivel enviar os documentos: ' + (error instanceof Error ? error.message : 'tente novamente.'))
-      return
-    }
+      if (finalizeError) {
+        reportSubmissionDiagnostic('FINALIZE_FAILED', finalizeError)
+        setMessage('Nao foi possivel concluir o envio. Tente novamente.')
+        return
+      }
 
-    const { error: profileUpdateError } = await supabase
-      .from('profiles')
-      .update({
-        wants_18_plus: true,
-        age_verification_status: 'pending',
-        show_sensitive_content: false,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', profile.id)
-
-    if (profileUpdateError) {
-      setSubmitting(false)
-      setMessage('Solicitacao criada, mas o perfil nao foi atualizado: ' + profileUpdateError.message)
+      setAcceptedStatement(false)
+      setPrivacyAccepted(false)
+      setStatement('')
+      setDocumentFrontFile(null)
+      setDocumentBackFile(null)
+      setSelfieFile(null)
       await loadPage()
-      return
+      setMessage('Sua solicitacao foi enviada para analise.')
+    } finally {
+      setSubmitting(false)
     }
-
-    setSubmitting(false)
-    setAcceptedStatement(false)
-    setPrivacyAccepted(false)
-    setStatement('')
-    setDocumentFrontFile(null)
-    setDocumentBackFile(null)
-    setSelfieFile(null)
-    setMessage('Sua solicitacao foi enviada para analise.')
-    await loadPage()
   }
 
   return (

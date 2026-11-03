@@ -25,6 +25,7 @@ import {
   Zap,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { signOutCurrentBrowser } from '@/lib/auth/logout'
 import { calculatePaymentTotals } from '@/lib/payment-fees'
 import {
   getSafeCheckoutUrl,
@@ -277,8 +278,7 @@ export default function VipPlusPage() {
   }
 
   async function handleLogout() {
-    await supabase.auth.signOut()
-    router.push('/login')
+    await signOutCurrentBrowser(supabase.auth, (path) => window.location.replace(path))
   }
 
   function handleToggleTheme() {
@@ -349,7 +349,6 @@ export default function VipPlusPage() {
         setPurchaseMessage(paymentErrorMessage(errorCode, data?.error || t('vip.errors.openPayment')))
         if (response.status === 401) {
           setPaymentAuthIssue(true)
-          if (errorCode === 'authentication_rejected') await supabase.auth.signOut({ scope: 'local' })
         }
         return
       }
@@ -401,7 +400,6 @@ export default function VipPlusPage() {
         setPurchaseMessage(paymentErrorMessage(errorCode, data?.error || t('vip.errors.pixUnavailable')))
         if (response.status === 401) {
           setPaymentAuthIssue(true)
-          if (errorCode === 'authentication_rejected') await supabase.auth.signOut({ scope: 'local' })
         }
         return
       }

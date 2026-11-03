@@ -26,7 +26,7 @@ describe('safe redirect helper', () => {
 
   it('builds the recovery redirect using the current origin', () => {
     expect(buildRecoveryRedirectUrl('https://entreus.example.com/')).toBe(
-      'https://entreus.example.com/reset-password?flow=recovery',
+      'https://entreus.example.com/auth/callback?type=recovery',
     )
   })
 })
